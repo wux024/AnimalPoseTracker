@@ -2,11 +2,11 @@
 # -*- coding: utf-8 -*-
 
 """
-File Name: __init__.py
+File Name: __init__.py.py
 Author: wux024
 Email: wux024@nenu.edu.cn
-Created On: 2024/9/6
-Last Modified: 2024/9/6
+Created On: 2024/9/8
+Last Modified: 2024/9/8
 Version: 1.0
 
 Overview:
@@ -17,5 +17,5 @@ Notes:
     - Ensure compliance with project coding standards.
 
 Revision History:
-    - [2024/9/6] wux024: Initial file creation
+    - [2024/9/8] wux024: Initial file creation
 """
