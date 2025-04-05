@@ -1,0 +1,56 @@
+
+# Train/val/test sets as 1) dir: path/to/imgs, 2) file: path/to/imgs.txt, or 3) list: [path/to/imgs1, path/to/imgs2, ..]
+path: realworldperson # dataset root dir
+train: images/train # train images (relative to 'path') 4 images
+val: images/val # val images (relative to 'path') 4 images
+test: images/test # test images (optional)
+
+# Keypoints
+kpt_shape: [17, 3] # number of keypoints, number of dims (2 for x,y or 3 for x,y,visible)
+flip_idx: [0, 2, 1, 4, 3, 6, 5, 8, 7, 10, 9, 12, 11, 14, 13, 16, 15]
+
+# Classes
+names:
+  0: person
+
+oks_sigmas: [
+    0.026,
+    0.025,
+    0.025,
+    0.035,
+    0.035,
+    0.079,
+    0.079,
+    0.072,
+    0.072,
+    0.062,
+    0.062,
+    0.107,
+    0.107,
+    0.087,
+    0.087,
+    0.089,
+    0.089,
+  ]
+skeleton:
+  [
+    [15, 13],
+    [13, 11],
+    [16, 14],
+    [14, 12],
+    [11, 12],
+    [5, 11],
+    [6, 12],
+    [5, 6],
+    [5, 7],
+    [6, 8],
+    [7, 9],
+    [8, 10],
+    [1, 2],
+    [0, 1],
+    [0, 2],
+    [1, 3],
+    [2, 4],
+    [3, 5],
+    [4, 6],
+  ]

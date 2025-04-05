@@ -1,0 +1,139 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<ui version="4.0">
+ <class>Form</class>
+ <widget class="QWidget" name="Form">
+  <property name="geometry">
+   <rect>
+    <x>0</x>
+    <y>0</y>
+    <width>821</width>
+    <height>680</height>
+   </rect>
+  </property>
+  <property name="windowTitle">
+   <string>Form</string>
+  </property>
+  <widget class="QTreeWidget" name="treeWidget">
+   <property name="geometry">
+    <rect>
+     <x>20</x>
+     <y>90</y>
+     <width>451</width>
+     <height>391</height>
+    </rect>
+   </property>
+   <property name="verticalScrollMode">
+    <enum>QAbstractItemView::ScrollMode::ScrollPerPixel</enum>
+   </property>
+   <column>
+    <property name="text">
+     <string>Parameter</string>
+    </property>
+   </column>
+   <column>
+    <property name="text">
+     <string>Value</string>
+    </property>
+   </column>
+   <item>
+    <property name="text">
+     <string>Project</string>
+    </property>
+    <property name="text">
+     <string>Mouse</string>
+    </property>
+    <property name="flags">
+     <set>ItemIsSelectable|ItemIsEditable|ItemIsDragEnabled|ItemIsDropEnabled|ItemIsUserCheckable|ItemIsEnabled</set>
+    </property>
+   </item>
+   <item>
+    <property name="text">
+     <string>Worker</string>
+    </property>
+    <property name="text">
+     <string>Adam</string>
+    </property>
+    <property name="flags">
+     <set>ItemIsSelectable|ItemIsEditable|ItemIsDragEnabled|ItemIsDropEnabled|ItemIsUserCheckable|ItemIsEnabled</set>
+    </property>
+   </item>
+   <item>
+    <property name="text">
+     <string>Date</string>
+    </property>
+    <property name="text">
+     <string>2025/4/4</string>
+    </property>
+    <property name="flags">
+     <set>ItemIsSelectable|ItemIsEditable|ItemIsDragEnabled|ItemIsDropEnabled|ItemIsUserCheckable|ItemIsEnabled</set>
+    </property>
+   </item>
+   <item>
+    <property name="text">
+     <string>Public Datasets Project</string>
+    </property>
+    <property name="text">
+     <string/>
+    </property>
+    <property name="flags">
+     <set>ItemIsSelectable|ItemIsEditable|ItemIsDragEnabled|ItemIsDropEnabled|ItemIsUserCheckable|ItemIsEnabled</set>
+    </property>
+   </item>
+   <item>
+    <property name="text">
+     <string>Project Path</string>
+    </property>
+    <property name="flags">
+     <set>ItemIsSelectable|ItemIsEditable|ItemIsDragEnabled|ItemIsDropEnabled|ItemIsUserCheckable|ItemIsEnabled</set>
+    </property>
+   </item>
+   <item>
+    <property name="text">
+     <string>Source</string>
+    </property>
+    <property name="flags">
+     <set>ItemIsSelectable|ItemIsEditable|ItemIsDragEnabled|ItemIsDropEnabled|ItemIsUserCheckable|ItemIsEnabled</set>
+    </property>
+   </item>
+   <item>
+    <property name="text">
+     <string>Training Configure</string>
+    </property>
+    <item>
+     <property name="text">
+      <string>Model Base</string>
+     </property>
+     <property name="text">
+      <string/>
+     </property>
+     <property name="flags">
+      <set>ItemIsSelectable|ItemIsEditable|ItemIsDragEnabled|ItemIsDropEnabled|ItemIsUserCheckable|ItemIsEnabled</set>
+     </property>
+    </item>
+    <item>
+     <property name="text">
+      <string>Model</string>
+     </property>
+     <property name="flags">
+      <set>ItemIsSelectable|ItemIsEditable|ItemIsDragEnabled|ItemIsDropEnabled|ItemIsUserCheckable|ItemIsEnabled</set>
+     </property>
+    </item>
+   </item>
+  </widget>
+  <widget class="QLabel" name="label">
+   <property name="geometry">
+    <rect>
+     <x>30</x>
+     <y>40</y>
+     <width>211</width>
+     <height>31</height>
+    </rect>
+   </property>
+   <property name="text">
+    <string>Configure Path</string>
+   </property>
+  </widget>
+ </widget>
+ <resources/>
+ <connections/>
+</ui>

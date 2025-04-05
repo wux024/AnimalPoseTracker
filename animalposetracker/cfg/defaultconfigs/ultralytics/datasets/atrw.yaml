@@ -1,0 +1,50 @@
+# Train/val/test sets as 1) dir: path/to/imgs, 2) file: path/to/imgs.txt, or 3) list: [path/to/imgs1, path/to/imgs2, ..]
+path: atrw # dataset root dir
+train: images/train # train images (relative to 'path') 4 images
+val: images/val # val images (relative to 'path') 4 images
+test: images/test # test images (optional)
+
+# Keypoints
+kpt_shape: [15, 3] # number of keypoints, number of dims (2 for x,y or 3 for x,y,visible)
+flip_idx: [1, 0, 2, 5, 6, 3, 4, 10, 11, 12, 7, 8, 9, 13, 14]
+
+# Classes
+names:
+  0: tiger
+
+oks_sigmas:
+  [
+    0.0277,
+    0.0823,
+    0.0831,
+    0.0202,
+    0.0716,
+    0.0263,
+    0.0646,
+    0.0302,
+    0.0440,
+    0.0316,
+    0.0333,
+    0.0547,
+    0.0263,
+    0.0683,
+    0.0539,
+  ]
+
+skeleton:
+  [
+    [0, 2],
+    [1, 2],
+    [2, 14],
+    [5, 6],
+    [5, 14],
+    [3, 4],
+    [3, 14],
+    [13, 14],
+    [9, 8],
+    [8, 7],
+    [7, 13],
+    [12, 11],
+    [11, 10],
+    [10, 13],
+  ]

@@ -1,0 +1,104 @@
+# Train/val/test sets as 1) dir: path/to/imgs, 2) file: path/to/imgs.txt, or 3) list: [path/to/imgs1, path/to/imgs2, ..]
+path: ap10k # dataset root dir
+train: images/train # train images (relative to 'path') 4 images
+val: images/val
+test: images/test
+
+# Keypoints
+kpt_shape: [17, 3] # number of keypoints, number of dims (2 for x,y or 3 for x,y,visible)
+flip_idx: [1, 0, 2, 3, 4, 8, 9, 10, 5, 6, 7, 14, 15, 16, 11, 12, 13]
+
+# Classes
+names:
+  0: antelope
+  1: argali sheep
+  2: bison
+  3: buffalo
+  4: cow
+  5: sheep
+  6: dog
+  7: fox
+  8: wolf
+  9: beaver
+  10: alouatta
+  11: monkey
+  12: noisy night monkey
+  13: spider monkey
+  14: uakari
+  15: deer
+  16: moose
+  17: hamster
+  18: elephant
+  19: horse
+  20: zebra
+  21: bobcat
+  22: cat
+  23: cheetah
+  24: jaguar
+  25: king cheetah
+  26: leopard
+  27: lion
+  28: panther
+  29: snow leopard
+  30: tiger
+  31: giraffe
+  32: hippo
+  33: chimpanzee
+  34: gorilla
+  35: rabbit
+  36: skunk
+  37: mouse
+  38: rat
+  39: otter
+  40: weasel
+  41: raccoon
+  42: rhino
+  43: marmot
+  44: squirrel
+  45: mole
+  46: black bear
+  47: brown bear
+  48: panda
+  49: polar bear
+
+oks_sigmas:
+  [
+    0.025,
+    0.025,
+    0.026,
+    0.035,
+    0.035,
+    0.079,
+    0.072,
+    0.062,
+    0.079,
+    0.072,
+    0.062,
+    0.107,
+    0.087,
+    0.089,
+    0.107,
+    0.087,
+    0.089,
+  ]
+
+skeleton:
+  [
+    [0, 1],
+    [0, 2],
+    [1, 2],
+    [2, 3],
+    [3, 4],
+    [3, 5],
+    [5, 6],
+    [6, 7],
+    [3, 8],
+    [8, 9],
+    [9, 10],
+    [4, 11],
+    [11, 12],
+    [12, 13],
+    [4, 14],
+    [14, 15],
+    [15, 16],
+  ]

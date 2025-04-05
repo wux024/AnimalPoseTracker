@@ -1,0 +1,78 @@
+# Train/val/test sets as 1) dir: path/to/imgs, 2) file: path/to/imgs.txt, or 3) list: [path/to/imgs1, path/to/imgs2, ..]
+path: openmonkeychallenge # dataset root dir
+train: images/train # train images (relative to 'path') 4 images
+val: images/val
+test: images/test
+
+# Keypoints
+kpt_shape: [17, 3] # number of keypoints, number of dims (2 for x,y or 3 for x,y,visible)
+flip_idx: [1, 0, 2, 3, 4, 8, 9, 10, 5, 6, 7, 11, 14, 15, 12, 13, 16]
+
+# Classes
+names:
+  0: Golden_snub-nosed_monkey
+  1: Cotton-top_tamarin
+  2: Chimpanzee
+  3: Gorilla
+  4: Proboscis_monkey
+  5: Rhesus_macaque
+  6: Siamang
+  7: Barbary_macaque
+  8: Common_marmoset
+  9: Mandrill
+  10: Lion-tailed_macaque
+  11: Hamadryas_baboon
+  12: Vervet_monkey
+  13: Japanese_macaque
+  14: Dusky_leaf_monkey
+  15: Emperor_tamarin
+  16: Gibbon
+  17: Tufted_capuchin
+  18: Chacma_baboon
+  19: Crab-eating_macaque
+  20: Golden_lion_tamarin
+  21: Olive_baboon
+  22: Orangutan
+  23: Squirrel_monkey
+  24: Formosan_rock_macaque
+  25: Bonobo
+
+oks_sigmas:
+  [
+    0.025,
+    0.025,
+    0.026,
+    0.035,
+    0.035,
+    0.079,
+    0.072,
+    0.062,
+    0.079,
+    0.072,
+    0.062,
+    0.107,
+    0.087,
+    0.089,
+    0.087,
+    0.089,
+    0.062,
+  ]
+
+skeleton:
+  [
+    [0, 2],
+    [1, 2],
+    [3, 4],
+    [4, 5],
+    [5, 6],
+    [6, 7],
+    [4, 8],
+    [8, 9],
+    [9, 10],
+    [4, 11],
+    [11, 12],
+    [12, 13],
+    [11, 14],
+    [14, 15],
+    [11, 16],
+  ]
