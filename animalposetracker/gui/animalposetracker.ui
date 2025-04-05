@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <ui version="4.0">
- <class>MainWindow</class>
- <widget class="QMainWindow" name="MainWindow">
+ <class>AnimalPoseTracker</class>
+ <widget class="QMainWindow" name="AnimalPoseTracker">
   <property name="windowModality">
    <enum>Qt::WindowModality::NonModal</enum>
   </property>
@@ -9,8 +9,8 @@
    <rect>
     <x>0</x>
     <y>0</y>
-    <width>836</width>
-    <height>672</height>
+    <width>636</width>
+    <height>639</height>
    </rect>
   </property>
   <property name="sizePolicy">
@@ -47,7 +47,19 @@
    <property name="autoFillBackground">
     <bool>true</bool>
    </property>
-   <layout class="QVBoxLayout" name="verticalLayout_2">
+   <layout class="QVBoxLayout" name="verticalLayout">
+    <property name="leftMargin">
+     <number>20</number>
+    </property>
+    <property name="topMargin">
+     <number>20</number>
+    </property>
+    <property name="rightMargin">
+     <number>20</number>
+    </property>
+    <property name="bottomMargin">
+     <number>20</number>
+    </property>
     <item>
      <widget class="QLabel" name="Welcome">
       <property name="sizePolicy">
@@ -73,7 +85,7 @@
     <item>
      <layout class="QHBoxLayout" name="LogoLayout">
       <item>
-       <spacer name="horizontalSpacer_4">
+       <spacer name="horizontalSpacer2">
         <property name="orientation">
          <enum>Qt::Orientation::Horizontal</enum>
         </property>
@@ -114,7 +126,7 @@
        </widget>
       </item>
       <item>
-       <spacer name="horizontalSpacer_3">
+       <spacer name="horizontalSpacer1">
         <property name="orientation">
          <enum>Qt::Orientation::Horizontal</enum>
         </property>
@@ -187,7 +199,7 @@
     <item>
      <layout class="QHBoxLayout" name="ToolsButtonLayout">
       <item>
-       <spacer name="horizontalSpacer_5">
+       <spacer name="horizontalSpacer4">
         <property name="orientation">
          <enum>Qt::Orientation::Horizontal</enum>
         </property>
@@ -207,13 +219,19 @@
           <verstretch>0</verstretch>
          </sizepolicy>
         </property>
+        <property name="minimumSize">
+         <size>
+          <width>160</width>
+          <height>25</height>
+         </size>
+        </property>
         <property name="text">
          <string>Create New Project</string>
         </property>
        </widget>
       </item>
       <item>
-       <spacer name="horizontalSpacer">
+       <spacer name="horizontalSpacer6">
         <property name="orientation">
          <enum>Qt::Orientation::Horizontal</enum>
         </property>
@@ -228,10 +246,16 @@
       <item>
        <widget class="QPushButton" name="LoadProjectButton">
         <property name="sizePolicy">
-         <sizepolicy hsizetype="Fixed" vsizetype="Fixed">
+         <sizepolicy hsizetype="Preferred" vsizetype="Fixed">
           <horstretch>0</horstretch>
           <verstretch>0</verstretch>
          </sizepolicy>
+        </property>
+        <property name="minimumSize">
+         <size>
+          <width>160</width>
+          <height>25</height>
+         </size>
         </property>
         <property name="text">
          <string>Load Project</string>
@@ -239,7 +263,7 @@
        </widget>
       </item>
       <item>
-       <spacer name="horizontalSpacer_2">
+       <spacer name="horizontalSpacer3">
         <property name="orientation">
          <enum>Qt::Orientation::Horizontal</enum>
         </property>
@@ -254,10 +278,16 @@
       <item>
        <widget class="QPushButton" name="PublicDatasetsProjectButton">
         <property name="sizePolicy">
-         <sizepolicy hsizetype="Fixed" vsizetype="Fixed">
+         <sizepolicy hsizetype="Preferred" vsizetype="Fixed">
           <horstretch>0</horstretch>
           <verstretch>0</verstretch>
          </sizepolicy>
+        </property>
+        <property name="minimumSize">
+         <size>
+          <width>160</width>
+          <height>25</height>
+         </size>
         </property>
         <property name="text">
          <string>Public Datasets Project</string>
@@ -265,7 +295,7 @@
        </widget>
       </item>
       <item>
-       <spacer name="horizontalSpacer_6">
+       <spacer name="horizontalSpacer5">
         <property name="orientation">
          <enum>Qt::Orientation::Horizontal</enum>
         </property>
@@ -286,7 +316,7 @@
     <rect>
      <x>0</x>
      <y>0</y>
-     <width>836</width>
+     <width>636</width>
      <height>33</height>
     </rect>
    </property>
@@ -300,9 +330,9 @@
     <property name="title">
      <string>File</string>
     </property>
-    <addaction name="actionNew_Project_Ctrl_N"/>
-    <addaction name="actionOpen_Old_Project_Ctrl_O"/>
-    <addaction name="actionOpen_Recent"/>
+    <addaction name="actionFileCreateNewProject"/>
+    <addaction name="actionFileLoadProject"/>
+    <addaction name="actionOpenRecent"/>
     <addaction name="actionSave"/>
     <addaction name="actionExit"/>
    </widget>
@@ -330,11 +360,25 @@
      <string>Help</string>
     </property>
     <addaction name="actionDoc"/>
-    <addaction name="actionCheck_Updated"/>
-    <addaction name="actionVersion"/>
+    <addaction name="actionCheckUpdated"/>
+    <addaction name="actionHelp"/>
+   </widget>
+   <widget class="QMenu" name="menuView">
+    <property name="title">
+     <string>View</string>
+    </property>
+    <widget class="QMenu" name="menuTheme">
+     <property name="title">
+      <string>Theme</string>
+     </property>
+     <addaction name="actionDark"/>
+     <addaction name="actionLight"/>
+    </widget>
+    <addaction name="menuTheme"/>
    </widget>
    <addaction name="menuAnimalPoseTracker"/>
    <addaction name="menuTools"/>
+   <addaction name="menuView"/>
    <addaction name="menuHelp"/>
   </widget>
   <widget class="QToolBar" name="toolBar">
@@ -356,33 +400,36 @@
    <addaction name="actionCreateNewProject"/>
    <addaction name="actionLoadProject"/>
    <addaction name="actionPublicDatasetsProject"/>
-   <addaction name="actionAnimalPoseLabelling"/>
-   <addaction name="actionAnimalPoseInfercence"/>
-   <addaction name="actionDoc"/>
-   <addaction name="actionCheck_Updated"/>
-   <addaction name="actionVersion"/>
+   <addaction name="actionHelp"/>
   </widget>
-  <action name="actionNew_Project_Ctrl_N">
-   <property name="text">
-    <string>New Project Ctrl+N</string>
+  <action name="actionFileLoadProject">
+   <property name="icon">
+    <iconset theme="document-open"/>
    </property>
-  </action>
-  <action name="actionOpen_Old_Project_Ctrl_O">
    <property name="text">
     <string>Open Old Project Ctrl+O</string>
    </property>
   </action>
-  <action name="actionOpen_Recent">
+  <action name="actionOpenRecent">
+   <property name="icon">
+    <iconset theme="document-open-recent"/>
+   </property>
    <property name="text">
     <string>Open Recent</string>
    </property>
   </action>
   <action name="actionSave">
+   <property name="icon">
+    <iconset theme="document-save"/>
+   </property>
    <property name="text">
     <string>Save</string>
    </property>
   </action>
   <action name="actionExit">
+   <property name="icon">
+    <iconset theme="application-exit"/>
+   </property>
    <property name="text">
     <string>Exit</string>
    </property>
@@ -402,29 +449,65 @@
     <string>Doc</string>
    </property>
   </action>
-  <action name="actionCheck_Updated">
+  <action name="actionCheckUpdated">
+   <property name="icon">
+    <iconset theme="update"/>
+   </property>
    <property name="text">
     <string>Check for Updating</string>
    </property>
   </action>
-  <action name="actionVersion">
+  <action name="actionHelp">
+   <property name="icon">
+    <iconset theme="help-browser"/>
+   </property>
    <property name="text">
-    <string>Version</string>
+    <string>Help</string>
    </property>
   </action>
   <action name="actionCreateNewProject">
+   <property name="checkable">
+    <bool>false</bool>
+   </property>
+   <property name="icon">
+    <iconset theme="document-new"/>
+   </property>
    <property name="text">
     <string>Create New Project</string>
    </property>
   </action>
   <action name="actionLoadProject">
+   <property name="icon">
+    <iconset theme="document-open"/>
+   </property>
    <property name="text">
     <string>Load Project</string>
    </property>
   </action>
   <action name="actionPublicDatasetsProject">
+   <property name="icon">
+    <iconset theme="edit-copy"/>
+   </property>
    <property name="text">
     <string>Public Datasets Project</string>
+   </property>
+  </action>
+  <action name="actionDark">
+   <property name="text">
+    <string>Dark</string>
+   </property>
+  </action>
+  <action name="actionLight">
+   <property name="text">
+    <string>Light</string>
+   </property>
+  </action>
+  <action name="actionFileCreateNewProject">
+   <property name="icon">
+    <iconset theme="document-new"/>
+   </property>
+   <property name="text">
+    <string>New Project Ctrl+N</string>
    </property>
   </action>
  </widget>
