@@ -1,17 +1,20 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <ui version="4.0">
- <class>TabWidget</class>
- <widget class="QTabWidget" name="TabWidget">
+ <class>AnimalPoseTrackerTabPage</class>
+ <widget class="QTabWidget" name="AnimalPoseTrackerTabPage">
+  <property name="enabled">
+   <bool>true</bool>
+  </property>
   <property name="geometry">
    <rect>
     <x>0</x>
     <y>0</y>
-    <width>836</width>
-    <height>615</height>
+    <width>509</width>
+    <height>426</height>
    </rect>
   </property>
   <property name="sizePolicy">
-   <sizepolicy hsizetype="Fixed" vsizetype="Fixed">
+   <sizepolicy hsizetype="Preferred" vsizetype="Preferred">
     <horstretch>0</horstretch>
     <verstretch>0</verstretch>
    </sizepolicy>
@@ -20,31 +23,22 @@
    <string>TabWidget</string>
   </property>
   <property name="currentIndex">
-   <number>1</number>
+   <number>2</number>
   </property>
-  <widget class="QWidget" name="ConfigurePage">
+  <widget class="QWidget" name="ConfigureModelBase">
+   <property name="sizePolicy">
+    <sizepolicy hsizetype="Preferred" vsizetype="Preferred">
+     <horstretch>0</horstretch>
+     <verstretch>0</verstretch>
+    </sizepolicy>
+   </property>
    <property name="contextMenuPolicy">
     <enum>Qt::ContextMenuPolicy::NoContextMenu</enum>
    </property>
    <attribute name="title">
     <string>Configure</string>
    </attribute>
-   <layout class="QVBoxLayout" name="ConfigurePageLayout">
-    <property name="sizeConstraint">
-     <enum>QLayout::SizeConstraint::SetMinAndMaxSize</enum>
-    </property>
-    <property name="leftMargin">
-     <number>20</number>
-    </property>
-    <property name="topMargin">
-     <number>20</number>
-    </property>
-    <property name="rightMargin">
-     <number>20</number>
-    </property>
-    <property name="bottomMargin">
-     <number>500</number>
-    </property>
+   <layout class="QVBoxLayout" name="verticalLayout_3">
     <item>
      <widget class="QLabel" name="ConfigurePageTitle">
       <property name="sizePolicy">
@@ -85,7 +79,7 @@
        <enum>QLayout::SizeConstraint::SetDefaultConstraint</enum>
       </property>
       <item>
-       <widget class="QLabel" name="label_2">
+       <widget class="QLabel" name="ConfigureFilePathLabel">
         <property name="sizePolicy">
          <sizepolicy hsizetype="Fixed" vsizetype="Fixed">
           <horstretch>0</horstretch>
@@ -98,7 +92,7 @@
        </widget>
       </item>
       <item>
-       <widget class="QLineEdit" name="lineEdit">
+       <widget class="QLineEdit" name="ConfigureFilePathDisplay">
         <property name="sizePolicy">
          <sizepolicy hsizetype="Expanding" vsizetype="Fixed">
           <horstretch>0</horstretch>
@@ -108,7 +102,7 @@
        </widget>
       </item>
       <item>
-       <widget class="QPushButton" name="pushButton">
+       <widget class="QPushButton" name="ConfigureFilePathBrowser">
         <property name="sizePolicy">
          <sizepolicy hsizetype="Fixed" vsizetype="Fixed">
           <horstretch>0</horstretch>
@@ -116,12 +110,15 @@
          </sizepolicy>
         </property>
         <property name="text">
-         <string>Browse</string>
+         <string/>
+        </property>
+        <property name="icon">
+         <iconset theme="folder-open"/>
         </property>
        </widget>
       </item>
       <item>
-       <widget class="QPushButton" name="pushButton_2">
+       <widget class="QPushButton" name="ConfigureFileEdit">
         <property name="sizePolicy">
          <sizepolicy hsizetype="Fixed" vsizetype="Fixed">
           <horstretch>0</horstretch>
@@ -129,286 +126,1740 @@
          </sizepolicy>
         </property>
         <property name="text">
-         <string>Edit</string>
+         <string/>
+        </property>
+        <property name="icon">
+         <iconset theme="document-open"/>
         </property>
        </widget>
       </item>
      </layout>
     </item>
+    <item>
+     <widget class="QGroupBox" name="ConfigureFileGroup">
+      <property name="title">
+       <string/>
+      </property>
+      <layout class="QVBoxLayout" name="verticalLayout_2">
+       <item>
+        <layout class="QVBoxLayout" name="ConfigureFileGroupLayout">
+         <item>
+          <widget class="QTreeWidget" name="ConfigureFile">
+           <column>
+            <property name="text">
+             <string>Parameter</string>
+            </property>
+           </column>
+           <column>
+            <property name="text">
+             <string>Value</string>
+            </property>
+           </column>
+           <item>
+            <property name="text">
+             <string>experiment</string>
+            </property>
+            <property name="text">
+             <string>mouse</string>
+            </property>
+           </item>
+           <item>
+            <property name="text">
+             <string>experimenter</string>
+            </property>
+            <property name="text">
+             <string>adam</string>
+            </property>
+           </item>
+           <item>
+            <property name="text">
+             <string>date</string>
+            </property>
+            <property name="text">
+             <string>20250406</string>
+            </property>
+           </item>
+           <item>
+            <property name="text">
+             <string>project_path</string>
+            </property>
+            <property name="text">
+             <string/>
+            </property>
+           </item>
+           <item>
+            <property name="text">
+             <string>model_type</string>
+            </property>
+            <property name="text">
+             <string/>
+            </property>
+           </item>
+           <item>
+            <property name="text">
+             <string>model_scale</string>
+            </property>
+            <property name="text">
+             <string/>
+            </property>
+           </item>
+           <item>
+            <property name="text">
+             <string>videos</string>
+            </property>
+            <property name="text">
+             <string>10</string>
+            </property>
+            <item>
+             <property name="text">
+              <string>path1</string>
+             </property>
+             <item>
+              <property name="text">
+               <string>resolution</string>
+              </property>
+             </item>
+            </item>
+           </item>
+           <item>
+            <property name="text">
+             <string>images</string>
+            </property>
+            <property name="text">
+             <string>10</string>
+            </property>
+            <item>
+             <property name="text">
+              <string>resolution</string>
+             </property>
+            </item>
+           </item>
+           <item>
+            <property name="text">
+             <string>keypoints</string>
+            </property>
+            <property name="text">
+             <string>12</string>
+            </property>
+            <item>
+             <property name="text">
+              <string>0</string>
+             </property>
+             <property name="text">
+              <string>nose</string>
+             </property>
+            </item>
+           </item>
+           <item>
+            <property name="text">
+             <string>classes</string>
+            </property>
+            <property name="text">
+             <string>3</string>
+            </property>
+            <item>
+             <property name="text">
+              <string>0</string>
+             </property>
+             <property name="text">
+              <string>mouse</string>
+             </property>
+            </item>
+           </item>
+           <item>
+            <property name="text">
+             <string>visible</string>
+            </property>
+            <property name="text">
+             <string>1</string>
+            </property>
+           </item>
+           <item>
+            <property name="text">
+             <string>skeleton</string>
+            </property>
+            <item>
+             <property name="text">
+              <string>0</string>
+             </property>
+             <property name="text">
+              <string/>
+             </property>
+             <item>
+              <property name="text">
+               <string>0</string>
+              </property>
+              <property name="text">
+               <string>nose</string>
+              </property>
+             </item>
+             <item>
+              <property name="text">
+               <string>1</string>
+              </property>
+              <property name="text">
+               <string>left_eye</string>
+              </property>
+             </item>
+            </item>
+           </item>
+           <item>
+            <property name="text">
+             <string>flip</string>
+            </property>
+            <item>
+             <property name="text">
+              <string>0</string>
+             </property>
+             <property name="text">
+              <string>1</string>
+             </property>
+            </item>
+            <item>
+             <property name="text">
+              <string>1</string>
+             </property>
+             <property name="text">
+              <string>0</string>
+             </property>
+            </item>
+           </item>
+          </widget>
+         </item>
+         <item>
+          <layout class="QHBoxLayout" name="ConfigureFileToolsLayout">
+           <item>
+            <widget class="QPushButton" name="SaveConfigureFile">
+             <property name="text">
+              <string>Save</string>
+             </property>
+            </widget>
+           </item>
+           <item>
+            <widget class="QPushButton" name="CannelConfigureFile">
+             <property name="text">
+              <string>Cannel</string>
+             </property>
+            </widget>
+           </item>
+          </layout>
+         </item>
+        </layout>
+       </item>
+      </layout>
+     </widget>
+    </item>
    </layout>
   </widget>
-  <widget class="QWidget" name="ExtractFrame">
+  <widget class="QWidget" name="ExtractLabelFrame">
+   <property name="sizePolicy">
+    <sizepolicy hsizetype="Preferred" vsizetype="Preferred">
+     <horstretch>0</horstretch>
+     <verstretch>0</verstretch>
+    </sizepolicy>
+   </property>
    <attribute name="title">
     <string>Extract Frames</string>
    </attribute>
-   <widget class="QLabel" name="label_3">
-    <property name="geometry">
-     <rect>
-      <x>20</x>
-      <y>10</y>
-      <width>212</width>
-      <height>15</height>
-     </rect>
+   <layout class="QVBoxLayout" name="verticalLayout_13">
+    <property name="sizeConstraint">
+     <enum>QLayout::SizeConstraint::SetMinAndMaxSize</enum>
     </property>
-    <property name="font">
-     <font>
-      <bold>true</bold>
-     </font>
-    </property>
-    <property name="text">
-     <string>AnimalPoseTracker-Extract Frames</string>
-    </property>
-    <property name="alignment">
-     <set>Qt::AlignmentFlag::AlignCenter</set>
-    </property>
-   </widget>
-   <widget class="Line" name="line_9">
-    <property name="geometry">
-     <rect>
-      <x>8</x>
-      <y>40</y>
-      <width>820</width>
-      <height>16</height>
-     </rect>
-    </property>
-    <property name="orientation">
-     <enum>Qt::Orientation::Horizontal</enum>
-    </property>
-   </widget>
+    <item>
+     <widget class="QLabel" name="ExtractLabelFrameLabel">
+      <property name="sizePolicy">
+       <sizepolicy hsizetype="Fixed" vsizetype="Fixed">
+        <horstretch>0</horstretch>
+        <verstretch>0</verstretch>
+       </sizepolicy>
+      </property>
+      <property name="maximumSize">
+       <size>
+        <width>500</width>
+        <height>36</height>
+       </size>
+      </property>
+      <property name="font">
+       <font>
+        <bold>true</bold>
+       </font>
+      </property>
+      <property name="text">
+       <string>AnimalPoseTracker-Extract and LabelFrames</string>
+      </property>
+      <property name="alignment">
+       <set>Qt::AlignmentFlag::AlignLeading|Qt::AlignmentFlag::AlignLeft|Qt::AlignmentFlag::AlignVCenter</set>
+      </property>
+     </widget>
+    </item>
+    <item>
+     <widget class="Line" name="ExtractLabelFrameLine">
+      <property name="orientation">
+       <enum>Qt::Orientation::Horizontal</enum>
+      </property>
+     </widget>
+    </item>
+    <item>
+     <widget class="QGroupBox" name="ExtractFramesGroupLayout">
+      <property name="sizePolicy">
+       <sizepolicy hsizetype="Preferred" vsizetype="Fixed">
+        <horstretch>0</horstretch>
+        <verstretch>0</verstretch>
+       </sizepolicy>
+      </property>
+      <property name="title">
+       <string/>
+      </property>
+      <layout class="QVBoxLayout" name="verticalLayout_7">
+       <property name="sizeConstraint">
+        <enum>QLayout::SizeConstraint::SetDefaultConstraint</enum>
+       </property>
+       <property name="leftMargin">
+        <number>9</number>
+       </property>
+       <property name="topMargin">
+        <number>9</number>
+       </property>
+       <property name="rightMargin">
+        <number>9</number>
+       </property>
+       <property name="bottomMargin">
+        <number>9</number>
+       </property>
+       <item>
+        <layout class="QVBoxLayout" name="ExtractFrameLayout">
+         <item>
+          <widget class="QLabel" name="ExtractFramesLabel">
+           <property name="sizePolicy">
+            <sizepolicy hsizetype="Fixed" vsizetype="Fixed">
+             <horstretch>0</horstretch>
+             <verstretch>0</verstretch>
+            </sizepolicy>
+           </property>
+           <property name="text">
+            <string>Extract Frames</string>
+           </property>
+          </widget>
+         </item>
+         <item>
+          <layout class="QHBoxLayout" name="ExtractMethodLayout">
+           <item>
+            <widget class="QLabel" name="ExtractionMethodLabel">
+             <property name="sizePolicy">
+              <sizepolicy hsizetype="Fixed" vsizetype="Fixed">
+               <horstretch>0</horstretch>
+               <verstretch>0</verstretch>
+              </sizepolicy>
+             </property>
+             <property name="text">
+              <string>Extraction method</string>
+             </property>
+            </widget>
+           </item>
+           <item>
+            <widget class="QComboBox" name="ExtractionMethodSelection">
+             <item>
+              <property name="text">
+               <string>auto</string>
+              </property>
+             </item>
+             <item>
+              <property name="text">
+               <string>manual</string>
+              </property>
+             </item>
+             <item>
+              <property name="text">
+               <string>No</string>
+              </property>
+             </item>
+            </widget>
+           </item>
+          </layout>
+         </item>
+         <item>
+          <layout class="QHBoxLayout" name="ClusterStepLayout">
+           <item>
+            <widget class="QLabel" name="ClusterStepLabel">
+             <property name="sizePolicy">
+              <sizepolicy hsizetype="Fixed" vsizetype="Fixed">
+               <horstretch>0</horstretch>
+               <verstretch>0</verstretch>
+              </sizepolicy>
+             </property>
+             <property name="text">
+              <string>Cluster step</string>
+             </property>
+            </widget>
+           </item>
+           <item>
+            <widget class="QSpinBox" name="ClusterStepSetup">
+             <property name="sizePolicy">
+              <sizepolicy hsizetype="Preferred" vsizetype="Fixed">
+               <horstretch>0</horstretch>
+               <verstretch>0</verstretch>
+              </sizepolicy>
+             </property>
+            </widget>
+           </item>
+          </layout>
+         </item>
+         <item>
+          <layout class="QHBoxLayout" name="ExtractionAlgorithmLayout">
+           <item>
+            <widget class="QLabel" name="ExtractionAlgorithmLabel">
+             <property name="sizePolicy">
+              <sizepolicy hsizetype="Fixed" vsizetype="Fixed">
+               <horstretch>0</horstretch>
+               <verstretch>0</verstretch>
+              </sizepolicy>
+             </property>
+             <property name="text">
+              <string>Extraction algorithm</string>
+             </property>
+            </widget>
+           </item>
+           <item>
+            <widget class="QComboBox" name="ExtractionAlgorithmSelection">
+             <item>
+              <property name="text">
+               <string>kmeas</string>
+              </property>
+             </item>
+             <item>
+              <property name="text">
+               <string>uniform</string>
+              </property>
+             </item>
+             <item>
+              <property name="text">
+               <string>None</string>
+              </property>
+             </item>
+            </widget>
+           </item>
+          </layout>
+         </item>
+         <item>
+          <layout class="QHBoxLayout" name="SelectionVideosImagesLayout">
+           <item>
+            <widget class="QPushButton" name="SelectionVideosImages">
+             <property name="sizePolicy">
+              <sizepolicy hsizetype="Preferred" vsizetype="Fixed">
+               <horstretch>0</horstretch>
+               <verstretch>0</verstretch>
+              </sizepolicy>
+             </property>
+             <property name="text">
+              <string>Selection videos or images</string>
+             </property>
+            </widget>
+           </item>
+           <item>
+            <widget class="QLabel" name="SelectionVideosImagesLabel">
+             <property name="sizePolicy">
+              <sizepolicy hsizetype="Preferred" vsizetype="Fixed">
+               <horstretch>0</horstretch>
+               <verstretch>0</verstretch>
+              </sizepolicy>
+             </property>
+             <property name="text">
+              <string>50 videos or images selected</string>
+             </property>
+            </widget>
+           </item>
+          </layout>
+         </item>
+         <item>
+          <layout class="QHBoxLayout" name="ClearVideosImagesLayout">
+           <item>
+            <widget class="QPushButton" name="ClearVideosImages">
+             <property name="sizePolicy">
+              <sizepolicy hsizetype="Preferred" vsizetype="Fixed">
+               <horstretch>0</horstretch>
+               <verstretch>0</verstretch>
+              </sizepolicy>
+             </property>
+             <property name="text">
+              <string>Clear selection</string>
+             </property>
+            </widget>
+           </item>
+           <item>
+            <widget class="QPushButton" name="ExtracFrames">
+             <property name="sizePolicy">
+              <sizepolicy hsizetype="Preferred" vsizetype="Fixed">
+               <horstretch>0</horstretch>
+               <verstretch>0</verstretch>
+              </sizepolicy>
+             </property>
+             <property name="text">
+              <string>Extract Frames</string>
+             </property>
+            </widget>
+           </item>
+          </layout>
+         </item>
+        </layout>
+       </item>
+      </layout>
+     </widget>
+    </item>
+    <item>
+     <widget class="QGroupBox" name="LabelFramesGroupLayout">
+      <property name="sizePolicy">
+       <sizepolicy hsizetype="Preferred" vsizetype="Fixed">
+        <horstretch>0</horstretch>
+        <verstretch>0</verstretch>
+       </sizepolicy>
+      </property>
+      <property name="title">
+       <string/>
+      </property>
+      <layout class="QVBoxLayout" name="verticalLayout_12">
+       <property name="sizeConstraint">
+        <enum>QLayout::SizeConstraint::SetDefaultConstraint</enum>
+       </property>
+       <item>
+        <layout class="QVBoxLayout" name="LabelFrameLayout">
+         <item>
+          <widget class="QLabel" name="LabelFramesLabel">
+           <property name="sizePolicy">
+            <sizepolicy hsizetype="Fixed" vsizetype="Fixed">
+             <horstretch>0</horstretch>
+             <verstretch>0</verstretch>
+            </sizepolicy>
+           </property>
+           <property name="text">
+            <string>Label Frames</string>
+           </property>
+          </widget>
+         </item>
+         <item>
+          <layout class="QHBoxLayout" name="SaveLayout">
+           <item>
+            <widget class="QCheckBox" name="SaveYOLO">
+             <property name="sizePolicy">
+              <sizepolicy hsizetype="Preferred" vsizetype="Fixed">
+               <horstretch>0</horstretch>
+               <verstretch>0</verstretch>
+              </sizepolicy>
+             </property>
+             <property name="text">
+              <string>Save YOLO Format</string>
+             </property>
+            </widget>
+           </item>
+           <item>
+            <widget class="QCheckBox" name="SaveCOCO">
+             <property name="sizePolicy">
+              <sizepolicy hsizetype="Preferred" vsizetype="Fixed">
+               <horstretch>0</horstretch>
+               <verstretch>0</verstretch>
+              </sizepolicy>
+             </property>
+             <property name="text">
+              <string>Save COCO Format</string>
+             </property>
+            </widget>
+           </item>
+          </layout>
+         </item>
+         <item>
+          <widget class="QPushButton" name="StartLabelFrames">
+           <property name="sizePolicy">
+            <sizepolicy hsizetype="Preferred" vsizetype="Fixed">
+             <horstretch>0</horstretch>
+             <verstretch>0</verstretch>
+            </sizepolicy>
+           </property>
+           <property name="text">
+            <string>Start Label Frames</string>
+           </property>
+          </widget>
+         </item>
+         <item>
+          <widget class="QPushButton" name="CheckLabelledFrames">
+           <property name="text">
+            <string>Check Labelled Frames</string>
+           </property>
+          </widget>
+         </item>
+         <item>
+          <widget class="QPushButton" name="BuildSkeleton">
+           <property name="sizePolicy">
+            <sizepolicy hsizetype="Preferred" vsizetype="Fixed">
+             <horstretch>0</horstretch>
+             <verstretch>0</verstretch>
+            </sizepolicy>
+           </property>
+           <property name="text">
+            <string>Build Skeleton</string>
+           </property>
+          </widget>
+         </item>
+        </layout>
+       </item>
+      </layout>
+     </widget>
+    </item>
+   </layout>
   </widget>
-  <widget class="QWidget" name="LabelFrame">
-   <attribute name="title">
-    <string>Label Frames</string>
-   </attribute>
-   <widget class="QLabel" name="label_5">
-    <property name="geometry">
-     <rect>
-      <x>20</x>
-      <y>10</y>
-      <width>203</width>
-      <height>15</height>
-     </rect>
-    </property>
-    <property name="font">
-     <font>
-      <bold>true</bold>
-     </font>
-    </property>
-    <property name="text">
-     <string>AnimalPoseTracker-Label Frames</string>
-    </property>
-    <property name="alignment">
-     <set>Qt::AlignmentFlag::AlignCenter</set>
-    </property>
-   </widget>
-   <widget class="Line" name="line_3">
-    <property name="geometry">
-     <rect>
-      <x>8</x>
-      <y>40</y>
-      <width>820</width>
-      <height>16</height>
-     </rect>
-    </property>
-    <property name="orientation">
-     <enum>Qt::Orientation::Horizontal</enum>
-    </property>
-   </widget>
-  </widget>
-  <widget class="QWidget" name="TrainingConfigure">
+  <widget class="QWidget" name="TrainingModel">
    <attribute name="title">
     <string>Training Configure</string>
    </attribute>
-   <widget class="Line" name="line_4">
-    <property name="geometry">
-     <rect>
-      <x>8</x>
-      <y>40</y>
-      <width>820</width>
-      <height>16</height>
-     </rect>
-    </property>
-    <property name="orientation">
-     <enum>Qt::Orientation::Horizontal</enum>
-    </property>
-   </widget>
-   <widget class="QLabel" name="label_6">
-    <property name="geometry">
-     <rect>
-      <x>20</x>
-      <y>10</y>
-      <width>238</width>
-      <height>15</height>
-     </rect>
-    </property>
-    <property name="font">
-     <font>
-      <bold>true</bold>
-     </font>
-    </property>
-    <property name="text">
-     <string>AnimalPoseTracker-Training Configure</string>
-    </property>
-    <property name="alignment">
-     <set>Qt::AlignmentFlag::AlignCenter</set>
-    </property>
-   </widget>
+   <layout class="QVBoxLayout" name="verticalLayout_6">
+    <item>
+     <widget class="QLabel" name="TrainingConfigureLabel">
+      <property name="font">
+       <font>
+        <bold>true</bold>
+       </font>
+      </property>
+      <property name="text">
+       <string>AnimalPoseTracker-Training Configure</string>
+      </property>
+      <property name="alignment">
+       <set>Qt::AlignmentFlag::AlignLeading|Qt::AlignmentFlag::AlignLeft|Qt::AlignmentFlag::AlignVCenter</set>
+      </property>
+     </widget>
+    </item>
+    <item>
+     <widget class="Line" name="TrainingConfigureLine">
+      <property name="orientation">
+       <enum>Qt::Orientation::Horizontal</enum>
+      </property>
+     </widget>
+    </item>
+    <item>
+     <widget class="QGroupBox" name="TrainingConfigureGroup">
+      <property name="title">
+       <string/>
+      </property>
+      <layout class="QVBoxLayout" name="verticalLayout_5">
+       <item>
+        <layout class="QVBoxLayout" name="TrainingConfigureGroupLayout">
+         <item>
+          <layout class="QHBoxLayout" name="TrainingConfigureToolsLayout">
+           <item>
+            <widget class="QPushButton" name="ResumeTrain">
+             <property name="text">
+              <string>Edit training parameters</string>
+             </property>
+            </widget>
+           </item>
+           <item>
+            <widget class="QPushButton" name="EditTrainingParameters">
+             <property name="text">
+              <string>Start Train</string>
+             </property>
+            </widget>
+           </item>
+           <item>
+            <widget class="QPushButton" name="StartTrain">
+             <property name="text">
+              <string>End Train</string>
+             </property>
+            </widget>
+           </item>
+           <item>
+            <widget class="QPushButton" name="EndTrain">
+             <property name="text">
+              <string>Resume Train</string>
+             </property>
+            </widget>
+           </item>
+          </layout>
+         </item>
+         <item>
+          <widget class="QTreeWidget" name="TrainingConfigure">
+           <column>
+            <property name="text">
+             <string>Parameter</string>
+            </property>
+           </column>
+           <column>
+            <property name="text">
+             <string>Value</string>
+            </property>
+           </column>
+           <item>
+            <property name="text">
+             <string>model</string>
+            </property>
+            <property name="text">
+             <string/>
+            </property>
+           </item>
+           <item>
+            <property name="text">
+             <string>data</string>
+            </property>
+            <property name="text">
+             <string/>
+            </property>
+           </item>
+           <item>
+            <property name="text">
+             <string>epochs</string>
+            </property>
+            <property name="text">
+             <string>1000</string>
+            </property>
+           </item>
+           <item>
+            <property name="text">
+             <string>time</string>
+            </property>
+            <property name="text">
+             <string>None</string>
+            </property>
+           </item>
+           <item>
+            <property name="text">
+             <string>patience</string>
+            </property>
+            <property name="text">
+             <string>300</string>
+            </property>
+           </item>
+           <item>
+            <property name="text">
+             <string>batch</string>
+            </property>
+            <property name="text">
+             <string>16</string>
+            </property>
+           </item>
+           <item>
+            <property name="text">
+             <string>imgsz</string>
+            </property>
+            <property name="text">
+             <string>640</string>
+            </property>
+           </item>
+           <item>
+            <property name="text">
+             <string>save</string>
+            </property>
+            <property name="text">
+             <string>True</string>
+            </property>
+           </item>
+           <item>
+            <property name="text">
+             <string>save_period</string>
+            </property>
+            <property name="text">
+             <string>-1</string>
+            </property>
+           </item>
+           <item>
+            <property name="text">
+             <string>cache</string>
+            </property>
+            <property name="text">
+             <string>False</string>
+            </property>
+           </item>
+           <item>
+            <property name="text">
+             <string>device</string>
+            </property>
+            <property name="text">
+             <string>None</string>
+            </property>
+           </item>
+           <item>
+            <property name="text">
+             <string>workers</string>
+            </property>
+            <property name="text">
+             <string>8</string>
+            </property>
+           </item>
+           <item>
+            <property name="text">
+             <string>project</string>
+            </property>
+            <property name="text">
+             <string>None</string>
+            </property>
+           </item>
+           <item>
+            <property name="text">
+             <string>name</string>
+            </property>
+            <property name="text">
+             <string>None</string>
+            </property>
+           </item>
+           <item>
+            <property name="text">
+             <string>pretrained</string>
+            </property>
+            <property name="text">
+             <string>True</string>
+            </property>
+           </item>
+           <item>
+            <property name="text">
+             <string>optimizer</string>
+            </property>
+            <property name="text">
+             <string>auto</string>
+            </property>
+           </item>
+           <item>
+            <property name="text">
+             <string>seed</string>
+            </property>
+            <property name="text">
+             <string>date</string>
+            </property>
+           </item>
+           <item>
+            <property name="text">
+             <string>cos_lr</string>
+            </property>
+            <property name="text">
+             <string>False</string>
+            </property>
+           </item>
+           <item>
+            <property name="text">
+             <string>close_mosaic</string>
+            </property>
+            <property name="text">
+             <string>10</string>
+            </property>
+           </item>
+           <item>
+            <property name="text">
+             <string>resume</string>
+            </property>
+            <property name="text">
+             <string>False</string>
+            </property>
+           </item>
+           <item>
+            <property name="text">
+             <string>amp</string>
+            </property>
+            <property name="text">
+             <string>True</string>
+            </property>
+           </item>
+           <item>
+            <property name="text">
+             <string>fraction</string>
+            </property>
+            <property name="text">
+             <string>1.0</string>
+            </property>
+           </item>
+           <item>
+            <property name="text">
+             <string>profile</string>
+            </property>
+            <property name="text">
+             <string>false</string>
+            </property>
+           </item>
+           <item>
+            <property name="text">
+             <string>lr0</string>
+            </property>
+            <property name="text">
+             <string>0.01</string>
+            </property>
+           </item>
+           <item>
+            <property name="text">
+             <string>lrf</string>
+            </property>
+            <property name="text">
+             <string>0.01</string>
+            </property>
+           </item>
+           <item>
+            <property name="text">
+             <string>momentum</string>
+            </property>
+            <property name="text">
+             <string>0.937</string>
+            </property>
+           </item>
+           <item>
+            <property name="text">
+             <string>weight_decay</string>
+            </property>
+            <property name="text">
+             <string>0.0005</string>
+            </property>
+           </item>
+           <item>
+            <property name="text">
+             <string>warmup_epochs</string>
+            </property>
+            <property name="text">
+             <string>3</string>
+            </property>
+           </item>
+           <item>
+            <property name="text">
+             <string>warmup_momentum</string>
+            </property>
+            <property name="text">
+             <string>0.8</string>
+            </property>
+           </item>
+           <item>
+            <property name="text">
+             <string>warmup_bias_lr</string>
+            </property>
+            <property name="text">
+             <string>0.1</string>
+            </property>
+           </item>
+           <item>
+            <property name="text">
+             <string>box</string>
+            </property>
+            <property name="text">
+             <string>7.5</string>
+            </property>
+           </item>
+           <item>
+            <property name="text">
+             <string>cls</string>
+            </property>
+            <property name="text">
+             <string>0.5</string>
+            </property>
+           </item>
+           <item>
+            <property name="text">
+             <string>dfl</string>
+            </property>
+            <property name="text">
+             <string>1.5</string>
+            </property>
+           </item>
+           <item>
+            <property name="text">
+             <string>pose</string>
+            </property>
+            <property name="text">
+             <string>40.0</string>
+            </property>
+           </item>
+           <item>
+            <property name="text">
+             <string>kobj</string>
+            </property>
+            <property name="text">
+             <string>2.0</string>
+            </property>
+           </item>
+           <item>
+            <property name="text">
+             <string>nbs</string>
+            </property>
+            <property name="text">
+             <string>64</string>
+            </property>
+           </item>
+           <item>
+            <property name="text">
+             <string>overlap_mask</string>
+            </property>
+            <property name="text">
+             <string>True</string>
+            </property>
+           </item>
+           <item>
+            <property name="text">
+             <string>mask_ratio</string>
+            </property>
+            <property name="text">
+             <string>4</string>
+            </property>
+           </item>
+           <item>
+            <property name="text">
+             <string>dropout</string>
+            </property>
+            <property name="text">
+             <string>0.0</string>
+            </property>
+           </item>
+           <item>
+            <property name="text">
+             <string>val</string>
+            </property>
+            <property name="text">
+             <string>True</string>
+            </property>
+           </item>
+           <item>
+            <property name="text">
+             <string>plots</string>
+            </property>
+            <property name="text">
+             <string>False</string>
+            </property>
+           </item>
+          </widget>
+         </item>
+        </layout>
+       </item>
+      </layout>
+     </widget>
+    </item>
+   </layout>
   </widget>
   <widget class="QWidget" name="EvaluateModel">
    <attribute name="title">
     <string>Evaluate Model</string>
    </attribute>
-   <widget class="Line" name="line_5">
-    <property name="geometry">
-     <rect>
-      <x>8</x>
-      <y>40</y>
-      <width>820</width>
-      <height>16</height>
-     </rect>
-    </property>
-    <property name="orientation">
-     <enum>Qt::Orientation::Horizontal</enum>
-    </property>
-   </widget>
-   <widget class="QLabel" name="label_7">
-    <property name="geometry">
-     <rect>
-      <x>20</x>
-      <y>10</y>
-      <width>217</width>
-      <height>15</height>
-     </rect>
-    </property>
-    <property name="font">
-     <font>
-      <bold>true</bold>
-     </font>
-    </property>
-    <property name="text">
-     <string>AnimalPoseTracker-Evaluate Model</string>
-    </property>
-    <property name="alignment">
-     <set>Qt::AlignmentFlag::AlignCenter</set>
-    </property>
-   </widget>
+   <layout class="QVBoxLayout" name="verticalLayout_9">
+    <item>
+     <widget class="QLabel" name="EvaluateModelLabel">
+      <property name="font">
+       <font>
+        <bold>true</bold>
+       </font>
+      </property>
+      <property name="text">
+       <string>AnimalPoseTracker-Evaluate Model</string>
+      </property>
+      <property name="alignment">
+       <set>Qt::AlignmentFlag::AlignLeading|Qt::AlignmentFlag::AlignLeft|Qt::AlignmentFlag::AlignVCenter</set>
+      </property>
+     </widget>
+    </item>
+    <item>
+     <widget class="Line" name="EvaluateModelLine">
+      <property name="orientation">
+       <enum>Qt::Orientation::Horizontal</enum>
+      </property>
+     </widget>
+    </item>
+    <item>
+     <widget class="QGroupBox" name="EvaluateModelGroup">
+      <property name="title">
+       <string/>
+      </property>
+      <layout class="QVBoxLayout" name="verticalLayout_8">
+       <property name="leftMargin">
+        <number>9</number>
+       </property>
+       <property name="topMargin">
+        <number>9</number>
+       </property>
+       <property name="rightMargin">
+        <number>9</number>
+       </property>
+       <property name="bottomMargin">
+        <number>9</number>
+       </property>
+       <item>
+        <layout class="QVBoxLayout" name="EvaluateModelGroupLayout">
+         <item>
+          <layout class="QHBoxLayout" name="EvaluateModelToolsLayout">
+           <item>
+            <widget class="QPushButton" name="EditevaluationParameters">
+             <property name="text">
+              <string>Edit evaluation parameters</string>
+             </property>
+            </widget>
+           </item>
+           <item>
+            <widget class="QPushButton" name="StartEvaluate">
+             <property name="text">
+              <string>Start evaluate</string>
+             </property>
+            </widget>
+           </item>
+           <item>
+            <widget class="QPushButton" name="EndEvaluate">
+             <property name="text">
+              <string>End evaluate</string>
+             </property>
+            </widget>
+           </item>
+          </layout>
+         </item>
+         <item>
+          <widget class="QTreeWidget" name="EvaluateConfigure">
+           <column>
+            <property name="text">
+             <string>Parameter</string>
+            </property>
+           </column>
+           <column>
+            <property name="text">
+             <string>Value</string>
+            </property>
+           </column>
+           <item>
+            <property name="text">
+             <string>data</string>
+            </property>
+            <property name="text">
+             <string/>
+            </property>
+           </item>
+           <item>
+            <property name="text">
+             <string>batch</string>
+            </property>
+            <property name="text">
+             <string>16</string>
+            </property>
+           </item>
+           <item>
+            <property name="text">
+             <string>imgsz</string>
+            </property>
+            <property name="text">
+             <string>640</string>
+            </property>
+           </item>
+           <item>
+            <property name="text">
+             <string>save_json</string>
+            </property>
+            <property name="text">
+             <string>False</string>
+            </property>
+           </item>
+           <item>
+            <property name="text">
+             <string>save_hybrid</string>
+            </property>
+            <property name="text">
+             <string>False</string>
+            </property>
+           </item>
+           <item>
+            <property name="text">
+             <string>conf</string>
+            </property>
+            <property name="text">
+             <string>0.001</string>
+            </property>
+           </item>
+           <item>
+            <property name="text">
+             <string>iou</string>
+            </property>
+            <property name="text">
+             <string>0.6</string>
+            </property>
+           </item>
+           <item>
+            <property name="text">
+             <string>max_det</string>
+            </property>
+            <property name="text">
+             <string>300</string>
+            </property>
+           </item>
+           <item>
+            <property name="text">
+             <string>half</string>
+            </property>
+            <property name="text">
+             <string>True</string>
+            </property>
+           </item>
+           <item>
+            <property name="text">
+             <string>device</string>
+            </property>
+            <property name="text">
+             <string>None</string>
+            </property>
+           </item>
+           <item>
+            <property name="text">
+             <string>dnn</string>
+            </property>
+            <property name="text">
+             <string>False</string>
+            </property>
+           </item>
+           <item>
+            <property name="text">
+             <string>plots</string>
+            </property>
+            <property name="text">
+             <string>False</string>
+            </property>
+           </item>
+           <item>
+            <property name="text">
+             <string>rect</string>
+            </property>
+            <property name="text">
+             <string>True</string>
+            </property>
+           </item>
+           <item>
+            <property name="text">
+             <string>split</string>
+            </property>
+            <property name="text">
+             <string>val</string>
+            </property>
+           </item>
+           <item>
+            <property name="text">
+             <string>project</string>
+            </property>
+            <property name="text">
+             <string>None</string>
+            </property>
+           </item>
+           <item>
+            <property name="text">
+             <string>name</string>
+            </property>
+            <property name="text">
+             <string>None</string>
+            </property>
+           </item>
+           <item>
+            <property name="text">
+             <string>profile</string>
+            </property>
+            <property name="text">
+             <string>false</string>
+            </property>
+           </item>
+           <item>
+            <property name="text">
+             <string>verbose</string>
+            </property>
+            <property name="text">
+             <string>False</string>
+            </property>
+           </item>
+           <item>
+            <property name="text">
+             <string>save_txt</string>
+            </property>
+            <property name="text">
+             <string>False</string>
+            </property>
+           </item>
+           <item>
+            <property name="text">
+             <string>save_conf</string>
+            </property>
+            <property name="text">
+             <string>False</string>
+            </property>
+           </item>
+           <item>
+            <property name="text">
+             <string>save_crop</string>
+            </property>
+            <property name="text">
+             <string>False</string>
+            </property>
+           </item>
+           <item>
+            <property name="text">
+             <string>workers</string>
+            </property>
+            <property name="text">
+             <string>8</string>
+            </property>
+           </item>
+           <item>
+            <property name="text">
+             <string>augment</string>
+            </property>
+            <property name="text">
+             <string>False</string>
+            </property>
+           </item>
+           <item>
+            <property name="text">
+             <string>agnostic_nms</string>
+            </property>
+            <property name="text">
+             <string>False</string>
+            </property>
+           </item>
+           <item>
+            <property name="text">
+             <string>single_cls</string>
+            </property>
+            <property name="text">
+             <string>False</string>
+            </property>
+           </item>
+          </widget>
+         </item>
+        </layout>
+       </item>
+      </layout>
+     </widget>
+    </item>
+   </layout>
   </widget>
   <widget class="QWidget" name="InferenceSource">
    <attribute name="title">
     <string>Inference Source</string>
    </attribute>
-   <widget class="Line" name="line_6">
-    <property name="geometry">
-     <rect>
-      <x>8</x>
-      <y>40</y>
-      <width>820</width>
-      <height>16</height>
-     </rect>
-    </property>
-    <property name="orientation">
-     <enum>Qt::Orientation::Horizontal</enum>
-    </property>
-   </widget>
-   <widget class="QLabel" name="label_8">
-    <property name="geometry">
-     <rect>
-      <x>20</x>
-      <y>10</y>
-      <width>224</width>
-      <height>15</height>
-     </rect>
-    </property>
-    <property name="font">
-     <font>
-      <bold>true</bold>
-     </font>
-    </property>
-    <property name="text">
-     <string>AnimalPoseTracker-Inference Source</string>
-    </property>
-    <property name="alignment">
-     <set>Qt::AlignmentFlag::AlignCenter</set>
-    </property>
-   </widget>
+   <layout class="QVBoxLayout" name="verticalLayout_4">
+    <item>
+     <widget class="QLabel" name="InferenceSourceLabel">
+      <property name="font">
+       <font>
+        <bold>true</bold>
+       </font>
+      </property>
+      <property name="text">
+       <string>AnimalPoseTracker-Inference Source</string>
+      </property>
+      <property name="alignment">
+       <set>Qt::AlignmentFlag::AlignLeading|Qt::AlignmentFlag::AlignLeft|Qt::AlignmentFlag::AlignVCenter</set>
+      </property>
+     </widget>
+    </item>
+    <item>
+     <widget class="Line" name="InferenceSourceLine">
+      <property name="orientation">
+       <enum>Qt::Orientation::Horizontal</enum>
+      </property>
+     </widget>
+    </item>
+    <item>
+     <widget class="QGroupBox" name="InferenceConfigureGroup">
+      <property name="title">
+       <string/>
+      </property>
+      <layout class="QVBoxLayout" name="verticalLayout_10">
+       <item>
+        <layout class="QVBoxLayout" name="InferenceSourceLayout">
+         <item>
+          <layout class="QHBoxLayout" name="InferenceSourceToolsLayout">
+           <item>
+            <widget class="QPushButton" name="pushButton_10">
+             <property name="text">
+              <string>Edit inference parameters</string>
+             </property>
+            </widget>
+           </item>
+           <item>
+            <widget class="QPushButton" name="pushButton_13">
+             <property name="text">
+              <string>Selection Source</string>
+             </property>
+            </widget>
+           </item>
+           <item>
+            <widget class="QPushButton" name="pushButton_11">
+             <property name="text">
+              <string>Start Inference</string>
+             </property>
+            </widget>
+           </item>
+           <item>
+            <widget class="QPushButton" name="pushButton_12">
+             <property name="text">
+              <string>End Inference</string>
+             </property>
+            </widget>
+           </item>
+          </layout>
+         </item>
+         <item>
+          <widget class="QTreeWidget" name="InferenceConfigure">
+           <column>
+            <property name="text">
+             <string>Parameter</string>
+            </property>
+           </column>
+           <column>
+            <property name="text">
+             <string>Value</string>
+            </property>
+           </column>
+           <item>
+            <property name="text">
+             <string>source</string>
+            </property>
+           </item>
+           <item>
+            <property name="text">
+             <string>conf</string>
+            </property>
+            <property name="text">
+             <string/>
+            </property>
+           </item>
+           <item>
+            <property name="text">
+             <string>iou</string>
+            </property>
+           </item>
+           <item>
+            <property name="text">
+             <string>imgsz</string>
+            </property>
+           </item>
+           <item>
+            <property name="text">
+             <string>half</string>
+            </property>
+           </item>
+           <item>
+            <property name="text">
+             <string>device</string>
+            </property>
+           </item>
+           <item>
+            <property name="text">
+             <string>batch</string>
+            </property>
+           </item>
+           <item>
+            <property name="text">
+             <string>max_det</string>
+            </property>
+           </item>
+           <item>
+            <property name="text">
+             <string>vid_stride</string>
+            </property>
+           </item>
+           <item>
+            <property name="text">
+             <string>stream_buffer</string>
+            </property>
+           </item>
+           <item>
+            <property name="text">
+             <string>visualize</string>
+            </property>
+           </item>
+           <item>
+            <property name="text">
+             <string>augment</string>
+            </property>
+           </item>
+           <item>
+            <property name="text">
+             <string>agnostic_nms</string>
+            </property>
+           </item>
+           <item>
+            <property name="text">
+             <string>classes</string>
+            </property>
+           </item>
+           <item>
+            <property name="text">
+             <string>retina_masks</string>
+            </property>
+           </item>
+           <item>
+            <property name="text">
+             <string>embed</string>
+            </property>
+           </item>
+           <item>
+            <property name="text">
+             <string>project</string>
+            </property>
+           </item>
+           <item>
+            <property name="text">
+             <string>name</string>
+            </property>
+           </item>
+           <item>
+            <property name="text">
+             <string>stream</string>
+            </property>
+           </item>
+           <item>
+            <property name="text">
+             <string>verbose</string>
+            </property>
+           </item>
+           <item>
+            <property name="text">
+             <string>show</string>
+            </property>
+           </item>
+           <item>
+            <property name="text">
+             <string>save</string>
+            </property>
+           </item>
+           <item>
+            <property name="text">
+             <string>save_frame</string>
+            </property>
+           </item>
+           <item>
+            <property name="text">
+             <string>save_txt</string>
+            </property>
+           </item>
+           <item>
+            <property name="text">
+             <string>save_conf</string>
+            </property>
+           </item>
+           <item>
+            <property name="text">
+             <string>save_crop</string>
+            </property>
+           </item>
+           <item>
+            <property name="text">
+             <string>show_label</string>
+            </property>
+           </item>
+           <item>
+            <property name="text">
+             <string>show_conf</string>
+            </property>
+           </item>
+           <item>
+            <property name="text">
+             <string>show_boxes</string>
+            </property>
+           </item>
+           <item>
+            <property name="text">
+             <string>line_width</string>
+            </property>
+           </item>
+           <item>
+            <property name="text">
+             <string>font_size</string>
+            </property>
+           </item>
+           <item>
+            <property name="text">
+             <string>font</string>
+            </property>
+           </item>
+           <item>
+            <property name="text">
+             <string>pil</string>
+            </property>
+           </item>
+           <item>
+            <property name="text">
+             <string>kpt_radius</string>
+            </property>
+           </item>
+           <item>
+            <property name="text">
+             <string>kpt_line</string>
+            </property>
+           </item>
+           <item>
+            <property name="text">
+             <string>masks</string>
+            </property>
+           </item>
+           <item>
+            <property name="text">
+             <string>probs</string>
+            </property>
+           </item>
+           <item>
+            <property name="text">
+             <string>filename</string>
+            </property>
+           </item>
+           <item>
+            <property name="text">
+             <string>color_mode</string>
+            </property>
+           </item>
+           <item>
+            <property name="text">
+             <string>txt_color</string>
+            </property>
+           </item>
+          </widget>
+         </item>
+        </layout>
+       </item>
+      </layout>
+     </widget>
+    </item>
+   </layout>
   </widget>
-  <widget class="QWidget" name="Tracking">
+  <widget class="QWidget" name="ExportModel">
    <attribute name="title">
-    <string>Tracking</string>
+    <string>Export Model</string>
    </attribute>
-   <widget class="Line" name="line_7">
-    <property name="geometry">
-     <rect>
-      <x>8</x>
-      <y>40</y>
-      <width>820</width>
-      <height>16</height>
-     </rect>
-    </property>
-    <property name="orientation">
-     <enum>Qt::Orientation::Horizontal</enum>
-    </property>
-   </widget>
-   <widget class="QLabel" name="label_9">
-    <property name="geometry">
-     <rect>
-      <x>20</x>
-      <y>10</y>
-      <width>174</width>
-      <height>15</height>
-     </rect>
-    </property>
-    <property name="font">
-     <font>
-      <bold>true</bold>
-     </font>
-    </property>
-    <property name="text">
-     <string>AnimalPoseTracker-Tracking</string>
-    </property>
-    <property name="alignment">
-     <set>Qt::AlignmentFlag::AlignCenter</set>
-    </property>
-   </widget>
-  </widget>
-  <widget class="QWidget" name="Animal3DPose">
-   <attribute name="title">
-    <string>Animal3DPose</string>
-   </attribute>
-   <widget class="Line" name="line_8">
-    <property name="geometry">
-     <rect>
-      <x>8</x>
-      <y>40</y>
-      <width>820</width>
-      <height>16</height>
-     </rect>
-    </property>
-    <property name="orientation">
-     <enum>Qt::Orientation::Horizontal</enum>
-    </property>
-   </widget>
-   <widget class="QLabel" name="label_10">
-    <property name="geometry">
-     <rect>
-      <x>20</x>
-      <y>10</y>
-      <width>212</width>
-      <height>15</height>
-     </rect>
-    </property>
-    <property name="font">
-     <font>
-      <bold>true</bold>
-     </font>
-    </property>
-    <property name="text">
-     <string>AnimalPoseTracker-Animal3DPose</string>
-    </property>
-    <property name="alignment">
-     <set>Qt::AlignmentFlag::AlignCenter</set>
-    </property>
-   </widget>
+   <layout class="QVBoxLayout" name="verticalLayout">
+    <item>
+     <widget class="QLabel" name="ExportModelLabel">
+      <property name="font">
+       <font>
+        <bold>true</bold>
+       </font>
+      </property>
+      <property name="text">
+       <string>AnimalPoseTracker-Export Model</string>
+      </property>
+      <property name="alignment">
+       <set>Qt::AlignmentFlag::AlignLeading|Qt::AlignmentFlag::AlignLeft|Qt::AlignmentFlag::AlignVCenter</set>
+      </property>
+     </widget>
+    </item>
+    <item>
+     <widget class="Line" name="ExportModelLine">
+      <property name="orientation">
+       <enum>Qt::Orientation::Horizontal</enum>
+      </property>
+     </widget>
+    </item>
+    <item>
+     <widget class="QGroupBox" name="ExportConfigureGroup">
+      <property name="title">
+       <string/>
+      </property>
+      <layout class="QVBoxLayout" name="verticalLayout_11">
+       <item>
+        <layout class="QVBoxLayout" name="ExportConfigureGroupLayout">
+         <item>
+          <layout class="QHBoxLayout" name="ExportConfigureToolsLayout">
+           <item>
+            <widget class="QPushButton" name="EditExportParameters">
+             <property name="text">
+              <string>Edit export parameters</string>
+             </property>
+            </widget>
+           </item>
+           <item>
+            <widget class="QPushButton" name="StartModelWeights">
+             <property name="text">
+              <string>Selection model weights </string>
+             </property>
+            </widget>
+           </item>
+           <item>
+            <widget class="QPushButton" name="StartExport">
+             <property name="text">
+              <string>Start Export</string>
+             </property>
+            </widget>
+           </item>
+          </layout>
+         </item>
+         <item>
+          <widget class="QTreeWidget" name="ExportConfigure">
+           <column>
+            <property name="text">
+             <string>Parameter</string>
+            </property>
+           </column>
+           <column>
+            <property name="text">
+             <string>Value</string>
+            </property>
+           </column>
+           <item>
+            <property name="text">
+             <string>format</string>
+            </property>
+           </item>
+           <item>
+            <property name="text">
+             <string>imgsz</string>
+            </property>
+           </item>
+           <item>
+            <property name="text">
+             <string>keras</string>
+            </property>
+           </item>
+           <item>
+            <property name="text">
+             <string>optimize</string>
+            </property>
+           </item>
+           <item>
+            <property name="text">
+             <string>half</string>
+            </property>
+           </item>
+           <item>
+            <property name="text">
+             <string>int8</string>
+            </property>
+           </item>
+           <item>
+            <property name="text">
+             <string>dynamic</string>
+            </property>
+           </item>
+           <item>
+            <property name="text">
+             <string>simplify</string>
+            </property>
+           </item>
+           <item>
+            <property name="text">
+             <string>opset</string>
+            </property>
+           </item>
+           <item>
+            <property name="text">
+             <string>workspace</string>
+            </property>
+           </item>
+           <item>
+            <property name="text">
+             <string>nms</string>
+            </property>
+           </item>
+           <item>
+            <property name="text">
+             <string>batch</string>
+            </property>
+           </item>
+           <item>
+            <property name="text">
+             <string>device</string>
+            </property>
+           </item>
+           <item>
+            <property name="text">
+             <string>data</string>
+            </property>
+           </item>
+           <item>
+            <property name="text">
+             <string>fraction</string>
+            </property>
+           </item>
+          </widget>
+         </item>
+        </layout>
+       </item>
+      </layout>
+     </widget>
+    </item>
+   </layout>
   </widget>
  </widget>
  <resources/>
