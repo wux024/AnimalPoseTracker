@@ -2,7 +2,7 @@
 # -*- coding: utf-8 -*-
 
 """
-File Name: __init__.py.py
+File Name: dataset.py.py
 Author: wux024
 Email: wux024@nenu.edu.cn
 Created On: 2024/9/8
@@ -19,3 +19,25 @@ Notes:
 Revision History:
     - [2024/9/8] wux024: Initial file creation
 """
+
+class AnimalPoseAnnotation(object):
+    def __init__(self, keypoints = 17, classes = 1):
+        self.keypoints = keypoints
+        self.classes = classes
+    
+    def load_annotation(self, annotation_file):
+        pass
+
+    def save_annotation(self, annotation_file, format = 'COCO'):
+        pass
+
+    def get_keypoints(self):
+        pass
+
+    def set_keypoints(self, keypoints):
+        pass
+
+    def get_classes(self):
+        pass
+
+

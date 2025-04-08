@@ -2,7 +2,7 @@
 # -*- coding: utf-8 -*-
 
 """
-File Name: frame_extraction.py.py
+File Name: dataset.py.py
 Author: wux024
 Email: wux024@nenu.edu.cn
 Created On: 2024/9/8
@@ -20,16 +20,24 @@ Revision History:
     - [2024/9/8] wux024: Initial file creation
 """
 
-def extract_frames(
-        config,
-        mode = "auto",
-        method = "kmeans"
-):
-    """
-    Extract frames from video or images according to the given configuration and mode.
-    :param config:
-    :param mode:
-    :param method:
-    :return:
-    """
-    pass
+class AnimalPoseAnnotation(object):
+    def __init__(self, keypoints = 17, classes = 1):
+        self.keypoints = keypoints
+        self.classes = classes
+    
+    def load_annotation(self, annotation_file):
+        pass
+
+    def save_annotation(self, annotation_file, format = 'COCO'):
+        pass
+
+    def get_keypoints(self):
+        pass
+
+    def set_keypoints(self, keypoints):
+        pass
+
+    def get_classes(self):
+        pass
+
+

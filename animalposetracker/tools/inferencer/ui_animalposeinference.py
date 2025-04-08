@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 
 ################################################################################
-## Form generated from reading UI file 'animalposeinferenceQxTHRL.ui'
+## Form generated from reading UI file 'animalposeinferenceVKrqAD.ui'
 ##
 ## Created by: Qt User Interface Compiler version 6.8.2
 ##
@@ -281,14 +281,15 @@ class Ui_AnimalPoseInference(object):
 
         self.ShowLayout.addWidget(self.Show)
 
-        self.OpenGL = QCheckBox(self.ShowToolsGroup)
-        self.OpenGL.setObjectName(u"OpenGL")
-        self.OpenGL.setEnabled(False)
-        sizePolicy2.setHeightForWidth(self.OpenGL.sizePolicy().hasHeightForWidth())
-        self.OpenGL.setSizePolicy(sizePolicy2)
-        self.OpenGL.setMinimumSize(QSize(120, 25))
+        self.Backgroud = QCheckBox(self.ShowToolsGroup)
+        self.Backgroud.setObjectName(u"Backgroud")
+        self.Backgroud.setEnabled(True)
+        sizePolicy2.setHeightForWidth(self.Backgroud.sizePolicy().hasHeightForWidth())
+        self.Backgroud.setSizePolicy(sizePolicy2)
+        self.Backgroud.setMinimumSize(QSize(120, 25))
+        self.Backgroud.setTristate(True)
 
-        self.ShowLayout.addWidget(self.OpenGL)
+        self.ShowLayout.addWidget(self.Backgroud)
 
 
         self.ShowToolsLayout.addLayout(self.ShowLayout)
@@ -327,7 +328,14 @@ class Ui_AnimalPoseInference(object):
 
         self.ShowKeypointsRadius = QSlider(self.ShowToolsGroup)
         self.ShowKeypointsRadius.setObjectName(u"ShowKeypointsRadius")
+        self.ShowKeypointsRadius.setMinimum(1)
+        self.ShowKeypointsRadius.setMaximum(20)
+        self.ShowKeypointsRadius.setPageStep(2)
+        self.ShowKeypointsRadius.setSliderPosition(6)
         self.ShowKeypointsRadius.setOrientation(Qt.Orientation.Horizontal)
+        self.ShowKeypointsRadius.setInvertedAppearance(False)
+        self.ShowKeypointsRadius.setInvertedControls(False)
+        self.ShowKeypointsRadius.setTickPosition(QSlider.TickPosition.NoTicks)
 
         self.ShowKeypointsLayout.addWidget(self.ShowKeypointsRadius)
 
@@ -347,6 +355,10 @@ class Ui_AnimalPoseInference(object):
 
         self.ShowSkeletonsLineWidth = QSlider(self.ShowToolsGroup)
         self.ShowSkeletonsLineWidth.setObjectName(u"ShowSkeletonsLineWidth")
+        self.ShowSkeletonsLineWidth.setMinimum(1)
+        self.ShowSkeletonsLineWidth.setMaximum(10)
+        self.ShowSkeletonsLineWidth.setPageStep(1)
+        self.ShowSkeletonsLineWidth.setValue(2)
         self.ShowSkeletonsLineWidth.setOrientation(Qt.Orientation.Horizontal)
 
         self.ShowSkeletonsLayout.addWidget(self.ShowSkeletonsLineWidth)
@@ -367,6 +379,10 @@ class Ui_AnimalPoseInference(object):
 
         self.ShowBBoxWidth = QSlider(self.ShowToolsGroup)
         self.ShowBBoxWidth.setObjectName(u"ShowBBoxWidth")
+        self.ShowBBoxWidth.setMinimum(1)
+        self.ShowBBoxWidth.setMaximum(10)
+        self.ShowBBoxWidth.setPageStep(1)
+        self.ShowBBoxWidth.setValue(2)
         self.ShowBBoxWidth.setOrientation(Qt.Orientation.Horizontal)
 
         self.ShowBBoxLayout.addWidget(self.ShowBBoxWidth)
@@ -396,9 +412,10 @@ class Ui_AnimalPoseInference(object):
         self.Display.setObjectName(u"Display")
         sizePolicy.setHeightForWidth(self.Display.sizePolicy().hasHeightForWidth())
         self.Display.setSizePolicy(sizePolicy)
-        self.Display.setMaximumSize(QSize(400, 400))
+        self.Display.setMinimumSize(QSize(100, 100))
+        self.Display.setMaximumSize(QSize(1000, 1000))
         self.Display.setToolTipDuration(0)
-        self.Display.setPixmap(QPixmap(u"assets/logo.png"))
+        self.Display.setPixmap(QPixmap(u"../../assets/logo_transparent.png"))
         self.Display.setScaledContents(True)
         self.Display.setAlignment(Qt.AlignmentFlag.AlignCenter)
 
@@ -445,7 +462,7 @@ class Ui_AnimalPoseInference(object):
         self.ShowToolsGroup.setTitle("")
         self.Save.setText(QCoreApplication.translate("AnimalPoseInference", u"Save", None))
         self.Show.setText(QCoreApplication.translate("AnimalPoseInference", u"Show", None))
-        self.OpenGL.setText(QCoreApplication.translate("AnimalPoseInference", u"OpenGL", None))
+        self.Backgroud.setText(QCoreApplication.translate("AnimalPoseInference", u"Original", None))
         self.ShowClasses.setText(QCoreApplication.translate("AnimalPoseInference", u"Show Classes", None))
         self.Classes.setText(QCoreApplication.translate("AnimalPoseInference", u"There are 50 classes!", None))
         self.ShowKeypoints.setText(QCoreApplication.translate("AnimalPoseInference", u"Show Keypoints", None))

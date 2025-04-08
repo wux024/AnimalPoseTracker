@@ -527,9 +527,9 @@
              </widget>
             </item>
             <item>
-             <widget class="QCheckBox" name="OpenGL">
+             <widget class="QCheckBox" name="Backgroud">
               <property name="enabled">
-               <bool>false</bool>
+               <bool>true</bool>
               </property>
               <property name="sizePolicy">
                <sizepolicy hsizetype="Preferred" vsizetype="Fixed">
@@ -544,7 +544,10 @@
                </size>
               </property>
               <property name="text">
-               <string>OpenGL</string>
+               <string>Original</string>
+              </property>
+              <property name="tristate">
+               <bool>true</bool>
               </property>
              </widget>
             </item>
@@ -627,8 +630,29 @@
             </item>
             <item>
              <widget class="QSlider" name="ShowKeypointsRadius">
+              <property name="minimum">
+               <number>1</number>
+              </property>
+              <property name="maximum">
+               <number>20</number>
+              </property>
+              <property name="pageStep">
+               <number>2</number>
+              </property>
+              <property name="sliderPosition">
+               <number>6</number>
+              </property>
               <property name="orientation">
                <enum>Qt::Orientation::Horizontal</enum>
+              </property>
+              <property name="invertedAppearance">
+               <bool>false</bool>
+              </property>
+              <property name="invertedControls">
+               <bool>false</bool>
+              </property>
+              <property name="tickPosition">
+               <enum>QSlider::TickPosition::NoTicks</enum>
               </property>
              </widget>
             </item>
@@ -663,6 +687,18 @@
             </item>
             <item>
              <widget class="QSlider" name="ShowSkeletonsLineWidth">
+              <property name="minimum">
+               <number>1</number>
+              </property>
+              <property name="maximum">
+               <number>10</number>
+              </property>
+              <property name="pageStep">
+               <number>1</number>
+              </property>
+              <property name="value">
+               <number>2</number>
+              </property>
               <property name="orientation">
                <enum>Qt::Orientation::Horizontal</enum>
               </property>
@@ -699,6 +735,18 @@
             </item>
             <item>
              <widget class="QSlider" name="ShowBBoxWidth">
+              <property name="minimum">
+               <number>1</number>
+              </property>
+              <property name="maximum">
+               <number>10</number>
+              </property>
+              <property name="pageStep">
+               <number>1</number>
+              </property>
+              <property name="value">
+               <number>2</number>
+              </property>
               <property name="orientation">
                <enum>Qt::Orientation::Horizontal</enum>
               </property>
@@ -751,10 +799,16 @@
           <verstretch>0</verstretch>
          </sizepolicy>
         </property>
+        <property name="minimumSize">
+         <size>
+          <width>100</width>
+          <height>100</height>
+         </size>
+        </property>
         <property name="maximumSize">
          <size>
-          <width>400</width>
-          <height>400</height>
+          <width>1000</width>
+          <height>1000</height>
          </size>
         </property>
         <property name="toolTipDuration">
@@ -764,7 +818,7 @@
          <string/>
         </property>
         <property name="pixmap">
-         <pixmap>assets/logo.png</pixmap>
+         <pixmap>../../assets/logo_transparent.png</pixmap>
         </property>
         <property name="scaledContents">
          <bool>true</bool>

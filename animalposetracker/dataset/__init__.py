@@ -2,7 +2,7 @@
 # -*- coding: utf-8 -*-
 
 """
-File Name: __init__.py
+File Name: __init__.py.py
 Author: wux024
 Email: wux024@nenu.edu.cn
 Created On: 2024/9/6
@@ -19,7 +19,3 @@ Notes:
 Revision History:
     - [2024/9/6] wux024: Initial file creation
 """
-from .animalposetracker import AnimalPoseTracker
-
-
-__all__ = ['AnimalPoseTracker']

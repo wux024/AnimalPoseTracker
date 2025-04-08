@@ -1,74 +1,16 @@
-from PySide6.QtCore import (
-    QCoreApplication, QDate, QDateTime, QLocale,
-    QMetaObject, QObject, QPoint, QRect,
-    QSize, QTime, QUrl, Qt, Signal, Slot, QThread, Q_ARG, QMutex
-)
-from PySide6.QtGui import (
-    QBrush, QColor, QConicalGradient, QCursor,
-    QFont, QFontDatabase, QGradient, QIcon,
-    QImage, QKeySequence, QLinearGradient, QPainter,
-    QPalette, QPixmap, QRadialGradient, QTransform
-)
-from PySide6.QtWidgets import (
-    QApplication, QCheckBox, QComboBox, QFileDialog,
-    QGroupBox, QHBoxLayout, QLabel, QLayout,
-    QPushButton, QRadioButton, QSizePolicy, QSlider,
-    QSpinBox, QVBoxLayout, QWidget
-)
+from PySide6.QtCore import   QMetaObject, Qt, Slot, Q_ARG
+from PySide6.QtGui import QImage, QPixmap
+from PySide6.QtWidgets import  QApplication, QFileDialog, QWidget
 import os
 import yaml
 import cv2
 import numpy as np
-import time
+import sys
 
-from ui_animalposeinference import Ui_AnimalPoseInference
+from .ui_animalposeinference import Ui_AnimalPoseInference
 
+from animalposetracker.utils import PreviewThread
 
-class PreviewThread(QThread):
-    """Thread to run inference on video"""
-    frame_ready = Signal(np.ndarray)
-    status_update = Signal(str)
-    def __init__(self, source, parent=None):
-        super().__init__(parent)
-        self.source = source
-        self.running = False
-        self._lock = QMutex()
-    
-    def run(self):
-        self._lock.lock()
-        self.running = True
-        self._lock.unlock()
-        cap = cv2.VideoCapture(self.source)
-        fps = cap.get(cv2.CAP_PROP_FPS)
-        if not cap.isOpened():
-            self.status_update.emit("Preview failed to start")
-            return
-        self.status_update.emit("Preview started")
-        while self.running:
-            ret, frame = cap.read()
-            if ret:
-                self.frame_ready.emit(frame)
-            else:
-                self.status_update.emit("Preview stopped")
-                self.finished.emit()
-                break
-            time.sleep(1.0/fps)
-
-        cap.release()
-        self.status_update.emit("Preview stopped")
-    
-    @property
-    def is_running(self):
-        self._lock.lock()
-        is_running = self.running
-        self._lock.unlock()
-        return is_running
-    
-    def safe_stop(self):
-        self._lock.lock()
-        self.running = False
-        self._lock.unlock()
-        self.wait()
 
 class AnimalPoseInference(QWidget):
     def __init__(self, parent=None):
@@ -78,6 +20,8 @@ class AnimalPoseInference(QWidget):
 
         # constants
         self.camera_list = {}
+
+        self.preview_thread = PreviewThread()
 
         # init button
         self.initialize_controls()
@@ -111,7 +55,7 @@ class AnimalPoseInference(QWidget):
         # Display option signals
         self.ui.Save.stateChanged.connect(self.onSaveStateChanged)
         self.ui.Show.stateChanged.connect(self.onShowStateChanged)
-        self.ui.OpenGL.stateChanged.connect(self.onOpenGLStateChanged)
+        self.ui.Backgroud.stateChanged.connect(self.onBackgroudStateChanged)
         self.ui.ShowClasses.stateChanged.connect(self.onShowClassesStateChanged)
         self.ui.ShowKeypoints.stateChanged.connect(self.onShowKeypointsStateChanged)
         self.ui.ShowKeypointsRadius.valueChanged.connect(self.onShowKeypointsRadiusChanged)
@@ -137,7 +81,7 @@ class AnimalPoseInference(QWidget):
         self.ui.Save.setEnabled(False)
         self.ui.Show.setEnabled(False)
         self.ui.Show.setCheckState(Qt.Checked)
-        self.ui.OpenGL.setEnabled(False)
+        self.ui.Backgroud.setEnabled(False)
         self.ui.ShowClasses.setEnabled(False)
         self.ui.Classes.clear()
         self.ui.ShowKeypoints.setEnabled(False)
@@ -158,7 +102,7 @@ class AnimalPoseInference(QWidget):
         self.ui.End.setEnabled(True)
         self.ui.Save.setEnabled(True)
         self.ui.Show.setEnabled(True)
-        self.ui.OpenGL.setEnabled(True)
+        self.ui.Backgroud.setEnabled(True)
         self.ui.ShowClasses.setEnabled(True)
         self.ui.Classes.setEnabled(True)
         self.ui.ShowKeypoints.setEnabled(True)
@@ -176,7 +120,7 @@ class AnimalPoseInference(QWidget):
         self.ui.End.setEnabled(False)
         self.ui.Save.setEnabled(False)
         self.ui.Show.setEnabled(False)
-        self.ui.OpenGL.setEnabled(False)
+        self.ui.Backgroud.setEnabled(False)
         self.ui.ShowClasses.setEnabled(False)
         self.ui.Classes.setEnabled(False)
         self.ui.ShowKeypoints.setEnabled(False)
@@ -498,18 +442,13 @@ class AnimalPoseInference(QWidget):
         self.ui.CameraVideosSelection.clear()
         self.ui.CameraVideosSelection.addItem("...")
         self.ui.CameraVideosSelection.addItem("Select video file...")
-        self.ui.CameraVideosSelection.setEnabled(True)
 
-        self.ui.CheckCameraVideosConnect.setEnabled(False)
-        self.ui.CheckCameraVideosConnect.setText("Preview Camera")
+        self.ui.CheckCameraVideosConnect.setText("Preview Video")
 
     def _detect_available_cameras(self) -> list:
-        """Detects available cameras.
-        Args:
-            max_to_check (int): Maximum number of camera indices to test (default: 3)
-            
+        """Detects available cameras.   
         Returns:
-            list: List of available cameras as ["Camera 0", "Camera 1", ...]
+            list: List of available cameras with their indices as keys.
         """
         try:
             from PyCameraList.camera_device import list_video_devices
@@ -575,10 +514,8 @@ class AnimalPoseInference(QWidget):
         """Handle changes in camera/video source selection"""
         if self.ui.CameraVideosSelection.currentText() in self.camera_list.keys():
             self._update_camera_params()
-            self.ui.CheckCameraVideosConnect.setEnabled(True)
         elif "Select video file..." in self.ui.CameraVideosSelection.currentText():
             self._select_video_file()
-            self.ui.CheckCameraVideosConnect.setEnabled(True)
             self.ui.CameraVideosSelection.setCurrentText("...")
         else:
             pass
@@ -650,7 +587,6 @@ class AnimalPoseInference(QWidget):
         RGB = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
         height, width, _ = RGB.shape
         QImg = QImage(RGB.data, width, height, QImage.Format_RGB888)
-        print(QImg.size())
         pixmap = QPixmap.fromImage(QImg).scaled(
             self.ui.Display.size(),
             Qt.KeepAspectRatio,
@@ -669,34 +605,44 @@ class AnimalPoseInference(QWidget):
         self.ui.PrintInformation.setText(message)
 
     @Slot(int)
-    def onWidthSetupChanged(self, value):
+    def onWidthSetupChanged(self):
         """Handle changes to the width parameter setting"""
-        pass
+        self.width = self.ui.WidthSetup.value()
+        self.ui.PrintInformation.setText(f"Set Camera output Width: {self.width}")
     
     @Slot(int)
-    def onHeightSetupChanged(self, value):
+    def onHeightSetupChanged(self):
         """Handle changes to the height parameter setting"""
-        pass
-    
+        self.height = self.ui.HeightSetup.value()
+        self.ui.PrintInformation.setText(f"Set Camera output Height: {self.height}")
+
     @Slot(int)
-    def onFPSSetupChanged(self, value):
+    def onFPSSetupChanged(self):
         """Handle changes to the FPS parameter setting"""
-        pass
+        self.fps = self.ui.FPSSetup.value()
+        self.ui.PrintInformation.setText(f"Set Camera output FPS: {self.fps}")
     
     @Slot(int)
-    def onEngineSelectionChanged(self, index):
+    def onEngineSelectionChanged(self):
         """Handle changes to the inference engine selection"""
-        pass
+        self.engine = self.ui.EngineSelection.currentText()
+        self.ui.PrintInformation.setText(f"Selected Inference Engine: {self.engine}")
     
     @Slot(int)
-    def onDeviceSelectionChanged(self, index):
+    def onDeviceSelectionChanged(self):
         """Handle changes to the inference device selection"""
-        pass
+        self.device = self.ui.DeviceSelection.currentText()
+        self.ui.PrintInformation.setText(f"Selected Inference Device: {self.device}")
     
     @Slot()
     def onStartClicked(self):
         """Handle when the Start button is clicked to begin processing"""
-        pass
+        if self.ui.Start.text() == "Start":
+            self.ui.Start.setText("Pause")
+        elif self.ui.Start.text() == "Pause":
+            self.ui.Start.setText("Resume")
+        else:
+            self.ui.Start.setText("Start")
     
     @Slot()
     def onEndClicked(self):
@@ -706,60 +652,67 @@ class AnimalPoseInference(QWidget):
     @Slot(int)
     def onSaveStateChanged(self, state):
         """Handle changes to the Save output checkbox state"""
-        pass
-    
+        self.save = bool(state)
+
     @Slot(int)
     def onShowStateChanged(self, state):
         """Handle changes to the Show output checkbox state"""
-        pass
-    
+        self.show_ = bool(state)
+
     @Slot(int)
-    def onOpenGLStateChanged(self, state):
-        """Handle changes to the OpenGL acceleration checkbox state"""
-        pass
+    def onBackgroudStateChanged(self, state):
+        """Handle changes to the Show Backgroud checkbox state"""
+        if state == 0:
+            self.ui.Backgroud.setText("Original")
+        elif state == 1:
+            self.ui.Backgroud.setText("White")
+        else:
+            self.ui.Backgroud.setText("Black")
+        self.show_Backgroud = state
     
     @Slot(int)
     def onShowClassesStateChanged(self, state):
         """Handle changes to the Show Classes checkbox state"""
-        pass
+        self.show_classes = bool(state)
     
     @Slot(int)
     def onShowKeypointsStateChanged(self, state):
         """Handle changes to the Show Keypoints checkbox state"""
-        pass
+        self.show_keypoints = bool(state)
     
     @Slot(int)
     def onShowKeypointsRadiusChanged(self, value):
         """Handle changes to the keypoint radius slider value"""
-        pass
+        self.kpt_radius = value
     
     @Slot(int)
     def onShowSkeletonsStateChanged(self, state):
         """Handle changes to the Show Skeletons checkbox state"""
-        pass
+        self.show_skeletons = bool(state)
     
     @Slot(int)
     def onShowSkeletonsLineWidthChanged(self, value):
         """Handle changes to the skeleton line width slider value"""
-        pass
+        self.line_width = value
     
     @Slot(int)
     def onShowBBoxStateChanged(self, state):
         """Handle changes to the Show Bounding Box checkbox state"""
-        pass
+        self.show_bbox = bool(state)
     
     @Slot(int)
     def onShowBBoxWidthChanged(self, value):
         """Handle changes to the bounding box width slider value"""
-        pass
-
+        self.bbox_width = value
+    
     def closeEvent(self, event):
         if self.preview_thread.isRunning():
             self.preview_thread.safe_stop()
         event.accept()
 
-if __name__ == '__main__':
-    import sys
+def run():
+    platform = sys.platform
+    os.environ["QT_QPA_PLATFORM"] = "offscreen" if platform == "linux" else "windows"
     app = QApplication(sys.argv)
     window = AnimalPoseInference()
     window.show()

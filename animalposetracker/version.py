@@ -19,5 +19,5 @@ Notes:
 Revision History:
     - [2024/9/6] wux024: Initial file creation
 """
-__version__ = "0.0.1"
+__version__ = "0.1.0"
 VERSION = __version__
