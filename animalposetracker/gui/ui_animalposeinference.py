@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 
 ################################################################################
-## Form generated from reading UI file 'animalposeinferenceVKrqAD.ui'
+## Form generated from reading UI file 'animalposeinferenceXZyvEG.ui'
 ##
 ## Created by: Qt User Interface Compiler version 6.8.2
 ##
@@ -20,6 +20,8 @@ from PySide6.QtWidgets import (QApplication, QCheckBox, QComboBox, QGroupBox,
     QRadioButton, QSizePolicy, QSlider, QSpinBox,
     QVBoxLayout, QWidget)
 
+from animalposetracker.gui import LOGO_PATH_TRANSPARENT, LOGO_SMALL_PATH
+
 class Ui_AnimalPoseInference(object):
     def setupUi(self, AnimalPoseInference):
         if not AnimalPoseInference.objectName():
@@ -31,6 +33,9 @@ class Ui_AnimalPoseInference(object):
         sizePolicy.setHeightForWidth(AnimalPoseInference.sizePolicy().hasHeightForWidth())
         AnimalPoseInference.setSizePolicy(sizePolicy)
         AnimalPoseInference.setAcceptDrops(False)
+        icon = QIcon()
+        icon.addFile(LOGO_SMALL_PATH, QSize(), QIcon.Mode.Normal, QIcon.State.Off)
+        AnimalPoseInference.setWindowIcon(icon)
         self.AnimalPoseInferenceLayout = QVBoxLayout(AnimalPoseInference)
         self.AnimalPoseInferenceLayout.setObjectName(u"AnimalPoseInferenceLayout")
         self.BaseConfigure = QHBoxLayout()
@@ -415,7 +420,7 @@ class Ui_AnimalPoseInference(object):
         self.Display.setMinimumSize(QSize(100, 100))
         self.Display.setMaximumSize(QSize(1000, 1000))
         self.Display.setToolTipDuration(0)
-        self.Display.setPixmap(QPixmap(u"../../assets/logo_transparent.png"))
+        self.Display.setPixmap(QPixmap(LOGO_PATH_TRANSPARENT))
         self.Display.setScaledContents(True)
         self.Display.setAlignment(Qt.AlignmentFlag.AlignCenter)
 

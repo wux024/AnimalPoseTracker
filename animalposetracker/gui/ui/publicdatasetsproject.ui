@@ -17,13 +17,13 @@
    </sizepolicy>
   </property>
   <property name="windowTitle">
-   <string>New Project</string>
+   <string>New Public Dataset Project</string>
   </property>
   <property name="windowIcon">
    <iconset>
-    <normaloff>C:/Users/wux024/.designer/backup/assets/logo.png</normaloff>C:/Users/wux024/.designer/backup/assets/logo.png</iconset>
+    <normaloff>media/logo.png</normaloff>media/logo.png</iconset>
   </property>
-  <layout class="QVBoxLayout" name="verticalLayout">
+  <layout class="QVBoxLayout" name="PublicDatasetProjectLayout">
    <property name="sizeConstraint">
     <enum>QLayout::SizeConstraint::SetMinAndMaxSize</enum>
    </property>
@@ -44,7 +44,7 @@
      <property name="alignment">
       <set>Qt::AlignmentFlag::AlignLeading|Qt::AlignmentFlag::AlignLeft|Qt::AlignmentFlag::AlignTop</set>
      </property>
-     <layout class="QHBoxLayout" name="horizontalLayout_6">
+     <layout class="QHBoxLayout" name="PublicDatasetProjectGroupHLayout">
       <property name="sizeConstraint">
        <enum>QLayout::SizeConstraint::SetMinAndMaxSize</enum>
       </property>
@@ -313,12 +313,22 @@
               </item>
               <item>
                <property name="text">
+                <string>YOLO12-Pose</string>
+               </property>
+              </item>
+              <item>
+               <property name="text">
                 <string>YOLO11-Pose</string>
                </property>
               </item>
               <item>
                <property name="text">
                 <string>YOLOv8-Pose</string>
+               </property>
+              </item>
+              <item>
+               <property name="text">
+                <string>YOLOv8-Pose-P6</string>
                </property>
               </item>
              </widget>
@@ -426,6 +436,31 @@
             </property>
             <item>
              <property name="text">
+              <string>AcinoSet</string>
+             </property>
+            </item>
+            <item>
+             <property name="text">
+              <string>AnimalKingdom</string>
+             </property>
+            </item>
+            <item>
+             <property name="text">
+              <string>AnimalPose</string>
+             </property>
+            </item>
+            <item>
+             <property name="text">
+              <string>AniposeFly</string>
+             </property>
+            </item>
+            <item>
+             <property name="text">
+              <string>AnimalMouse</string>
+             </property>
+            </item>
+            <item>
+             <property name="text">
               <string>AP10K</string>
              </property>
             </item>
@@ -436,7 +471,32 @@
             </item>
             <item>
              <property name="text">
-              <string>Tri-Mouse</string>
+              <string>APTv2</string>
+             </property>
+            </item>
+            <item>
+             <property name="text">
+              <string>ATRW</string>
+             </property>
+            </item>
+            <item>
+             <property name="text">
+              <string>AwA</string>
+             </property>
+            </item>
+            <item>
+             <property name="text">
+              <string>COCO</string>
+             </property>
+            </item>
+            <item>
+             <property name="text">
+              <string>Fish</string>
+             </property>
+            </item>
+            <item>
+             <property name="text">
+              <string>Fly</string>
              </property>
             </item>
             <item>
@@ -446,7 +506,62 @@
             </item>
             <item>
              <property name="text">
-              <string>COCO</string>
+              <string>Locust</string>
+             </property>
+            </item>
+            <item>
+             <property name="text">
+              <string>LoTE</string>
+             </property>
+            </item>
+            <item>
+             <property name="text">
+              <string>LSP</string>
+             </property>
+            </item>
+            <item>
+             <property name="text">
+              <string>Macaque</string>
+             </property>
+            </item>
+            <item>
+             <property name="text">
+              <string>Marmoset</string>
+             </property>
+            </item>
+            <item>
+             <property name="text">
+              <string>OpenMonkeyChallenge</string>
+             </property>
+            </item>
+            <item>
+             <property name="text">
+              <string>Pups</string>
+             </property>
+            </item>
+            <item>
+             <property name="text">
+              <string>Quadruped-80K</string>
+             </property>
+            </item>
+            <item>
+             <property name="text">
+              <string>StanfordExtra</string>
+             </property>
+            </item>
+            <item>
+             <property name="text">
+              <string>TopViewMouse</string>
+             </property>
+            </item>
+            <item>
+             <property name="text">
+              <string>Tri-Mouse</string>
+             </property>
+            </item>
+            <item>
+             <property name="text">
+              <string>Zebra</string>
              </property>
             </item>
            </widget>

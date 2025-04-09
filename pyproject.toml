@@ -85,4 +85,5 @@ animalposetracker = [
 
 # Entry points (if creating CLI tools)
 [project.scripts]
-animalpose-inferencer = "animalposetracker.tools.inferencer.animalposeinference:run"
+"animalposetracker" = "animalposetracker.gui.mainpage:main"
+"animalpose-inferencer" = "animalposetracker.gui.inferencepage:main"

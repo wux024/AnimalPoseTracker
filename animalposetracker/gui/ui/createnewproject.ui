@@ -1,13 +1,13 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <ui version="4.0">
- <class>Form</class>
- <widget class="QWidget" name="Form">
+ <class>CreateNewProject</class>
+ <widget class="QWidget" name="CreateNewProject">
   <property name="geometry">
    <rect>
     <x>0</x>
     <y>0</y>
-    <width>972</width>
-    <height>902</height>
+    <width>968</width>
+    <height>575</height>
    </rect>
   </property>
   <property name="windowTitle">
@@ -15,9 +15,9 @@
   </property>
   <property name="windowIcon">
    <iconset>
-    <normaloff>C:/Users/wux024/.designer/backup/assets/logo.png</normaloff>C:/Users/wux024/.designer/backup/assets/logo.png</iconset>
+    <normaloff>media/logo.png</normaloff>media/logo.png</iconset>
   </property>
-  <layout class="QVBoxLayout" name="verticalLayout_2">
+  <layout class="QVBoxLayout" name="CreateNewProjectLayout">
    <item>
     <widget class="QGroupBox" name="BaseConfigGroup">
      <property name="sizePolicy">
@@ -35,7 +35,7 @@
      <property name="title">
       <string/>
      </property>
-     <layout class="QHBoxLayout" name="horizontalLayout_3">
+     <layout class="QHBoxLayout" name="BaseConfigGroupHLayout">
       <item>
        <layout class="QVBoxLayout" name="BaseConfigGroupLayout">
         <item>
@@ -631,8 +631,8 @@
               <rect>
                <x>0</x>
                <y>0</y>
-               <width>463</width>
-               <height>198</height>
+               <width>461</width>
+               <height>56</height>
               </rect>
              </property>
              <property name="sizePolicy">
@@ -755,8 +755,8 @@
               <rect>
                <x>0</x>
                <y>0</y>
-               <width>463</width>
-               <height>198</height>
+               <width>461</width>
+               <height>56</height>
               </rect>
              </property>
              <property name="sizePolicy">
@@ -888,9 +888,9 @@
      <property name="title">
       <string/>
      </property>
-     <layout class="QHBoxLayout" name="horizontalLayout_11">
+     <layout class="QHBoxLayout" name="SourceDataListDisplayGroupLayout">
       <item>
-       <widget class="QListWidget" name="listWidget"/>
+       <widget class="QListWidget" name="SourceList"/>
       </item>
      </layout>
     </widget>

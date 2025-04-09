@@ -1,0 +1,2346 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<ui version="4.0">
+ <class>AnimalPoseTracker</class>
+ <widget class="QMainWindow" name="AnimalPoseTracker">
+  <property name="windowModality">
+   <enum>Qt::WindowModality::NonModal</enum>
+  </property>
+  <property name="geometry">
+   <rect>
+    <x>0</x>
+    <y>0</y>
+    <width>714</width>
+    <height>491</height>
+   </rect>
+  </property>
+  <property name="sizePolicy">
+   <sizepolicy hsizetype="Fixed" vsizetype="Fixed">
+    <horstretch>0</horstretch>
+    <verstretch>0</verstretch>
+   </sizepolicy>
+  </property>
+  <property name="font">
+   <font>
+    <family>Times New Roman</family>
+   </font>
+  </property>
+  <property name="windowTitle">
+   <string>AnimalPoseTracker</string>
+  </property>
+  <property name="windowIcon">
+   <iconset>
+    <normaloff>../media/logo.png</normaloff>../media/logo.png</iconset>
+  </property>
+  <property name="layoutDirection">
+   <enum>Qt::LayoutDirection::LeftToRight</enum>
+  </property>
+  <property name="autoFillBackground">
+   <bool>false</bool>
+  </property>
+  <widget class="QWidget" name="AnimalPoseTrackerLayout">
+   <property name="sizePolicy">
+    <sizepolicy hsizetype="Expanding" vsizetype="Expanding">
+     <horstretch>0</horstretch>
+     <verstretch>0</verstretch>
+    </sizepolicy>
+   </property>
+   <property name="autoFillBackground">
+    <bool>true</bool>
+   </property>
+   <layout class="QVBoxLayout" name="AnimalPoseTrackerVLayout">
+    <item>
+     <widget class="QStackedWidget" name="AnimalPoseTrackerPage">
+      <property name="currentIndex">
+       <number>1</number>
+      </property>
+      <widget class="QWidget" name="MainPage">
+       <layout class="QVBoxLayout" name="MainPageLayout">
+        <item>
+         <widget class="QLabel" name="WelcomeLabel">
+          <property name="sizePolicy">
+           <sizepolicy hsizetype="Preferred" vsizetype="Fixed">
+            <horstretch>0</horstretch>
+            <verstretch>0</verstretch>
+           </sizepolicy>
+          </property>
+          <property name="font">
+           <font>
+            <family>Times New Roman</family>
+            <pointsize>24</pointsize>
+           </font>
+          </property>
+          <property name="text">
+           <string>Welcome to the AnimalPoseTracker!</string>
+          </property>
+          <property name="alignment">
+           <set>Qt::AlignmentFlag::AlignCenter</set>
+          </property>
+         </widget>
+        </item>
+        <item>
+         <layout class="QHBoxLayout" name="LogoLayout">
+          <item>
+           <spacer name="horizontalSpacer2">
+            <property name="orientation">
+             <enum>Qt::Orientation::Horizontal</enum>
+            </property>
+            <property name="sizeHint" stdset="0">
+             <size>
+              <width>40</width>
+              <height>20</height>
+             </size>
+            </property>
+           </spacer>
+          </item>
+          <item>
+           <widget class="QLabel" name="Logo">
+            <property name="sizePolicy">
+             <sizepolicy hsizetype="Preferred" vsizetype="Preferred">
+              <horstretch>0</horstretch>
+              <verstretch>0</verstretch>
+             </sizepolicy>
+            </property>
+            <property name="maximumSize">
+             <size>
+              <width>200</width>
+              <height>200</height>
+             </size>
+            </property>
+            <property name="text">
+             <string/>
+            </property>
+            <property name="textFormat">
+             <enum>Qt::TextFormat::AutoText</enum>
+            </property>
+            <property name="pixmap">
+             <pixmap>assets/logo_transparent.png</pixmap>
+            </property>
+            <property name="scaledContents">
+             <bool>true</bool>
+            </property>
+           </widget>
+          </item>
+          <item>
+           <spacer name="horizontalSpacer1">
+            <property name="orientation">
+             <enum>Qt::Orientation::Horizontal</enum>
+            </property>
+            <property name="sizeHint" stdset="0">
+             <size>
+              <width>40</width>
+              <height>20</height>
+             </size>
+            </property>
+           </spacer>
+          </item>
+         </layout>
+        </item>
+        <item>
+         <widget class="QLabel" name="Introdution">
+          <property name="sizePolicy">
+           <sizepolicy hsizetype="Preferred" vsizetype="Fixed">
+            <horstretch>0</horstretch>
+            <verstretch>0</verstretch>
+           </sizepolicy>
+          </property>
+          <property name="font">
+           <font>
+            <family>Times New Roman</family>
+            <pointsize>11</pointsize>
+           </font>
+          </property>
+          <property name="layoutDirection">
+           <enum>Qt::LayoutDirection::LeftToRight</enum>
+          </property>
+          <property name="text">
+           <string>AnimalPoseTracker is an open source tool for animal pose estimation with deep learning. Wu X. | https://wux024.github.io</string>
+          </property>
+          <property name="alignment">
+           <set>Qt::AlignmentFlag::AlignCenter</set>
+          </property>
+          <property name="wordWrap">
+           <bool>true</bool>
+          </property>
+         </widget>
+        </item>
+        <item>
+         <widget class="QLabel" name="Note">
+          <property name="sizePolicy">
+           <sizepolicy hsizetype="Preferred" vsizetype="Fixed">
+            <horstretch>0</horstretch>
+            <verstretch>0</verstretch>
+           </sizepolicy>
+          </property>
+          <property name="font">
+           <font>
+            <family>Times New Roman</family>
+            <pointsize>11</pointsize>
+           </font>
+          </property>
+          <property name="layoutDirection">
+           <enum>Qt::LayoutDirection::LeftToRight</enum>
+          </property>
+          <property name="text">
+           <string>To get started, you can create a new project, load an existing project, or use opensource public datasets.</string>
+          </property>
+          <property name="alignment">
+           <set>Qt::AlignmentFlag::AlignCenter</set>
+          </property>
+          <property name="wordWrap">
+           <bool>true</bool>
+          </property>
+         </widget>
+        </item>
+        <item>
+         <layout class="QHBoxLayout" name="ToolsButtonLayout">
+          <item>
+           <spacer name="horizontalSpacer4">
+            <property name="orientation">
+             <enum>Qt::Orientation::Horizontal</enum>
+            </property>
+            <property name="sizeHint" stdset="0">
+             <size>
+              <width>40</width>
+              <height>20</height>
+             </size>
+            </property>
+           </spacer>
+          </item>
+          <item>
+           <widget class="QPushButton" name="CreateNewProjectButton">
+            <property name="sizePolicy">
+             <sizepolicy hsizetype="Fixed" vsizetype="Fixed">
+              <horstretch>0</horstretch>
+              <verstretch>0</verstretch>
+             </sizepolicy>
+            </property>
+            <property name="minimumSize">
+             <size>
+              <width>160</width>
+              <height>25</height>
+             </size>
+            </property>
+            <property name="text">
+             <string>Create New Project</string>
+            </property>
+           </widget>
+          </item>
+          <item>
+           <spacer name="horizontalSpacer6">
+            <property name="orientation">
+             <enum>Qt::Orientation::Horizontal</enum>
+            </property>
+            <property name="sizeHint" stdset="0">
+             <size>
+              <width>40</width>
+              <height>20</height>
+             </size>
+            </property>
+           </spacer>
+          </item>
+          <item>
+           <widget class="QPushButton" name="LoadProjectButton">
+            <property name="sizePolicy">
+             <sizepolicy hsizetype="Preferred" vsizetype="Fixed">
+              <horstretch>0</horstretch>
+              <verstretch>0</verstretch>
+             </sizepolicy>
+            </property>
+            <property name="minimumSize">
+             <size>
+              <width>160</width>
+              <height>25</height>
+             </size>
+            </property>
+            <property name="text">
+             <string>Load Project</string>
+            </property>
+           </widget>
+          </item>
+          <item>
+           <spacer name="horizontalSpacer3">
+            <property name="orientation">
+             <enum>Qt::Orientation::Horizontal</enum>
+            </property>
+            <property name="sizeHint" stdset="0">
+             <size>
+              <width>40</width>
+              <height>20</height>
+             </size>
+            </property>
+           </spacer>
+          </item>
+          <item>
+           <widget class="QPushButton" name="PublicDatasetsProjectButton">
+            <property name="sizePolicy">
+             <sizepolicy hsizetype="Preferred" vsizetype="Fixed">
+              <horstretch>0</horstretch>
+              <verstretch>0</verstretch>
+             </sizepolicy>
+            </property>
+            <property name="minimumSize">
+             <size>
+              <width>160</width>
+              <height>25</height>
+             </size>
+            </property>
+            <property name="text">
+             <string>Public Datasets Project</string>
+            </property>
+           </widget>
+          </item>
+          <item>
+           <spacer name="horizontalSpacer5">
+            <property name="orientation">
+             <enum>Qt::Orientation::Horizontal</enum>
+            </property>
+            <property name="sizeHint" stdset="0">
+             <size>
+              <width>40</width>
+              <height>20</height>
+             </size>
+            </property>
+           </spacer>
+          </item>
+         </layout>
+        </item>
+       </layout>
+      </widget>
+      <widget class="QWidget" name="ConfigurePage">
+       <layout class="QVBoxLayout" name="ConfigurePageLayout">
+        <item>
+         <widget class="QTabWidget" name="ConfigureTabPage">
+          <property name="sizePolicy">
+           <sizepolicy hsizetype="Expanding" vsizetype="Expanding">
+            <horstretch>0</horstretch>
+            <verstretch>0</verstretch>
+           </sizepolicy>
+          </property>
+          <property name="currentIndex">
+           <number>3</number>
+          </property>
+          <property name="tabBarAutoHide">
+           <bool>false</bool>
+          </property>
+          <widget class="QWidget" name="ManageConfigure">
+           <attribute name="title">
+            <string>Manage Configure</string>
+           </attribute>
+           <layout class="QVBoxLayout" name="ManageConfigureLayout">
+            <item>
+             <widget class="QLabel" name="ConfigurePageTitle">
+              <property name="sizePolicy">
+               <sizepolicy hsizetype="Fixed" vsizetype="Fixed">
+                <horstretch>0</horstretch>
+                <verstretch>0</verstretch>
+               </sizepolicy>
+              </property>
+              <property name="maximumSize">
+               <size>
+                <width>236</width>
+                <height>36</height>
+               </size>
+              </property>
+              <property name="font">
+               <font>
+                <family>Times New Roman</family>
+                <bold>true</bold>
+               </font>
+              </property>
+              <property name="text">
+               <string>AnimalPoseTracker-Manage Configure</string>
+              </property>
+              <property name="alignment">
+               <set>Qt::AlignmentFlag::AlignLeading|Qt::AlignmentFlag::AlignLeft|Qt::AlignmentFlag::AlignVCenter</set>
+              </property>
+             </widget>
+            </item>
+            <item>
+             <widget class="Line" name="ConfigurePageLine">
+              <property name="orientation">
+               <enum>Qt::Orientation::Horizontal</enum>
+              </property>
+             </widget>
+            </item>
+            <item>
+             <layout class="QHBoxLayout" name="ConfigureFilePathLayout" stretch="1,0,0,0">
+              <property name="sizeConstraint">
+               <enum>QLayout::SizeConstraint::SetDefaultConstraint</enum>
+              </property>
+              <item>
+               <widget class="QLabel" name="ConfigureFilePathLabel">
+                <property name="sizePolicy">
+                 <sizepolicy hsizetype="Fixed" vsizetype="Fixed">
+                  <horstretch>0</horstretch>
+                  <verstretch>0</verstretch>
+                 </sizepolicy>
+                </property>
+                <property name="text">
+                 <string>Configure File Path:</string>
+                </property>
+               </widget>
+              </item>
+              <item>
+               <widget class="QLineEdit" name="ConfigureFilePathDisplay">
+                <property name="sizePolicy">
+                 <sizepolicy hsizetype="Expanding" vsizetype="Fixed">
+                  <horstretch>0</horstretch>
+                  <verstretch>0</verstretch>
+                 </sizepolicy>
+                </property>
+               </widget>
+              </item>
+              <item>
+               <widget class="QPushButton" name="ConfigureFilePathBrowser">
+                <property name="sizePolicy">
+                 <sizepolicy hsizetype="Fixed" vsizetype="Fixed">
+                  <horstretch>0</horstretch>
+                  <verstretch>0</verstretch>
+                 </sizepolicy>
+                </property>
+                <property name="text">
+                 <string/>
+                </property>
+                <property name="icon">
+                 <iconset theme="folder-open"/>
+                </property>
+               </widget>
+              </item>
+              <item>
+               <widget class="QPushButton" name="ConfigureFileEdit">
+                <property name="sizePolicy">
+                 <sizepolicy hsizetype="Fixed" vsizetype="Fixed">
+                  <horstretch>0</horstretch>
+                  <verstretch>0</verstretch>
+                 </sizepolicy>
+                </property>
+                <property name="text">
+                 <string/>
+                </property>
+                <property name="icon">
+                 <iconset theme="document-open"/>
+                </property>
+               </widget>
+              </item>
+             </layout>
+            </item>
+            <item>
+             <widget class="QGroupBox" name="ConfigureFileGroup">
+              <property name="title">
+               <string/>
+              </property>
+              <layout class="QVBoxLayout" name="ConfigureFileGroupVLayout_2">
+               <item>
+                <layout class="QVBoxLayout" name="ConfigureFileGroupLayout">
+                 <item>
+                  <widget class="QTreeWidget" name="ConfigureFile">
+                   <column>
+                    <property name="text">
+                     <string>Parameter</string>
+                    </property>
+                   </column>
+                   <column>
+                    <property name="text">
+                     <string>Value</string>
+                    </property>
+                   </column>
+                   <item>
+                    <property name="text">
+                     <string>experiment</string>
+                    </property>
+                    <property name="text">
+                     <string>mouse</string>
+                    </property>
+                   </item>
+                   <item>
+                    <property name="text">
+                     <string>experimenter</string>
+                    </property>
+                    <property name="text">
+                     <string>adam</string>
+                    </property>
+                   </item>
+                   <item>
+                    <property name="text">
+                     <string>date</string>
+                    </property>
+                    <property name="text">
+                     <string>20250406</string>
+                    </property>
+                   </item>
+                   <item>
+                    <property name="text">
+                     <string>project_path</string>
+                    </property>
+                    <property name="text">
+                     <string/>
+                    </property>
+                   </item>
+                   <item>
+                    <property name="text">
+                     <string>model_type</string>
+                    </property>
+                    <property name="text">
+                     <string/>
+                    </property>
+                   </item>
+                   <item>
+                    <property name="text">
+                     <string>model_scale</string>
+                    </property>
+                    <property name="text">
+                     <string/>
+                    </property>
+                   </item>
+                   <item>
+                    <property name="text">
+                     <string>videos</string>
+                    </property>
+                    <property name="text">
+                     <string>10</string>
+                    </property>
+                    <item>
+                     <property name="text">
+                      <string>path1</string>
+                     </property>
+                     <item>
+                      <property name="text">
+                       <string>resolution</string>
+                      </property>
+                     </item>
+                    </item>
+                   </item>
+                   <item>
+                    <property name="text">
+                     <string>images</string>
+                    </property>
+                    <property name="text">
+                     <string>10</string>
+                    </property>
+                    <item>
+                     <property name="text">
+                      <string>resolution</string>
+                     </property>
+                    </item>
+                   </item>
+                   <item>
+                    <property name="text">
+                     <string>keypoints</string>
+                    </property>
+                    <property name="text">
+                     <string>12</string>
+                    </property>
+                    <item>
+                     <property name="text">
+                      <string>0</string>
+                     </property>
+                     <property name="text">
+                      <string>nose</string>
+                     </property>
+                    </item>
+                   </item>
+                   <item>
+                    <property name="text">
+                     <string>classes</string>
+                    </property>
+                    <property name="text">
+                     <string>3</string>
+                    </property>
+                    <item>
+                     <property name="text">
+                      <string>0</string>
+                     </property>
+                     <property name="text">
+                      <string>mouse</string>
+                     </property>
+                    </item>
+                   </item>
+                   <item>
+                    <property name="text">
+                     <string>visible</string>
+                    </property>
+                    <property name="text">
+                     <string>1</string>
+                    </property>
+                   </item>
+                   <item>
+                    <property name="text">
+                     <string>skeleton</string>
+                    </property>
+                    <item>
+                     <property name="text">
+                      <string>0</string>
+                     </property>
+                     <property name="text">
+                      <string/>
+                     </property>
+                     <item>
+                      <property name="text">
+                       <string>0</string>
+                      </property>
+                      <property name="text">
+                       <string>nose</string>
+                      </property>
+                     </item>
+                     <item>
+                      <property name="text">
+                       <string>1</string>
+                      </property>
+                      <property name="text">
+                       <string>left_eye</string>
+                      </property>
+                     </item>
+                    </item>
+                   </item>
+                   <item>
+                    <property name="text">
+                     <string>flip</string>
+                    </property>
+                    <item>
+                     <property name="text">
+                      <string>0</string>
+                     </property>
+                     <property name="text">
+                      <string>1</string>
+                     </property>
+                    </item>
+                    <item>
+                     <property name="text">
+                      <string>1</string>
+                     </property>
+                     <property name="text">
+                      <string>0</string>
+                     </property>
+                    </item>
+                   </item>
+                  </widget>
+                 </item>
+                 <item>
+                  <layout class="QHBoxLayout" name="ConfigureFileToolsLayout">
+                   <item>
+                    <widget class="QPushButton" name="SaveConfigureFile">
+                     <property name="text">
+                      <string>Save</string>
+                     </property>
+                    </widget>
+                   </item>
+                   <item>
+                    <widget class="QPushButton" name="CannelConfigureFile">
+                     <property name="text">
+                      <string>Cannel</string>
+                     </property>
+                    </widget>
+                   </item>
+                  </layout>
+                 </item>
+                </layout>
+               </item>
+              </layout>
+             </widget>
+            </item>
+           </layout>
+          </widget>
+          <widget class="QWidget" name="ExtractLabelFrames">
+           <property name="sizePolicy">
+            <sizepolicy hsizetype="Expanding" vsizetype="Fixed">
+             <horstretch>0</horstretch>
+             <verstretch>0</verstretch>
+            </sizepolicy>
+           </property>
+           <attribute name="title">
+            <string>Extract and Label Frames</string>
+           </attribute>
+           <layout class="QVBoxLayout" name="ExtractLabelFramesLayout">
+            <property name="sizeConstraint">
+             <enum>QLayout::SizeConstraint::SetMinAndMaxSize</enum>
+            </property>
+            <item>
+             <widget class="QLabel" name="ExtractLabelFrameLabel">
+              <property name="sizePolicy">
+               <sizepolicy hsizetype="Fixed" vsizetype="Fixed">
+                <horstretch>0</horstretch>
+                <verstretch>0</verstretch>
+               </sizepolicy>
+              </property>
+              <property name="maximumSize">
+               <size>
+                <width>500</width>
+                <height>14</height>
+               </size>
+              </property>
+              <property name="font">
+               <font>
+                <family>Times New Roman</family>
+                <bold>true</bold>
+               </font>
+              </property>
+              <property name="text">
+               <string>AnimalPoseTracker-Extract and Label Frames</string>
+              </property>
+              <property name="alignment">
+               <set>Qt::AlignmentFlag::AlignLeading|Qt::AlignmentFlag::AlignLeft|Qt::AlignmentFlag::AlignVCenter</set>
+              </property>
+             </widget>
+            </item>
+            <item>
+             <widget class="Line" name="ExtractLabelFrameLine">
+              <property name="orientation">
+               <enum>Qt::Orientation::Horizontal</enum>
+              </property>
+             </widget>
+            </item>
+            <item>
+             <widget class="QGroupBox" name="ExtractFramesGroupLayout">
+              <property name="sizePolicy">
+               <sizepolicy hsizetype="Preferred" vsizetype="Fixed">
+                <horstretch>0</horstretch>
+                <verstretch>0</verstretch>
+               </sizepolicy>
+              </property>
+              <property name="title">
+               <string/>
+              </property>
+              <layout class="QVBoxLayout" name="ExtractFramesGroupVLayout">
+               <property name="sizeConstraint">
+                <enum>QLayout::SizeConstraint::SetDefaultConstraint</enum>
+               </property>
+               <item>
+                <widget class="QLabel" name="ExtractFramesLabel">
+                 <property name="sizePolicy">
+                  <sizepolicy hsizetype="Fixed" vsizetype="Fixed">
+                   <horstretch>0</horstretch>
+                   <verstretch>0</verstretch>
+                  </sizepolicy>
+                 </property>
+                 <property name="text">
+                  <string>Extract Frames</string>
+                 </property>
+                </widget>
+               </item>
+               <item>
+                <layout class="QHBoxLayout" name="ExtractMethodLayout">
+                 <item>
+                  <widget class="QLabel" name="ExtractionMethodLabel">
+                   <property name="sizePolicy">
+                    <sizepolicy hsizetype="Fixed" vsizetype="Fixed">
+                     <horstretch>0</horstretch>
+                     <verstretch>0</verstretch>
+                    </sizepolicy>
+                   </property>
+                   <property name="text">
+                    <string>Extraction method</string>
+                   </property>
+                  </widget>
+                 </item>
+                 <item>
+                  <widget class="QComboBox" name="ExtractionMethodSelection">
+                   <item>
+                    <property name="text">
+                     <string>auto</string>
+                    </property>
+                   </item>
+                   <item>
+                    <property name="text">
+                     <string>manual</string>
+                    </property>
+                   </item>
+                   <item>
+                    <property name="text">
+                     <string>No</string>
+                    </property>
+                   </item>
+                  </widget>
+                 </item>
+                </layout>
+               </item>
+               <item>
+                <layout class="QHBoxLayout" name="ExtractionAlgorithmClusterStepLayout">
+                 <item>
+                  <layout class="QHBoxLayout" name="ExtractionAlgorithmLayout">
+                   <item>
+                    <widget class="QLabel" name="ExtractionAlgorithmLabel">
+                     <property name="sizePolicy">
+                      <sizepolicy hsizetype="Fixed" vsizetype="Fixed">
+                       <horstretch>0</horstretch>
+                       <verstretch>0</verstretch>
+                      </sizepolicy>
+                     </property>
+                     <property name="text">
+                      <string>Extraction algorithm</string>
+                     </property>
+                    </widget>
+                   </item>
+                   <item>
+                    <widget class="QComboBox" name="ExtractionAlgorithmSelection">
+                     <item>
+                      <property name="text">
+                       <string>kmeas</string>
+                      </property>
+                     </item>
+                     <item>
+                      <property name="text">
+                       <string>uniform</string>
+                      </property>
+                     </item>
+                     <item>
+                      <property name="text">
+                       <string>None</string>
+                      </property>
+                     </item>
+                    </widget>
+                   </item>
+                  </layout>
+                 </item>
+                 <item>
+                  <layout class="QHBoxLayout" name="ClusterStepLayout">
+                   <item>
+                    <widget class="QLabel" name="ClusterStepLabel">
+                     <property name="sizePolicy">
+                      <sizepolicy hsizetype="Fixed" vsizetype="Fixed">
+                       <horstretch>0</horstretch>
+                       <verstretch>0</verstretch>
+                      </sizepolicy>
+                     </property>
+                     <property name="text">
+                      <string>Cluster step</string>
+                     </property>
+                    </widget>
+                   </item>
+                   <item>
+                    <widget class="QSpinBox" name="ClusterStepSetup">
+                     <property name="sizePolicy">
+                      <sizepolicy hsizetype="Preferred" vsizetype="Fixed">
+                       <horstretch>0</horstretch>
+                       <verstretch>0</verstretch>
+                      </sizepolicy>
+                     </property>
+                    </widget>
+                   </item>
+                  </layout>
+                 </item>
+                </layout>
+               </item>
+               <item>
+                <layout class="QHBoxLayout" name="SelectionVideosImagesLayout">
+                 <item>
+                  <widget class="QPushButton" name="SelectionVideosImages">
+                   <property name="sizePolicy">
+                    <sizepolicy hsizetype="Preferred" vsizetype="Fixed">
+                     <horstretch>0</horstretch>
+                     <verstretch>0</verstretch>
+                    </sizepolicy>
+                   </property>
+                   <property name="text">
+                    <string>Selection videos or images</string>
+                   </property>
+                  </widget>
+                 </item>
+                 <item>
+                  <widget class="QLabel" name="SelectionVideosImagesLabel">
+                   <property name="sizePolicy">
+                    <sizepolicy hsizetype="Preferred" vsizetype="Fixed">
+                     <horstretch>0</horstretch>
+                     <verstretch>0</verstretch>
+                    </sizepolicy>
+                   </property>
+                   <property name="text">
+                    <string>50 videos or images selected</string>
+                   </property>
+                  </widget>
+                 </item>
+                </layout>
+               </item>
+               <item>
+                <layout class="QHBoxLayout" name="ClearVideosImagesLayout">
+                 <item>
+                  <widget class="QPushButton" name="ClearVideosImages">
+                   <property name="sizePolicy">
+                    <sizepolicy hsizetype="Preferred" vsizetype="Fixed">
+                     <horstretch>0</horstretch>
+                     <verstretch>0</verstretch>
+                    </sizepolicy>
+                   </property>
+                   <property name="text">
+                    <string>Clear selection</string>
+                   </property>
+                  </widget>
+                 </item>
+                 <item>
+                  <widget class="QPushButton" name="ExtracFrames">
+                   <property name="sizePolicy">
+                    <sizepolicy hsizetype="Preferred" vsizetype="Fixed">
+                     <horstretch>0</horstretch>
+                     <verstretch>0</verstretch>
+                    </sizepolicy>
+                   </property>
+                   <property name="text">
+                    <string>Extract Frames</string>
+                   </property>
+                  </widget>
+                 </item>
+                </layout>
+               </item>
+              </layout>
+             </widget>
+            </item>
+            <item>
+             <widget class="QGroupBox" name="LabelFramesGroupLayout">
+              <property name="sizePolicy">
+               <sizepolicy hsizetype="Preferred" vsizetype="Fixed">
+                <horstretch>0</horstretch>
+                <verstretch>0</verstretch>
+               </sizepolicy>
+              </property>
+              <property name="title">
+               <string/>
+              </property>
+              <layout class="QVBoxLayout" name="LabelFramesGroupVLayout">
+               <property name="sizeConstraint">
+                <enum>QLayout::SizeConstraint::SetDefaultConstraint</enum>
+               </property>
+               <item>
+                <layout class="QVBoxLayout" name="LabelFrameLayout">
+                 <item>
+                  <widget class="QLabel" name="LabelFramesLabel">
+                   <property name="sizePolicy">
+                    <sizepolicy hsizetype="Fixed" vsizetype="Fixed">
+                     <horstretch>0</horstretch>
+                     <verstretch>0</verstretch>
+                    </sizepolicy>
+                   </property>
+                   <property name="text">
+                    <string>Label Frames</string>
+                   </property>
+                  </widget>
+                 </item>
+                 <item>
+                  <layout class="QHBoxLayout" name="SaveLayout">
+                   <item>
+                    <widget class="QCheckBox" name="SaveYOLO">
+                     <property name="sizePolicy">
+                      <sizepolicy hsizetype="Preferred" vsizetype="Fixed">
+                       <horstretch>0</horstretch>
+                       <verstretch>0</verstretch>
+                      </sizepolicy>
+                     </property>
+                     <property name="text">
+                      <string>Save YOLO Format</string>
+                     </property>
+                    </widget>
+                   </item>
+                   <item>
+                    <widget class="QCheckBox" name="SaveCOCO">
+                     <property name="sizePolicy">
+                      <sizepolicy hsizetype="Preferred" vsizetype="Fixed">
+                       <horstretch>0</horstretch>
+                       <verstretch>0</verstretch>
+                      </sizepolicy>
+                     </property>
+                     <property name="text">
+                      <string>Save COCO Format</string>
+                     </property>
+                    </widget>
+                   </item>
+                  </layout>
+                 </item>
+                 <item>
+                  <widget class="QPushButton" name="StartLabelFrames">
+                   <property name="sizePolicy">
+                    <sizepolicy hsizetype="Preferred" vsizetype="Fixed">
+                     <horstretch>0</horstretch>
+                     <verstretch>0</verstretch>
+                    </sizepolicy>
+                   </property>
+                   <property name="text">
+                    <string>Start Label Frames</string>
+                   </property>
+                  </widget>
+                 </item>
+                 <item>
+                  <widget class="QPushButton" name="CheckLabelledFrames">
+                   <property name="text">
+                    <string>Check Labelled Frames</string>
+                   </property>
+                  </widget>
+                 </item>
+                 <item>
+                  <widget class="QPushButton" name="BuildSkeleton">
+                   <property name="sizePolicy">
+                    <sizepolicy hsizetype="Preferred" vsizetype="Fixed">
+                     <horstretch>0</horstretch>
+                     <verstretch>0</verstretch>
+                    </sizepolicy>
+                   </property>
+                   <property name="text">
+                    <string>Build Skeleton</string>
+                   </property>
+                  </widget>
+                 </item>
+                </layout>
+               </item>
+              </layout>
+             </widget>
+            </item>
+           </layout>
+          </widget>
+          <widget class="QWidget" name="TrainingConfigure">
+           <attribute name="title">
+            <string>Training Configure</string>
+           </attribute>
+           <layout class="QVBoxLayout" name="verticalLayout_6">
+            <item>
+             <widget class="QLabel" name="TrainingConfigureLabel">
+              <property name="font">
+               <font>
+                <family>Times New Roman</family>
+                <bold>true</bold>
+               </font>
+              </property>
+              <property name="text">
+               <string>AnimalPoseTracker-Training Configure</string>
+              </property>
+              <property name="alignment">
+               <set>Qt::AlignmentFlag::AlignLeading|Qt::AlignmentFlag::AlignLeft|Qt::AlignmentFlag::AlignVCenter</set>
+              </property>
+             </widget>
+            </item>
+            <item>
+             <widget class="Line" name="TrainingConfigureLine">
+              <property name="orientation">
+               <enum>Qt::Orientation::Horizontal</enum>
+              </property>
+             </widget>
+            </item>
+            <item>
+             <widget class="QGroupBox" name="TrainingConfigureGroup">
+              <property name="title">
+               <string/>
+              </property>
+              <layout class="QVBoxLayout" name="TrainingConfigureGroupVLayout">
+               <item>
+                <layout class="QVBoxLayout" name="TrainingConfigureGroupLayout">
+                 <item>
+                  <layout class="QHBoxLayout" name="TrainingConfigureToolsLayout">
+                   <item>
+                    <widget class="QPushButton" name="ResumeTrain">
+                     <property name="text">
+                      <string>Edit training parameters</string>
+                     </property>
+                    </widget>
+                   </item>
+                   <item>
+                    <widget class="QPushButton" name="EditTrainingParameters">
+                     <property name="text">
+                      <string>Start Train</string>
+                     </property>
+                    </widget>
+                   </item>
+                   <item>
+                    <widget class="QPushButton" name="StartTrain">
+                     <property name="text">
+                      <string>End Train</string>
+                     </property>
+                    </widget>
+                   </item>
+                   <item>
+                    <widget class="QPushButton" name="EndTrain">
+                     <property name="text">
+                      <string>Resume Train</string>
+                     </property>
+                    </widget>
+                   </item>
+                  </layout>
+                 </item>
+                 <item>
+                  <widget class="QTreeWidget" name="TrainingConfigure">
+                   <column>
+                    <property name="text">
+                     <string>Parameter</string>
+                    </property>
+                   </column>
+                   <column>
+                    <property name="text">
+                     <string>Value</string>
+                    </property>
+                   </column>
+                   <item>
+                    <property name="text">
+                     <string>model</string>
+                    </property>
+                    <property name="text">
+                     <string/>
+                    </property>
+                   </item>
+                   <item>
+                    <property name="text">
+                     <string>data</string>
+                    </property>
+                    <property name="text">
+                     <string/>
+                    </property>
+                   </item>
+                   <item>
+                    <property name="text">
+                     <string>epochs</string>
+                    </property>
+                    <property name="text">
+                     <string>1000</string>
+                    </property>
+                   </item>
+                   <item>
+                    <property name="text">
+                     <string>time</string>
+                    </property>
+                    <property name="text">
+                     <string>None</string>
+                    </property>
+                   </item>
+                   <item>
+                    <property name="text">
+                     <string>patience</string>
+                    </property>
+                    <property name="text">
+                     <string>300</string>
+                    </property>
+                   </item>
+                   <item>
+                    <property name="text">
+                     <string>batch</string>
+                    </property>
+                    <property name="text">
+                     <string>16</string>
+                    </property>
+                   </item>
+                   <item>
+                    <property name="text">
+                     <string>imgsz</string>
+                    </property>
+                    <property name="text">
+                     <string>640</string>
+                    </property>
+                   </item>
+                   <item>
+                    <property name="text">
+                     <string>save</string>
+                    </property>
+                    <property name="text">
+                     <string>True</string>
+                    </property>
+                   </item>
+                   <item>
+                    <property name="text">
+                     <string>save_period</string>
+                    </property>
+                    <property name="text">
+                     <string>-1</string>
+                    </property>
+                   </item>
+                   <item>
+                    <property name="text">
+                     <string>cache</string>
+                    </property>
+                    <property name="text">
+                     <string>False</string>
+                    </property>
+                   </item>
+                   <item>
+                    <property name="text">
+                     <string>device</string>
+                    </property>
+                    <property name="text">
+                     <string>None</string>
+                    </property>
+                   </item>
+                   <item>
+                    <property name="text">
+                     <string>workers</string>
+                    </property>
+                    <property name="text">
+                     <string>8</string>
+                    </property>
+                   </item>
+                   <item>
+                    <property name="text">
+                     <string>project</string>
+                    </property>
+                    <property name="text">
+                     <string>None</string>
+                    </property>
+                   </item>
+                   <item>
+                    <property name="text">
+                     <string>name</string>
+                    </property>
+                    <property name="text">
+                     <string>None</string>
+                    </property>
+                   </item>
+                   <item>
+                    <property name="text">
+                     <string>pretrained</string>
+                    </property>
+                    <property name="text">
+                     <string>True</string>
+                    </property>
+                   </item>
+                   <item>
+                    <property name="text">
+                     <string>optimizer</string>
+                    </property>
+                    <property name="text">
+                     <string>auto</string>
+                    </property>
+                   </item>
+                   <item>
+                    <property name="text">
+                     <string>seed</string>
+                    </property>
+                    <property name="text">
+                     <string>date</string>
+                    </property>
+                   </item>
+                   <item>
+                    <property name="text">
+                     <string>cos_lr</string>
+                    </property>
+                    <property name="text">
+                     <string>False</string>
+                    </property>
+                   </item>
+                   <item>
+                    <property name="text">
+                     <string>close_mosaic</string>
+                    </property>
+                    <property name="text">
+                     <string>10</string>
+                    </property>
+                   </item>
+                   <item>
+                    <property name="text">
+                     <string>resume</string>
+                    </property>
+                    <property name="text">
+                     <string>False</string>
+                    </property>
+                   </item>
+                   <item>
+                    <property name="text">
+                     <string>amp</string>
+                    </property>
+                    <property name="text">
+                     <string>True</string>
+                    </property>
+                   </item>
+                   <item>
+                    <property name="text">
+                     <string>fraction</string>
+                    </property>
+                    <property name="text">
+                     <string>1.0</string>
+                    </property>
+                   </item>
+                   <item>
+                    <property name="text">
+                     <string>profile</string>
+                    </property>
+                    <property name="text">
+                     <string>false</string>
+                    </property>
+                   </item>
+                   <item>
+                    <property name="text">
+                     <string>lr0</string>
+                    </property>
+                    <property name="text">
+                     <string>0.01</string>
+                    </property>
+                   </item>
+                   <item>
+                    <property name="text">
+                     <string>lrf</string>
+                    </property>
+                    <property name="text">
+                     <string>0.01</string>
+                    </property>
+                   </item>
+                   <item>
+                    <property name="text">
+                     <string>momentum</string>
+                    </property>
+                    <property name="text">
+                     <string>0.937</string>
+                    </property>
+                   </item>
+                   <item>
+                    <property name="text">
+                     <string>weight_decay</string>
+                    </property>
+                    <property name="text">
+                     <string>0.0005</string>
+                    </property>
+                   </item>
+                   <item>
+                    <property name="text">
+                     <string>warmup_epochs</string>
+                    </property>
+                    <property name="text">
+                     <string>3</string>
+                    </property>
+                   </item>
+                   <item>
+                    <property name="text">
+                     <string>warmup_momentum</string>
+                    </property>
+                    <property name="text">
+                     <string>0.8</string>
+                    </property>
+                   </item>
+                   <item>
+                    <property name="text">
+                     <string>warmup_bias_lr</string>
+                    </property>
+                    <property name="text">
+                     <string>0.1</string>
+                    </property>
+                   </item>
+                   <item>
+                    <property name="text">
+                     <string>box</string>
+                    </property>
+                    <property name="text">
+                     <string>7.5</string>
+                    </property>
+                   </item>
+                   <item>
+                    <property name="text">
+                     <string>cls</string>
+                    </property>
+                    <property name="text">
+                     <string>0.5</string>
+                    </property>
+                   </item>
+                   <item>
+                    <property name="text">
+                     <string>dfl</string>
+                    </property>
+                    <property name="text">
+                     <string>1.5</string>
+                    </property>
+                   </item>
+                   <item>
+                    <property name="text">
+                     <string>pose</string>
+                    </property>
+                    <property name="text">
+                     <string>40.0</string>
+                    </property>
+                   </item>
+                   <item>
+                    <property name="text">
+                     <string>kobj</string>
+                    </property>
+                    <property name="text">
+                     <string>2.0</string>
+                    </property>
+                   </item>
+                   <item>
+                    <property name="text">
+                     <string>nbs</string>
+                    </property>
+                    <property name="text">
+                     <string>64</string>
+                    </property>
+                   </item>
+                   <item>
+                    <property name="text">
+                     <string>overlap_mask</string>
+                    </property>
+                    <property name="text">
+                     <string>True</string>
+                    </property>
+                   </item>
+                   <item>
+                    <property name="text">
+                     <string>mask_ratio</string>
+                    </property>
+                    <property name="text">
+                     <string>4</string>
+                    </property>
+                   </item>
+                   <item>
+                    <property name="text">
+                     <string>dropout</string>
+                    </property>
+                    <property name="text">
+                     <string>0.0</string>
+                    </property>
+                   </item>
+                   <item>
+                    <property name="text">
+                     <string>val</string>
+                    </property>
+                    <property name="text">
+                     <string>True</string>
+                    </property>
+                   </item>
+                   <item>
+                    <property name="text">
+                     <string>plots</string>
+                    </property>
+                    <property name="text">
+                     <string>False</string>
+                    </property>
+                   </item>
+                  </widget>
+                 </item>
+                </layout>
+               </item>
+              </layout>
+             </widget>
+            </item>
+           </layout>
+          </widget>
+          <widget class="QWidget" name="EvaluateModel">
+           <attribute name="title">
+            <string>Evaluate Model</string>
+           </attribute>
+           <layout class="QVBoxLayout" name="verticalLayout_7">
+            <item>
+             <widget class="QLabel" name="EvaluateModelLabel">
+              <property name="font">
+               <font>
+                <family>Times New Roman</family>
+                <bold>true</bold>
+               </font>
+              </property>
+              <property name="text">
+               <string>AnimalPoseTracker-Evaluate Model</string>
+              </property>
+              <property name="alignment">
+               <set>Qt::AlignmentFlag::AlignLeading|Qt::AlignmentFlag::AlignLeft|Qt::AlignmentFlag::AlignVCenter</set>
+              </property>
+             </widget>
+            </item>
+            <item>
+             <widget class="Line" name="EvaluateModelLine">
+              <property name="orientation">
+               <enum>Qt::Orientation::Horizontal</enum>
+              </property>
+             </widget>
+            </item>
+            <item>
+             <widget class="QGroupBox" name="EvaluateModelGroup">
+              <property name="title">
+               <string/>
+              </property>
+              <layout class="QVBoxLayout" name="EvaluateModelGroupVLayout">
+               <property name="leftMargin">
+                <number>9</number>
+               </property>
+               <property name="topMargin">
+                <number>9</number>
+               </property>
+               <property name="rightMargin">
+                <number>9</number>
+               </property>
+               <property name="bottomMargin">
+                <number>9</number>
+               </property>
+               <item>
+                <layout class="QVBoxLayout" name="EvaluateModelGroupLayout">
+                 <item>
+                  <layout class="QHBoxLayout" name="EvaluateModelToolsLayout">
+                   <item>
+                    <widget class="QPushButton" name="EditEvaluationParameters">
+                     <property name="text">
+                      <string>Edit evaluation parameters</string>
+                     </property>
+                    </widget>
+                   </item>
+                   <item>
+                    <widget class="QPushButton" name="StartEvaluate">
+                     <property name="text">
+                      <string>Start evaluate</string>
+                     </property>
+                    </widget>
+                   </item>
+                   <item>
+                    <widget class="QPushButton" name="EndEvaluate">
+                     <property name="text">
+                      <string>End evaluate</string>
+                     </property>
+                    </widget>
+                   </item>
+                  </layout>
+                 </item>
+                 <item>
+                  <widget class="QTreeWidget" name="EvaluateConfigure">
+                   <column>
+                    <property name="text">
+                     <string>Parameter</string>
+                    </property>
+                   </column>
+                   <column>
+                    <property name="text">
+                     <string>Value</string>
+                    </property>
+                   </column>
+                   <item>
+                    <property name="text">
+                     <string>data</string>
+                    </property>
+                    <property name="text">
+                     <string/>
+                    </property>
+                   </item>
+                   <item>
+                    <property name="text">
+                     <string>batch</string>
+                    </property>
+                    <property name="text">
+                     <string>16</string>
+                    </property>
+                   </item>
+                   <item>
+                    <property name="text">
+                     <string>imgsz</string>
+                    </property>
+                    <property name="text">
+                     <string>640</string>
+                    </property>
+                   </item>
+                   <item>
+                    <property name="text">
+                     <string>save_json</string>
+                    </property>
+                    <property name="text">
+                     <string>False</string>
+                    </property>
+                   </item>
+                   <item>
+                    <property name="text">
+                     <string>save_hybrid</string>
+                    </property>
+                    <property name="text">
+                     <string>False</string>
+                    </property>
+                   </item>
+                   <item>
+                    <property name="text">
+                     <string>conf</string>
+                    </property>
+                    <property name="text">
+                     <string>0.001</string>
+                    </property>
+                   </item>
+                   <item>
+                    <property name="text">
+                     <string>iou</string>
+                    </property>
+                    <property name="text">
+                     <string>0.6</string>
+                    </property>
+                   </item>
+                   <item>
+                    <property name="text">
+                     <string>max_det</string>
+                    </property>
+                    <property name="text">
+                     <string>300</string>
+                    </property>
+                   </item>
+                   <item>
+                    <property name="text">
+                     <string>half</string>
+                    </property>
+                    <property name="text">
+                     <string>True</string>
+                    </property>
+                   </item>
+                   <item>
+                    <property name="text">
+                     <string>device</string>
+                    </property>
+                    <property name="text">
+                     <string>None</string>
+                    </property>
+                   </item>
+                   <item>
+                    <property name="text">
+                     <string>dnn</string>
+                    </property>
+                    <property name="text">
+                     <string>False</string>
+                    </property>
+                   </item>
+                   <item>
+                    <property name="text">
+                     <string>plots</string>
+                    </property>
+                    <property name="text">
+                     <string>False</string>
+                    </property>
+                   </item>
+                   <item>
+                    <property name="text">
+                     <string>rect</string>
+                    </property>
+                    <property name="text">
+                     <string>True</string>
+                    </property>
+                   </item>
+                   <item>
+                    <property name="text">
+                     <string>split</string>
+                    </property>
+                    <property name="text">
+                     <string>val</string>
+                    </property>
+                   </item>
+                   <item>
+                    <property name="text">
+                     <string>project</string>
+                    </property>
+                    <property name="text">
+                     <string>None</string>
+                    </property>
+                   </item>
+                   <item>
+                    <property name="text">
+                     <string>name</string>
+                    </property>
+                    <property name="text">
+                     <string>None</string>
+                    </property>
+                   </item>
+                   <item>
+                    <property name="text">
+                     <string>profile</string>
+                    </property>
+                    <property name="text">
+                     <string>false</string>
+                    </property>
+                   </item>
+                   <item>
+                    <property name="text">
+                     <string>verbose</string>
+                    </property>
+                    <property name="text">
+                     <string>False</string>
+                    </property>
+                   </item>
+                   <item>
+                    <property name="text">
+                     <string>save_txt</string>
+                    </property>
+                    <property name="text">
+                     <string>False</string>
+                    </property>
+                   </item>
+                   <item>
+                    <property name="text">
+                     <string>save_conf</string>
+                    </property>
+                    <property name="text">
+                     <string>False</string>
+                    </property>
+                   </item>
+                   <item>
+                    <property name="text">
+                     <string>save_crop</string>
+                    </property>
+                    <property name="text">
+                     <string>False</string>
+                    </property>
+                   </item>
+                   <item>
+                    <property name="text">
+                     <string>workers</string>
+                    </property>
+                    <property name="text">
+                     <string>8</string>
+                    </property>
+                   </item>
+                   <item>
+                    <property name="text">
+                     <string>augment</string>
+                    </property>
+                    <property name="text">
+                     <string>False</string>
+                    </property>
+                   </item>
+                   <item>
+                    <property name="text">
+                     <string>agnostic_nms</string>
+                    </property>
+                    <property name="text">
+                     <string>False</string>
+                    </property>
+                   </item>
+                   <item>
+                    <property name="text">
+                     <string>single_cls</string>
+                    </property>
+                    <property name="text">
+                     <string>False</string>
+                    </property>
+                   </item>
+                  </widget>
+                 </item>
+                </layout>
+               </item>
+              </layout>
+             </widget>
+            </item>
+           </layout>
+          </widget>
+          <widget class="QWidget" name="InferenceSource">
+           <attribute name="title">
+            <string>Inference Source</string>
+           </attribute>
+           <layout class="QVBoxLayout" name="InferenceSourceLayout">
+            <item>
+             <widget class="QLabel" name="InferenceSourceLabel">
+              <property name="font">
+               <font>
+                <family>Times New Roman</family>
+                <bold>true</bold>
+               </font>
+              </property>
+              <property name="text">
+               <string>AnimalPoseTracker-Inference Source</string>
+              </property>
+              <property name="alignment">
+               <set>Qt::AlignmentFlag::AlignLeading|Qt::AlignmentFlag::AlignLeft|Qt::AlignmentFlag::AlignVCenter</set>
+              </property>
+             </widget>
+            </item>
+            <item>
+             <widget class="Line" name="InferenceSourceLine">
+              <property name="orientation">
+               <enum>Qt::Orientation::Horizontal</enum>
+              </property>
+             </widget>
+            </item>
+            <item>
+             <widget class="QGroupBox" name="InferenceSourceGroup">
+              <property name="title">
+               <string/>
+              </property>
+              <layout class="QVBoxLayout" name="InferenceSourceGroupLayout">
+               <item>
+                <layout class="QVBoxLayout" name="InferenceConfigureGroupLayout">
+                 <item>
+                  <layout class="QHBoxLayout" name="InferenceSourceToolsLayout">
+                   <item>
+                    <widget class="QPushButton" name="EditInferenceParameters">
+                     <property name="text">
+                      <string>Edit inference parameters</string>
+                     </property>
+                    </widget>
+                   </item>
+                   <item>
+                    <widget class="QPushButton" name="SelectionSource">
+                     <property name="text">
+                      <string>Selection Source</string>
+                     </property>
+                    </widget>
+                   </item>
+                   <item>
+                    <widget class="QPushButton" name="StartInference">
+                     <property name="text">
+                      <string>Start Inference</string>
+                     </property>
+                    </widget>
+                   </item>
+                   <item>
+                    <widget class="QPushButton" name="EndInference">
+                     <property name="text">
+                      <string>End Inference</string>
+                     </property>
+                    </widget>
+                   </item>
+                  </layout>
+                 </item>
+                 <item>
+                  <widget class="QTreeWidget" name="InferenceConfigure">
+                   <column>
+                    <property name="text">
+                     <string>Parameter</string>
+                    </property>
+                   </column>
+                   <column>
+                    <property name="text">
+                     <string>Value</string>
+                    </property>
+                   </column>
+                   <item>
+                    <property name="text">
+                     <string>source</string>
+                    </property>
+                   </item>
+                   <item>
+                    <property name="text">
+                     <string>conf</string>
+                    </property>
+                    <property name="text">
+                     <string/>
+                    </property>
+                   </item>
+                   <item>
+                    <property name="text">
+                     <string>iou</string>
+                    </property>
+                   </item>
+                   <item>
+                    <property name="text">
+                     <string>imgsz</string>
+                    </property>
+                   </item>
+                   <item>
+                    <property name="text">
+                     <string>half</string>
+                    </property>
+                   </item>
+                   <item>
+                    <property name="text">
+                     <string>device</string>
+                    </property>
+                   </item>
+                   <item>
+                    <property name="text">
+                     <string>batch</string>
+                    </property>
+                   </item>
+                   <item>
+                    <property name="text">
+                     <string>max_det</string>
+                    </property>
+                   </item>
+                   <item>
+                    <property name="text">
+                     <string>vid_stride</string>
+                    </property>
+                   </item>
+                   <item>
+                    <property name="text">
+                     <string>stream_buffer</string>
+                    </property>
+                   </item>
+                   <item>
+                    <property name="text">
+                     <string>visualize</string>
+                    </property>
+                   </item>
+                   <item>
+                    <property name="text">
+                     <string>augment</string>
+                    </property>
+                   </item>
+                   <item>
+                    <property name="text">
+                     <string>agnostic_nms</string>
+                    </property>
+                   </item>
+                   <item>
+                    <property name="text">
+                     <string>classes</string>
+                    </property>
+                   </item>
+                   <item>
+                    <property name="text">
+                     <string>retina_masks</string>
+                    </property>
+                   </item>
+                   <item>
+                    <property name="text">
+                     <string>embed</string>
+                    </property>
+                   </item>
+                   <item>
+                    <property name="text">
+                     <string>project</string>
+                    </property>
+                   </item>
+                   <item>
+                    <property name="text">
+                     <string>name</string>
+                    </property>
+                   </item>
+                   <item>
+                    <property name="text">
+                     <string>stream</string>
+                    </property>
+                   </item>
+                   <item>
+                    <property name="text">
+                     <string>verbose</string>
+                    </property>
+                   </item>
+                   <item>
+                    <property name="text">
+                     <string>show</string>
+                    </property>
+                   </item>
+                   <item>
+                    <property name="text">
+                     <string>save</string>
+                    </property>
+                   </item>
+                   <item>
+                    <property name="text">
+                     <string>save_frame</string>
+                    </property>
+                   </item>
+                   <item>
+                    <property name="text">
+                     <string>save_txt</string>
+                    </property>
+                   </item>
+                   <item>
+                    <property name="text">
+                     <string>save_conf</string>
+                    </property>
+                   </item>
+                   <item>
+                    <property name="text">
+                     <string>save_crop</string>
+                    </property>
+                   </item>
+                   <item>
+                    <property name="text">
+                     <string>show_label</string>
+                    </property>
+                   </item>
+                   <item>
+                    <property name="text">
+                     <string>show_conf</string>
+                    </property>
+                   </item>
+                   <item>
+                    <property name="text">
+                     <string>show_boxes</string>
+                    </property>
+                   </item>
+                   <item>
+                    <property name="text">
+                     <string>line_width</string>
+                    </property>
+                   </item>
+                   <item>
+                    <property name="text">
+                     <string>font_size</string>
+                    </property>
+                   </item>
+                   <item>
+                    <property name="text">
+                     <string>font</string>
+                    </property>
+                   </item>
+                   <item>
+                    <property name="text">
+                     <string>pil</string>
+                    </property>
+                   </item>
+                   <item>
+                    <property name="text">
+                     <string>kpt_radius</string>
+                    </property>
+                   </item>
+                   <item>
+                    <property name="text">
+                     <string>kpt_line</string>
+                    </property>
+                   </item>
+                   <item>
+                    <property name="text">
+                     <string>masks</string>
+                    </property>
+                   </item>
+                   <item>
+                    <property name="text">
+                     <string>probs</string>
+                    </property>
+                   </item>
+                   <item>
+                    <property name="text">
+                     <string>filename</string>
+                    </property>
+                   </item>
+                   <item>
+                    <property name="text">
+                     <string>color_mode</string>
+                    </property>
+                   </item>
+                   <item>
+                    <property name="text">
+                     <string>txt_color</string>
+                    </property>
+                   </item>
+                  </widget>
+                 </item>
+                </layout>
+               </item>
+              </layout>
+             </widget>
+            </item>
+           </layout>
+          </widget>
+          <widget class="QWidget" name="ExportModel">
+           <attribute name="title">
+            <string>Export Model</string>
+           </attribute>
+           <layout class="QVBoxLayout" name="ExportModelLayout">
+            <item>
+             <widget class="QLabel" name="ExportModelLabel">
+              <property name="font">
+               <font>
+                <family>Times New Roman</family>
+                <bold>true</bold>
+               </font>
+              </property>
+              <property name="text">
+               <string>AnimalPoseTracker-Export Model</string>
+              </property>
+              <property name="alignment">
+               <set>Qt::AlignmentFlag::AlignLeading|Qt::AlignmentFlag::AlignLeft|Qt::AlignmentFlag::AlignVCenter</set>
+              </property>
+             </widget>
+            </item>
+            <item>
+             <widget class="Line" name="ExportModelLine">
+              <property name="orientation">
+               <enum>Qt::Orientation::Horizontal</enum>
+              </property>
+             </widget>
+            </item>
+            <item>
+             <widget class="QGroupBox" name="ExportConfigureGroup">
+              <property name="title">
+               <string/>
+              </property>
+              <layout class="QVBoxLayout" name="ExportConfigureGroupVLayout">
+               <item>
+                <layout class="QVBoxLayout" name="ExportConfigureGroupLayout">
+                 <item>
+                  <layout class="QHBoxLayout" name="ExportConfigureToolsLayout">
+                   <item>
+                    <widget class="QPushButton" name="EditExportParameters">
+                     <property name="text">
+                      <string>Edit export parameters</string>
+                     </property>
+                    </widget>
+                   </item>
+                   <item>
+                    <widget class="QPushButton" name="StartModelWeights">
+                     <property name="text">
+                      <string>Selection model weights </string>
+                     </property>
+                    </widget>
+                   </item>
+                   <item>
+                    <widget class="QPushButton" name="StartExport">
+                     <property name="text">
+                      <string>Start Export</string>
+                     </property>
+                    </widget>
+                   </item>
+                  </layout>
+                 </item>
+                 <item>
+                  <widget class="QTreeWidget" name="ExportConfigure">
+                   <column>
+                    <property name="text">
+                     <string>Parameter</string>
+                    </property>
+                   </column>
+                   <column>
+                    <property name="text">
+                     <string>Value</string>
+                    </property>
+                   </column>
+                   <item>
+                    <property name="text">
+                     <string>format</string>
+                    </property>
+                   </item>
+                   <item>
+                    <property name="text">
+                     <string>imgsz</string>
+                    </property>
+                   </item>
+                   <item>
+                    <property name="text">
+                     <string>keras</string>
+                    </property>
+                   </item>
+                   <item>
+                    <property name="text">
+                     <string>optimize</string>
+                    </property>
+                   </item>
+                   <item>
+                    <property name="text">
+                     <string>half</string>
+                    </property>
+                   </item>
+                   <item>
+                    <property name="text">
+                     <string>int8</string>
+                    </property>
+                   </item>
+                   <item>
+                    <property name="text">
+                     <string>dynamic</string>
+                    </property>
+                   </item>
+                   <item>
+                    <property name="text">
+                     <string>simplify</string>
+                    </property>
+                   </item>
+                   <item>
+                    <property name="text">
+                     <string>opset</string>
+                    </property>
+                   </item>
+                   <item>
+                    <property name="text">
+                     <string>workspace</string>
+                    </property>
+                   </item>
+                   <item>
+                    <property name="text">
+                     <string>nms</string>
+                    </property>
+                   </item>
+                   <item>
+                    <property name="text">
+                     <string>batch</string>
+                    </property>
+                   </item>
+                   <item>
+                    <property name="text">
+                     <string>device</string>
+                    </property>
+                   </item>
+                   <item>
+                    <property name="text">
+                     <string>data</string>
+                    </property>
+                   </item>
+                   <item>
+                    <property name="text">
+                     <string>fraction</string>
+                    </property>
+                   </item>
+                  </widget>
+                 </item>
+                </layout>
+               </item>
+              </layout>
+             </widget>
+            </item>
+           </layout>
+          </widget>
+         </widget>
+        </item>
+       </layout>
+      </widget>
+     </widget>
+    </item>
+   </layout>
+  </widget>
+  <widget class="QMenuBar" name="menubar">
+   <property name="geometry">
+    <rect>
+     <x>0</x>
+     <y>0</y>
+     <width>714</width>
+     <height>33</height>
+    </rect>
+   </property>
+   <widget class="QMenu" name="menuAnimalPoseTracker">
+    <property name="sizePolicy">
+     <sizepolicy hsizetype="Expanding" vsizetype="Expanding">
+      <horstretch>0</horstretch>
+      <verstretch>0</verstretch>
+     </sizepolicy>
+    </property>
+    <property name="title">
+     <string>File</string>
+    </property>
+    <addaction name="actionCreateNewProject"/>
+    <addaction name="actionLoadProject"/>
+    <addaction name="actionOpenRecent"/>
+    <addaction name="actionSave"/>
+    <addaction name="actionExit"/>
+   </widget>
+   <widget class="QMenu" name="menuTools">
+    <property name="sizePolicy">
+     <sizepolicy hsizetype="Expanding" vsizetype="Expanding">
+      <horstretch>0</horstretch>
+      <verstretch>0</verstretch>
+     </sizepolicy>
+    </property>
+    <property name="title">
+     <string>Tools</string>
+    </property>
+    <addaction name="actionAnnotator"/>
+    <addaction name="actionInferencer"/>
+    <addaction name="actionTracker"/>
+   </widget>
+   <widget class="QMenu" name="menuHelp">
+    <property name="sizePolicy">
+     <sizepolicy hsizetype="Expanding" vsizetype="Expanding">
+      <horstretch>0</horstretch>
+      <verstretch>0</verstretch>
+     </sizepolicy>
+    </property>
+    <property name="title">
+     <string>Help</string>
+    </property>
+    <addaction name="actionDoc"/>
+    <addaction name="actionCheckUpdated"/>
+    <addaction name="actionHelp"/>
+   </widget>
+   <widget class="QMenu" name="menuView">
+    <property name="title">
+     <string>View</string>
+    </property>
+    <widget class="QMenu" name="menuTheme">
+     <property name="title">
+      <string>Theme</string>
+     </property>
+     <addaction name="actionDark"/>
+     <addaction name="actionLight"/>
+    </widget>
+    <addaction name="menuTheme"/>
+   </widget>
+   <addaction name="menuAnimalPoseTracker"/>
+   <addaction name="menuTools"/>
+   <addaction name="menuView"/>
+   <addaction name="menuHelp"/>
+  </widget>
+  <widget class="QToolBar" name="toolBar">
+   <property name="sizePolicy">
+    <sizepolicy hsizetype="Expanding" vsizetype="Expanding">
+     <horstretch>0</horstretch>
+     <verstretch>0</verstretch>
+    </sizepolicy>
+   </property>
+   <property name="windowTitle">
+    <string>toolBar</string>
+   </property>
+   <attribute name="toolBarArea">
+    <enum>TopToolBarArea</enum>
+   </attribute>
+   <attribute name="toolBarBreak">
+    <bool>false</bool>
+   </attribute>
+   <addaction name="actionCreateNewProject"/>
+   <addaction name="actionLoadProject"/>
+   <addaction name="actionPublicDatasetsProject"/>
+   <addaction name="actionHelp"/>
+  </widget>
+  <action name="actionLoadProject">
+   <property name="icon">
+    <iconset theme="document-open"/>
+   </property>
+   <property name="text">
+    <string>Open Old Project Ctrl+O</string>
+   </property>
+  </action>
+  <action name="actionOpenRecent">
+   <property name="icon">
+    <iconset theme="document-open-recent"/>
+   </property>
+   <property name="text">
+    <string>Open Recent</string>
+   </property>
+  </action>
+  <action name="actionSave">
+   <property name="icon">
+    <iconset theme="document-save"/>
+   </property>
+   <property name="text">
+    <string>Save</string>
+   </property>
+  </action>
+  <action name="actionExit">
+   <property name="icon">
+    <iconset theme="application-exit"/>
+   </property>
+   <property name="text">
+    <string>Exit</string>
+   </property>
+  </action>
+  <action name="actionAnnotator">
+   <property name="text">
+    <string>Annotator</string>
+   </property>
+  </action>
+  <action name="actionInferencer">
+   <property name="text">
+    <string>Inferencer</string>
+   </property>
+  </action>
+  <action name="actionDoc">
+   <property name="text">
+    <string>Doc</string>
+   </property>
+  </action>
+  <action name="actionCheckUpdated">
+   <property name="icon">
+    <iconset theme="update"/>
+   </property>
+   <property name="text">
+    <string>Check for Updating</string>
+   </property>
+  </action>
+  <action name="actionHelp">
+   <property name="icon">
+    <iconset theme="help-browser"/>
+   </property>
+   <property name="text">
+    <string>Help</string>
+   </property>
+  </action>
+  <action name="actionPublicDatasetsProject">
+   <property name="icon">
+    <iconset theme="edit-copy"/>
+   </property>
+   <property name="text">
+    <string>Public Datasets Project</string>
+   </property>
+  </action>
+  <action name="actionDark">
+   <property name="text">
+    <string>Dark</string>
+   </property>
+  </action>
+  <action name="actionLight">
+   <property name="text">
+    <string>Light</string>
+   </property>
+  </action>
+  <action name="actionCreateNewProject">
+   <property name="icon">
+    <iconset theme="document-new"/>
+   </property>
+   <property name="text">
+    <string>New Project Ctrl+N</string>
+   </property>
+  </action>
+  <action name="actionTracker">
+   <property name="text">
+    <string>Tracker</string>
+   </property>
+  </action>
+ </widget>
+ <resources/>
+ <connections/>
+ <slots>
+  <slot>slot1()</slot>
+ </slots>
+</ui>

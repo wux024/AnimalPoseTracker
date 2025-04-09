@@ -22,6 +22,10 @@
   <property name="windowTitle">
    <string>AnimalPoseInference</string>
   </property>
+  <property name="windowIcon">
+   <iconset>
+    <normaloff>media/logo.png</normaloff>media/logo.png</iconset>
+  </property>
   <layout class="QVBoxLayout" name="AnimalPoseInferenceLayout">
    <item>
     <layout class="QHBoxLayout" name="BaseConfigure">
