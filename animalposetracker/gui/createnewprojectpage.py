@@ -72,7 +72,6 @@ class CreateNewProjectPage(QWidget, Ui_CreateNewProject):
     def onCreateProjectClicked(self):
         """Handler for project creation"""
         # TODO: Validate inputs and create project structure
-        self.CreateProjectClicked.emit()
         self.close()
         self.deleteLater()
         

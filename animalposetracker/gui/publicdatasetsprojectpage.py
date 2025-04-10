@@ -1,4 +1,4 @@
-from PySide6.QtCore import   QMetaObject, Qt, Slot, Q_ARG
+from PySide6.QtCore import   QMetaObject, Qt, Slot, Q_ARG, Signal
 from PySide6.QtGui import QImage, QPixmap
 from PySide6.QtWidgets import  QApplication, QFileDialog, QWidget, QMainWindow
 import os
@@ -11,6 +11,7 @@ from .ui_publicdatasetsproject import Ui_PublicDatasetProject
 
 
 class PublicDatasetProjectPage(QWidget, Ui_PublicDatasetProject):
+    CreateProjectClicked = Signal()
     def __init__(self, parent=None):
         super().__init__(parent)
         self.setupUi(self)
@@ -23,6 +24,7 @@ class PublicDatasetProjectPage(QWidget, Ui_PublicDatasetProject):
         
         # Project creation
         self.CreateProjectBase.clicked.connect(self.onCreateProjectClicked)
+        self.CreateProjectBase.clicked.connect(self.CreateProjectClicked)
         
         # Model selection
         self.ModelTypeSelection.currentIndexChanged.connect(self.onModelTypeChanged)
@@ -44,6 +46,8 @@ class PublicDatasetProjectPage(QWidget, Ui_PublicDatasetProject):
         """Handler for public dataset project creation"""
         # TODO: Validate inputs and create project structure
         # Should use selected dataset and model configurations
+        self.close()
+        self.deleteLater()
         
     def onModelTypeChanged(self, index):
         """Handler for model type selection change"""

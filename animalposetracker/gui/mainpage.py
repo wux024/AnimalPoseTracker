@@ -110,6 +110,15 @@ class AnimalPoseTrackerPage(QMainWindow, Ui_AnimalPoseTracker):
         self.sub_page = WindowFactory.run(CreateNewProjectPage)
         self.sub_page.CreateProjectClicked.connect(self.handleCreateNewProject)
     
+    def onCreatePublicDatasetsProject(self):
+        """Slot for opening public datasets"""
+        if hasattr(self, 'sub_page') and self.sub_page is not None:
+            self.sub_page.close()
+            self.sub_page = WindowFactory.run(PublicDatasetProjectPage)
+            self.sub_page.deleteLater()        
+        self.sub_page = WindowFactory.run(PublicDatasetProjectPage)
+        self.sub_page.CreateProjectClicked.connect(self.handleCreateNewProject)
+    
     def handleCreateNewProject(self):
         """Slot for handling the creation of a new project"""
         self.AnimalPoseTrackerPage.setCurrentIndex(1)
@@ -169,11 +178,6 @@ class AnimalPoseTrackerPage(QMainWindow, Ui_AnimalPoseTracker):
         """Slot for changing the application theme"""
         print(f"Change theme to {theme}")
         # Add your implementation here
-
-    def onCreatePublicDatasetsProject(self):
-        """Slot for opening public datasets"""
-        print("Create Public Datasets Project clicked")
-        self.sub_page = WindowFactory.run(PublicDatasetProjectPage)
 
     def onBrowseConfigureFile(self):
         """Slot for browsing configure file"""
