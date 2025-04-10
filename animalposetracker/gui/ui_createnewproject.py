@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 
 ################################################################################
-## Form generated from reading UI file 'createnewprojectRVqTcR.ui'
+## Form generated from reading UI file 'createnewprojectdRPRkw.ui'
 ##
 ## Created by: Qt User Interface Compiler version 6.8.2
 ##
@@ -301,11 +301,11 @@ class Ui_CreateNewProject(object):
         sizePolicy.setHeightForWidth(self.KeypointListLayout.sizePolicy().hasHeightForWidth())
         self.KeypointListLayout.setSizePolicy(sizePolicy)
         self.KeypointListLayout.setMinimumSize(QSize(450, 0))
-        self.verticalLayout_3 = QVBoxLayout(self.KeypointListLayout)
-        self.verticalLayout_3.setSpacing(10)
-        self.verticalLayout_3.setObjectName(u"verticalLayout_3")
-        self.verticalLayout_3.setSizeConstraint(QLayout.SizeConstraint.SetFixedSize)
-        self.verticalLayout_3.setContentsMargins(0, 10, 0, 10)
+        self.KeypointListVLayout = QVBoxLayout(self.KeypointListLayout)
+        self.KeypointListVLayout.setSpacing(10)
+        self.KeypointListVLayout.setObjectName(u"KeypointListVLayout")
+        self.KeypointListVLayout.setSizeConstraint(QLayout.SizeConstraint.SetFixedSize)
+        self.KeypointListVLayout.setContentsMargins(0, 10, 0, 10)
         self.KeypointLayout = QHBoxLayout()
         self.KeypointLayout.setSpacing(10)
         self.KeypointLayout.setObjectName(u"KeypointLayout")
@@ -331,7 +331,7 @@ class Ui_CreateNewProject(object):
         self.KeypointLayout.addWidget(self.Keypoint1)
 
 
-        self.verticalLayout_3.addLayout(self.KeypointLayout)
+        self.KeypointListVLayout.addLayout(self.KeypointLayout)
 
         self.KeypointList.setWidget(self.KeypointListLayout)
 
@@ -348,11 +348,11 @@ class Ui_CreateNewProject(object):
         sizePolicy.setHeightForWidth(self.ClassListLayout.sizePolicy().hasHeightForWidth())
         self.ClassListLayout.setSizePolicy(sizePolicy)
         self.ClassListLayout.setMinimumSize(QSize(450, 0))
-        self.verticalLayout_4 = QVBoxLayout(self.ClassListLayout)
-        self.verticalLayout_4.setSpacing(10)
-        self.verticalLayout_4.setObjectName(u"verticalLayout_4")
-        self.verticalLayout_4.setSizeConstraint(QLayout.SizeConstraint.SetFixedSize)
-        self.verticalLayout_4.setContentsMargins(0, 10, 0, 10)
+        self.ClassListVLayout = QVBoxLayout(self.ClassListLayout)
+        self.ClassListVLayout.setSpacing(10)
+        self.ClassListVLayout.setObjectName(u"ClassListVLayout")
+        self.ClassListVLayout.setSizeConstraint(QLayout.SizeConstraint.SetFixedSize)
+        self.ClassListVLayout.setContentsMargins(0, 10, 0, 10)
         self.ClassLayout = QHBoxLayout()
         self.ClassLayout.setSpacing(10)
         self.ClassLayout.setObjectName(u"ClassLayout")
@@ -377,7 +377,7 @@ class Ui_CreateNewProject(object):
         self.ClassLayout.addWidget(self.Class1)
 
 
-        self.verticalLayout_4.addLayout(self.ClassLayout)
+        self.ClassListVLayout.addLayout(self.ClassLayout)
 
         self.ClassList.setWidget(self.ClassListLayout)
 

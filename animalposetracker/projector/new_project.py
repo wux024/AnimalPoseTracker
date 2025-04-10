@@ -349,37 +349,36 @@ class AnimalPoseTrackerProject:
         
         for key, value in params.items():
             if key not in valid_keys:
-                print(f"Warning: Invalid {config_type} config key: {key}")
                 continue
             config[key] = value
             
-        self._save_config(config_type)
+        # self._save_config(config_type)
 
 
-if __name__ == '__main__':
-    project = AnimalPoseTrackerProject(
-        local_path='D:/wux024/AnimalPoseTrackerProject',
-        project_name='person',
-        worker='Adam',
-        model_type='AnimalRTPose',
-        model_scale='N',
-        keypoints=17,
-        visible=True,
-        classes=1,
-        keypoints_name=None,
-        skeleton=None,
-        oks_sigmas=None,
-        classes_name=None,
-        sources=None,
-        date=None
-    )
-    project.print_project_info()
-    project.create_new_project()
-    project.print_project_info()
+# if __name__ == '__main__':
+#     project = AnimalPoseTrackerProject(
+#         local_path='D:/wux024/AnimalPoseTrackerProject',
+#         project_name='person',
+#         worker='Adam',
+#         model_type='AnimalRTPose',
+#         model_scale='N',
+#         keypoints=17,
+#         visible=True,
+#         classes=1,
+#         keypoints_name=None,
+#         skeleton=None,
+#         oks_sigmas=None,
+#         classes_name=None,
+#         sources=None,
+#         date=None
+#     )
+#     project.print_project_info()
+#     project.create_new_project()
+#     project.print_project_info()
 
-    project.load_project_config('D:\wux024\AnimalPoseTrackerProject\AP10K-Adam-AnimalRTPose-N-20250410\configs\project.yaml')
-    project.print_project_info()
+#     project.load_project_config('D:\wux024\AnimalPoseTrackerProject\AP10K-Adam-AnimalRTPose-N-20250410\configs\project.yaml')
+#     project.print_project_info()
 
-    project.create_public_dataset_project('APT36K')
+#     project.create_public_dataset_project('APT36K')
 
-    project.print_project_info()
+#     project.print_project_info()

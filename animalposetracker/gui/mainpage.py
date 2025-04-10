@@ -13,6 +13,7 @@ from .inferencepage import AnimalPoseInferencePage
 from .createnewprojectpage import CreateNewProjectPage
 from .publicdatasetsprojectpage import PublicDatasetProjectPage
 from animalposetracker.gui import WindowFactory
+from animalposetracker.projector import AnimalPoseTrackerProject
 
 class AnimalPoseTrackerPage(QMainWindow, Ui_AnimalPoseTracker):
     def __init__(self, parent=None):

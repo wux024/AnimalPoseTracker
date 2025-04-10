@@ -647,7 +647,7 @@
                <height>0</height>
               </size>
              </property>
-             <layout class="QVBoxLayout" name="verticalLayout_3" stretch="0">
+             <layout class="QVBoxLayout" name="KeypointListVLayout" stretch="0">
               <property name="spacing">
                <number>10</number>
               </property>
@@ -771,7 +771,7 @@
                <height>0</height>
               </size>
              </property>
-             <layout class="QVBoxLayout" name="verticalLayout_4">
+             <layout class="QVBoxLayout" name="ClassListVLayout">
               <property name="spacing">
                <number>10</number>
               </property>
