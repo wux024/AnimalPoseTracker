@@ -2,15 +2,15 @@ import yaml
 from datetime import datetime
 from pathlib import Path
 from typing import Optional, List, Dict, Any, Union
+from warnings import warn
 from animalposetracker.cfg import DATA_YAML_PATHS, MODEL_YAML_PATHS
 
 
 class AnimalPoseTrackerProject:
-    """Manage animal pose tracking projects 
-    including configurations and directory structure."""
+    """Manage animal pose tracking projects including configurations and directory structure."""
     
     # Constants for configuration types
-    CONFIG_TYPES = {"project", "data", "model"}
+    CONFIG_TYPES = {"project", "dataset", "model"}
     
     # Standard directory structure
     DEFAULT_DIRS = [
@@ -52,67 +52,50 @@ class AnimalPoseTrackerProject:
             visible: Whether keypoints have visibility info (default: True)
             classes: Number of classes (default: 1)
             keypoints_name: Names of keypoints (default: auto-generated)
-            skeleton: Skeleton connections between keypoints (default: empty)
+            skeleton: connections between keypoints (default: empty)
             oks_sigmas: OKS sigmas for keypoints (default: uniform distribution)
             classes_name: Names of classes (default: ['person'])
             sources: Source paths (default: None)
             date: Project creation date (default: current date)
         """
+        # Validate keypoints-related parameters
+        if keypoints_name is not None and len(keypoints_name) != keypoints:
+            raise ValueError(
+                f"keypoints_name length ({len(keypoints_name)}) must match keypoints ({keypoints})"
+            )
+        
+        if skeleton is not None:
+            for connection in skeleton:
+                if any(idx >= keypoints for idx in connection):
+                    raise ValueError(
+                        f"Skeleton contains invalid keypoint index (max {keypoints-1})"
+                    )
+        
         # Initialize paths and basic attributes
-        self.local_path = Path(local_path) if local_path else Path.cwd()
-        self.date = date or datetime.now().strftime(r"%Y%m%d")
-        self.project_name = project_name
-        self.worker = worker
-        self.model_type = model_type
-        self.model_scale = model_scale
-        
-        # Keypoint        
-        self.keypoints = keypoints
-        self.visible = visible
-        self.keypoints_name = keypoints_name or [f"kp_{i}" for i in range(keypoints)]
-        self.skeleton = skeleton or []
-        self.oks_sigmas = oks_sigmas or [1.0 / keypoints] * keypoints if keypoints > 0 else []
-        
-        # Class configuration
-        self.classes = classes
-        self.classes_name = classes_name or ['person']
-        
-        # Handle sources (single path or list of paths)
-        self.sources = []
-        if sources:
-            if isinstance(sources, (str, Path)):
-                self.sources = [Path(sources)]
-            else:
-                self.sources = [Path(s) if isinstance(s, str) else s for s in sources]
+        kpt_shape = [keypoints, 3] if visible else [keypoints, 2]
 
-        # Generate project path and initialize configurations
-        self.project_path = self._generate_project_path()
-        self._initialize_configs()
-
-    def _generate_project_path(self) -> Path:
-        """Generate the project path based on naming convention."""
-        return self.local_path / f"{self.project_name}-{self.worker}-{self.model_type}-{self.model_scale}-{self.date}"
-
-    def _initialize_configs(self) -> None:
-        """Initialize all configuration dictionaries."""
-        # Common keypoint shape configuration
-        kpt_shape = [self.keypoints, 3] if self.visible else [self.keypoints, 2]
+        # Handle default values
+        if classes_name is None:
+            classes_name = ['person']
         
+        if oks_sigmas is None:
+            oks_sigmas = [1.0 / keypoints] * keypoints  # Default uniform distribution
+
         self.project_config = {
-            "project_path": str(self.project_path),
-            "project_name": self.project_name,
-            "worker": self.worker,
-            "model_type": self.model_type,
-            "model_scale": self.model_scale,
-            "date": self.date,
-            "keypoints": self.keypoints,
-            "visible": self.visible,
-            "classes": self.classes,
-            "keypoints_name": self.keypoints_name,
-            "skeleton": self.skeleton,
-            "oks_sigmas": self.oks_sigmas,
-            "classes_name": self.classes_name,
-            "sources": [str(s) for s in self.sources],
+            "project_path": None,
+            "project_name": project_name,
+            "worker": worker,
+            "model_type": model_type,
+            "model_scale": model_scale,
+            "date:": date if date is not None else datetime.now().strftime(r"%Y%m%d"),
+            "keypoints": keypoints,
+            "visible": visible,
+            "classes": classes,
+            "keypoints_name": keypoints_name or [f"kpt_{i}" for i in range(keypoints)],
+            "skeleton": skeleton or [],
+            "oks_sigmas": oks_sigmas,
+            "classes_name": classes_name,
+            "sources": [str(s) for s in sources] if sources else [],
         }
         
         self.dataset_config = {
@@ -121,19 +104,49 @@ class AnimalPoseTrackerProject:
             'val': 'images/val',
             'test': 'images/test',
             'kpt_shape': kpt_shape,
-            'flip_idx': [i for i in range(self.keypoints)],
-            'names': dict(enumerate(self.classes_name)),
-            'skeleton': self.skeleton,
-            'oks_sigmas': self.oks_sigmas,
+            'flip_idx': list(range(keypoints)),
+            'names': dict(enumerate(classes_name)),
+            'skeleton': skeleton or [],
+            'oks_sigmas': oks_sigmas,
         }
         
         self.model_config = {
-            'nc': self.classes,
+            'nc': classes,
             'kpt_shape': kpt_shape,
             'scales': None,
             'backbone': None,
             'head': None,
         }
+        
+        # Generate project path and initialize configurations
+        self._local_path = Path(local_path) if local_path else Path.cwd()
+        self._project_path = self._generate_project_path()
+        self.project_config['project_path'] = self._generate_project_path()
+
+    @property
+    def local_path(self) -> Path:
+        """Get the local path of the project."""
+        return self._local_path
+
+    @local_path.setter
+    def local_path(self, value: Union[str, Path]) -> None:
+        """Set the local path of the project."""
+        self._local_path = Path(value)
+        self._project_path = self._generate_project_path()
+    
+    @property
+    def project_path(self) -> Path:
+        """Get the project path."""
+        return self._project_path
+
+    def _generate_project_path(self) -> Path:
+        """Generate the project path based on naming convention."""
+        project_name = self.project_config.get("project_name", "person")
+        worker = self.project_config.get("worker", "Adam")
+        model_type = self.project_config.get("model_type", "AnimalRTPose")
+        model_scale = self.project_config.get("model_scale", "N")
+        date = self.project_config.get("date", datetime.now().strftime(r"%Y%m%d"))
+        return self.local_path / f"{project_name}-{worker}-{model_type}-{model_scale}-{date}"
 
     def print_project_info(self) -> None:
         """Print the current project configuration in a readable format."""
@@ -146,11 +159,14 @@ class AnimalPoseTrackerProject:
         for key, value in self.project_config.items():
             print(f"{key:<20}: {value}")
         print("-" * 40)
+        
 
     def create_new_project(self) -> None:
         """Create a new project with default configurations."""
         self.create_project_dirs()
-        self.save_configs("all")
+        self.create_project_config()
+        self.create_dataset_config()
+        self.create_model_config()
 
     def create_public_dataset_project(self, dataname: str = 'AP10K') -> None:
         """
@@ -175,9 +191,17 @@ class AnimalPoseTrackerProject:
         except (IOError, yaml.YAMLError) as e:
             raise RuntimeError(f"Failed to load dataset config: {e}")
         
+        self.project_config["classes"] = len(self.dataset_config['names'].keys())
+        self.project_config["classes_name"] = list(self.dataset_config['names'].values())
+        self.project_config["keypoints"] = self.dataset_config['kpt_shape'][0]
+        self.project_config["visible"] = self.dataset_config['kpt_shape'][1] == 3
+        
         self.update_config("project", self.dataset_config)
         self.update_config("dataset", {'path': str(self.project_path / "datasets")})
         self.update_config("model", self.dataset_config)
+        self.create_project_config()
+        self.create_dataset_config()
+        self.create_model_config()
     
     def load_project_config(self, config_path: Union[str, Path]) -> None:
         """
@@ -214,15 +238,15 @@ class AnimalPoseTrackerProject:
     def _update_from_config(self) -> None:
         """Update instance variables from loaded project config."""
         attrs = [
-            "local_path", "project_name", "worker", "model_type", 
+            "project_name", "worker", "model_type", 
             "model_scale", "date", "keypoints", "visible", "classes",
             "keypoints_name", "skeleton", "oks_sigmas", "classes_name"
         ]
         
-        self.local_path = Path(self.project_config["project_path"]).parent
-        self.project_path = Path(self.project_config["project_path"])
+        self._local_path = Path(self.project_config["project_path"]).parent
+        self._project_path = Path(self.project_config["project_path"])
         
-        for attr in attrs[1:]:  # Skip local_path as we set it specially
+        for attr in attrs:
             if attr in self.project_config:
                 setattr(self, attr, self.project_config[attr])
 
@@ -250,12 +274,14 @@ class AnimalPoseTrackerProject:
             
         # Check for duplicates using path resolution
         src_resolved = source_path.resolve()
-        if any(s.resolve() == src_resolved for s in self.sources):
+        current_sources = [Path(s).resolve() for s in self.project_config["sources"]]
+        
+        if any(s == src_resolved for s in current_sources):
             print(f"Source already exists: {source_path}")
             return
             
-        self.sources.append(source_path)
-        self.update_config("project", {"sources": [str(s) for s in self.sources]})
+        self.project_config["sources"].append(str(source_path))
+        self.update_config("project", {"sources": self.project_config["sources"]})
 
     def save_configs(self, config_type: str = "all") -> None:
         """
@@ -283,6 +309,7 @@ class AnimalPoseTrackerProject:
         config_path = self.project_path / "configs" / f"{config_type}.yaml"
         
         try:
+            config_path.parent.mkdir(parents=True, exist_ok=True)
             with open(config_path, "w") as f:
                 yaml.safe_dump(
                     config, 
@@ -299,6 +326,10 @@ class AnimalPoseTrackerProject:
         for rel_dir in self.DEFAULT_DIRS:
             dir_path = self.project_path / rel_dir
             dir_path.mkdir(parents=True, exist_ok=True)
+    
+    def create_project_config(self) -> None:
+        """Create and save the project configuration."""
+        self._save_config("project")
 
     def create_dataset_config(self) -> None:
         """Create and save the dataset configuration."""
@@ -312,20 +343,23 @@ class AnimalPoseTrackerProject:
             ValueError: If model type is invalid
             RuntimeError: If config loading fails
         """
-        if self.model_type not in MODEL_YAML_PATHS:
+        model_type = self.project_config.get("model_type")
+        if model_type not in MODEL_YAML_PATHS:
             available = list(MODEL_YAML_PATHS.keys())
             raise ValueError(f"Invalid model type. Available: {available}")
         
         try:
-            with open(MODEL_YAML_PATHS[self.model_type], "r") as f:
+            with open(MODEL_YAML_PATHS[model_type], "r") as f:
                 self.model_config = yaml.safe_load(f) or {}
         except (IOError, yaml.YAMLError) as e:
             raise RuntimeError(f"Failed to load model config: {e}")
         
         # Update model-specific parameters
         self.model_config.update({
-            'nc': self.classes,
-            'kpt_shape': [self.keypoints, 3] if self.visible else [self.keypoints, 2]
+            'nc': self.project_config["classes"],
+            'kpt_shape': [self.project_config["keypoints"], 3] 
+                if self.project_config["visible"] 
+                else [self.project_config["keypoints"], 2]
         })
         
         self._save_config("model")
@@ -351,34 +385,3 @@ class AnimalPoseTrackerProject:
             if key not in valid_keys:
                 continue
             config[key] = value
-            
-        # self._save_config(config_type)
-
-
-# if __name__ == '__main__':
-#     project = AnimalPoseTrackerProject(
-#         local_path='D:/wux024/AnimalPoseTrackerProject',
-#         project_name='person',
-#         worker='Adam',
-#         model_type='AnimalRTPose',
-#         model_scale='N',
-#         keypoints=17,
-#         visible=True,
-#         classes=1,
-#         keypoints_name=None,
-#         skeleton=None,
-#         oks_sigmas=None,
-#         classes_name=None,
-#         sources=None,
-#         date=None
-#     )
-#     project.print_project_info()
-#     project.create_new_project()
-#     project.print_project_info()
-
-#     project.load_project_config('D:\wux024\AnimalPoseTrackerProject\AP10K-Adam-AnimalRTPose-N-20250410\configs\project.yaml')
-#     project.print_project_info()
-
-#     project.create_public_dataset_project('APT36K')
-
-#     project.print_project_info()

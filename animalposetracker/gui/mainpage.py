@@ -1,11 +1,13 @@
 from PySide6.QtCore import   QMetaObject, Qt, Slot, Q_ARG
 from PySide6.QtGui import QImage, QPixmap
-from PySide6.QtWidgets import  QApplication, QFileDialog, QWidget, QMainWindow
+from PySide6.QtWidgets import  (QApplication, QFileDialog, QWidget, QMainWindow,
+                                 QMessageBox, QTreeWidget, QTreeWidgetItem)
 import os
 import yaml
 import cv2
 import numpy as np
 import sys
+from pathlib import Path
 
 
 from .ui_animalposetracker import Ui_AnimalPoseTracker
@@ -22,11 +24,25 @@ class AnimalPoseTrackerPage(QMainWindow, Ui_AnimalPoseTracker):
         self.setupUi(self)
         self.setupConnections()
         self.setupConstants()
-        self.AnimalPoseTrackerPage.setCurrentIndex(0)
+        self.initialize_controls()
 
     
     def setupConstants(self):
         self.sub_page = None
+
+    def initialize_controls(self):
+        """Initialize the controls of the main page"""
+        self.project = AnimalPoseTrackerProject()
+        self.config_data = {}
+        self.config_type = "project"
+        self.AnimalPoseTrackerPage.setCurrentIndex(0)
+        self.ConfigureTabPage.setCurrentIndex(0)
+        self.ConfigureFile.clear()
+        
+        self.ConfigureFilePathDisplay.setReadOnly(True)
+
+        self.ConfigureFile.setEditTriggers(QTreeWidget.DoubleClicked | QTreeWidget.EditKeyPressed)
+        
 
     def setupConnections(self):
         # File menu actions
@@ -57,6 +73,7 @@ class AnimalPoseTrackerPage(QMainWindow, Ui_AnimalPoseTracker):
         self.CreateNewProjectButton.clicked.connect(self.onCreateNewProject)
         self.LoadProjectButton.clicked.connect(self.onLoadProject)
         self.PublicDatasetsProjectButton.clicked.connect(self.onCreatePublicDatasetsProject)
+        self.ConfigureFile.itemChanged.connect(self.OnConfigureFileEdited)
         
         # Configure file operations
         self.ConfigureFilePathBrowser.clicked.connect(self.onBrowseConfigureFile)
@@ -109,7 +126,7 @@ class AnimalPoseTrackerPage(QMainWindow, Ui_AnimalPoseTracker):
             self.sub_page.deleteLater()
         
         self.sub_page = WindowFactory.run(CreateNewProjectPage)
-        self.sub_page.CreateProjectClicked.connect(self.handleCreateNewProject)
+        self.sub_page.CreateProjectClicked.connect(self._OpenConfigureTabPage)
     
     def onCreatePublicDatasetsProject(self):
         """Slot for opening public datasets"""
@@ -118,11 +135,19 @@ class AnimalPoseTrackerPage(QMainWindow, Ui_AnimalPoseTracker):
             self.sub_page = WindowFactory.run(PublicDatasetProjectPage)
             self.sub_page.deleteLater()        
         self.sub_page = WindowFactory.run(PublicDatasetProjectPage)
-        self.sub_page.CreateProjectClicked.connect(self.handleCreateNewProject)
+        self.sub_page.CreateProjectClicked.connect(self._OpenConfigureTabPage)
     
-    def handleCreateNewProject(self):
+    def _OpenConfigureTabPage(self):
         """Slot for handling the creation of a new project"""
         self.AnimalPoseTrackerPage.setCurrentIndex(1)
+        self.project.local_path = self.sub_page.project.local_path
+        self.project.update_config("project", self.sub_page.project.project_config)
+        self.project.update_config("dataset", self.sub_page.project.dataset_config)
+        self.project.update_config("model", self.sub_page.project.model_config)
+        self.sub_page.close()
+        self.sub_page = None
+        project_config_path = str(self.project.project_path / "configs" / "project.yaml")
+        self.ConfigureFilePathDisplay.setText(project_config_path)
 
     def onLoadProject(self):
         """Slot for loading an existing project"""
@@ -181,19 +206,148 @@ class AnimalPoseTrackerPage(QMainWindow, Ui_AnimalPoseTracker):
         # Add your implementation here
 
     def onBrowseConfigureFile(self):
-        """Slot for browsing configure file"""
-        print("Browse Configure File clicked")
-        # Add your implementation here
+        """Slot for browsing and selecting YAML configuration files.
+        
+        Opens a file dialog to select .yaml or .yml files, validates the selection,
+        displays the path in UI, and optionally loads the file content.
+        """
+
+        # Initialize file dialog with appropriate settings
+        file_dialog = QFileDialog(self)
+        file_dialog.setWindowTitle("Select Configuration File")
+        file_dialog.setNameFilter("YAML Files (*.yaml *.yml)")
+        file_dialog.setFileMode(QFileDialog.ExistingFile) 
+        
+        # Execute dialog and process selection
+        if file_dialog.exec_():
+            selected_files = file_dialog.selectedFiles()
+            if selected_files:  # Check if user selected a file
+                file_path = selected_files[0]
+                
+                # Validate file extension (recommended safety check)
+                if not file_path.lower().endswith(('.yaml', '.yml')):
+                    QMessageBox.warning(
+                        self, 
+                        "Invalid File", 
+                        "Please select a valid YAML file (.yaml or .yml extension)"
+                    )
+                    return
+                    
+                # Update UI with selected path
+                self.ConfigureFilePathDisplay.setText(file_path)
+                
+                # Optional: Load and parse the YAML file
+                # try:
+                #     with open(file_path, 'r') as f:
+                #         config = yaml.safe_load(f)  # Safe loading prevents code execution
+                #         print("Successfully loaded config:", config)
+                        
+                #         # Here you can add additional config processing logic
+                #         # For example: self.process_config(config)
+                        
+                # except yaml.YAMLError as e:
+                #     QMessageBox.critical(
+                #         self, 
+                #         "YAML Error", 
+                #         f"Invalid YAML syntax:\n{str(e)}"
+                #     )
+                # except IOError as e:
+                #     QMessageBox.critical(
+                #         self, 
+                #         "File Error", 
+                #         f"Cannot read file:\n{str(e)}"
+                #     )
+                # except Exception as e:
+                #     QMessageBox.critical(
+                #         self, 
+                #         "Unexpected Error", 
+                #         f"Failed to process file:\n{str(e)}"
+                #     )
 
     def onEditConfigureFile(self):
         """Slot for file"""
-        print("Edit Configure File clicked")
-        # Add your implementation here
+        yaml_file = self.ConfigureFilePathDisplay.text()
+        self.config_type = Path(yaml_file).stem.lower()
+        if self.config_type not in self.project.CONFIG_TYPES:
+            QMessageBox.warning(
+                self, 
+                "Invalid Configuration Type", 
+                "Please select a valid configuration type (project, dataset, or model)"
+            )
+        if self.config_type == "project":
+            self.config_data = self.project.project_config
+        elif self.config_type == "dataset":
+            self.config_data = self.project.dataset_config
+        elif self.config_type == "model":
+            self.config_data = self.project.model_config
+        self.DisplayConfigureFile()
+
+    def DisplayConfigureFile(self):
+        self.ConfigureFile.clear()
+        self.AddItemsToTree(self.config_data)
+    
+    def AddItemsToTree(self, data, parent=None, path=None):
+        if parent is None:
+            parent = self.ConfigureFile
+            path = []
+        if isinstance(data, dict):
+            for key, value in data.items():
+                item = QTreeWidgetItem(parent, [str(key), ""])
+                self.AddItemsToTree(value, item, path + [("dict", key)]) 
+        elif isinstance(data, list):
+            for index, value in enumerate(data):
+                item = QTreeWidgetItem(parent, [f"[{index}]", ""])
+                item.setFlags(item.flags() & ~Qt.ItemIsEditable)
+                self.AddItemsToTree(value, item, path + [("list", index)]) 
+        else:
+            if parent.columnCount() < 2:
+                parent.setText(1, str(data))
+                parent.setFlags(parent.flags() | Qt.ItemIsEditable)
+                parent.setData(1, Qt.UserRole, path)
+            else:
+                parent.setText(1, str(data))
+                parent.setFlags(parent.flags() | Qt.ItemIsEditable)
+                parent.setData(1, Qt.UserRole, path)
+    
+    def OnConfigureFileEdited(self, item, column):
+        if column == 1:
+            new_value = item.text(1)
+            path = item.data(1, Qt.UserRole)
+            if path:            
+                self.update_config_data(self.config_data, path, new_value)
+
+    def update_config_data(self, data, path, new_value):
+        current = data
+        for step in path[:-1]:
+            if step[0] == "dict":
+                current = current[step[1]]
+            elif step[0] == "list":
+                current = current[step[1]]
+        
+        last_step = path[-1]
+        if last_step[0] == "dict":
+            current[last_step[1]] = self.parse_value(new_value)
+        elif last_step[0] == "list":
+            current[last_step[1]] = self.parse_value(new_value)
+
+    def parse_value(self, value_str):
+        try:
+            return int(value_str)
+        except ValueError:
+            try:
+                return float(value_str)
+            except ValueError:
+                if value_str.lower() == "true":
+                    return True
+                elif value_str.lower() == "false":
+                    return False
+                else:
+                    return value_str 
 
     def onSaveConfigureFile(self):
         """Slot for saving configure file"""
-        print("Save Configure File clicked")
-        # Add your implementation here
+        print(f"{self.config_type} Save Configure File clicked")
+        self.project._save_config(self.config_type)
 
     def onCancelConfigureFile(self):
         """Slot for canceling configure file changes"""

@@ -1,6 +1,7 @@
-from PySide6.QtCore import Signal, QTimer, Qt, QSize, QObject
+from PySide6.QtCore import Signal, QTimer, Qt, QSize, QObject, QSignalBlocker
 from PySide6.QtWidgets import  (QFileDialog, QWidget, QHBoxLayout, 
-    QVBoxLayout, QLabel, QLineEdit, QLayout)
+    QVBoxLayout, QLabel, QLineEdit, QLayout, QMenu, QCheckBox, QListWidgetItem)
+from PySide6.QtGui import QCursor
 import os
 import yaml
 import cv2
@@ -15,7 +16,6 @@ from animalposetracker.cfg import MODEL_YAML_PATHS
 
 class ListManager(QObject):
     list_changed = Signal()
-
     def __init__(self, scroll_area, initial_widgets):
         super().__init__()
         self.scroll_area = scroll_area
@@ -134,10 +134,32 @@ class ListManager(QObject):
             if item.widget():
                 item.widget().deleteLater()
         layout.deleteLater()
+
+class SourceSignal(QObject):
+    source_selected = Signal(bool)
+
+class CheckableListWidgetItem(QListWidgetItem):
+    def __init__(self, text):
+        super().__init__()
+        self.checked_signal = SourceSignal()
+
+        self.widget = QWidget()
+        self.checkbox = QCheckBox(text)
+        self.checkbox.setChecked(True)
+
+        layout = QHBoxLayout(self.widget)
+        layout.setContentsMargins(5, 0, 5, 0)
+        layout.addWidget(self.checkbox)
+        
+        self.checkbox.stateChanged.connect(self._emit_check_state)
+    
+    def _emit_check_state(self):
+        self.checked_signal.source_selected.emit(self.checkbox.isChecked())
+
 class CreateNewProjectPage(QWidget, Ui_CreateNewProject):
     # Signals
     CreateProjectClicked = Signal()
-    project = AnimalPoseTrackerProject()
+    source_type = "image"
     def __init__(self, parent=None):
         super().__init__(parent)
         self.setupUi(self)
@@ -147,6 +169,11 @@ class CreateNewProjectPage(QWidget, Ui_CreateNewProject):
     
     def initialize_controls(self):
         """Initialize all UI controls based on project configuration"""
+
+        self.project = AnimalPoseTrackerProject()
+
+        self.SourceDataSelected.setTristate(True)
+        self.SourceDataSelected.setEnabled(True)
 
         self.LocationPathDisplay.setReadOnly(True)
 
@@ -173,7 +200,6 @@ class CreateNewProjectPage(QWidget, Ui_CreateNewProject):
                     })
         self.keypoint_manager.list_changed.connect(self.onKeypointChanged)
 
-
         self.class_manager =  ListManager(
                     scroll_area=self.ClassList,
                     initial_widgets={
@@ -184,6 +210,7 @@ class CreateNewProjectPage(QWidget, Ui_CreateNewProject):
                         'container': self.ClassListLayout
                     })
         self.class_manager.list_changed.connect(self.onClassChanged)
+
 
 
     def setupConnections(self):
@@ -244,66 +271,147 @@ class CreateNewProjectPage(QWidget, Ui_CreateNewProject):
         
     def onBrowseSourceDataClicked(self):
         """
-        Handles media source selection and updates project config directly.
-        Uses local variable 'sources' to temporarily store the selection.
+        Handles media source selection with context menu for type selection.
+        Maintains single button interaction with intelligent type detection.
         """
-        VIDEO_EXTS = {'.mp4', '.avi', '.mov', '.mkv', '.flv', '.webm'}
-        IMAGE_EXTS = {'.jpg', '.jpeg', '.png', '.bmp', '.tiff', '.webp'}
+        # Create context menu
+        menu = QMenu(self)
+        video_action = menu.addAction("Select Video(s)")
+        image_action = menu.addAction("Select Image Directory")
         
-        # Configure file dialog
-        dialog = QFileDialog(self)
-        dialog.setWindowTitle("Select Media Sources")
-        dialog.setDirectory(str(Path.home()))
-        dialog.setFileMode(QFileDialog.ExistingFiles)
-        dialog.setNameFilter("Media Files (*.mp4 *.avi *.mov *.mkv *.jpg *.jpeg *.png)")
+        # Show menu at cursor position
+        action = menu.exec_(QCursor.pos())
+        
+        if action == video_action:
+            self.source_type = "video"
+            self._handleVideoSelection()
+        elif action == image_action:
+            self.source_type = "image"
+            self._handleImageDirSelection()
 
-        # Initialize local variable
-        sources = None
+    def _handleVideoSelection(self):
+        """Process video files/directory selection"""
+        VIDEO_EXTS = {'.mp4', '.avi', '.mov', '.mkv', '.flv', '.webm'}
+        
+        dialog = QFileDialog(self)
+        dialog.setWindowTitle("Select Video(s)")
+        dialog.setFileMode(QFileDialog.ExistingFiles)
+        dialog.setNameFilter("Video Files (*.mp4 *.avi *.mov *.mkv)")
         
         if dialog.exec():
             selected = dialog.selectedFiles()
+            valid = []
             
-            # Case 1: Directory selected
-            if len(selected) == 1 and Path(selected[0]).is_dir():
-                dir_path = Path(selected[0])
-                all_files = list(dir_path.glob('*'))
-                
-                videos = [f for f in all_files if f.suffix.lower() in VIDEO_EXTS]
-                images = [f for f in all_files if f.suffix.lower() in IMAGE_EXTS]
-                others = [f for f in all_files if f.suffix.lower() not in VIDEO_EXTS | IMAGE_EXTS]
-                
-                if videos and not images and not others:
-                    sources = sorted(str(f) for f in videos)
-                elif images and not videos and not others:
-                    sources = str(dir_path)
+            # Process mixed selection (files + directories)
+            for path in selected:
+                path_obj = Path(path)
+                if path_obj.is_dir():
+                    # Scan directory for videos
+                    dir_videos = [str(f) for f in path_obj.glob('*') 
+                                if f.suffix.lower() in VIDEO_EXTS]
+                    valid.extend(sorted(dir_videos))
                 else:
-                    self.showErrorMessage(
-                        "Invalid Directory",
-                        f"Contains: {len(videos)} videos, {len(images)} images, {len(others)} other files"
-                    )
+                    if path_obj.suffix.lower() in VIDEO_EXTS:
+                        valid.append(str(path_obj))
             
-            # Case 2: Files selected
-            elif selected:
-                invalid_files = [f for f in selected if Path(f).suffix.lower() not in VIDEO_EXTS]
-                
-                if invalid_files:
-                    self.showErrorMessage(
-                        "Invalid Files",
-                        f"First 3 invalid: {', '.join(invalid_files[:3])}" + 
-                        ("..." if len(invalid_files) > 3 else "")
-                    )
-                else:
-                    sources = sorted(selected)
-            print(sources)
+            if valid:
+                self._updateSourceList(valid, len(valid))
+            else:
+                print("No Valid Videos", "Selected paths contain no video files")
+
+    def _handleImageDirSelection(self):
+        """Process image directory selection with strict validation"""
+        IMAGE_EXTS = {'.jpg', '.jpeg', '.png', '.bmp', '.tiff', '.webp'}
         
+        dialog = QFileDialog(self)
+        dialog.setWindowTitle("Select Image Directory")
+        dialog.setFileMode(QFileDialog.Directory)
         
+        if dialog.exec():
+            dir_path = Path(dialog.selectedFiles()[0])
+            all_files = list(dir_path.glob('*'))
+            
+            images = [f for f in all_files if f.suffix.lower() in IMAGE_EXTS]
+            non_images = [f for f in all_files if f.suffix.lower() not in IMAGE_EXTS]
+            
+            if len(images) == 0:
+                self.showErrorMessage("Empty Directory", "No images found in selected folder")
+            elif non_images:
+                self.showErrorMessage("Invalid Directory", 
+                                    f"Contains {len(non_images)} non-image files")
+            else:
+                self._updateSourceList([f"{dir_path}"], len(images))
+
+    def _updateSourceList(self, items, count):
+        """Update UI with validation markers"""
+        self.SourceList.clear()
+        # Add type indicators to source list
+        with QSignalBlocker(self.SourceDataSelected):
+            for item in items:
+                item = CheckableListWidgetItem(str(item))
+                self.SourceList.addItem(item)
+                self.SourceList.setItemWidget(item, item.checkbox)
+                item.checked_signal.source_selected.connect(self._handleSourceDataSelection)
+
+        self.SourceDataSelected.setCheckState(Qt.CheckState.Checked)
+        self.SourceDataSelected.setText(f"{count} {self.source_type}{'s' if count > 1 else ''} selected")
+    
+    def _handleSourceDataSelection(self):
+        checked_items = self.GetCheckedItems()
+        self._updateSourceDataSelectionChanged(len(checked_items))
+        self.project.update_config("project", {"sources": checked_items})
+    
+    def _updateSourceDataSelectionChanged(self, checked_count):
+        """Update UI with source data selection summary"""
+        with QSignalBlocker(self.SourceDataSelected):
+            if checked_count == 0:
+                state = Qt.Unchecked
+            elif checked_count == self.SourceList.count():
+                state = Qt.Checked
+            else:
+                state = Qt.PartiallyChecked
+            self.SourceDataSelected.setCheckState(state)
+            self.SourceDataSelected.setText(
+                f"{checked_count} {self.source_type}{'s' if checked_count > 1 else ''} selected"
+            )
+    
+    def onSourceDataSelectionChanged(self):
+        """Handler for source data selection state change"""
+        state = self.SourceDataSelected.checkState()
+        if state == Qt.CheckState.PartiallyChecked:
+            return
+        with QSignalBlocker(self.SourceDataSelected):
+            for i in range(self.SourceList.count()):
+                item = self.SourceList.item(i)
+                if not item:
+                    continue
+                if hasattr(item, 'checkbox'):
+                    item.checkbox.setCheckState(state)
+        checked_items = self.GetCheckedItems()
+        self._updateSourceDataSelectionChanged(len(checked_items))
+        self.project.update_config("project", {"sources": checked_items})
+
+    def GetCheckedItems(self):
+        checked = []
+        for i in range(self.SourceList.count()):
+            item = self.SourceList.item(i)
+            if not item:
+                continue
+            if hasattr(item, 'checkbox') and item.checkbox.isChecked():
+                checked.append(item.checkbox.text())
+        return checked
+
     def onClearSourceDataClicked(self):
         """Handler for clearing source data list"""
-        # TODO: Clear the source data list widget
+        self.SourceList.clear()
+        self.SourceDataSelected.setCheckState(Qt.CheckState.Unchecked)
+        self.SourceDataSelected.setText("0 source data selected")
+        self.project.update_config("project", {"sources": []})
+        
 
     def getAllProjectConfig(self):
         project_config = {
-            "project_path": self.project.local_path,
+            "project_path": str(self.project.project_path),
             "project_name": self.ProjectConfig.text(),
             "worker": self.WorkerConfig.text(),
             "model_type": self.ModelTypeSelection.currentText(),
@@ -313,36 +421,33 @@ class CreateNewProjectPage(QWidget, Ui_CreateNewProject):
             "keypoints_name": self.keypoint_manager.get_list_data(),
             "classes": self.ClassConfig.value(),
             "classes_name": self.class_manager.get_list_data(),
-            "source": self.SourceList.currentText()
+            "source": self.GetCheckedItems(),
         }
-        if project_config["keypoints"] != len(project_config["keypoints_name"]):
-            print("Error: Number of keypoints does not match number of keypoint names")
-            return None
-        if project_config["classes"] != len(project_config["classes_name"]):
-            print("Error: Number of classes does not match number of class names")
-            return None
+        if not project_config["keypoints_name"]:
+            project_config["keypoints_name"] = [f"keypoint{i+1}" for i in range(project_config["keypoints"])]
+        if not project_config["classes_name"]:
+            project_config["classes_name"] = [f"class{i+1}" for i in range(project_config["classes"])]
+
         return project_config
 
     def onCreateProjectClicked(self):
-        self.project.local_path = Path(self.LocationPathDisplay.text())
         project_config = self.getAllProjectConfig() 
         if project_config is None:
             return
         self.project.update_config("project", project_config)
-        self.project.create_project()
-        self.project.print_project_info()
+        self.project.local_path = Path(self.LocationPathDisplay.text())
+        self.project.create_new_project()
 
         if self.CopySourceData.isChecked():
-            # TODO: Copy source data to project directory
-            pass
+            sources = self.project.project_config['sources']
+            if self.source_type == "image":
+                shutil.copy(sources[0], self.project.project_path / "sources")
+            elif self.source_type == "video":
+                for video_path in sources:
+                    shutil.copy(video_path, self.project.project_path / "sources")
 
         self.CreateProjectClicked.emit()
-        self.deleteLater()
-        
-    def onSourceDataSelectionChanged(self, state):
-        """Handler for source data selection state change"""
-        # TODO: Update UI based on selection state
-    
+        # self.deleteLater()
         
     def onKeypointConfigChanged(self, keypoints):
         self.project.update_config("project", {"keypoints": keypoints})
