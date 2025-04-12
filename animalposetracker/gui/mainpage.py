@@ -1,13 +1,12 @@
-from PySide6.QtCore import   QMetaObject, Qt, Slot, Q_ARG
-from PySide6.QtGui import QImage, QPixmap
-from PySide6.QtWidgets import  (QApplication, QFileDialog, QWidget, QMainWindow,
-                                 QMessageBox, QTreeWidget, QTreeWidgetItem)
+from PySide6.QtCore import  Qt, QSettings
+from PySide6.QtWidgets import  (QMenu, QApplication, QFileDialog, QMainWindow,
+                                 QMessageBox, QTreeWidget, QTreeWidgetItem, 
+                                 QTreeWidgetItemIterator)
+from PySide6.QtGui import QCursor
 import os
-import yaml
-import cv2
-import numpy as np
 import sys
 from pathlib import Path
+from collections import deque
 
 
 from .ui_animalposetracker import Ui_AnimalPoseTracker
@@ -25,16 +24,30 @@ class AnimalPoseTrackerPage(QMainWindow, Ui_AnimalPoseTracker):
         self.setupConnections()
         self.setupConstants()
         self.initialize_controls()
-
     
     def setupConstants(self):
         self.sub_page = None
+        # set work directory
+        os.chdir(Path.cwd())
+        self.source_type = 'image' 
+        self.training = False
+        self.evaluating = False
+        self.inference = False
 
     def initialize_controls(self):
         """Initialize the controls of the main page"""
         self.project = AnimalPoseTrackerProject()
         self.config_data = {}
         self.config_type = "project"
+
+        # set recent projects
+        self.maxRecentProjects = 5
+        self.recent_projects = deque(maxlen=self.maxRecentProjects)
+        self.recentProjectsMenu = QMenu(self)
+        self.actionOpenRecent.setMenu(self.recentProjectsMenu)
+        self.loadRecentProjects()
+        self.updateRecentProjectsMenu()
+
         self.AnimalPoseTrackerPage.setCurrentIndex(0)
         self.ConfigureTabPage.setCurrentIndex(0)
         self.ConfigureFile.clear()
@@ -42,13 +55,13 @@ class AnimalPoseTrackerPage(QMainWindow, Ui_AnimalPoseTracker):
         self.ConfigureFilePathDisplay.setReadOnly(True)
 
         self.ConfigureFile.setEditTriggers(QTreeWidget.DoubleClicked | QTreeWidget.EditKeyPressed)
+        self.TrainingConfigureEdit.setEditTriggers(QTreeWidget.DoubleClicked | QTreeWidget.EditKeyPressed)
         
 
     def setupConnections(self):
         # File menu actions
         self.actionCreateNewProject.triggered.connect(self.onCreateNewProject)
         self.actionLoadProject.triggered.connect(self.onLoadProject)
-        self.actionOpenRecent.triggered.connect(self.onOpenRecent)
         self.actionSave.triggered.connect(self.onSave)
         self.actionExit.triggered.connect(self.onExit)
         
@@ -82,9 +95,9 @@ class AnimalPoseTrackerPage(QMainWindow, Ui_AnimalPoseTracker):
         self.CannelConfigureFile.clicked.connect(self.onCancelConfigureFile)
         
         # Extract and Label Frames tab
-        self.ExtractionMethodSelection.currentIndexChanged.connect(self.onExtractionMethodChanged)
+        self.ExtractionMethodSelection.currentTextChanged.connect(self.onExtractionMethodChanged)
         self.ClusterStepSetup.valueChanged.connect(self.onClusterStepChanged)
-        self.ExtractionAlgorithmSelection.currentIndexChanged.connect(self.onExtractionAlgorithmChanged)
+        self.ExtractionAlgorithmSelection.currentTextChanged.connect(self.onExtractionAlgorithmChanged)
         self.SelectionVideosImages.clicked.connect(self.onSelectVideosImages)
         self.ClearVideosImages.clicked.connect(self.onClearVideosImages)
         self.ExtracFrames.clicked.connect(self.onExtractFrames)
@@ -98,23 +111,27 @@ class AnimalPoseTrackerPage(QMainWindow, Ui_AnimalPoseTracker):
         
         # Training tab
         self.ResumeTrain.clicked.connect(self.onResumeTrain)
-        self.EditTrainingParameters.clicked.connect(self.onEditTrainingParameters)
+        self.EditTrainingParameters.clicked.connect(self.onEditOtherParameters)
         self.StartTrain.clicked.connect(self.onStartTrain)
         self.EndTrain.clicked.connect(self.onEndTrain)
+        self.TrainingConfigureEdit.itemChanged.connect(self.onOtherConfigureEdited)
         
         # Evaluation tab
-        self.EditEvaluationParameters.clicked.connect(self.onEditEvaluationParameters)
+        self.EditEvaluationParameters.clicked.connect(self.onEditOtherParameters)
+        self.EvaluateConfigure.itemChanged.connect(self.onOtherConfigureEdited)
         self.StartEvaluate.clicked.connect(self.onStartEvaluate)
         self.EndEvaluate.clicked.connect(self.onEndEvaluate)
         
         # Inference tab
-        self.EditInferenceParameters.clicked.connect(self.onEditInferenceParameters)
+        self.EditInferenceParameters.clicked.connect(self.onEditOtherParameters)
+        self.InferenceConfigure.itemChanged.connect(self.onOtherConfigureEdited)
         self.SelectionSource.clicked.connect(self.onSelectSource)
         self.StartInference.clicked.connect(self.onStartInference)
         self.EndInference.clicked.connect(self.onEndInference)
         
         # Export tab
-        self.EditExportParameters.clicked.connect(self.onEditExportParameters)
+        self.EditExportParameters.clicked.connect(self.onEditOtherParameters)
+        self.ExportConfigure.itemChanged.connect(self.onOtherConfigureEdited)
         self.StartModelWeights.clicked.connect(self.onSelectModelWeights)
         self.StartExport.clicked.connect(self.onStartExport)
 
@@ -141,33 +158,118 @@ class AnimalPoseTrackerPage(QMainWindow, Ui_AnimalPoseTracker):
         """Slot for handling the creation of a new project"""
         self.AnimalPoseTrackerPage.setCurrentIndex(1)
         self.project.local_path = self.sub_page.project.local_path
+        # set work directory
+        os.chdir(self.project.project_path)
         self.project.update_config("project", self.sub_page.project.project_config)
         self.project.update_config("dataset", self.sub_page.project.dataset_config)
         self.project.update_config("model", self.sub_page.project.model_config)
+        self.project.update_config("other", self.sub_page.project.other_config)
         self.sub_page.close()
         self.sub_page = None
-        project_config_path = str(self.project.project_path / "configs" / "project.yaml")
+        project_config_path = str(self.project.project_path / "project.yaml")
         self.ConfigureFilePathDisplay.setText(project_config_path)
+        self.initialize_other_config()
+        self.addRecentProject(project_config_path)
 
     def onLoadProject(self):
         """Slot for loading an existing project"""
-        print("Load Project clicked")
         # Add your implementation here
+        config_path = QFileDialog.getOpenFileName(self, 
+                                                  "Select Configuration File", 
+                                                  "", "YAML Files (*.yaml *.yml)")[0]
+        if config_path:
+            self.project.load_project_config(config_path)
+            self.AnimalPoseTrackerPage.setCurrentIndex(1)
+            project_config_path = str(self.project.project_path / "project.yaml")
+            self.ConfigureFilePathDisplay.setText(project_config_path)
+            self.initialize_other_config()
+            self.addRecentProject(project_config_path)
 
-    def onOpenRecent(self):
-        """Slot for opening a recent project"""
-        print("Open Recent clicked")
-        # Add your implementation here
+    def initialize_other_config(self):
+        """Initialize the other config"""
+        iterators = []
+        iterators.append(QTreeWidgetItemIterator(self.TrainingConfigureEdit))
+        iterators.append(QTreeWidgetItemIterator(self.EvaluateConfigure))
+        iterators.append(QTreeWidgetItemIterator(self.InferenceConfigure))
+        iterators.append(QTreeWidgetItemIterator(self.ExportConfigure))
+        for iterator in iterators:
+            while iterator.value():
+                    item = iterator.value()
+                    key = item.text(0)  # First column contains parameter names
+                    # Only update if the key exists in project config
+                    if key in self.project.other_config:
+                        current_value = self.project.other_config[key]
+                        item.setText(1, str(current_value))
+                    iterator += 1 
+
+    def loadRecentProjects(self):
+        """Load saved projects from QSettings"""
+        settings = QSettings("Northeast Normal University", "AnimalPoseTracker")
+        projects = settings.value("recentProjects", [], type=list)
+        self.recent_projects.extend(p for p in projects if Path(p).exists())
+
+    def updateRecentProjectsMenu(self):
+        """Consolidated menu updater"""
+        self.recentProjectsMenu.clear()
+        
+        if not self.recent_projects:
+            self.recentProjectsMenu.addAction("No recent projects").setEnabled(False)
+        else:
+            for i, path in enumerate(self.recent_projects):
+                action = self.recentProjectsMenu.addAction(f"&{i+1} {path}")
+                action.triggered.connect(lambda _, p=path: self.openRecentProject(p))
+        
+        self.recentProjectsMenu.addSeparator()
+        self.recentProjectsMenu.addAction("Clear All").triggered.connect(self.clearRecentProjects)
+
+    def openRecentProject(self, path):
+        """Actually open a project file"""
+        try:
+            if Path(path).exists():
+                # Add your project loading logic here
+                self.project.load_project_config(path)
+                self.AnimalPoseTrackerPage.setCurrentIndex(1)
+                project_config_path = str(self.project.project_path / "project.yaml")
+                self.ConfigureFilePathDisplay.setText(project_config_path)
+                self.initialize_other_config()
+                self.addRecentProject(path)
+                return True
+            return False
+        except Exception as e:
+            QMessageBox.warning(self, "Error", f"Cannot open project:\n{str(e)}")
+            return False
+
+    def addRecentProject(self, project_path):
+        """Add with validation"""
+        path = str(Path(project_path).absolute())
+        if not Path(path).exists():
+            return
+        
+        if path in self.recent_projects:
+            self.recent_projects.remove(path)
+        
+        self.recent_projects.appendleft(path)
+        self.saveRecentProjects()
+        self.updateRecentProjectsMenu()
+
+    def clearRecentProjects(self):
+        self.recent_projects.clear()
+        self.saveRecentProjects()
+        self.updateRecentProjectsMenu()  # Update UI
+
+    def saveRecentProjects(self):
+        settings = QSettings("Northeast Normal University", "AnimalPoseTracker")
+        settings.setValue("recentProjects", list(self.recent_projects))
 
     def onSave(self):
         """Slot for saving the current project"""
-        print("Save clicked")
-        # Add your implementation here
+        self.project.save_configs()
 
     def onExit(self):
         """Slot for exiting the application"""
-        print("Exit clicked")
-        # Add your implementation here
+        if self.sub_page is not None:
+            self.sub_page.close()
+        self.close()
 
     def onOpenAnnotator(self):
         """Slot for opening the annotator tool"""
@@ -201,17 +303,31 @@ class AnimalPoseTrackerPage(QMainWindow, Ui_AnimalPoseTracker):
         # Add your implementation here
 
     def onChangeTheme(self, theme):
-        """Slot for changing the application theme"""
-        print(f"Change theme to {theme}")
-        # Add your implementation here
+        """Change application theme/stylesheets"""
+        try:
+            if theme == "dark":
+                self._applyDarkTheme()
+            elif theme == "light": 
+                self._applyLightTheme()
+            else:
+                raise ValueError(f"Unknown theme: {theme}")
+            
+        except Exception as e:
+            QMessageBox.warning(self, "Theme Error", str(e))
+    
+    def _applyDarkTheme(self):
+        """Apply dark mode stylesheet"""
+        print("Dark theme applied")
+
+    def _applyLightTheme(self):
+        """Reset to default light theme"""
+        print("Light theme applied")
 
     def onBrowseConfigureFile(self):
         """Slot for browsing and selecting YAML configuration files.
-        
         Opens a file dialog to select .yaml or .yml files, validates the selection,
         displays the path in UI, and optionally loads the file content.
         """
-
         # Initialize file dialog with appropriate settings
         file_dialog = QFileDialog(self)
         file_dialog.setWindowTitle("Select Configuration File")
@@ -223,7 +339,6 @@ class AnimalPoseTrackerPage(QMainWindow, Ui_AnimalPoseTracker):
             selected_files = file_dialog.selectedFiles()
             if selected_files:  # Check if user selected a file
                 file_path = selected_files[0]
-                
                 # Validate file extension (recommended safety check)
                 if not file_path.lower().endswith(('.yaml', '.yml')):
                     QMessageBox.warning(
@@ -236,33 +351,6 @@ class AnimalPoseTrackerPage(QMainWindow, Ui_AnimalPoseTracker):
                 # Update UI with selected path
                 self.ConfigureFilePathDisplay.setText(file_path)
                 
-                # Optional: Load and parse the YAML file
-                # try:
-                #     with open(file_path, 'r') as f:
-                #         config = yaml.safe_load(f)  # Safe loading prevents code execution
-                #         print("Successfully loaded config:", config)
-                        
-                #         # Here you can add additional config processing logic
-                #         # For example: self.process_config(config)
-                        
-                # except yaml.YAMLError as e:
-                #     QMessageBox.critical(
-                #         self, 
-                #         "YAML Error", 
-                #         f"Invalid YAML syntax:\n{str(e)}"
-                #     )
-                # except IOError as e:
-                #     QMessageBox.critical(
-                #         self, 
-                #         "File Error", 
-                #         f"Cannot read file:\n{str(e)}"
-                #     )
-                # except Exception as e:
-                #     QMessageBox.critical(
-                #         self, 
-                #         "Unexpected Error", 
-                #         f"Failed to process file:\n{str(e)}"
-                #     )
 
     def onEditConfigureFile(self):
         """Slot for file"""
@@ -280,6 +368,8 @@ class AnimalPoseTrackerPage(QMainWindow, Ui_AnimalPoseTracker):
             self.config_data = self.project.dataset_config
         elif self.config_type == "model":
             self.config_data = self.project.model_config
+        elif self.config_type == "other":
+            self.config_data = self.project.other_config
         self.DisplayConfigureFile()
 
     def DisplayConfigureFile(self):
@@ -346,13 +436,11 @@ class AnimalPoseTrackerPage(QMainWindow, Ui_AnimalPoseTracker):
 
     def onSaveConfigureFile(self):
         """Slot for saving configure file"""
-        print(f"{self.config_type} Save Configure File clicked")
         self.project._save_config(self.config_type)
 
     def onCancelConfigureFile(self):
         """Slot for canceling configure file changes"""
-        print("Cancel Configure File clicked")
-        # Add your implementation here
+        self.ConfigureFile.clear()
 
     def onExtractionMethodChanged(self, index):
         """Slot for extraction method selection changed"""
@@ -370,14 +458,83 @@ class AnimalPoseTrackerPage(QMainWindow, Ui_AnimalPoseTracker):
         # Add your implementation here
 
     def onSelectVideosImages(self):
-        """Slot for selecting videos/images"""
-        print("Select Videos/Images clicked")
-        # Add your implementation here
+        """Slot for selecting videos/images
+        Handles media source selection with context menu for type selection.
+        Maintains single button interaction with intelligent type detection.
+        """
+        # Create context menu
+        menu = QMenu(self)
+        video_action = menu.addAction("Select added Video(s)")
+        image_action = menu.addAction("Select added Image Directory")
+        
+        # Show menu at cursor position
+        action = menu.exec_(QCursor.pos())
+        
+        if action == video_action:
+            self.source_type = "video"
+            self._handleVideoSelection()
+        elif action == image_action:
+            self.source_type = "image"
+            self._handleImageDirSelection()
 
+    def _handleVideoSelection(self):
+        """Process video files/directory selection"""
+        VIDEO_EXTS = {'.mp4', '.avi', '.mov', '.mkv', '.flv', '.webm'}
+        
+        dialog = QFileDialog(self)
+        dialog.setWindowTitle("Select Video(s)")
+        dialog.setFileMode(QFileDialog.ExistingFiles)
+        dialog.setNameFilter("Video Files (*.mp4 *.avi *.mov *.mkv)")
+        
+        if dialog.exec():
+            selected = dialog.selectedFiles()
+            valid = []
+            
+            # Process mixed selection (files + directories)
+            for path in selected:
+                path_obj = Path(path)
+                if path_obj.is_dir():
+                    # Scan directory for videos
+                    dir_videos = [str(f) for f in path_obj.glob('*') 
+                                if f.suffix.lower() in VIDEO_EXTS]
+                    valid.extend(sorted(dir_videos))
+                else:
+                    if path_obj.suffix.lower() in VIDEO_EXTS:
+                        valid.append(str(path_obj))
+            
+            if valid:
+                self.project.add_source_to_project(valid)
+            else:
+                self.showErrorMessage("Invalid Selection", "No valid video files selected")
+                
+
+    def _handleImageDirSelection(self):
+        """Process image directory selection with strict validation"""
+        IMAGE_EXTS = {'.jpg', '.jpeg', '.png', '.bmp', '.tiff', '.webp'}
+        
+        dialog = QFileDialog(self)
+        dialog.setWindowTitle("Select Image Directory")
+        dialog.setFileMode(QFileDialog.Directory)
+        
+        if dialog.exec():
+            dir_path = Path(dialog.selectedFiles()[0])
+            all_files = list(dir_path.glob('*'))
+            
+            images = [f for f in all_files if f.suffix.lower() in IMAGE_EXTS]
+            non_images = [f for f in all_files if f.suffix.lower() not in IMAGE_EXTS]
+            
+            if len(images) == 0:
+                self.showErrorMessage("Empty Directory", "No images found in selected folder")
+            elif non_images:
+                self.showErrorMessage("Invalid Directory", 
+                                    f"Contains {len(non_images)} non-image files")
+            else:
+                self.project.add_source_to_project(dir_path)
+        
     def onClearVideosImages(self):
         """Slot for clearing videos/images selection"""
-        print("Clear Videos/Images clicked")
-        # Add your implementation here
+        self.SelectionVideosImagesLabel.setText("0 video or image selected")
+        self.project.update_config("project", {"sources", []})
 
     def onExtractFrames(self):
         """Slot for extracting frames"""
@@ -412,72 +569,177 @@ class AnimalPoseTrackerPage(QMainWindow, Ui_AnimalPoseTracker):
     def onResumeTrain(self):
         """Slot for resuming training"""
         print("Resume Train clicked")
-        # Add your implementation here
+    
+    def onEditOtherParameters(self):
+        button = self.sender()
+        BUTTON_TO_WIDGET_MAP = {
+        self.EditTrainingParameters: self.TrainingConfigureEdit,
+        self.EditEvaluationParameters: self.EvaluateConfigure,
+        self.EditInferenceParameters: self.InferenceConfigure,
+        self.EditExportParameters: self.ExportConfigure
+        }
+        tree_widget = BUTTON_TO_WIDGET_MAP[button]
+        if tree_widget is None:
+            return
+        # Determine current mode from button text
+        current_text = button.text()
+        is_edit_mode = current_text.startswith("Edit")
+        parameter_type = current_text.split()[1] 
+        iterator = QTreeWidgetItemIterator(tree_widget)
+        while iterator.value():
+            item = iterator.value()
+            if is_edit_mode:
+                # EDIT MODE: Enable editing and load current values
+                item.setFlags(item.flags() | Qt.ItemIsEditable)
+            else:
+                # SAVE MODE: Disable editing and save changes
+                item.setFlags(item.flags() & ~Qt.ItemIsEditable)
+            iterator += 1  # Move to next item
 
-    def onEditTrainingParameters(self):
-        """Slot for editing training parameters"""
-        print("Edit Training Parameters clicked")
-        # Add your implementation here
+        # Toggle button text for next action
+        new_button_text = f"Save {parameter_type} Parameters" if is_edit_mode else f"Edit {parameter_type} Parameters"
+        button.setText(new_button_text)
+
+    def onOtherConfigureEdited(self, item, column):
+        """Slot function for handling other parameters editing"""
+        if column == 1:
+            new_value = item.text(1)
+            key = item.text(0)
+            if key in self.project.other_config:
+                self.project.other_config[key] = new_value
+            else:
+                raise ValueError(f"Invalid key {key} in other config")
+
 
     def onStartTrain(self):
         """Slot for starting training"""
-        print("Start Train clicked")
-        # Add your implementation here
+        current_text = self.StartTrain.text()
+        if current_text == "Start Train":
+            print("Start Train clicked")
+            self.StartTrain.setText("Pause Train")
+            self.training = True
+        elif current_text == "Pause Train":
+            print("Pause Train clicked")
+            self.StartTrain.setText("Continue Train")
+        else:
+            print("Continue Train clicked")
+            if self.training:
+                self.StartTrain.setText("Pause Train")
+            else:
+                self.StartTrain.setText("Start Train")
 
     def onEndTrain(self):
         """Slot for ending training"""
-        print("End Train clicked")
-        # Add your implementation here
-
-    def onEditEvaluationParameters(self):
-        """Slot for editing evaluation parameters"""
-        print("Edit Evaluation Parameters clicked")
-        # Add your implementation here
+        self.training = False
+        self.StartTrain.setText("Start Train")
 
     def onStartEvaluate(self):
         """Slot for starting evaluation"""
-        print("Start Evaluate clicked")
-        # Add your implementation here
+        current_text = self.StartEvaluate.text()
+        if current_text == "Start Evaluate":
+            print("Start Evaluate clicked")
+            self.StartEvaluate.setText("Pause Evaluate")
+            self.evaluating = True
+        elif current_text == "Pause Evaluate":
+            print("Pause Evaluate clicked")
+            self.StartEvaluate.setText("Continue Evaluate")
+        else:
+            print("Continue Evaluate clicked")
+            if self.evaluating:
+                self.StartEvaluate.setText("Pause Evaluate")
+            else:
+                self.StartEvaluate.setText("Start Evaluate")
 
     def onEndEvaluate(self):
         """Slot for ending evaluation"""
-        print("End Evaluate clicked")
-        # Add your implementation here
-
-    def onEditInferenceParameters(self):
-        """Slot for editing inference parameters"""
-        print("Edit Inference Parameters clicked")
-        # Add your implementation here
+        self.evaluating = False
+        self.StartEvaluate.setText("Start Evaluate")
 
     def onSelectSource(self):
-        """Slot for selecting inference source"""
-        print("Select Source clicked")
-        # Add your implementation here
-
+                # Create context menu
+        menu = QMenu(self)
+        file_action = menu.addAction("Select a video/image file")
+        path_action = menu.addAction("Select an video/image directory")
+        
+        # Show menu at cursor position
+        action = menu.exec_(QCursor.pos())
+        
+        if action == file_action:
+            self._handleFileSelection()
+        elif action == path_action:
+            self._handlePathDirSelection()
+        
+    def _handleFileSelection(self):
+        """Show file dialog and return selected file path"""
+        file_path, _ = QFileDialog.getOpenFileName(
+            parent=self,
+            caption="Select Media File",
+            filter="All Supported Files (*.mp4 *.avi *.mov *.mkv *.jpg *.jpeg *.png *.bmp);;"
+                "Video Files (*.mp4 *.avi *.mov *.mkv);;"
+                "Image Files (*.jpg *.jpeg *.png *.bmp)"
+        )
+        if file_path:
+            self.inference_source = file_path
+        else:
+            base_path = self.project.project_config["path"]
+            test_path = Path(base_path) / self.project.dataset_config["test"]
+            self.inference_source = str(test_path)
+    
+    def _handlePathDirSelection(self):
+        """Show directory dialog and return selected directory path"""
+        dir_path = QFileDialog.getExistingDirectory(
+            parent=self,
+            caption="Select Directory"
+        )
+        if dir_path:
+            self.inference_source = dir_path
+        else:
+            base_path = self.project.project_config["path"]
+            test_path = Path(base_path) / self.project.dataset_config["test"]
+            self.inference_source = str(test_path)
+        
     def onStartInference(self):
         """Slot for starting inference"""
-        print("Start Inference clicked")
-        # Add your implementation here
+        current_text = self.StartInference.text()
+        if current_text == "Start Inference":
+            print("Start Inference clicked")
+            self.StartInference.setText("Pause Inference")
+            self.inference = True
+        elif current_text == "Pause Inference":
+            print("Pause Inference clicked")
+            self.StartInference.setText("Continue Inference")
+        else:
+            print("Continue Inference clicked")
+            if self.inference:
+                self.StartInference.setText("Pause Inference")
+            else:
+                self.StartInference.setText("Start Inference")
 
     def onEndInference(self):
         """Slot for ending inference"""
-        print("End Inference clicked")
-        # Add your implementation here
+        self.inference = False
+        self.StartInference.setText("Start Inference")
 
-    def onEditExportParameters(self):
-        """Slot for editing export parameters"""
-        print("Edit Export Parameters clicked")
-        # Add your implementation here
 
     def onSelectModelWeights(self):
-        """Slot for selecting model weights"""
-        print("Select Model Weights clicked")
-        # Add your implementation here
+        """Show file dialog and return selected file path"""
+        file_path, _ = QFileDialog.getOpenFileName(
+            parent=self,
+            caption="Select Media File",
+            filter="All Supported Files (*.pt *.onnx);;"
+        )
+        if file_path:
+            self.inference_weights = file_path
+        else:
+            model_type = self.project.project_config["model_type"].lower()
+            model_scale = self.project.project_config["model_scale"].lower()
+            runs_path = f"runs/train/{model_type}-{model_scale}/weights/best.pt"
+            weights_path = self.project.project_path / runs_path
+            self.inference_source = str(weights_path)
 
     def onStartExport(self):
         """Slot for starting export"""
         print("Start Export clicked")
-        # Add your implementation here
    
 
 def main():

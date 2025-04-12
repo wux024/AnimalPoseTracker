@@ -2,15 +2,13 @@ import yaml
 from datetime import datetime
 from pathlib import Path
 from typing import Optional, List, Dict, Any, Union
-from warnings import warn
-from animalposetracker.cfg import DATA_YAML_PATHS, MODEL_YAML_PATHS
-
+from animalposetracker.cfg import DATA_YAML_PATHS, MODEL_YAML_PATHS, DEFAULT_CFG_PATH
 
 class AnimalPoseTrackerProject:
     """Manage animal pose tracking projects including configurations and directory structure."""
     
     # Constants for configuration types
-    CONFIG_TYPES = {"project", "dataset", "model"}
+    CONFIG_TYPES = {"project", "dataset", "model", "other"}
     
     # Standard directory structure
     DEFAULT_DIRS = [
@@ -117,6 +115,9 @@ class AnimalPoseTrackerProject:
             'backbone': None,
             'head': None,
         }
+
+        # include trian, val and inference config here
+        self.other_config = {}
         
         # Generate project path and initialize configurations
         self._local_path = Path(local_path) if local_path else Path.cwd()
@@ -167,6 +168,7 @@ class AnimalPoseTrackerProject:
         self.create_project_config()
         self.create_dataset_config()
         self.create_model_config()
+        self.create_other_config()
 
     def create_public_dataset_project(self, dataname: str = 'AP10K') -> None:
         """
@@ -202,6 +204,7 @@ class AnimalPoseTrackerProject:
         self.create_project_config()
         self.create_dataset_config()
         self.create_model_config()
+        self.create_other_config()
     
     def load_project_config(self, config_path: Union[str, Path]) -> None:
         """
@@ -228,7 +231,7 @@ class AnimalPoseTrackerProject:
         self._update_from_config()
         
         # Load other configs if they exist
-        for config_type in ["dataset", "model"]:
+        for config_type in ["dataset", "model", "other"]:
             config_file = self.project_path / "configs" / f"{config_type}.yaml"
             if config_file.exists():
                 self._load_config_file(config_type, config_file)
@@ -243,8 +246,7 @@ class AnimalPoseTrackerProject:
             "keypoints_name", "skeleton", "oks_sigmas", "classes_name"
         ]
         
-        self._local_path = Path(self.project_config["project_path"]).parent
-        self._project_path = Path(self.project_config["project_path"])
+        self.local_path = Path(self.project_config["project_path"]).parent
         
         for attr in attrs:
             if attr in self.project_config:
@@ -258,30 +260,54 @@ class AnimalPoseTrackerProject:
         except (IOError, yaml.YAMLError) as e:
             raise RuntimeError(f"Failed to load {config_type} config: {e}")
 
-    def add_source_to_project(self, source_path: Union[str, Path]) -> None:
+    def add_source_to_project(self, source_paths: Union[str, Path, List[Union[str, Path]]]) -> None:
         """
-        Add a source path to the project.
+        Add source path(s) to the project after validation.
         
         Args:
-            source_path: Path to source to add
-            
+            source_paths: Path(s) to source(s) to add. Can be:
+                - Single string path
+                - Single Path object
+                - List of string/Path objects
+                
         Raises:
-            FileNotFoundError: If source path doesn't exist
+            FileNotFoundError: If any source path doesn't exist
+            ValueError: If source_paths is empty or invalid type
         """
-        source_path = Path(source_path)
-        if not source_path.exists():
-            raise FileNotFoundError(f"Source path not found: {source_path}")
+        # Convert input to consistent list format
+        if not source_paths:
+            raise ValueError("No source paths provided")
             
-        # Check for duplicates using path resolution
-        src_resolved = source_path.resolve()
-        current_sources = [Path(s).resolve() for s in self.project_config["sources"]]
+        if isinstance(source_paths, (str, Path)):
+            source_paths = [source_paths]
+        elif not isinstance(source_paths, list):
+            raise ValueError("source_paths must be string, Path, or list thereof")
+
+        # Process each source path
+        added_sources = []
+        current_sources = [Path(s).resolve() for s in self.project_config.get("sources", [])]
         
-        if any(s == src_resolved for s in current_sources):
-            print(f"Source already exists: {source_path}")
-            return
+        for source_path in source_paths:
+            # Convert to Path object and validate
+            src_path = Path(source_path)
+            if not src_path.exists():
+                raise FileNotFoundError(f"path not found: {src_path}")
+                
+            # Check for duplicates using resolved paths
+            src_resolved = src_path.resolve()
+            if any(s == src_resolved for s in current_sources):
+                print(f"Source already exists: {src_path}")
+                continue
+                
+            # Add to project
+            added_sources.append(str(src_path))
+            current_sources.append(src_resolved)  # Update for duplicate checking
             
-        self.project_config["sources"].append(str(source_path))
-        self.update_config("project", {"sources": self.project_config["sources"]})
+        if added_sources:
+            # Update config only if new sources were added
+            sources = self.project_config.setdefault("sources", [])
+            sources.extend(added_sources)
+            self.update_config("project", {"sources": sources})
 
     def save_configs(self, config_type: str = "all") -> None:
         """
@@ -306,7 +332,10 @@ class AnimalPoseTrackerProject:
     def _save_config(self, config_type: str) -> None:
         """Helper method to save a single configuration."""
         config = getattr(self, f"{config_type}_config")
-        config_path = self.project_path / "configs" / f"{config_type}.yaml"
+        if config_type == "project":
+            config_path = self.project_path / f"{config_type}.yaml"
+        else:
+            config_path = self.project_path / "configs" / f"{config_type}.yaml"
         
         try:
             config_path.parent.mkdir(parents=True, exist_ok=True)
@@ -385,3 +414,21 @@ class AnimalPoseTrackerProject:
             if key not in valid_keys:
                 continue
             config[key] = value
+    
+    def create_other_config(self) -> None:
+        """Create any other missing configurations."""
+        with open(DEFAULT_CFG_PATH, "r") as f:
+            self.other_config = yaml.safe_load(f) or {}
+        
+        model_scale = self.project_config['model_scale'].lower()
+        self.other_config['model'] = str(self.project_path / "configs" / f"model-{model_scale}.yaml")
+        self.other_config['data'] = str(self.project_path / "configs" / "dataset.yaml")
+        
+        with open(self.project_path / "configs" / "other.yaml", "w") as f:
+            yaml.safe_dump(
+                self.other_config, 
+                f, 
+                indent=2, 
+                sort_keys=False, 
+                default_flow_style=False
+            )

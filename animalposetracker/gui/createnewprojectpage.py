@@ -171,11 +171,14 @@ class CreateNewProjectPage(QWidget, Ui_CreateNewProject):
         """Initialize all UI controls based on project configuration"""
 
         self.project = AnimalPoseTrackerProject()
+        self.project.local_path = Path.cwd()
 
+        # Load project config
         self.SourceDataSelected.setTristate(True)
         self.SourceDataSelected.setEnabled(True)
 
         self.LocationPathDisplay.setReadOnly(True)
+        self.LocationPathDisplay.setText(str(self.project.local_path))
 
         # edit project timer
         self.edit_project_timer = QTimer()
@@ -260,7 +263,7 @@ class CreateNewProjectPage(QWidget, Ui_CreateNewProject):
     
     def onLocationPathClicked(self):
         """Open directory dialog to select project location and update UI"""
-        start_dir = str(Path.home())
+        start_dir = str(Path.cwd())
         selected_dir = QFileDialog.getExistingDirectory(self, 
                                                         "Select Directory", 
                                                         start_dir,

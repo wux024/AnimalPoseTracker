@@ -317,7 +317,7 @@
            </sizepolicy>
           </property>
           <property name="currentIndex">
-           <number>3</number>
+           <number>2</number>
           </property>
           <property name="tabBarAutoHide">
            <bool>false</bool>
@@ -429,7 +429,7 @@
               <property name="title">
                <string/>
               </property>
-              <layout class="QVBoxLayout" name="ConfigureFileGroupVLayout_2">
+              <layout class="QVBoxLayout" name="ConfigureFileGroupVLayout">
                <item>
                 <layout class="QVBoxLayout" name="ConfigureFileGroupLayout">
                  <item>
@@ -987,7 +987,7 @@
            <attribute name="title">
             <string>Training Configure</string>
            </attribute>
-           <layout class="QVBoxLayout" name="verticalLayout_6">
+           <layout class="QVBoxLayout" name="TrainingConfigureLayout">
             <item>
              <widget class="QLabel" name="TrainingConfigureLabel">
               <property name="font">
@@ -1022,28 +1022,28 @@
                  <item>
                   <layout class="QHBoxLayout" name="TrainingConfigureToolsLayout">
                    <item>
-                    <widget class="QPushButton" name="ResumeTrain">
+                    <widget class="QPushButton" name="EditTrainingParameters">
                      <property name="text">
                       <string>Edit training parameters</string>
                      </property>
                     </widget>
                    </item>
                    <item>
-                    <widget class="QPushButton" name="EditTrainingParameters">
+                    <widget class="QPushButton" name="StartTrain">
                      <property name="text">
                       <string>Start Train</string>
                      </property>
                     </widget>
                    </item>
                    <item>
-                    <widget class="QPushButton" name="StartTrain">
+                    <widget class="QPushButton" name="EndTrain">
                      <property name="text">
                       <string>End Train</string>
                      </property>
                     </widget>
                    </item>
                    <item>
-                    <widget class="QPushButton" name="EndTrain">
+                    <widget class="QPushButton" name="ResumeTrain">
                      <property name="text">
                       <string>Resume Train</string>
                      </property>
@@ -1052,7 +1052,7 @@
                   </layout>
                  </item>
                  <item>
-                  <widget class="QTreeWidget" name="TrainingConfigure">
+                  <widget class="QTreeWidget" name="TrainingConfigureEdit">
                    <column>
                     <property name="text">
                      <string>Parameter</string>
@@ -1404,7 +1404,7 @@
            <attribute name="title">
             <string>Evaluate Model</string>
            </attribute>
-           <layout class="QVBoxLayout" name="verticalLayout_7">
+           <layout class="QVBoxLayout" name="EvaluateModelLayout">
             <item>
              <widget class="QLabel" name="EvaluateModelLabel">
               <property name="font">

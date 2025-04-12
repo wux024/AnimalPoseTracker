@@ -20,7 +20,7 @@ Revision History:
     - [2024/9/8] wux024: Initial file creation
 """
 
-class AnimalPoseAnnotation(object):
+class AnimalPoseAnnotation:
     def __init__(self, keypoints = 17, classes = 1):
         self.keypoints = keypoints
         self.classes = classes
