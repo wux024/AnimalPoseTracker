@@ -20,7 +20,7 @@ Revision History:
     - [2024/9/6] wux024: Initial file creation
 """
 
-from .base import ModelEngine
+from .model import ModelEngine
 from .inferencer import InferenceEngine
 from .tracker import TrackerEngine
 

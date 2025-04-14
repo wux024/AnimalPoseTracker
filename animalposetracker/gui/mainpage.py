@@ -1,4 +1,4 @@
-from PySide6.QtCore import  Qt, QSettings
+from PySide6.QtCore import  Qt, QSettings, QProcess
 from PySide6.QtWidgets import  (QMenu, QApplication, QFileDialog, QMainWindow,
                                  QMessageBox, QTreeWidget, QTreeWidgetItem, 
                                  QTreeWidgetItemIterator)
@@ -7,7 +7,6 @@ import os
 import sys
 from pathlib import Path
 from collections import deque
-
 
 from .ui_animalposetracker import Ui_AnimalPoseTracker
 from .inferencepage import AnimalPoseInferencePage
@@ -30,15 +29,13 @@ class AnimalPoseTrackerPage(QMainWindow, Ui_AnimalPoseTracker):
         # set work directory
         os.chdir(Path.cwd())
         self.source_type = 'image' 
-        self.training = False
-        self.evaluating = False
-        self.inference = False
 
     def initialize_controls(self):
         """Initialize the controls of the main page"""
         self.project = AnimalPoseTrackerProject()
         self.config_data = {}
         self.config_type = "project"
+        self.process = QProcess()
 
         # set recent projects
         self.maxRecentProjects = 5
@@ -157,19 +154,18 @@ class AnimalPoseTrackerPage(QMainWindow, Ui_AnimalPoseTracker):
     def _OpenConfigureTabPage(self):
         """Slot for handling the creation of a new project"""
         self.AnimalPoseTrackerPage.setCurrentIndex(1)
+        self.project.update_config("project", self.sub_page.project.project_config)
         self.project.local_path = self.sub_page.project.local_path
+        self.project.load_config_file()
         # set work directory
         os.chdir(self.project.project_path)
-        self.project.update_config("project", self.sub_page.project.project_config)
-        self.project.update_config("dataset", self.sub_page.project.dataset_config)
-        self.project.update_config("model", self.sub_page.project.model_config)
-        self.project.update_config("other", self.sub_page.project.other_config)
-        self.sub_page.close()
-        self.sub_page = None
         project_config_path = str(self.project.project_path / "project.yaml")
         self.ConfigureFilePathDisplay.setText(project_config_path)
         self.initialize_other_config()
         self.addRecentProject(project_config_path)
+        # close sub page
+        self.sub_page.close()
+        self.sub_page = None     
 
     def onLoadProject(self):
         """Slot for loading an existing project"""
@@ -184,9 +180,15 @@ class AnimalPoseTrackerPage(QMainWindow, Ui_AnimalPoseTracker):
             self.ConfigureFilePathDisplay.setText(project_config_path)
             self.initialize_other_config()
             self.addRecentProject(project_config_path)
+            # set work directory
+            os.chdir(self.project.project_path)
 
     def initialize_other_config(self):
         """Initialize the other config"""
+        self.TrainingConfigureEdit.blockSignals(True)
+        self.EvaluateConfigure.blockSignals(True)
+        self.InferenceConfigure.blockSignals(True)
+        self.ExportConfigure.blockSignals(True)
         iterators = []
         iterators.append(QTreeWidgetItemIterator(self.TrainingConfigureEdit))
         iterators.append(QTreeWidgetItemIterator(self.EvaluateConfigure))
@@ -201,6 +203,10 @@ class AnimalPoseTrackerPage(QMainWindow, Ui_AnimalPoseTracker):
                         current_value = self.project.other_config[key]
                         item.setText(1, str(current_value))
                     iterator += 1 
+        self.TrainingConfigureEdit.blockSignals(False)
+        self.EvaluateConfigure.blockSignals(False)
+        self.InferenceConfigure.blockSignals(False)
+        self.ExportConfigure.blockSignals(False)
 
     def loadRecentProjects(self):
         """Load saved projects from QSettings"""
@@ -571,6 +577,7 @@ class AnimalPoseTrackerPage(QMainWindow, Ui_AnimalPoseTracker):
         print("Resume Train clicked")
     
     def onEditOtherParameters(self):
+        """Slot for editing other parameters"""
         button = self.sender()
         BUTTON_TO_WIDGET_MAP = {
         self.EditTrainingParameters: self.TrainingConfigureEdit,
@@ -613,50 +620,83 @@ class AnimalPoseTrackerPage(QMainWindow, Ui_AnimalPoseTracker):
 
     def onStartTrain(self):
         """Slot for starting training"""
-        current_text = self.StartTrain.text()
-        if current_text == "Start Train":
-            print("Start Train clicked")
-            self.StartTrain.setText("Pause Train")
-            self.training = True
-        elif current_text == "Pause Train":
-            print("Pause Train clicked")
-            self.StartTrain.setText("Continue Train")
-        else:
-            print("Continue Train clicked")
-            if self.training:
-                self.StartTrain.setText("Pause Train")
-            else:
-                self.StartTrain.setText("Start Train")
+        cmd = [
+            "yolo",
+            "pose",
+            "train",
+            f"cfg=configs/other.yaml"
+        ]
+        self.process.setProcessChannelMode(QProcess.ForwardedChannels)
+        self.process.start(cmd[0], cmd[1:])
+        self.StartTrain.setEnabled(False)
+        self.EndTrain.setEnabled(True)
 
     def onEndTrain(self):
         """Slot for ending training"""
-        self.training = False
-        self.StartTrain.setText("Start Train")
+        if self.process.state() == QProcess.Running:
+            self.process.terminate()
+            if not self.process.waitForFinished(3000):
+                self.process.kill()
+        self.StartTrain.setEnabled(True)
+        self.EndTrain.setEnabled(False)
 
     def onStartEvaluate(self):
         """Slot for starting evaluation"""
-        current_text = self.StartEvaluate.text()
-        if current_text == "Start Evaluate":
-            print("Start Evaluate clicked")
-            self.StartEvaluate.setText("Pause Evaluate")
-            self.evaluating = True
-        elif current_text == "Pause Evaluate":
-            print("Pause Evaluate clicked")
-            self.StartEvaluate.setText("Continue Evaluate")
-        else:
-            print("Continue Evaluate clicked")
-            if self.evaluating:
-                self.StartEvaluate.setText("Pause Evaluate")
-            else:
-                self.StartEvaluate.setText("Start Evaluate")
+        self.project.update_config("other", {"model": "runs/train/best.pt"})
+        self.project.update_config("other", {"name": "val"})
+        self.project.save_configs("other")
+        cmd = [
+            "yolo",
+            "pose",
+            "val",
+            f"cfg=configs/other.yaml"
+        ]
+        self.process.start(cmd[0], cmd[1:])
+        self.StartEvaluate.setEnabled(False)
+        self.EndEvaluate.setEnabled(True)
+
 
     def onEndEvaluate(self):
         """Slot for ending evaluation"""
-        self.evaluating = False
-        self.StartEvaluate.setText("Start Evaluate")
+        if self.process.state() == QProcess.Running:
+            self.process.terminate()
+            if not self.process.waitForFinished(3000):
+                self.process.kill()
+        self.StartEvaluate.setEnabled(True)
+        self.EndEvaluate.setEnabled(False)
 
+
+    def onStartInference(self):
+        """Slot for starting inference"""
+        self.project.update_config("other", {"model": "runs/train/best.pt"})
+        self.project.update_config("other", {"name": "predict"})
+        self.project.save_configs("other")
+        if self.inference_source is None:
+            self.inference_source = Path(self.project.project_config["path"]) / self.project.dataset_config["test"]
+            self.inference_source = str(self.inference_source)
+        cmd = [
+            "yolo",
+            "pose",
+            "predict",
+            f"cfg=configs/other.yaml",
+            f"source={self.inference_source}"
+        ]
+        self.process.start(cmd[0], cmd[1:])
+        self.StartInference.setEnabled(False)
+        self.EndInference.setEnabled(True)
+
+
+    def onEndInference(self):
+        """Slot for ending inference"""
+        if self.process.state() == QProcess.Running:
+            self.process.terminate()
+            if not self.process.waitForFinished(3000):
+                self.process.kill()
+        self.StartInference.setEnabled(True)
+        self.EndInference.setEnabled(False)
+        
     def onSelectSource(self):
-                # Create context menu
+        # Create context menu
         menu = QMenu(self)
         file_action = menu.addAction("Select a video/image file")
         path_action = menu.addAction("Select an video/image directory")
@@ -680,10 +720,6 @@ class AnimalPoseTrackerPage(QMainWindow, Ui_AnimalPoseTracker):
         )
         if file_path:
             self.inference_source = file_path
-        else:
-            base_path = self.project.project_config["path"]
-            test_path = Path(base_path) / self.project.dataset_config["test"]
-            self.inference_source = str(test_path)
     
     def _handlePathDirSelection(self):
         """Show directory dialog and return selected directory path"""
@@ -693,34 +729,7 @@ class AnimalPoseTrackerPage(QMainWindow, Ui_AnimalPoseTracker):
         )
         if dir_path:
             self.inference_source = dir_path
-        else:
-            base_path = self.project.project_config["path"]
-            test_path = Path(base_path) / self.project.dataset_config["test"]
-            self.inference_source = str(test_path)
         
-    def onStartInference(self):
-        """Slot for starting inference"""
-        current_text = self.StartInference.text()
-        if current_text == "Start Inference":
-            print("Start Inference clicked")
-            self.StartInference.setText("Pause Inference")
-            self.inference = True
-        elif current_text == "Pause Inference":
-            print("Pause Inference clicked")
-            self.StartInference.setText("Continue Inference")
-        else:
-            print("Continue Inference clicked")
-            if self.inference:
-                self.StartInference.setText("Pause Inference")
-            else:
-                self.StartInference.setText("Start Inference")
-
-    def onEndInference(self):
-        """Slot for ending inference"""
-        self.inference = False
-        self.StartInference.setText("Start Inference")
-
-
     def onSelectModelWeights(self):
         """Show file dialog and return selected file path"""
         file_path, _ = QFileDialog.getOpenFileName(
@@ -729,17 +738,20 @@ class AnimalPoseTrackerPage(QMainWindow, Ui_AnimalPoseTracker):
             filter="All Supported Files (*.pt *.onnx);;"
         )
         if file_path:
-            self.inference_weights = file_path
-        else:
-            model_type = self.project.project_config["model_type"].lower()
-            model_scale = self.project.project_config["model_scale"].lower()
-            runs_path = f"runs/train/{model_type}-{model_scale}/weights/best.pt"
-            weights_path = self.project.project_path / runs_path
-            self.inference_source = str(weights_path)
+            self.project.update_config("other", {"model": file_path})
 
     def onStartExport(self):
         """Slot for starting export"""
-        print("Start Export clicked")
+        self.project.update_config("other", {"model": "runs/train/best.pt"})
+        self.project.update_config("other", {"name": "export"})
+        self.project.save_configs("other")
+        cmd = [
+            "yolo",
+            "pose",
+            "export",
+            f"cfg=configs/other.yaml"
+        ]
+        self.process.start(cmd[0], cmd[1:])
    
 
 def main():

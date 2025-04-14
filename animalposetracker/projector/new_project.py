@@ -169,6 +169,21 @@ class AnimalPoseTrackerProject:
         self.create_dataset_config()
         self.create_model_config()
         self.create_other_config()
+        self.load_config_file()
+        
+    def load_config_file(self) -> None:
+        """Load the project configuration from file."""
+        config_file = self.project_path / "project.yaml"
+        if config_file.exists():
+                self._load_config_file("project", config_file)
+        else:
+            raise FileNotFoundError(f"Config file not found: {config_file}")
+        for config_type in ["dataset", "model", "other"]:
+            config_file = self.project_path / "configs" / f"{config_type}.yaml"
+            if config_file.exists():
+                self._load_config_file(config_type, config_file)
+            else:
+                raise FileNotFoundError(f"Config file not found: {config_file}")
 
     def create_public_dataset_project(self, dataname: str = 'AP10K') -> None:
         """
@@ -188,7 +203,7 @@ class AnimalPoseTrackerProject:
         self.create_project_dirs()
         
         try:
-            with open(DATA_YAML_PATHS[dataname], "r") as f:
+            with open(DATA_YAML_PATHS[dataname], "r", encoding="utf-8") as f:
                 self.dataset_config = yaml.safe_load(f) or {}
         except (IOError, yaml.YAMLError) as e:
             raise RuntimeError(f"Failed to load dataset config: {e}")
@@ -205,6 +220,7 @@ class AnimalPoseTrackerProject:
         self.create_dataset_config()
         self.create_model_config()
         self.create_other_config()
+        self.load_config_file()
     
     def load_project_config(self, config_path: Union[str, Path]) -> None:
         """
@@ -218,44 +234,16 @@ class AnimalPoseTrackerProject:
             RuntimeError: If config loading fails
         """
         config_path = Path(config_path)
-        if not config_path.exists():
-            raise FileNotFoundError(f"Config file not found: {config_path}")
+        with open(config_path, "r", encoding="utf-8") as f:
+            self.project_config = yaml.safe_load(f) or {}
+        self.local_path = config_path.parent.parent
+        self.load_config_file()
         
-        try:
-            with open(config_path, "r") as f:
-                self.project_config = yaml.safe_load(f) or {}
-        except (IOError, yaml.YAMLError) as e:
-            raise RuntimeError(f"Failed to load project config: {e}")
-        
-        # Update instance variables from loaded config
-        self._update_from_config()
-        
-        # Load other configs if they exist
-        for config_type in ["dataset", "model", "other"]:
-            config_file = self.project_path / "configs" / f"{config_type}.yaml"
-            if config_file.exists():
-                self._load_config_file(config_type, config_file)
-            else:
-                getattr(self, f"create_{config_type}_config")()
-
-    def _update_from_config(self) -> None:
-        """Update instance variables from loaded project config."""
-        attrs = [
-            "project_name", "worker", "model_type", 
-            "model_scale", "date", "keypoints", "visible", "classes",
-            "keypoints_name", "skeleton", "oks_sigmas", "classes_name"
-        ]
-        
-        self.local_path = Path(self.project_config["project_path"]).parent
-        
-        for attr in attrs:
-            if attr in self.project_config:
-                setattr(self, attr, self.project_config[attr])
 
     def _load_config_file(self, config_type: str, config_path: Path) -> None:
         """Helper to load a configuration file."""
         try:
-            with open(config_path, "r") as f:
+            with open(config_path, "r", encoding="utf-8") as f:
                 setattr(self, f"{config_type}_config", yaml.safe_load(f) or {})
         except (IOError, yaml.YAMLError) as e:
             raise RuntimeError(f"Failed to load {config_type} config: {e}")
@@ -339,7 +327,7 @@ class AnimalPoseTrackerProject:
         
         try:
             config_path.parent.mkdir(parents=True, exist_ok=True)
-            with open(config_path, "w") as f:
+            with open(config_path, "w", encoding="utf-8") as f:
                 yaml.safe_dump(
                     config, 
                     f, 
@@ -378,7 +366,7 @@ class AnimalPoseTrackerProject:
             raise ValueError(f"Invalid model type. Available: {available}")
         
         try:
-            with open(MODEL_YAML_PATHS[model_type], "r") as f:
+            with open(MODEL_YAML_PATHS[model_type], "r", encoding="utf-8") as f:
                 self.model_config = yaml.safe_load(f) or {}
         except (IOError, yaml.YAMLError) as e:
             raise RuntimeError(f"Failed to load model config: {e}")
@@ -417,7 +405,7 @@ class AnimalPoseTrackerProject:
     
     def create_other_config(self) -> None:
         """Create any other missing configurations."""
-        with open(DEFAULT_CFG_PATH, "r") as f:
+        with open(DEFAULT_CFG_PATH, "r", encoding="utf-8") as f:
             self.other_config = yaml.safe_load(f) or {}
         
         model_scale = self.project_config['model_scale'].lower()

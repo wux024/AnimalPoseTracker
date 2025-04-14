@@ -9,8 +9,6 @@ from animalposetracker.cfg import DATA_YAML_PATHS, MODEL_YAML_PATHS
 
 class PublicDatasetProjectPage(QWidget, Ui_PublicDatasetProject):
     CreateProjectClicked = Signal()
-    project = AnimalPoseTrackerProject()
-    dataset = 'AP10K'
     def __init__(self, parent=None):
         super().__init__(parent)
         self.setupUi(self)
@@ -18,6 +16,11 @@ class PublicDatasetProjectPage(QWidget, Ui_PublicDatasetProject):
         self.initialize_controls()
     
     def initialize_controls(self):
+
+        self.project = AnimalPoseTrackerProject()
+        self.dataset = "AP10K"
+        self.project.local_path = Path.cwd()
+        self.LocationPathDisplay.setText(str(self.project.local_path))
 
         # edit project timer
         self.edit_project_timer = QTimer()
@@ -84,9 +87,7 @@ class PublicDatasetProjectPage(QWidget, Ui_PublicDatasetProject):
         self.project.update_config("project", project_config)
         self.project.local_path = Path(self.LocationPathDisplay.text())
         self.project.create_public_dataset_project(self.dataset)
-        self.project.print_project_info()
         self.CreateProjectClicked.emit()
-        self.deleteLater()
         
     def onModelTypeChanged(self, model_type):
         """Handler for model type selection change"""
@@ -107,7 +108,6 @@ class PublicDatasetProjectPage(QWidget, Ui_PublicDatasetProject):
         if dataset in DATA_YAML_PATHS:
             self.dataset = dataset
 
-    
     def onProjectTextEdited(self):
         """Handler for project configuration text edit"""
         self.edit_project_timer.stop()

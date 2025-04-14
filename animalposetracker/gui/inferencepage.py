@@ -10,8 +10,7 @@ import sys
 from .ui_animalposeinference import Ui_AnimalPoseInference
 from animalposetracker.utils import PreviewThread
 from animalposetracker.gui import LOGO_PATH_TRANSPARENT
-
-
+from animalposetracker.engine import InferenceEngine
 class AnimalPoseInferencePage(QWidget, Ui_AnimalPoseInference):
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -22,6 +21,10 @@ class AnimalPoseInferencePage(QWidget, Ui_AnimalPoseInference):
         self.camera_list = {}
 
         self.preview_thread = PreviewThread()
+        self.data_config_path = None
+        self.data_config = dict()
+        self.weights_path = None
+        self.inference = InferenceEngine()
 
         # init button
         self.initialize_controls()
@@ -69,6 +72,7 @@ class AnimalPoseInferencePage(QWidget, Ui_AnimalPoseInference):
         self.SelectConfigure.setEnabled(True)
         self.SelectWeights.setEnabled(False)
         self.CameraORVideos.setEnabled(False)
+        self.CameraVideosSelection.setEnabled(False)
         self.CheckCameraVideosConnect.setEnabled(False)
         self.WidthSetup.setEnabled(False)
         self.HeightSetup.setEnabled(False)
@@ -80,12 +84,11 @@ class AnimalPoseInferencePage(QWidget, Ui_AnimalPoseInference):
 
         self.Save.setEnabled(False)
         self.Show.setEnabled(False)
-        self.Show.setCheckState(Qt.Checked)
+        self.Show.setCheckState(Qt.CheckState.Checked)
         self.Backgroud.setEnabled(False)
         self.ShowClasses.setEnabled(False)
         self.Classes.clear()
-        self.ShowKeypoints.setEnabled(False)
-        self.ShowKeypoints.setCheckState(Qt.Checked)
+        self.ShowKeypoints.setCheckState(Qt.CheckState.Checked)
         self.ShowKeypointsRadius.setEnabled(False)
         self.ShowSkeletons.setEnabled(False)
         self.ShowSkeletonsLineWidth.setEnabled(False)
@@ -129,8 +132,6 @@ class AnimalPoseInferencePage(QWidget, Ui_AnimalPoseInference):
         self.ShowSkeletonsLineWidth.setEnabled(False)
         self.ShowBBox.setEnabled(False)
 
-    
-    @Slot()
     def onSelectConfigureClicked(self):
         """
         Open file dialog to select YAML configuration file for data settings.
@@ -176,9 +177,9 @@ class AnimalPoseInferencePage(QWidget, Ui_AnimalPoseInference):
             self.PrintInformation.setText(f"Error: {str(e)}")
             self.data_config_path = None
 
-    @Slot()
     def onSelectWeightsClicked(self):
-        """Open file dialog to select model weights and auto-configure supported engines and devices.
+        """Open file dialog to select model weights and 
+        auto-configure supported engines and devices.
         
         Supported Engines:
         - OpenVINO (.onnx, .xml/.bin)
@@ -237,7 +238,7 @@ class AnimalPoseInferencePage(QWidget, Ui_AnimalPoseInference):
             if device_info['cpu']:
                 engines.extend(["OpenCV", "OpenVINO", "Ultralytics", "MMdeploy"])
             if device_info['gpu']:
-                engines.extend(["OpenVINO", "Ultralytics"])  # GPU-specific engines
+                engines.extend(["OpenCV", "OpenVINO", "Ultralytics"])  # GPU-specific engines
             if device_info['ascend_npu']:
                 engines.append("CANN")
                 
@@ -377,16 +378,6 @@ class AnimalPoseInferencePage(QWidget, Ui_AnimalPoseInference):
             return 'NPU' in core.available_devices
         except:
             return False
-
-    def _detect_available_devices(self):
-        """Detect available hardware devices in the system"""
-        return {
-            'cpu': True,  # Always available
-            'gpu': self._check_nvidia_gpu(),
-            'ascend_npu': self._check_cann_environment(),
-            'hailo_npu': self._check_hailo_environment(),
-            'intel_npu': self._check_openvino_npu()
-        }
     
     @Slot(bool)
     def onCameraORVideosToggled(self, checked):
@@ -508,8 +499,6 @@ class AnimalPoseInferencePage(QWidget, Ui_AnimalPoseInference):
             # Fallback to defaults
             self._set_camera_setup()
         
-    
-    @Slot(int)
     def onCameraVideosSelectionChanged(self):
         """Handle changes in camera/video source selection"""
         if self.CameraVideosSelection.currentText() in self.camera_list.keys():
@@ -520,7 +509,6 @@ class AnimalPoseInferencePage(QWidget, Ui_AnimalPoseInference):
         else:
             pass
     
-    @Slot()
     def onCheckCameraVideosConnectClicked(self):
         """Handle when checking camera connection is requested"""
 
