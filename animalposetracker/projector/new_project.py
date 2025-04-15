@@ -85,7 +85,7 @@ class AnimalPoseTrackerProject:
             "worker": worker,
             "model_type": model_type,
             "model_scale": model_scale,
-            "date:": date if date is not None else datetime.now().strftime(r"%Y%m%d"),
+            "date": date if date is not None else datetime.now().strftime(r"%Y%m%d"),
             "keypoints": keypoints,
             "visible": visible,
             "classes": classes,
@@ -120,9 +120,30 @@ class AnimalPoseTrackerProject:
         self.other_config = {}
         
         # Generate project path and initialize configurations
-        self._local_path = Path(local_path) if local_path else Path.cwd()
-        self._project_path = self._generate_project_path()
-        self.project_config['project_path'] = self._generate_project_path()
+        self.local_path = Path(local_path) if local_path else Path.cwd()
+        self.project_config['project_path'] = str(self.project_path)
+    
+    def _validate_keypoints_params(
+        self,
+        keypoints: int,
+        keypoints_name: Optional[List[str]],
+        skeleton: Optional[List[List[int]]]
+    ) -> None:
+        """Validate keypoints-related parameters."""
+        if keypoints_name is not None and len(keypoints_name) != keypoints:
+            raise ValueError(
+                f"keypoints_name length ({len(keypoints_name)}) must match keypoints ({keypoints})"
+            )
+        
+        if skeleton is not None:
+            for connection in skeleton:
+                if any(idx >= keypoints for idx in connection):
+                    raise ValueError(
+                        f"Skeleton contains invalid keypoint index (max {keypoints-1})"
+                    )
+    
+    def _init_config(self, config_type: str, default: Dict[str, Any]) -> Dict[str, Any]:
+        return default.copy()
 
     @property
     def local_path(self) -> Path:
@@ -142,12 +163,15 @@ class AnimalPoseTrackerProject:
 
     def _generate_project_path(self) -> Path:
         """Generate the project path based on naming convention."""
-        project_name = self.project_config.get("project_name", "person")
-        worker = self.project_config.get("worker", "Adam")
-        model_type = self.project_config.get("model_type", "AnimalRTPose")
-        model_scale = self.project_config.get("model_scale", "N")
-        date = self.project_config.get("date", datetime.now().strftime(r"%Y%m%d"))
-        return self.local_path / f"{project_name}-{worker}-{model_type}-{model_scale}-{date}"
+        config = self.project_config
+        components = [
+            config['project_name'],
+            config['worker'],
+            config['model_type'],
+            config['model_scale'],
+            config['date']
+        ]
+        return self.local_path / "-".join(components)
 
     def print_project_info(self) -> None:
         """Print the current project configuration in a readable format."""
@@ -164,166 +188,119 @@ class AnimalPoseTrackerProject:
 
     def create_new_project(self) -> None:
         """Create a new project with default configurations."""
-        self.create_project_dirs()
-        self.create_project_config()
-        self.create_dataset_config()
-        self.create_model_config()
-        self.create_other_config()
+        self._create_project_structure()
         self.load_config_file()
+    
+    def _create_project_structure(self) -> None:
+        """Create all project directories and configurations."""
+        self.create_project_dirs()
+        for config_type in self.CONFIG_TYPES:
+            getattr(self, f"create_{config_type}_config")()
         
     def load_config_file(self) -> None:
         """Load the project configuration from file."""
-        config_file = self.project_path / "project.yaml"
-        if config_file.exists():
-                self._load_config_file("project", config_file)
-        else:
-            raise FileNotFoundError(f"Config file not found: {config_file}")
-        for config_type in ["dataset", "model", "other"]:
-            config_file = self.project_path / "configs" / f"{config_type}.yaml"
-            if config_file.exists():
-                self._load_config_file(config_type, config_file)
-            else:
+        config_files = {
+            "project": self.project_path / "project.yaml",
+            "dataset": self.project_path / "configs" / "dataset.yaml",
+            "model": self.project_path / "configs" / "model.yaml",
+            "other": self.project_path / "configs" / "other.yaml",
+        }
+        
+        for config_type, config_file in config_files.items():
+            if not config_file.exists():
                 raise FileNotFoundError(f"Config file not found: {config_file}")
+            self._load_config_file(config_type, config_file)
 
     def create_public_dataset_project(self, dataname: str = 'AP10K') -> None:
-        """
-        Create a project using a public dataset configuration.
-        
-        Args:
-            dataname: Name of public dataset (default: 'AP10K')
-            
-        Raises:
-            ValueError: If dataset name is invalid
-            RuntimeError: If config loading fails
-        """
+        """Create a project using a public dataset configuration."""
         if dataname not in DATA_YAML_PATHS:
-            available = list(DATA_YAML_PATHS.keys())
-            raise ValueError(f"Invalid dataset name. Available: {available}")
+            raise ValueError(f"Invalid dataset name. Available: {list(DATA_YAML_PATHS.keys())}")
         
-        self.create_project_dirs()
+        self._create_project_structure()
+        self._load_config_from_file("dataset", DATA_YAML_PATHS[dataname])
         
-        try:
-            with open(DATA_YAML_PATHS[dataname], "r", encoding="utf-8") as f:
-                self.dataset_config = yaml.safe_load(f) or {}
-        except (IOError, yaml.YAMLError) as e:
-            raise RuntimeError(f"Failed to load dataset config: {e}")
+        # Update project config based on dataset
+        self.project_config.update({
+            "classes": len(self.dataset_config['names'].keys()),
+            "classes_name": list(self.dataset_config['names'].values()),
+            "keypoints": self.dataset_config['kpt_shape'][0],
+            "visible": self.dataset_config['kpt_shape'][1] == 3
+        })
         
-        self.project_config["classes"] = len(self.dataset_config['names'].keys())
-        self.project_config["classes_name"] = list(self.dataset_config['names'].values())
-        self.project_config["keypoints"] = self.dataset_config['kpt_shape'][0]
-        self.project_config["visible"] = self.dataset_config['kpt_shape'][1] == 3
-        
+        self._update_configs_from_dataset()
+        self.load_config_file()
+    
+    def _update_configs_from_dataset(self) -> None:
+        """Update configurations based on dataset settings."""
         self.update_config("project", self.dataset_config)
         self.update_config("dataset", {'path': str(self.project_path / "datasets")})
         self.update_config("model", self.dataset_config)
-        self.create_project_config()
-        self.create_dataset_config()
-        self.create_model_config()
-        self.create_other_config()
-        self.load_config_file()
     
     def load_project_config(self, config_path: Union[str, Path]) -> None:
-        """
-        Load a project configuration from file.
-        
-        Args:
-            config_path: Path to project configuration file
-            
-        Raises:
-            FileNotFoundError: If config file doesn't exist
-            RuntimeError: If config loading fails
-        """
-        config_path = Path(config_path)
-        with open(config_path, "r", encoding="utf-8") as f:
-            self.project_config = yaml.safe_load(f) or {}
-        self.local_path = config_path.parent.parent
+        """Load a project configuration from file."""
+        self._load_config_from_file("project", config_path)
+        self.local_path = Path(config_path).parent.parent
         self.load_config_file()
-        
-
-    def _load_config_file(self, config_type: str, config_path: Path) -> None:
-        """Helper to load a configuration file."""
+    
+    def _load_config_from_file(self, config_type: str, file_path: Union[str, Path]) -> None:
+        """Load configuration from a YAML file."""
         try:
-            with open(config_path, "r", encoding="utf-8") as f:
-                setattr(self, f"{config_type}_config", yaml.safe_load(f) or {})
+            with open(file_path, "r", encoding="utf-8") as f:
+                config = yaml.safe_load(f) or {}
+                setattr(self, f"{config_type}_config", config)
         except (IOError, yaml.YAMLError) as e:
             raise RuntimeError(f"Failed to load {config_type} config: {e}")
+    
+    def _load_config_file(self, config_type: str, config_path: Path) -> None:
+        """Helper to load a configuration file."""
+        self._load_config_from_file(config_type, config_path)
 
     def add_source_to_project(self, source_paths: Union[str, Path, List[Union[str, Path]]]) -> None:
-        """
-        Add source path(s) to the project after validation.
-        
-        Args:
-            source_paths: Path(s) to source(s) to add. Can be:
-                - Single string path
-                - Single Path object
-                - List of string/Path objects
-                
-        Raises:
-            FileNotFoundError: If any source path doesn't exist
-            ValueError: If source_paths is empty or invalid type
-        """
-        # Convert input to consistent list format
+        """Add source path(s) to the project after validation."""
         if not source_paths:
             raise ValueError("No source paths provided")
             
-        if isinstance(source_paths, (str, Path)):
-            source_paths = [source_paths]
-        elif not isinstance(source_paths, list):
+        sources = [source_paths] if isinstance(source_paths, (str, Path)) else source_paths
+        if not isinstance(sources, list):
             raise ValueError("source_paths must be string, Path, or list thereof")
 
-        # Process each source path
-        added_sources = []
         current_sources = [Path(s).resolve() for s in self.project_config.get("sources", [])]
+        added_sources = []
         
-        for source_path in source_paths:
-            # Convert to Path object and validate
+        for source_path in sources:
             src_path = Path(source_path)
             if not src_path.exists():
                 raise FileNotFoundError(f"path not found: {src_path}")
                 
-            # Check for duplicates using resolved paths
             src_resolved = src_path.resolve()
             if any(s == src_resolved for s in current_sources):
                 print(f"Source already exists: {src_path}")
                 continue
                 
-            # Add to project
             added_sources.append(str(src_path))
-            current_sources.append(src_resolved)  # Update for duplicate checking
+            current_sources.append(src_resolved)
             
         if added_sources:
-            # Update config only if new sources were added
-            sources = self.project_config.setdefault("sources", [])
-            sources.extend(added_sources)
-            self.update_config("project", {"sources": sources})
+            self.project_config.setdefault("sources", []).extend(added_sources)
+            self.update_config("project", {"sources": self.project_config["sources"]})
 
     def save_configs(self, config_type: str = "all") -> None:
-        """
-        Save configurations to files.
-        
-        Args:
-            config_type: Which configs to save ('project', 'dataset', 'model', or 'all')
-            
-        Raises:
-            ValueError: If invalid config type is provided
-        """
-        if config_type == "all":
-            configs_to_save = self.CONFIG_TYPES
-        elif config_type in self.CONFIG_TYPES:
-            configs_to_save = {config_type}
-        else:
+        """Save configurations to files."""
+        configs_to_save = self.CONFIG_TYPES if config_type == "all" else {config_type}
+        if config_type not in self.CONFIG_TYPES and config_type != "all":
             raise ValueError(f"Invalid config type. Must be one of {self.CONFIG_TYPES} or 'all'")
             
         for ct in configs_to_save:
             self._save_config(ct)
 
     def _save_config(self, config_type: str) -> None:
-        """Helper method to save a single configuration."""
+        """Save a single configuration to file."""
         config = getattr(self, f"{config_type}_config")
-        if config_type == "project":
-            config_path = self.project_path / f"{config_type}.yaml"
-        else:
-            config_path = self.project_path / "configs" / f"{config_type}.yaml"
+        config_path = (
+            self.project_path / f"{config_type}.yaml" 
+            if config_type == "project" 
+            else self.project_path / "configs" / f"{config_type}.yaml"
+        )
         
         try:
             config_path.parent.mkdir(parents=True, exist_ok=True)
@@ -341,82 +318,42 @@ class AnimalPoseTrackerProject:
     def create_project_dirs(self) -> None:
         """Create the standard directory structure for the project."""
         for rel_dir in self.DEFAULT_DIRS:
-            dir_path = self.project_path / rel_dir
-            dir_path.mkdir(parents=True, exist_ok=True)
+            (self.project_path / rel_dir).mkdir(parents=True, exist_ok=True)
     
-    def create_project_config(self) -> None:
-        """Create and save the project configuration."""
-        self._save_config("project")
-
     def create_dataset_config(self) -> None:
         """Create and save the dataset configuration."""
         self.dataset_config['path'] = str(self.project_path / "datasets")
         self._save_config("dataset")
 
     def create_model_config(self) -> None:
-        """Create and save the model configuration.
-        
-        Raises:
-            ValueError: If model type is invalid
-            RuntimeError: If config loading fails
-        """
+        """Create and save the model configuration."""
         model_type = self.project_config.get("model_type")
         if model_type not in MODEL_YAML_PATHS:
-            available = list(MODEL_YAML_PATHS.keys())
-            raise ValueError(f"Invalid model type. Available: {available}")
+            raise ValueError(f"Invalid model type. Available: {list(MODEL_YAML_PATHS.keys())}")
         
-        try:
-            with open(MODEL_YAML_PATHS[model_type], "r", encoding="utf-8") as f:
-                self.model_config = yaml.safe_load(f) or {}
-        except (IOError, yaml.YAMLError) as e:
-            raise RuntimeError(f"Failed to load model config: {e}")
-        
-        # Update model-specific parameters
+        self._load_config_from_file("model", MODEL_YAML_PATHS[model_type])
         self.model_config.update({
             'nc': self.project_config["classes"],
-            'kpt_shape': [self.project_config["keypoints"], 3] 
-                if self.project_config["visible"] 
-                else [self.project_config["keypoints"], 2]
+            'kpt_shape': self.dataset_config['kpt_shape']
         })
-        
         self._save_config("model")
 
     def update_config(self, config_type: str, params: Dict[str, Any]) -> None:
-        """
-        Update configuration values.
-        
-        Args:
-            config_type: Type of config ('project', 'dataset', or 'model')
-            params: Dictionary of key-value pairs to update
-            
-        Raises:
-            ValueError: If invalid config type is provided
-        """
+        """Update configuration values."""
         if config_type not in self.CONFIG_TYPES:
             raise ValueError(f"Invalid config type. Must be one of {self.CONFIG_TYPES}")
             
         config = getattr(self, f"{config_type}_config")
-        valid_keys = set(config.keys())
-        
-        for key, value in params.items():
-            if key not in valid_keys:
-                continue
-            config[key] = value
+        config.update({k: v for k, v in params.items() if k in config})
     
     def create_other_config(self) -> None:
         """Create any other missing configurations."""
-        with open(DEFAULT_CFG_PATH, "r", encoding="utf-8") as f:
-            self.other_config = yaml.safe_load(f) or {}
+        self._load_config_from_file("other", DEFAULT_CFG_PATH)
         
         model_scale = self.project_config['model_scale'].lower()
-        self.other_config['model'] = str(self.project_path / "configs" / f"model-{model_scale}.yaml")
-        self.other_config['data'] = str(self.project_path / "configs" / "dataset.yaml")
+        self.other_config.update({
+            'model': str(self.project_path / "configs" / f"model-{model_scale}.yaml"),
+            'data': str(self.project_path / "configs" / "dataset.yaml")
+        })
         
-        with open(self.project_path / "configs" / "other.yaml", "w") as f:
-            yaml.safe_dump(
-                self.other_config, 
-                f, 
-                indent=2, 
-                sort_keys=False, 
-                default_flow_style=False
-            )
+        self._save_config("other")

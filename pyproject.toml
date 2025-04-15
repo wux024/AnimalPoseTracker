@@ -1,16 +1,16 @@
 # Project metadata with author information
 [project]
 name = "animalposetracker"
-version = "0.1.0"
+dynamic = ["version"]
 description = "Animal Pose Estimation and Tracking Toolkit"
 authors = [{name = "Wu X.", email = "wux024@nenu.edu.cn"}]
 readme = "README.md"
 requires-python = ">=3.8"
-license = {text = "MIT"}
+license = { "text" = "AGPL-3.0" }
 
 # Build system requirements
 [build-system]
-requires = ["setuptools>=42", "wheel"]
+requires = ["setuptools>=70.0.0", "wheel"]
 build-backend = "setuptools.build_meta"
 
 # Main dependencies (aligned with your pip list)
@@ -75,7 +75,12 @@ animalposetracker = [
     "assets/icons/save.png",
     "media/dlc_1-01.png",
     "media/logo.png",
+    "style/dark.qss",
+    "style/light.qss"  
 ]
+
+[tool.setuptools.dynamic]
+version = { attr = "animalposetracker.__version__" }
 
 [tool.setuptools.exclude-package-data]
 animalposetracker = [

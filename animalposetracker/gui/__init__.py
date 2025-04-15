@@ -9,6 +9,9 @@ LOGO_PATH = os.path.join(BASE_DIR, "assets", "logo.png")
 LOGO_SMALL_PATH = os.path.join(BASE_DIR, "media", "logo.png")
 WELCOME_PATH = os.path.join(BASE_DIR, "assets", "welcome.png")
 
+DARK_THEME_PATH = os.path.join(BASE_DIR, "style", "dark.qss")
+LIGHT_THEME_PATH = os.path.join(BASE_DIR, "style", "light.qss")
+
 class WindowFactory:
     @staticmethod
     def run(window_class, 

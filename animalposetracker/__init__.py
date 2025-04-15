@@ -20,10 +20,8 @@ Revision History:
     - [2024/9/6] wux024: Initial file creation
 """
 
-from .version import __version__
-from .version import VERSION
+__version__ = "0.1.0"
 
-
-__all__ = ['__version__', 'VERSION']
+__all__ = ["__version__"]
 
 

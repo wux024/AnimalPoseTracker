@@ -1,8 +1,8 @@
-from PySide6.QtCore import  Qt, QSettings, QProcess
+from PySide6.QtCore import  Qt, QSettings, QProcess, QFile, QTextStream
 from PySide6.QtWidgets import  (QMenu, QApplication, QFileDialog, QMainWindow,
                                  QMessageBox, QTreeWidget, QTreeWidgetItem, 
                                  QTreeWidgetItemIterator)
-from PySide6.QtGui import QCursor
+from PySide6.QtGui import QCursor, QPixmap
 import os
 import sys
 from pathlib import Path
@@ -14,24 +14,24 @@ from .createnewprojectpage import CreateNewProjectPage
 from .publicdatasetsprojectpage import PublicDatasetProjectPage
 from animalposetracker.gui import WindowFactory
 from animalposetracker.projector import AnimalPoseTrackerProject
+from animalposetracker.gui import (DARK_THEME_PATH, LIGHT_THEME_PATH, 
+                                   LOGO_PATH_TRANSPARENT, LOGO_PATH, 
+                                   LOGO_SMALL_PATH)
 
 class AnimalPoseTrackerPage(QMainWindow, Ui_AnimalPoseTracker):
     def __init__(self, parent=None):
         super().__init__(parent)
-
         self.setupUi(self)
-        self.setupConnections()
-        self.setupConstants()
+        self.showMaximized()
         self.initialize_controls()
-    
-    def setupConstants(self):
+        
+
+    def initialize_controls(self):
+        """Initialize the controls of the main page"""
         self.sub_page = None
         # set work directory
         os.chdir(Path.cwd())
         self.source_type = 'image' 
-
-    def initialize_controls(self):
-        """Initialize the controls of the main page"""
         self.project = AnimalPoseTrackerProject()
         self.config_data = {}
         self.config_type = "project"
@@ -53,6 +53,10 @@ class AnimalPoseTrackerPage(QMainWindow, Ui_AnimalPoseTracker):
 
         self.ConfigureFile.setEditTriggers(QTreeWidget.DoubleClicked | QTreeWidget.EditKeyPressed)
         self.TrainingConfigureEdit.setEditTriggers(QTreeWidget.DoubleClicked | QTreeWidget.EditKeyPressed)
+
+        self.onChangeTheme("light") 
+
+        self.setupConnections()
         
 
     def setupConnections(self):
@@ -217,7 +221,6 @@ class AnimalPoseTrackerPage(QMainWindow, Ui_AnimalPoseTracker):
     def updateRecentProjectsMenu(self):
         """Consolidated menu updater"""
         self.recentProjectsMenu.clear()
-        
         if not self.recent_projects:
             self.recentProjectsMenu.addAction("No recent projects").setEnabled(False)
         else:
@@ -310,25 +313,29 @@ class AnimalPoseTrackerPage(QMainWindow, Ui_AnimalPoseTracker):
 
     def onChangeTheme(self, theme):
         """Change application theme/stylesheets"""
+        theme_file = {
+            "dark": DARK_THEME_PATH,
+            "light": LIGHT_THEME_PATH
+            }.get(theme)
+        if not theme_file:
+            QMessageBox.warning(self, "Error", "Invalid theme name")
+            return
         try:
+            file = QFile(theme_file)
+            if file.open(QFile.ReadOnly | QFile.Text):
+                stream = QTextStream(file)
+                self.setStyleSheet(stream.readAll())
+                file.close()
             if theme == "dark":
-                self._applyDarkTheme()
-            elif theme == "light": 
-                self._applyLightTheme()
-            else:
-                raise ValueError(f"Unknown theme: {theme}")
-            
+                self.Logo.setPixmap(QPixmap(LOGO_PATH_TRANSPARENT))
+            elif theme == "light":
+                # self.Logo.setPixmap(QPixmap(LOGO_PATH))
+                self.Logo.setPixmap(QPixmap(LOGO_PATH_TRANSPARENT))
         except Exception as e:
             QMessageBox.warning(self, "Theme Error", str(e))
+        
+        
     
-    def _applyDarkTheme(self):
-        """Apply dark mode stylesheet"""
-        print("Dark theme applied")
-
-    def _applyLightTheme(self):
-        """Reset to default light theme"""
-        print("Light theme applied")
-
     def onBrowseConfigureFile(self):
         """Slot for browsing and selecting YAML configuration files.
         Opens a file dialog to select .yaml or .yml files, validates the selection,
@@ -422,23 +429,9 @@ class AnimalPoseTrackerPage(QMainWindow, Ui_AnimalPoseTracker):
         
         last_step = path[-1]
         if last_step[0] == "dict":
-            current[last_step[1]] = self.parse_value(new_value)
+            current[last_step[1]] = self.convert_value(new_value)
         elif last_step[0] == "list":
-            current[last_step[1]] = self.parse_value(new_value)
-
-    def parse_value(self, value_str):
-        try:
-            return int(value_str)
-        except ValueError:
-            try:
-                return float(value_str)
-            except ValueError:
-                if value_str.lower() == "true":
-                    return True
-                elif value_str.lower() == "false":
-                    return False
-                else:
-                    return value_str 
+            current[last_step[1]] = self.convert_value(new_value)
 
     def onSaveConfigureFile(self):
         """Slot for saving configure file"""
@@ -602,17 +595,65 @@ class AnimalPoseTrackerPage(QMainWindow, Ui_AnimalPoseTracker):
                 # SAVE MODE: Disable editing and save changes
                 item.setFlags(item.flags() & ~Qt.ItemIsEditable)
             iterator += 1  # Move to next item
+        
+        if not is_edit_mode:
+            # Save changes to config file
+            self.project.save_configs("other")
 
         # Toggle button text for next action
         new_button_text = f"Save {parameter_type} Parameters" if is_edit_mode else f"Edit {parameter_type} Parameters"
         button.setText(new_button_text)
 
+    def convert_value(self, value):
+        """
+        Converts a string value to appropriate Python type.
+        
+        Handles basic types: None, bool, int, float, str
+        Does NOT handle scientific notation or complex types.
+        
+        Args:
+            value: Input value (str or any type)
+            
+        Returns:
+            Appropriate Python type (None, bool, int, float, or original type)
+            
+        Examples:
+            >>> convert_value("123") → 123
+            >>> convert_value("3.14") → 3.14 
+            >>> convert_value("true") → True
+            >>> convert_value("null") → None
+            >>> convert_value(123) → 123 (non-strings returned as-is)
+        """
+        # Return non-strings immediately
+        if not isinstance(value, str):
+            return value
+            
+        value = value.strip().lower()  # Normalize input
+        
+        # Handle empty/None cases
+        if not value or value in ("none", "null"):
+            return None
+            
+        # Handle booleans
+        if value in ("true", "false"):
+            return value == "true"
+            
+        # Numeric conversion attempts
+        try:
+            return int(value)  # Try integer first
+        except ValueError:
+            try:
+                return float(value)  # Then try float
+            except ValueError:
+                return value  # Return original string if all conversions fail
+        
     def onOtherConfigureEdited(self, item, column):
         """Slot function for handling other parameters editing"""
         if column == 1:
             new_value = item.text(1)
             key = item.text(0)
             if key in self.project.other_config:
+                new_value = self.convert_value(new_value)
                 self.project.other_config[key] = new_value
             else:
                 raise ValueError(f"Invalid key {key} in other config")
