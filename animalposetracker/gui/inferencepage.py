@@ -1,4 +1,4 @@
-from PySide6.QtCore import   QMetaObject, Qt, Slot, Q_ARG
+from PySide6.QtCore import QMetaObject, Qt, Slot, Q_ARG, Signal
 from PySide6.QtGui import QImage, QPixmap
 from PySide6.QtWidgets import  QApplication, QFileDialog, QWidget
 import os

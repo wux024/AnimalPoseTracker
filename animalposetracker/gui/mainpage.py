@@ -12,6 +12,7 @@ from .ui_animalposetracker import Ui_AnimalPoseTracker
 from .inferencepage import AnimalPoseInferencePage
 from .createnewprojectpage import CreateNewProjectPage
 from .publicdatasetsprojectpage import PublicDatasetProjectPage
+from .annotatorpage import AnimalPoseAnnotatorPage
 from animalposetracker.gui import WindowFactory
 from animalposetracker.projector import AnimalPoseTrackerProject
 from animalposetracker.gui import (DARK_THEME_PATH, LIGHT_THEME_PATH, 
@@ -36,6 +37,7 @@ class AnimalPoseTrackerPage(QMainWindow, Ui_AnimalPoseTracker):
         self.config_data = {}
         self.config_type = "project"
         self.process = QProcess()
+        self.process.finished.connect(self.onProcessFinished)
 
         # set recent projects
         self.maxRecentProjects = 5
@@ -287,10 +289,13 @@ class AnimalPoseTrackerPage(QMainWindow, Ui_AnimalPoseTracker):
 
     def onOpenInferencer(self):
         """Slot for opening the inferencer tool"""
-        print("Inferencer clicked")
         # Add your implementation here
-        self.sub_page = AnimalPoseInferencePage()
-
+        if hasattr(self, 'sub_page') and self.sub_page is not None:
+            self.sub_page.close()
+            self.sub_page = WindowFactory.run(AnimalPoseInferencePage)
+            self.sub_page.deleteLater()
+        self.sub_page = WindowFactory.run(AnimalPoseInferencePage)
+    
     def onOpenTracker(self):
         """Slot for opening the tracker tool"""
         print("Tracker clicked")
@@ -552,8 +557,11 @@ class AnimalPoseTrackerPage(QMainWindow, Ui_AnimalPoseTracker):
 
     def onStartLabelFrames(self):
         """Slot for starting frame labeling"""
-        print("Start Label Frames clicked")
-        # Add your implementation here
+        if hasattr(self, 'sub_page') and self.sub_page is not None:
+            self.sub_page.close()
+            self.sub_page = WindowFactory.run(AnimalPoseAnnotatorPage)
+            self.sub_page.deleteLater()
+        self.sub_page = WindowFactory.run(AnimalPoseAnnotatorPage)
 
     def onCheckLabelledFrames(self):
         """Slot for checking labelled frames"""
@@ -567,8 +575,25 @@ class AnimalPoseTrackerPage(QMainWindow, Ui_AnimalPoseTracker):
 
     def onResumeTrain(self):
         """Slot for resuming training"""
-        print("Resume Train clicked")
-    
+        file = QFileDialog.getOpenFileName(self, 
+                                            "Select Resuming Model", 
+                                            "", "PyTorch Model (*.pt)")[0]
+        if file:
+            resume_path = file
+        else:
+            resume_path = str(self.project.project_path / "runs/train/weights/last.pt")
+        self.ResumeTrain.setEnabled(False)
+        self.StartTrain.setEnabled(False)
+        self.EndTrain.setEnabled(True)
+        cmd = [
+            "yolo",
+            "train",
+            "resume",
+            f"cfg={resume_path}"
+        ]
+        self.process.setProcessChannelMode(QProcess.ForwardedChannels)
+        self.process.start(cmd[0], cmd[1:])
+
     def onEditOtherParameters(self):
         """Slot for editing other parameters"""
         button = self.sender()
@@ -665,7 +690,7 @@ class AnimalPoseTrackerPage(QMainWindow, Ui_AnimalPoseTracker):
             "yolo",
             "pose",
             "train",
-            f"cfg=configs/other.yaml"
+            "cfg=configs/other.yaml"
         ]
         self.process.setProcessChannelMode(QProcess.ForwardedChannels)
         self.process.start(cmd[0], cmd[1:])
@@ -683,6 +708,7 @@ class AnimalPoseTrackerPage(QMainWindow, Ui_AnimalPoseTracker):
 
     def onStartEvaluate(self):
         """Slot for starting evaluation"""
+        old_model = self.project.other_config.get("model", None)
         self.project.update_config("other", {"model": "runs/train/best.pt"})
         self.project.update_config("other", {"name": "val"})
         self.project.save_configs("other")
@@ -690,11 +716,14 @@ class AnimalPoseTrackerPage(QMainWindow, Ui_AnimalPoseTracker):
             "yolo",
             "pose",
             "val",
-            f"cfg=configs/other.yaml"
+            "cfg=configs/other.yaml"
         ]
+        self.process.setProcessChannelMode(QProcess.ForwardedChannels)
         self.process.start(cmd[0], cmd[1:])
         self.StartEvaluate.setEnabled(False)
         self.EndEvaluate.setEnabled(True)
+        self.project.update_config("other", {"model": old_model})
+        self.project.save_configs("other")
 
 
     def onEndEvaluate(self):
@@ -709,6 +738,8 @@ class AnimalPoseTrackerPage(QMainWindow, Ui_AnimalPoseTracker):
 
     def onStartInference(self):
         """Slot for starting inference"""
+        self.process.setProcessChannelMode(QProcess.ForwardedChannels)
+        old_model = self.project.other_config.get("model", None)
         self.project.update_config("other", {"model": "runs/train/best.pt"})
         self.project.update_config("other", {"name": "predict"})
         self.project.save_configs("other")
@@ -719,12 +750,15 @@ class AnimalPoseTrackerPage(QMainWindow, Ui_AnimalPoseTracker):
             "yolo",
             "pose",
             "predict",
-            f"cfg=configs/other.yaml",
             f"source={self.inference_source}"
+            "cfg=configs/other.yaml",
         ]
+        self.process.setProcessChannelMode(QProcess.ForwardedChannels)
         self.process.start(cmd[0], cmd[1:])
         self.StartInference.setEnabled(False)
         self.EndInference.setEnabled(True)
+        self.project.update_config("other", {"model": old_model})
+        self.project.save_configs("other")
 
 
     def onEndInference(self):
@@ -783,6 +817,7 @@ class AnimalPoseTrackerPage(QMainWindow, Ui_AnimalPoseTracker):
 
     def onStartExport(self):
         """Slot for starting export"""
+        old_model = self.project.other_config.get("model", None)
         self.project.update_config("other", {"model": "runs/train/best.pt"})
         self.project.update_config("other", {"name": "export"})
         self.project.save_configs("other")
@@ -790,9 +825,17 @@ class AnimalPoseTrackerPage(QMainWindow, Ui_AnimalPoseTracker):
             "yolo",
             "pose",
             "export",
-            f"cfg=configs/other.yaml"
+            "cfg=configs/other.yaml"
         ]
+        self.process.setProcessChannelMode(QProcess.ForwardedChannels)
         self.process.start(cmd[0], cmd[1:])
+        self.project.update_config("other", {"model": old_model})
+        self.project.save_configs("other")
+    
+    def onProcessFinished(self, exit_code, exit_status):
+        """Slot for handling process finished signal"""
+        pass
+
    
 
 def main():
