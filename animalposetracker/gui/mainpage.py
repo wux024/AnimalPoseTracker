@@ -1,7 +1,7 @@
-from PySide6.QtCore import  Qt, QSettings, QProcess, QFile, QTextStream
+from PySide6.QtCore import  Qt, QSettings, QProcess, QFile, QTextStream, QTimer
 from PySide6.QtWidgets import  (QMenu, QApplication, QFileDialog, QMainWindow,
-                                 QMessageBox, QTreeWidget, QTreeWidgetItem, 
-                                 QTreeWidgetItemIterator)
+                                 QMessageBox, QTreeWidget, QTreeWidgetItem, QLabel, 
+                                 QTreeWidgetItemIterator, QSplashScreen, QProgressBar)
 from PySide6.QtGui import QCursor, QPixmap
 import os
 import sys
@@ -17,7 +17,7 @@ from animalposetracker.gui import WindowFactory
 from animalposetracker.projector import AnimalPoseTrackerProject
 from animalposetracker.gui import (DARK_THEME_PATH, LIGHT_THEME_PATH, 
                                    LOGO_PATH_TRANSPARENT, LOGO_PATH, 
-                                   LOGO_SMALL_PATH)
+                                   LOGO_SMALL_PATH, WELCOME_PATH)
 
 class AnimalPoseTrackerPage(QMainWindow, Ui_AnimalPoseTracker):
     def __init__(self, parent=None):
@@ -284,8 +284,11 @@ class AnimalPoseTrackerPage(QMainWindow, Ui_AnimalPoseTracker):
 
     def onOpenAnnotator(self):
         """Slot for opening the annotator tool"""
-        print("Annotator clicked")
-        # Add your implementation here
+        if hasattr(self, 'sub_page') and self.sub_page is not None:
+            self.sub_page.close()
+            self.sub_page = WindowFactory.run(AnimalPoseAnnotatorPage)
+            self.sub_page.deleteLater()
+        self.sub_page = WindowFactory.run(AnimalPoseAnnotatorPage)
 
     def onOpenInferencer(self):
         """Slot for opening the inferencer tool"""
@@ -589,7 +592,7 @@ class AnimalPoseTrackerPage(QMainWindow, Ui_AnimalPoseTracker):
             "yolo",
             "train",
             "resume",
-            f"cfg={resume_path}"
+            f"model={resume_path}"
         ]
         self.process.setProcessChannelMode(QProcess.ForwardedChannels)
         self.process.start(cmd[0], cmd[1:])
@@ -836,17 +839,94 @@ class AnimalPoseTrackerPage(QMainWindow, Ui_AnimalPoseTracker):
         """Slot for handling process finished signal"""
         pass
 
-   
+class SplashScreen(QSplashScreen):
+    """Custom splash screen with guaranteed initialization sequence"""
+    def __init__(self, image_path):
+        # Load image with size validation
+        pixmap = self._validate_pixmap(image_path)
+        super().__init__(pixmap, Qt.WindowStaysOnTopHint)
+        
+        # Initialize UI components after base class setup
+        self._init_ui_components(pixmap.size())
+        
+        # Force immediate display update
+        self.finalize_initialization()
+
+    def _validate_pixmap(self, path):
+        """Ensure valid pixmap with fallback mechanism"""
+        pixmap = QPixmap(path)
+        if pixmap.isNull():
+            pixmap = QPixmap(800, 600)
+            pixmap.fill(Qt.white)
+        return pixmap
+
+    def _init_ui_components(self, size):
+        """Initialize progress bar and label with precise positioning"""
+        # Progress bar (bottom 10% of splash)
+        self.progress = QProgressBar(self)
+        self.progress.setGeometry(
+            int(size.width() * 0.1),       # x: 10% from left
+            int(size.height() * 0.85),      # y: 85% from top
+            int(size.width() * 0.8),       # width: 80% of total
+            25                             # height
+        )
+        
+        # Status label (above progress bar)
+        self.status = QLabel("Initializing...", self)
+        self.status.setStyleSheet("""
+            QLabel {
+                color: #FFFFFF;
+                font: bold 14px;
+                background: transparent;
+            }
+        """)
+        self.status.adjustSize()
+        self.status.move(
+            self.progress.x() + 10,        # Align with progress bar
+            self.progress.y() - 35         # 35px above progress bar
+        )
+
+    def finalize_initialization(self):
+        """Ensure complete rendering before first display"""
+        self.setAttribute(Qt.WA_DontShowOnScreen, False)
+        self.raise_()
+        self.repaint()
+        QApplication.processEvents()
 
 def main():
     app = QApplication(sys.argv)
-    main_window = AnimalPoseTrackerPage()
-    main_window.show()
+    
+    # Initialize splash screen with guaranteed display
+    splash = SplashScreen(WELCOME_PATH)
+    splash.show()
+    
+    # Setup loading simulation
+    progress = 0
+    def simulate_loading():
+        nonlocal progress
+        progress += 2  # Increment by 2% each step
+        splash.progress.setValue(progress)
+        splash.status.setText(f"Loading modules... {progress}%")
+        
+        if progress >= 100:
+            timer.stop()
+            # Ensure complete splash cleanup
+            splash.deleteLater()
+            # Init main window AFTER splash destruction
+            main_win = AnimalPoseTrackerPage()
+            main_win.show()
+    
+    # Start loading simulation AFTER splash is fully shown
+    timer = QTimer()
+    timer.setInterval(20)  # 20ms interval for smooth progress
+    timer.timeout.connect(simulate_loading)
+    
+    # Single-shot timer to start loading process
+    QTimer.singleShot(100, timer.start)  # 100ms delay after display
+    
     sys.exit(app.exec())
 
-
-if __name__ == '__main__':
+if __name__ == "__main__":
     main()
-
 
         

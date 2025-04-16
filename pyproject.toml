@@ -92,3 +92,4 @@ animalposetracker = [
 [project.scripts]
 "animalposetracker" = "animalposetracker.gui.mainpage:main"
 "animalpose-inferencer" = "animalposetracker.gui.inferencepage:main"
+"animalpose-annotator" = "animalposetracker.gui.annotatorpage:main"

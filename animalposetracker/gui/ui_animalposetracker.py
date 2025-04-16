@@ -975,7 +975,7 @@ class Ui_AnimalPoseTracker(object):
 
     def retranslateUi(self, AnimalPoseTracker):
         AnimalPoseTracker.setWindowTitle(QCoreApplication.translate("AnimalPoseTracker", u"AnimalPoseTracker", None))
-        self.actionLoadProject.setText(QCoreApplication.translate("AnimalPoseTracker", u"Open Old Project Ctrl+O", None))
+        self.actionLoadProject.setText(QCoreApplication.translate("AnimalPoseTracker", u"Open Old Project", None))
         self.actionOpenRecent.setText(QCoreApplication.translate("AnimalPoseTracker", u"Open Recent", None))
         self.actionSave.setText(QCoreApplication.translate("AnimalPoseTracker", u"Save", None))
         self.actionExit.setText(QCoreApplication.translate("AnimalPoseTracker", u"Exit", None))
@@ -987,11 +987,12 @@ class Ui_AnimalPoseTracker(object):
         self.actionPublicDatasetsProject.setText(QCoreApplication.translate("AnimalPoseTracker", u"Public Datasets Project", None))
         self.actionDark.setText(QCoreApplication.translate("AnimalPoseTracker", u"Dark", None))
         self.actionLight.setText(QCoreApplication.translate("AnimalPoseTracker", u"Light", None))
-        self.actionCreateNewProject.setText(QCoreApplication.translate("AnimalPoseTracker", u"New Project Ctrl+N", None))
+        self.actionCreateNewProject.setText(QCoreApplication.translate("AnimalPoseTracker", u"New Project", None))
         self.actionTracker.setText(QCoreApplication.translate("AnimalPoseTracker", u"Tracker", None))
         self.WelcomeLabel.setText(QCoreApplication.translate("AnimalPoseTracker", u"Welcome to the AnimalPoseTracker!", None))
         self.Logo.setText("")
-        self.Introdution.setText(QCoreApplication.translate("AnimalPoseTracker", u"AnimalPoseTracker is an open source tool for animal pose estimation with deep learning. Wu X. | https://wux024.github.io", None))
+        self.Introdution.setText(QCoreApplication.translate("AnimalPoseTracker", u"AnimalPoseTracker is an open source tool for " \
+        "cross-species animal pose estimation based on deep learning. Wu X. | https://wux024.github.io", None))
         self.Note.setText(QCoreApplication.translate("AnimalPoseTracker", u"To get started, you can create a new project, load an existing project, or use opensource public datasets.", None))
         self.CreateNewProjectButton.setText(QCoreApplication.translate("AnimalPoseTracker", u"Create New Project", None))
         self.LoadProjectButton.setText(QCoreApplication.translate("AnimalPoseTracker", u"Load Project", None))
