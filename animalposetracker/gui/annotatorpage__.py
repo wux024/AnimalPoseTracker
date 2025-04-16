@@ -1,11 +1,11 @@
-from PySide6.QtCore import Qt, QFile, QTextStream
-from PySide6.QtWidgets import (QApplication, QFileDialog, QMainWindow,
-                               QMessageBox, QTreeWidgetItem, QTreeWidgetItemIterator,
-                               QGraphicsScene, QGraphicsView)
+from PySide6.QtCore import  Qt, QFile, QTextStream
+from PySide6.QtWidgets import  ( QApplication, QFileDialog, QMainWindow,
+                                 QMessageBox, QTreeWidgetItem, QTreeWidgetItemIterator, 
+                                 QGraphicsScene, QGraphicsView)
 from PySide6.QtGui import QPixmap, QPainter
-from animalposetracker.gui import (DARK_THEME_PATH, LIGHT_THEME_PATH,
-                                  LOGO_PATH_TRANSPARENT, LOGO_PATH,
-                                  LOGO_SMALL_PATH, WELCOME_PATH)
+from animalposetracker.gui import (DARK_THEME_PATH, LIGHT_THEME_PATH, 
+                                   LOGO_PATH_TRANSPARENT, LOGO_PATH, 
+                                   LOGO_SMALL_PATH, WELCOME_PATH)
 import os
 import sys
 from pathlib import Path
@@ -13,29 +13,27 @@ import yaml
 from animalposetracker.data import AnimalPoseAnnotation, AnimalPoseAnnotator
 
 from .ui_animalposeannotator import Ui_AnimalPoseAnnotator
-from .utils import ZoomableGraphicsView, DrawingBoard
+from .utils import ZoomableGraphicsView, DrawingLabel
 
 class AnimalPoseAnnotatorPage(QMainWindow, Ui_AnimalPoseAnnotator):
-    """Main application window for animal pose annotation"""
-    
     def __init__(self, parent=None):
         super().__init__(parent)
         self.setupUi(self)
         self.initialize_controls()
         self.setupConnections()
-        self.current_drawing_mode = "none"
-        self.annotation_targets = []
+    
 
     def initialize_controls(self):
-        """Initialize UI controls and state"""
         os.chdir(Path.cwd())
         self.project_config = {}
         self.images = {}
         self.current_image_index = -1
         self.sorted_keys = []
         self._CreateGraphicsScene()
+        self.ConfigureDisplay.clear()
         self.ConfigureDisplay.header().close()
         self._edit_mode = False
+        
 
     def setupConnections(self):
         """Connect all UI signals to their corresponding slot functions"""
@@ -49,10 +47,14 @@ class AnimalPoseAnnotatorPage(QMainWindow, Ui_AnimalPoseAnnotator):
         self.actionPreviousFrame.triggered.connect(self.onPreviousFrame)
         
         # Annotation tools
-        self.actionDrawBBox.triggered.connect(lambda: self.setDrawingMode("rect"))
-        self.actionDrawPoint.triggered.connect(lambda: self.setDrawingMode("point"))
-        self.actionDrawLine.triggered.connect(lambda: self.setDrawingMode("line"))
-        self.actionNoLabel.triggered.connect(lambda: self.setDrawingMode("none"))
+        self.actionDrawBBox.triggered.connect(
+            lambda: self.drawing_label.setDrawingMode("rect"))
+        self.actionDrawPoint.triggered.connect(
+            lambda: self.drawing_label.setDrawingMode("point"))
+        self.actionDrawLine.triggered.connect(
+            lambda: self.drawing_label.setDrawingMode("line"))
+        self.actionNoLabel.triggered.connect(
+            lambda: self.drawing_label.setDrawingMode("none"))
         
         # Editing operations
         self.actionAdd.triggered.connect(self.onAddItem)
@@ -80,106 +82,70 @@ class AnimalPoseAnnotatorPage(QMainWindow, Ui_AnimalPoseAnnotator):
         # Tree view selections
         self.ConfigureDisplay.itemSelectionChanged.connect(self.onConfigureDisplaySelectionChanged)
 
+
     def _CreateGraphicsScene(self):
-        """Create and configure the graphics scene"""
+        """Create the central graphics view"""
+
         self._ReplaceGraphicsView()
+
         self.scene = QGraphicsScene()
-        self.FrameDisplay.setScene(self.scene)
-        self._init_drawing_board()
+
         self.FrameDisplay.setAlignment(Qt.AlignHCenter | Qt.AlignVCenter)
         self.FrameDisplay.setVerticalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
+
         self.FrameDisplay.setRenderHints(
             QPainter.Antialiasing | 
             QPainter.SmoothPixmapTransform |
             QPainter.TextAntialiasing
         )
 
-    def _init_drawing_board(self):
-        """Initialize the drawing board"""
-        self.drawing_label = DrawingBoard()
-        self.drawing_label.setAutoFillBackground(True)
-        self.drawing_label.setAttribute(Qt.WA_TranslucentBackground)
+        self.FrameDisplay.setTransformationAnchor(QGraphicsView.AnchorViewCenter)
+        self.FrameDisplay.setResizeAnchor(QGraphicsView.AnchorViewCenter)
+        
+        # Add drawing label to the scene
+        self.drawing_label = DrawingLabel()
+        self.drawing_label.setAttribute(Qt.WA_DeleteOnClose, False)
         self.drawing_proxy = self.scene.addWidget(self.drawing_label)
-        self.drawing_proxy.setZValue(1)
-        self.drawing_label.setVisible(True)
+        self.drawing_proxy.setZValue(1)  # Make sure drawings appear above the image
+        self.drawing_proxy.setPos(0, 0)
 
+        self.FrameDisplay.setScene(self.scene)
+
+        self._ConfigureDisplay()
+        
+    
     def _ReplaceGraphicsView(self):
-        """Replace default graphics view with custom zoomable version"""
+        """Safely replaces the default QGraphicsView with our custom version"""
         original_view = self.FrameDisplay
+        
+        # Create custom view with same parent
         self.FrameDisplay = ZoomableGraphicsView(self.FrameDisplayGroup)
+        
+        # Copy all properties from original view
         self.FrameDisplay.setObjectName(original_view.objectName())
         self.FrameDisplay.setStyleSheet(original_view.styleSheet())
+        
+        # Replace in layout
         self.FrameDisplayGroupLayout.replaceWidget(original_view, self.FrameDisplay)
         original_view.deleteLater()
-
-    def setDrawingMode(self, mode):
-        """Set the current drawing mode and update UI"""
-        valid_modes = ["none", "point", "rect", "line"]
-        if mode not in valid_modes:
-            raise ValueError(f"Invalid mode: {mode}")
         
-        self.current_drawing_mode = mode
-        self.drawing_label.set_drawing_mode(mode)
-        self.setFocus()
-
-    def onOpenFileFolder(self):
-        """Load images from selected directory"""
-        folder_path = QFileDialog.getExistingDirectory(self, "Open Image Folder")
-        if not folder_path:
-            return
+    
+    def _ConfigureDisplay(self):
+        """Copy all relevant properties between QGraphicsView instances"""
+        # Core properties
+        self.FrameDisplay.setAlignment(Qt.AlignCenter)
+        self.FrameDisplay.setTransformationAnchor(QGraphicsView.AnchorUnderMouse)
+        self.FrameDisplay.setResizeAnchor(QGraphicsView.AnchorViewCenter)
         
-        self.images.clear()
-        supported_extensions = {'.jpg', '.jpeg', '.png', '.bmp', '.gif', '.tif', '.tiff', '.webp'}
-        folder = Path(folder_path)
+        # Enable high-quality rendering
+        self.FrameDisplay.setRenderHint(QPainter.Antialiasing)
+        self.FrameDisplay.setRenderHint(QPainter.SmoothPixmapTransform)
         
-        for img_file in folder.iterdir():
-            if img_file.suffix.lower() in supported_extensions:
-                self.images[img_file.name] = str(img_file)
-        
-        if self.images:
-            self.statusBar().showMessage(f"Loaded {len(self.images)} images")
-            self.sorted_keys = sorted(self.images.keys())
-            self.current_image_index = 0
-            self._DisplayCurrentImage()
-        else:
-            QMessageBox.warning(self, "Warning", "No supported images found")
+        # Initialize zoom parameters
+        self.zoom_factor = 1.0
+        self.min_zoom = 0.1
+        self.max_zoom = 10.0
 
-    def _DisplayCurrentImage(self):
-        """Display current image with annotations"""
-        if not self.images:
-            self.scene.clear()
-            return
-
-        key = self.sorted_keys[self.current_image_index]
-        image_path = Path(self.images[key])
-        
-        try:
-            pixmap = QPixmap(str(image_path))
-
-            if pixmap.isNull():
-                raise ValueError("Failed to load image")
-            
-            # Clear and setup scene
-            self.scene.clear()
-            self.scene.addPixmap(pixmap)
-
-            self._init_drawing_board()
-            
-            # Update DrawingBoard dimensions
-            self.drawing_label.setFixedSize(pixmap.size())
-            self.drawing_label.main_pixmap = QPixmap(pixmap.size())
-            self.drawing_label.main_pixmap.fill(Qt.transparent)
-            self.drawing_label.temp_pixmap = QPixmap(pixmap.size())
-            self.drawing_label.temp_pixmap.fill(Qt.transparent)
-            
-            # Set view parameters
-            self.FrameDisplay.fitInView(self.scene.itemsBoundingRect(), Qt.KeepAspectRatio)
-            self.statusBar().showMessage(f"Displaying: {key}")
-            
-        except Exception as e:
-            QMessageBox.warning(self, "Error", f"Failed to load image: {str(e)}")
-
-    # Additional methods (unchanged from original)
     def onOpenConfigFile(self):
         """Handle opening configuration file with safety checks"""
         file_path, _ = QFileDialog.getOpenFileName(
@@ -219,22 +185,76 @@ class AnimalPoseAnnotatorPage(QMainWindow, Ui_AnimalPoseAnnotator):
             f"{src} -> {dest}" for src, dest in self.project_config['skeleton']
         ]
         self.SkeletonSelection.addItems(skeleton_links)
+
+    def onOpenFileFolder(self):
+        """Handle opening a file folder using pathlib."""
+        folder_path = QFileDialog.getExistingDirectory(self, "Open Image Folder")
+        if not folder_path:  # User cancelled
+            return
         
-    def _ConfigureDisplay(self):
-        """Copy all relevant properties between QGraphicsView instances"""
-        # Core properties
-        self.FrameDisplay.setAlignment(Qt.AlignCenter)
-        self.FrameDisplay.setTransformationAnchor(QGraphicsView.AnchorUnderMouse)
-        self.FrameDisplay.setResizeAnchor(QGraphicsView.AnchorViewCenter)
+        self.images.clear()
+        supported_extensions = {'.jpg', '.jpeg', '.png', '.bmp',
+                            '.gif', '.tif', '.tiff', '.webp'}
         
-        # Enable high-quality rendering
-        self.FrameDisplay.setRenderHint(QPainter.Antialiasing)
-        self.FrameDisplay.setRenderHint(QPainter.SmoothPixmapTransform)
+        folder = Path(folder_path)
         
-        # Initialize zoom parameters
-        self.zoom_factor = 1.0
-        self.min_zoom = 0.1
-        self.max_zoom = 10.0
+        # More efficient single pass through files
+        for img_file in folder.iterdir():
+            if img_file.suffix.lower() in supported_extensions and img_file.is_file():
+                # Use full filename (with extension) as key to avoid collisions
+                key = img_file.name
+                self.images[key] = str(img_file)
+        
+        if self.images:
+            self.statusBar().showMessage(f"Loaded {len(self.images)} images from {folder_path}")
+        else:
+            self.statusBar().showMessage("No supported image files found in folder")
+        
+        self.sorted_keys = sorted(self.images.keys())
+        self.current_image_index = 0 if self.images else -1
+        self._DisplayCurrentImage()
+
+    def _DisplayCurrentImage(self):
+        """Display the current image with proper error handling and drawing layer setup."""
+        if not self.images:
+            self.scene.clear()
+            self.drawing_label = None
+            self.drawing_proxy = None
+            return
+
+        # Validate and adjust current image index
+        self.current_image_index = max(0, min(self.current_image_index, len(self.images)-1))
+        key = self.sorted_keys[self.current_image_index]
+        image_path = Path(self.images[key])
+
+        self.scene.clear()
+        self.drawing_label = None
+        self.drawing_proxy = None
+
+        try:
+            pixmap = QPixmap(str(image_path))
+            if pixmap.isNull():
+                raise ValueError("Invalid image")
+            pixmap_item = self.scene.addPixmap(pixmap)
+            scene_rect = pixmap_item.boundingRect()
+            self.scene.setSceneRect(scene_rect)
+
+            self.drawing_label = DrawingLabel()
+            self.drawing_label.setAttribute(Qt.WA_TranslucentBackground)
+            self.drawing_label.setFixedSize(pixmap.size())
+            self.drawing_proxy = self.scene.addWidget(self.drawing_label)
+            self.drawing_proxy.setZValue(1)
+            self.drawing_proxy.setPos(pixmap_item.pos())
+
+            self.FrameDisplay.fitInView(scene_rect, Qt.KeepAspectRatio)
+            self.statusBar().showMessage(f"Displaying: {key}")
+
+        except Exception as e:
+            self.statusBar().showMessage(f"Error: {str(e)}")
+            self.current_image_index += 1
+            if self.current_image_index >= len(self.images):
+                self.current_image_index = 0
+            self._DisplayCurrentImage() 
 
     def _advance_image_index(self, step):
         """Safely advance image index with wrap-around handling."""
@@ -243,6 +263,41 @@ class AnimalPoseAnnotatorPage(QMainWindow, Ui_AnimalPoseAnnotator):
         self.current_image_index += step
         self.current_image_index = max(0, min(self.current_image_index, len(self.images)-1))
         self._DisplayCurrentImage()
+
+    def resizeEvent(self, event):
+        """Maintain aspect ratio when window is resized."""
+        super().resizeEvent(event)
+        if self.scene and not self.scene.itemsBoundingRect().isEmpty():
+            self.FrameDisplay.fitInView(self.scene.sceneRect(), Qt.KeepAspectRatio)
+    
+    def onSaveLabel(self):
+        """
+        Handle saving current label data.
+        
+        Saves the current annotation state to file.
+        """
+        if not self.drawing_label.targets:
+            QMessageBox.warning(self, "Warning", "No annotations to save")
+            return
+        
+        annotations = []
+        for target in self.drawing_label.targets:
+            annotation = {
+                "id": 0,
+                "image_id": self.sorted_keys[self.current_image_index],
+                "category_id": target.class_id,
+                "bbox": {
+                    "x": target.rect.x(),
+                    "y": target.rect.y(),
+                    "width": target.rect.width(),
+                    "height": target.rect.height()
+                },
+                "area": target.rect.width() * target.rect.height(),
+                "keypoints": [(p.x(), p.y()) for p in target.points],
+
+            }
+            annotations.append(annotation)
+        print(annotations)
 
     def onNextFrame(self):
         """Display the next image (with wrap-around)"""
@@ -262,6 +317,7 @@ class AnimalPoseAnnotatorPage(QMainWindow, Ui_AnimalPoseAnnotator):
             self.statusBar().showMessage("No images loaded")
             return False
         return True
+
 
     def onAddItem(self):
         """
@@ -469,11 +525,19 @@ class AnimalPoseAnnotatorPage(QMainWindow, Ui_AnimalPoseAnnotator):
         # Implementation for keypoint selection change goes here
 
     def onClassSelectionChanged(self):
-        """Handle class selection changes"""
+        """
+        Handle class selection change.
+        
+        Args:
+            index (int): New selected index in classes combo box
+        """
         if self.drawing_label.current_target:
-            self.drawing_label.current_target.class_id = self.ClassesSelection.currentIndex()
-            self.drawing_label.current_target.class_name = self.ClassesSelection.currentText()
-            self.drawing_label._commit_changes()
+            self.drawing_label.current_target.class_id = (
+                self.ClassesSelection.currentIndex())
+            self.drawing_label.current_target.class_name = (
+                self.ClassesSelection.currentText())
+            self.drawing_label._draw_permanent()
+        
 
     def onSkeletonSelectionChanged(self, index):
         """
@@ -506,55 +570,6 @@ class AnimalPoseAnnotatorPage(QMainWindow, Ui_AnimalPoseAnnotator):
         if selected_indexes:
             print(f"Label info selection changed: {selected_indexes[0].data()}")
             # Implementation for label info selection goes here
-    
-    def onSaveLabel(self):
-        """Save current annotations to file"""
-        if not self.drawing_label.targets:
-            QMessageBox.warning(self, "Warning", "No annotations to save")
-            return
-
-        annotations = []
-        for target in self.drawing_label.targets:
-            annotation = {
-                "id": target.id,
-                "image_id": self.sorted_keys[self.current_image_index],
-                "class_id": target.class_id,
-                "class_name": target.class_name,
-                "bbox": {
-                    "x": target.bounding_rect.x(),
-                    "y": target.bounding_rect.y(),
-                    "width": target.bounding_rect.width(),
-                    "height": target.bounding_rect.height()
-                },
-                "points": [[p.x(), p.y()] for p in target.key_points],  # 修复属性名称
-                "lines": [[line[0].x(), line[0].y(), line[1].x(), line[1].y()] 
-                        for line in target.connections]  # 修复属性名称
-            }
-            annotations.append(annotation)
-            print(annotation)
-        
-    def closeEvent(self, event):
-        """Handle closing of the save dialog"""
-        self.scene.clear()
-        self.drawing_label = None
-        event.accept()
-
-    def wheelEvent(self, event):
-        """Adjust keypoint size with mouse wheel"""
-        if self.current_drawing_mode != "point" or not self.drawing_label.current_target:
-            return
-        
-        delta = event.angleDelta().y() / 120
-        self.drawing_label.current_target.point_radius = max(
-            1, min(self.drawing_label.current_target.point_radius + delta, 20)
-        )
-        self.drawing_label._commit_drawing()
-
-    def resizeEvent(self, event):
-        """Maintain aspect ratio when resizing window"""
-        super().resizeEvent(event)
-        if self.scene.items():
-            self.FrameDisplay.fitInView(self.scene.sceneRect(), Qt.KeepAspectRatio)
 
 def main():
     app = QApplication(sys.argv)
