@@ -1,4 +1,4 @@
-from PySide6.QtCore import  Qt, QSettings, QProcess, QFile, QTextStream, QTimer
+from PySide6.QtCore import  Qt, QSettings, QProcess, QFile, QTextStream, QTimer, QSize
 from PySide6.QtWidgets import  (QMenu, QApplication, QFileDialog, QMainWindow,
                                  QMessageBox, QTreeWidget, QTreeWidgetItem, QLabel, 
                                  QTreeWidgetItemIterator, QSplashScreen, QProgressBar)
@@ -16,8 +16,7 @@ from .annotatorpage import AnimalPoseAnnotatorPage
 from animalposetracker.gui import WindowFactory
 from animalposetracker.projector import AnimalPoseTrackerProject
 from animalposetracker.gui import (DARK_THEME_PATH, LIGHT_THEME_PATH, 
-                                   LOGO_PATH_TRANSPARENT, LOGO_PATH, 
-                                   LOGO_SMALL_PATH, WELCOME_PATH)
+                                   LOGO_PATH_TRANSPARENT, LOGO_PATH, WELCOME_PATH)
 
 class AnimalPoseTrackerPage(QMainWindow, Ui_AnimalPoseTracker):
     def __init__(self, parent=None):
@@ -335,9 +334,8 @@ class AnimalPoseTrackerPage(QMainWindow, Ui_AnimalPoseTracker):
                 self.setStyleSheet(stream.readAll())
                 file.close()
             if theme == "dark":
-                self.Logo.setPixmap(QPixmap(LOGO_PATH_TRANSPARENT))
+                self.Logo.setPixmap(QPixmap(LOGO_PATH))
             elif theme == "light":
-                # self.Logo.setPixmap(QPixmap(LOGO_PATH))
                 self.Logo.setPixmap(QPixmap(LOGO_PATH_TRANSPARENT))
         except Exception as e:
             QMessageBox.warning(self, "Theme Error", str(e))
@@ -866,7 +864,7 @@ class SplashScreen(QSplashScreen):
         self.progress = QProgressBar(self)
         self.progress.setGeometry(
             int(size.width() * 0.1),       # x: 10% from left
-            int(size.height() * 0.85),      # y: 85% from top
+            int(size.height() * 0.9),      # y: 85% from top
             int(size.width() * 0.8),       # width: 80% of total
             25                             # height
         )
