@@ -1,8 +1,11 @@
 from PySide6.QtCore import Qt, QPoint, QRect, QSize, Signal, QObject
 from PySide6.QtWidgets import (QWidget, QHBoxLayout, QLabel, QLineEdit, 
-                              QListWidgetItem, QGraphicsView, QCheckBox, QLayout)
+                              QListWidgetItem, QGraphicsView, QCheckBox, 
+                              QLayout, QTreeView, QHeaderView)
 from PySide6.QtGui import (QPainter, QPixmap, QPen, QColor, QCursor,
-                           QWheelEvent, QBrush, QFont, QFontMetrics)
+                           QWheelEvent, QBrush, QFont, QFontMetrics, 
+                           QStandardItemModel, QStandardItem)
+from typing import List
 
 
 class ListManager(QObject):
@@ -219,18 +222,127 @@ class AnnotationTarget:
     """Represents a single annotated object with visual elements"""
     def __init__(self, target_id, color):
         self.id = target_id
-        self.color = color          # Display color
-        self.class_id = 0           # Associated class ID
-        self.class_name = ""        # Class name from config
-        self.bounding_rect = QRect()  # Main bounding box
-        self.key_points = []        # List of keypoints (QPoint)
-        self.connections = []       # List of line connections [(QPoint, QPoint)]
-        self.point_radius = 5       # Radius for key points
+        # Display color
+        self.color = color
+        # List of bounding rectangles
+        # {"category_id": int,  "bbox": [x, y, w, h], "area": float, "category_name": str}
+        self.bounding_rect = {}   
+        # List of keypoints {"keypoint_id": {"keypoint_name": str, "pos": [x, y]}}  
+        self.keypoints =  {}   
+        # List of line connections {"id": {"skeleton":[id_n,id_m], "pos": [x1, y1, x2, y2]}}    
+        self.skeletons = {}       
+        self.point_radius = 5  # Radius for key points
 
+class AnnotationViewer:
+    def __init__(self, tree_view: QTreeView):
+        """Initialize the annotation viewer with a QTreeView
+        
+        Args:
+            tree_view: The QTreeView widget to display annotation hierarchy
+        """
+        self.tree_view = tree_view
+        self.model = QStandardItemModel()
+        self.tree_view.setModel(self.model)
+        self.current_highlight = None  # Stores currently highlighted item
+        self._setup_view()
+
+    def _setup_view(self):
+        """Configure tree view display properties"""
+        self.tree_view.setEditTriggers(QTreeView.NoEditTriggers)
+        self.tree_view.setIndentation(20)
+        self.tree_view.setColumnWidth(0, 200)  # Fixed width for property column
+    
+    def display_target(self, targets: List[AnnotationTarget]):
+        """Display target data with proper two-column expansion"""
+
+        self.model.clear()
+        self.model.setHorizontalHeaderLabels(["Property", "Value"])
+
+        for target in targets:
+            # Create root item
+            root = QStandardItem(f"Target {target.id}")
+            root.setData(target.id, Qt.UserRole)
+            self.model.appendRow([root, QStandardItem()])  # Empty value column for root
+
+            # 1. Bounding Box Section
+            if target.bounding_rect:
+                bbox_header = QStandardItem("Bounding Box")
+                root.appendRow([bbox_header, QStandardItem()])  # Empty value
+                
+                for key, value in target.bounding_rect.items():
+                    prop = QStandardItem(key.replace('_', ' ').title())
+                    val = QStandardItem(str(value))
+                    bbox_header.appendRow([prop, val])  # Proper value in second column
+
+            # 2. Keypoints Section
+            if target.keypoints:
+                kp_header = QStandardItem(f"Keypoints ({len(target.keypoints)})")
+                root.appendRow([kp_header, QStandardItem()])  # Empty value
+                
+                for kpt_id, kpt_data in target.keypoints.items():
+                    kp_parent = QStandardItem(f"{kpt_id}")
+                    kp_header.appendRow([kp_parent, QStandardItem()])  # Empty value
+                    
+                    # Name property-value pair
+                    name_prop = QStandardItem("Name")
+                    name_val = QStandardItem(kpt_data.get('name', 'Unnamed'))
+                    kp_parent.appendRow([name_prop, name_val])
+                    
+                    # Position property-value pair
+                    pos_prop = QStandardItem("Position")
+                    x, y = kpt_data['pos']
+                    pos_val = QStandardItem(f"({x}, {y})")
+                    kp_parent.appendRow([pos_prop, pos_val])
+
+            # 3. Skeletons Section
+            if target.skeletons:
+                skel_header = QStandardItem(f"Skeletons ({len(target.skeletons)})")
+                root.appendRow([skel_header, QStandardItem()])  # Empty value
+                
+                for skel_id, skel_data in target.skeletons.items():
+                    conn_prop = QStandardItem(f"Conn-{skel_id}")
+                    src, dst = skel_data['skeleton']
+                    conn_val = QStandardItem(f"{src}->{dst}")
+                    skel_header.appendRow([conn_prop, conn_val])
+
+            self.tree_view.expandAll()
+
+    
+    def highlight_target(self, target_id: int):
+        """Highlight a specific target in the tree view
+        
+        Args:
+            target_id: ID of the target to highlight
+        """
+        # Clear previous highlight
+        if self.current_highlight:
+            for col in range(self.model.columnCount()):
+                self.current_highlight.setBackground(QBrush())
+        
+        # Find and highlight new target
+        items = self.model.findItems(f"Target {target_id}")
+        if items:
+            self.current_highlight = items[0]
+            highlight_color = QBrush(QColor(173, 216, 230))  # Light blue
+            for col in range(self.model.columnCount()):
+                self.current_highlight.setBackground(highlight_color)
+            self.tree_view.scrollTo(self.model.indexFromItem(items[0]))
+    
+    def clear_highlight(self):
+        """Clear all highlighting from the tree view"""
+        if self.current_highlight:
+            for col in range(self.model.columnCount()):
+                self.current_highlight.setBackground(QBrush())
+            self.current_highlight = None
+    
 class DrawingBoard(QLabel):
     """Main canvas for creating and managing annotations"""
     
-    def __init__(self, parent=None):
+    def __init__(self, parent=None, 
+                 keypoints=None, 
+                 classes=None, 
+                 skeletons=None,
+                 labels=None):
         super().__init__(parent)
         self.setMouseTracking(True)
         self.setAlignment(Qt.AlignCenter)
@@ -244,9 +356,18 @@ class DrawingBoard(QLabel):
         # Drawing state
         self.drawing_mode = "none"
         self.current_target = None
+        self.current_target_id = 0
         self.start_position = None
         self.current_pos = None
         self.color_index = 0
+
+        # keypoints, classes and skeleton selection
+        self.keypoints = keypoints
+        self.classes = classes
+        self.skeletons = skeletons
+        self.labels = labels
+        self.labels_view = AnnotationViewer(labels)
+        self.labels.clicked.connect(self._on_label_click)
         
         # Visual settings
         self.pen_settings = {
@@ -266,6 +387,29 @@ class DrawingBoard(QLabel):
                 "style": Qt.DashLine
             }
         }
+    
+    def _on_label_click(self, index):
+        """Handle label selection from parent widget"""
+        target_id = index.data(Qt.UserRole)
+        if target_id is not None:
+            self.set_current_target(target_id)
+
+    def set_current_target(self, target_id = None):
+        """Set current target for drawing operations"""
+        if not self.targets:
+            self.current_target_id = None
+            if hasattr(self, 'labels_view'):
+                self.labels_view.clear_highlight()
+                return
+        
+        if target_id is None:
+            target_id = self.targets[0].id
+
+        if not any(t.id == target_id for t in self.targets):
+            raise ValueError(f"Target {target_id} not found")
+            
+        self.current_target_id = target_id
+        self.labels_view.highlight_target(target_id)
 
     def reset_canvases(self):
         """Initialize or clear both canvases"""
@@ -292,13 +436,7 @@ class DrawingBoard(QLabel):
         """Create new annotation target with initial properties"""
         color = self.generate_color()
         new_target = AnnotationTarget(len(self.targets), color)
-        
-        # Sync class info from parent if available
-        parent = self.parent()
-        if parent and hasattr(parent, 'class_selector'):
-            new_target.class_id = parent.class_selector.currentIndex()
-            new_target.class_name = parent.class_selector.currentText()
-            
+        self.current_target_id = new_target.id
         self.targets.append(new_target)
         return new_target
 
@@ -308,182 +446,305 @@ class DrawingBoard(QLabel):
             
         pos = event.pos()
         
-        if self.drawing_mode == "point":
+        if self.drawing_mode == "rect":
+            self._handle_rect_mode(pos)
+        elif self.drawing_mode == "point":
             self._handle_point_mode(pos)
-        elif self.drawing_mode == "rect":
-            if self.start_position is None:
-                self.start_position = pos
-                self.current_target = self.create_target()
-                self.current_target.bounding_rect = QRect(pos, pos)
-            else:
-                end_pos = pos
-                if (abs(self.start_position.x() - end_pos.x()) > 5 or 
-                    abs(self.start_position.y() - end_pos.y()) > 5):
-                    rect = QRect(self.start_position, end_pos).normalized()
-                    self.current_target.bounding_rect = rect
-                    self._add_to_connections()
-                    self._commit_changes()
-                self.start_position = None
-                self.current_target = None
-                self.reset_temp_canvas()
-        elif self.drawing_mode == "line":
-            if self.start_position is None:
-                self.start_position = pos
-                self.current_target = self.create_target()
-                self.current_target.connections.append([pos, pos])
-            else:
-                end_pos = pos
-                if (abs(self.start_position.x() - end_pos.x()) > 5 or 
-                    abs(self.start_position.y() - end_pos.y()) > 5):
-                    self.current_target.connections[-1][1] = end_pos
-                    self._commit_changes()
-                self.start_position = None
-                self.current_target = None
-                self.reset_temp_canvas()
+        elif self.drawing_mode == "bline":
+            self._handle_bline_mode(pos)
                 
         super().mousePressEvent(event)
+    
+    def _handle_rect_mode(self, pos):
+        """Process rectangle drawing operations"""
+        if self.start_position is None:
+            self.start_position = pos
+            self.current_target = self.create_target()
+        else:
+            end_pos = pos
+            if (abs(self.start_position.x() - end_pos.x()) > 5 or 
+                abs(self.start_position.y() - end_pos.y()) > 5):
+                rect = QRect(self.start_position, end_pos).normalized()
+                self.current_target.bounding_rect = self._get_class_info(rect)
+                self._commit_changes()
+                self.start_position = None
+                self.current_target = None
+                self.reset_temp_canvas()
+
+    def _get_class_info(self, rect: QRect):
+        """Get classification metadata from parent widget"""
+        class_id = self.classes.currentIndex()
+        class_name = self.classes.currentText()
+        x, y, w, h = rect.getRect()
+        return {
+                "category_id": class_id,
+                "category_name": class_name,
+                "bbox": [x, y, w, h],
+                "area": w * h
+            }
+
+    def _handle_point_mode(self, click_pos):
+        """Process point annotation operations"""
+        if not self.targets:
+            raise ValueError("No targets for point annotation")
+        self.current_target = self.targets[self.current_target_id]
+        if not self.current_target:
+            raise ValueError("No current target for point annotation")
+        
+        point_info = self._get_keypoint_info(click_pos)
+        self.current_target.keypoints.update(point_info)
+
+        self._commit_changes()
+    
+        next_idx = (self.keypoints.currentIndex() + 1) % self.keypoints.count()
+        self.keypoints.setCurrentIndex(next_idx)
+        
+
+
+    def _get_keypoint_info(self, pos):
+        """Get keypoint metadata from parent widget"""
+        kpt_id = self.keypoints.currentIndex()
+        kpt_name = self.keypoints.currentText()
+        return {kpt_id: {"name": kpt_name, "pos": (pos.x(), pos.y())}}
+
+    def _handle_bline_mode(self, click_pos):
+        """Process bone line drawing operations"""
+        self.current_target = self.targets[self.current_target_id]
+        if not self.current_target:
+            raise ValueError("No current target for bone line drawing")
+            
+        nearest_id = self._find_nearest_keypoint(click_pos)
+        if nearest_id is None:
+            return
+
+        if not hasattr(self, '_bline_temp_points'):
+            self._bline_temp_points = []
+            
+        self._bline_temp_points.append(nearest_id)
+
+        if len(self._bline_temp_points) == 2:
+            start_id, end_id = self._bline_temp_points
+            if start_id != end_id:
+                self._create_skeleton_connection(start_id, end_id)
+            del self._bline_temp_points
+            self._commit_changes()
+
+    def _create_skeleton_connection(self, start_id, end_id):
+        """Create a skeleton connection between two keypoints"""
+        skeleton_id = len(self.current_target.skeletons)
+        start_pos = self.current_target.keypoints[start_id]["pos"]
+        end_pos = self.current_target.keypoints[end_id]["pos"]
+        self.current_target.skeletons[skeleton_id] = {
+            "skeleton": (start_id, end_id),
+            "pos": [*start_pos, *end_pos]
+        }
+
+    def _find_nearest_keypoint(self, pos):
+        """Find nearest keypoint within tolerance range"""
+        if not self.current_target or not self.current_target.keypoints:
+            return None
+            
+        min_distance = self.current_target.point_radius * 2
+        nearest_id, best_dist = None, float('inf')
+        
+        for kpt_id, kpt_data in self.current_target.keypoints.items():
+            kpt_pos = QPoint(*kpt_data["pos"])
+            current_dist = (kpt_pos - pos).manhattanLength()
+            if current_dist < min_distance and current_dist < best_dist:
+                best_dist = current_dist
+                nearest_id = kpt_id
+        return nearest_id
 
     def mouseMoveEvent(self, event):
-        if self.drawing_mode == "rect" and self.start_position:
-            self.current_pos = event.pos()
-            self._update_temp_canvas()
-        elif self.drawing_mode == "line" and self.start_position:
-            self.current_pos = event.pos()
-            self._update_temp_canvas()
+        """Handle mouse movement events"""
         super().mouseMoveEvent(event)
+        self.current_pos = event.pos()
+        
+        if self.drawing_mode == "rect" and self.start_position:
+            self._update_temp_canvas()
+        elif self.drawing_mode == "bline":
+            self._process_bline_move(event.pos())
+
+    def _process_bline_move(self, pos):
+        """Update bone line preview during mouse movement"""
+        old_nearest = getattr(self, '_nearest_point_id', None)
+        self._nearest_point_id = self._find_nearest_keypoint(pos)
+        
+        if self._nearest_point_id != old_nearest or hasattr(self, '_bline_temp_points'):
+            self._update_temp_canvas()
 
     def mouseReleaseEvent(self, event):
+        """Handle mouse release events"""
         self.current_pos = None
         super().mouseReleaseEvent(event)
 
     def _update_temp_canvas(self):
+        """Update temporary overlay canvas"""
         self.temp_pixmap.fill(Qt.transparent)
         painter = QPainter(self.temp_pixmap)
         painter.setRenderHint(QPainter.Antialiasing)
         
-        if self.drawing_mode == "rect" and self.start_position and self.current_pos:
-            self._draw_rectangle_preview(painter, self.start_position, self.current_pos)
-        elif self.drawing_mode == "line" and self.start_position and self.current_pos:
-            self._draw_line_preview(painter, self.start_position, self.current_pos)
+        if self.drawing_mode == "bline":
+            self._draw_bline_preview(painter)
+        elif self.drawing_mode == "rect" and self.start_position:
+            self._draw_rect_preview(painter, self.start_position, self.current_pos)
             
         painter.end()
         self.update_pixmap()
-    
-    def _draw_rectangle_preview(self, painter, start, end):
+
+    def _draw_rect_preview(self, painter, start, end):
+        """Draw rectangle preview with dashed lines"""
         style = self.preview_style["rect"]
         pen = QPen(style["color"], style["width"], style["style"])
+        
+        painter.save()
         painter.setPen(pen)
-        painter.drawRect(QRect(start, end).normalized())
+        painter.setBrush(Qt.NoBrush)
+        
+        rect = QRect(start, end).normalized()
+        if rect.width() < 3 or rect.height() < 3:
+            painter.drawLine(rect.topLeft(), rect.bottomRight())
+            painter.drawLine(rect.topRight(), rect.bottomLeft())
+        else:
+            painter.drawRect(rect)
+            
+        painter.restore()
 
-    def _draw_line_preview(self, painter, start, end):
-        style = self.preview_style["line"]
-        pen = QPen(style["color"], style["width"], style["style"])
-        painter.setPen(pen)
-        painter.drawLine(start, end)
+    def _draw_bline_preview(self, painter):
+        """Draw bone line connection preview"""
+        if not self.current_target:
+            return
+            
+        # Draw hovered point highlight
+        if hasattr(self, '_nearest_point_id') and self._nearest_point_id is not None:
+            kpt_data = self.current_target.keypoints[self._nearest_point_id]
+            pos = QPoint(*kpt_data["pos"])
+            painter.setBrush(QColor(255, 255, 0, 180))
+            painter.drawEllipse(pos, self.current_target.point_radius * 1.5, 
+                              self.current_target.point_radius * 1.5)
+        
+        # Draw temporary connection preview
+        if hasattr(self, '_bline_temp_points') and len(self._bline_temp_points) == 1:
+            start_id = self._bline_temp_points[0]
+            start_pos = QPoint(*self.current_target.keypoints[start_id]["pos"])
+            end_pos = QPoint(*self.current_target.keypoints[self._nearest_point_id]["pos"])
+            
+            pen = QPen(QColor(100, 255, 100, 150), 2, Qt.DashLine)
+            painter.setPen(pen)
+            painter.drawLine(start_pos, end_pos)
+
+    def update_pixmap(self):
+        """Composite main and temp canvases for display"""
+        if self.main_pixmap.size() != self.size():
+            self.reset_canvases()
+            
+        composite = QPixmap(self.size())
+        composite.fill(Qt.transparent)
+        painter = QPainter(composite)
+        painter.drawPixmap(0, 0, self.main_pixmap)
+        painter.drawPixmap(0, 0, self.temp_pixmap)
+        painter.end()
+        
+        self.setPixmap(composite)
+        self.repaint()
 
     def _commit_changes(self):
-        """Update main canvas with current state"""
+        """Commit changes to main canvas"""
         self.main_pixmap.fill(Qt.transparent)
         painter = QPainter(self.main_pixmap)
         painter.setRenderHint(QPainter.Antialiasing)
+
+        self.labels_view.display_target(self.targets)
         
-        # Draw all existing annotations
         for target in self.targets:
             self._draw_target(target, painter)
             
         painter.end()
         self.update_pixmap()
 
-    def update_pixmap(self):
-        composite = QPixmap(self.size())
-        composite.fill(Qt.transparent)
-        
-        painter = QPainter(composite)
-        painter.drawPixmap(0, 0, self.main_pixmap) 
-        painter.drawPixmap(0, 0, self.temp_pixmap)  
-        painter.end()
-        
-        self.setPixmap(composite)
-        self.repaint()
-
-
-    def _handle_point_mode(self, click_pos):
-        """Process point drawing operations"""
-        if click_pos is None:
-            return
-        if not self.current_target:
-            self.current_target = self.create_target()
-        self.current_target.key_points.append(click_pos)
-        self._commit_changes()
-
-    def _handle_rect_mode_start(self):
-        """Initialize new rectangle annotation"""
-        self.current_target = self.create_target()
-        self.current_target.bounding_rect = QRect(self.start_position, QSize())
-
-    def _handle_rect_mode_end(self, end_pos):
-        """Finalize rectangle dimensions"""
-        if (abs(self.start_position.x() - end_pos.x()) > 5 and 
-            abs(self.start_position.y() - end_pos.y()) > 5):
-            self.current_target.bounding_rect = QRect(
-                self.start_position, end_pos
-            ).normalized()
-            print("Rect:", self.current_target.bounding_rect)
-            self._add_to_connections()
-            self._commit_changes()
-
-    def _handle_line_mode_start(self):
-        """Initialize new line drawing"""
-        self.current_target = self.create_target()
-        self.current_target.connections.append([self.start_position, self.start_position])
-
-    def _handle_line_mode_end(self, end_pos):
-        """Finalize line connection"""
-        if self.current_target.connections:
-            self.current_target.connections[-1][1] = end_pos
-            self._commit_changes()
-
-    def _add_to_connections(self):
-        """Add default connection for new rectangles"""
-        if self.current_target.bounding_rect.isValid():
-            center = self.current_target.bounding_rect.center()
-            self.current_target.connections.append([center, center])
-
     def _draw_target(self, target, painter):
         """Draw complete annotation target"""
         # Draw bounding box
         painter.setBrush(Qt.NoBrush)
-        painter.setPen(QPen(target.color, self.pen_settings["width"]))
-        painter.drawRect(target.bounding_rect)
+        if target.bounding_rect:
+            painter.setPen(QPen(target.color, self.pen_settings["width"]))
+            rect = QRect(*target.bounding_rect["bbox"])
+            painter.drawRect(rect)
         
-        # Draw key points
+        # Draw keypoints
         painter.setBrush(target.color)
-        for point in target.key_points:
-            if point and hasattr(target, 'point_radius') and target.point_radius:
-                painter.drawEllipse(point, target.point_radius, target.point_radius)
-            else:
-                print("Invalid point:", point)
+        for kpt_data in target.keypoints.values():
+            pos = QPoint(*kpt_data["pos"])
+            painter.drawEllipse(pos, target.point_radius, target.point_radius)
         
-        # Draw connections
+        # Draw skeletons
         painter.setBrush(Qt.NoBrush)
-        painter.setPen(QPen(target.color, self.pen_settings["width"], self.pen_settings["style"]))
-        for start, end in target.connections:
+        painter.setPen(QPen(target.color, self.pen_settings["width"], 
+                          Qt.SolidLine))
+        for skeleton in target.skeletons.values():
+            start = QPoint(skeleton["pos"][0], skeleton["pos"][1])
+            end = QPoint(skeleton["pos"][2], skeleton["pos"][3])
             painter.drawLine(start, end)
 
     def set_drawing_mode(self, mode):
         """Set active drawing tool"""
-        valid_modes = ["none", "point", "rect", "line"]
+        valid_modes = ["none", "point", "rect", "bline", "line"]
         if mode not in valid_modes:
-            raise ValueError(f"Invalid mode: {mode}")
+            raise ValueError(f"Invalid drawing mode: {mode}")
+        
+        if mode == "line":
+            if self.current_target and self.current_target.keypoints:
+                self._handle_line_mode()
+            else:
+                print("Create keypoints first before generating skeletons")
+                mode = "none"  
             
         self.drawing_mode = mode
         self.start_position = None
-        self.current_target = None
         self.reset_temp_canvas()
         self.setFocus()
+    
+    def _handle_line_mode(self):
+        """Automatically create all skeleton connections from parent's definition"""
+        self.current_target = self.targets[self.current_target_id]
+        if not self.current_target:
+            raise ValueError("No current target for line annotation")
+        
+        # Clear existing skeleton connections
+        self.current_target.skeletons.clear()
+        
+        # Create connections based on predefined skeletons
+        for i in range(self.skeletons.count()):
+            connection_text = self.skeletons.itemText(i)
+            try:
+                src, dest = map(int, connection_text.strip().split('->'))
+                self._validate_and_create_connection(src, dest)
+            except ValueError:
+                print(f"Ignoring invalid skeleton format: {connection_text}")
+        
+        self._commit_changes()
+    
+    def _validate_and_create_connection(self, src, dest):
+        """Validate and create a skeleton connection between keypoints"""
+        if src == dest:
+            return
+            
+        keypoints = self.current_target.keypoints
+        if src not in keypoints or dest not in keypoints:
+            print(f"Missing keypoints for connection {src}->{dest}")
+            return
+            
+        start_pos = keypoints[src]["pos"]
+        end_pos = keypoints[dest]["pos"]
+        
+        skeleton_id = len(self.current_target.skeletons)
+        self.current_target.skeletons[skeleton_id] = {
+            "skeleton": (src, dest),
+            "pos": [*start_pos, *end_pos]
+        }
 
     def clear_annotations(self):
-        """Remove all existing annotations"""
+        """Clear all annotations from canvas"""
         self.targets.clear()
         self.reset_canvases()
         self.update_pixmap()

@@ -2,7 +2,7 @@ from PySide6.QtCore import Qt, QFile, QTextStream
 from PySide6.QtWidgets import (QApplication, QFileDialog, QMainWindow,
                                QMessageBox, QTreeWidgetItem, QTreeWidgetItemIterator,
                                QGraphicsScene, QGraphicsView)
-from PySide6.QtGui import QPixmap, QPainter
+from PySide6.QtGui import QPixmap, QPainter, QStandardItemModel
 from animalposetracker.gui import (DARK_THEME_PATH, LIGHT_THEME_PATH,
                                   LOGO_PATH_TRANSPARENT, LOGO_PATH,
                                   LOGO_SMALL_PATH, WELCOME_PATH)
@@ -52,7 +52,10 @@ class AnimalPoseAnnotatorPage(QMainWindow, Ui_AnimalPoseAnnotator):
         self.actionDrawBBox.triggered.connect(lambda: self.setDrawingMode("rect"))
         self.actionDrawPoint.triggered.connect(lambda: self.setDrawingMode("point"))
         self.actionDrawLine.triggered.connect(lambda: self.setDrawingMode("line"))
+        self.actionBuildSkeleton.triggered.connect(lambda: self.setDrawingMode("bline"))
         self.actionNoLabel.triggered.connect(lambda: self.setDrawingMode("none"))
+        self.actionDrawLine.setEnabled(False)
+        self.actionDrawPoint.setEnabled(False)
         
         # Editing operations
         self.actionAdd.triggered.connect(self.onAddItem)
@@ -80,6 +83,7 @@ class AnimalPoseAnnotatorPage(QMainWindow, Ui_AnimalPoseAnnotator):
         # Tree view selections
         self.ConfigureDisplay.itemSelectionChanged.connect(self.onConfigureDisplaySelectionChanged)
 
+
     def _CreateGraphicsScene(self):
         """Create and configure the graphics scene"""
         self._ReplaceGraphicsView()
@@ -96,7 +100,12 @@ class AnimalPoseAnnotatorPage(QMainWindow, Ui_AnimalPoseAnnotator):
 
     def _init_drawing_board(self):
         """Initialize the drawing board"""
-        self.drawing_label = DrawingBoard()
+        self.drawing_label = DrawingBoard(keypoints=self.KeypointsSeletion,
+                                          classes=self.ClassesSelection,
+                                          skeletons=self.SkeletonSelection,
+                                          labels=self.LabelInformationView)
+        if hasattr(self.drawing_label, 'targets') and self.drawing_label.targets:
+            self.drawing_label.set_current_target()
         self.drawing_label.setAutoFillBackground(True)
         self.drawing_label.setAttribute(Qt.WA_TranslucentBackground)
         self.drawing_proxy = self.scene.addWidget(self.drawing_label)
@@ -114,9 +123,18 @@ class AnimalPoseAnnotatorPage(QMainWindow, Ui_AnimalPoseAnnotator):
 
     def setDrawingMode(self, mode):
         """Set the current drawing mode and update UI"""
-        valid_modes = ["none", "point", "rect", "line"]
+        valid_modes = ["none", "point", "rect", "line", "bline"]
         if mode not in valid_modes:
             raise ValueError(f"Invalid mode: {mode}")
+        if mode == "none":
+            self.actionDrawLine.setEnabled(False)
+            self.actionDrawPoint.setEnabled(False)
+            self.actionBuildSkeleton.setEnabled(False)
+        elif mode == "rect":
+            self.actionDrawPoint.setEnabled(True)
+        elif mode == "point":
+            self.actionDrawLine.setEnabled(True)
+            self.actionBuildSkeleton.setEnabled(True)
         
         self.current_drawing_mode = mode
         self.drawing_label.set_drawing_mode(mode)
@@ -129,7 +147,8 @@ class AnimalPoseAnnotatorPage(QMainWindow, Ui_AnimalPoseAnnotator):
             return
         
         self.images.clear()
-        supported_extensions = {'.jpg', '.jpeg', '.png', '.bmp', '.gif', '.tif', '.tiff', '.webp'}
+        supported_extensions = {'.jpg', '.jpeg', '.png', '.bmp', 
+                                '.gif', '.tif', '.tiff', '.webp'}
         folder = Path(folder_path)
         
         for img_file in folder.iterdir():
@@ -216,7 +235,7 @@ class AnimalPoseAnnotatorPage(QMainWindow, Ui_AnimalPoseAnnotator):
             self.project_config['classes_name'])
         
         skeleton_links = [
-            f"{src} -> {dest}" for src, dest in self.project_config['skeleton']
+            f"{src}->{dest}" for src, dest in self.project_config['skeleton']
         ]
         self.SkeletonSelection.addItems(skeleton_links)
         
@@ -368,7 +387,7 @@ class AnimalPoseAnnotatorPage(QMainWindow, Ui_AnimalPoseAnnotator):
             list_item.setText(0, str(idx))
             
             if config_type == 'skeleton':
-                connection_text = f"{item[0]} -> {item[1]}"
+                connection_text = f"{item[0]}->{item[1]}"
                 list_item.setText(1, connection_text)
             else:
                 list_item.setText(1, str(item))

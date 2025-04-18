@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 
 ################################################################################
-## Form generated from reading UI file 'animalposeannotatorygOtJR.ui'
+## Form generated from reading UI file 'animalposeannotatorrhBMkm.ui'
 ##
 ## Created by: Qt User Interface Compiler version 6.8.2
 ##
@@ -101,6 +101,11 @@ class Ui_AnimalPoseAnnotator(object):
         self.actionDark.setObjectName(u"actionDark")
         self.actionLight = QAction(AnimalPoseAnnotator)
         self.actionLight.setObjectName(u"actionLight")
+        self.actionBuildSkeleton = QAction(AnimalPoseAnnotator)
+        self.actionBuildSkeleton.setObjectName(u"actionBuildSkeleton")
+        icon15 = QIcon(QIcon.fromTheme(u"format-text-strikethrough"))
+        self.actionBuildSkeleton.setIcon(icon15)
+        self.actionBuildSkeleton.setMenuRole(QAction.MenuRole.NoRole)
         self.AnimalPoseAnnotatorLayout = QWidget(AnimalPoseAnnotator)
         self.AnimalPoseAnnotatorLayout.setObjectName(u"AnimalPoseAnnotatorLayout")
         self.AnimalPoseAnnotatorHLayout = QHBoxLayout(self.AnimalPoseAnnotatorLayout)
@@ -261,6 +266,7 @@ class Ui_AnimalPoseAnnotator(object):
         self.toolBar.addAction(self.actionDrawBBox)
         self.toolBar.addAction(self.actionDrawPoint)
         self.toolBar.addAction(self.actionDrawLine)
+        self.toolBar.addAction(self.actionBuildSkeleton)
         self.toolBar.addAction(self.actionAdd)
         self.toolBar.addAction(self.actionDelete)
         self.toolBar.addAction(self.actionUndoLasted)
@@ -291,6 +297,7 @@ class Ui_AnimalPoseAnnotator(object):
         self.actionHelp.setText(QCoreApplication.translate("AnimalPoseAnnotator", u"Help", None))
         self.actionDark.setText(QCoreApplication.translate("AnimalPoseAnnotator", u"Dark", None))
         self.actionLight.setText(QCoreApplication.translate("AnimalPoseAnnotator", u"Light", None))
+        self.actionBuildSkeleton.setText(QCoreApplication.translate("AnimalPoseAnnotator", u"BuildSkeleton", None))
         self.EditClasses.setText(QCoreApplication.translate("AnimalPoseAnnotator", u"Edit Classes", None))
         self.EditKeypoints.setText(QCoreApplication.translate("AnimalPoseAnnotator", u"Edit Keypoints", None))
         self.EditSkeleton.setText(QCoreApplication.translate("AnimalPoseAnnotator", u"Edit Sekelton", None))

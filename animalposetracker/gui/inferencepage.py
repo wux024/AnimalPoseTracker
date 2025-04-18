@@ -24,7 +24,7 @@ class AnimalPoseInferencePage(QWidget, Ui_AnimalPoseInference):
         self.data_config_path = None
         self.data_config = dict()
         self.weights_path = None
-        self.inference = InferenceEngine()
+        #self.inference = InferenceEngine()
 
         # init button
         self.initialize_controls()

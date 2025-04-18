@@ -331,6 +331,7 @@
    <addaction name="actionDrawBBox"/>
    <addaction name="actionDrawPoint"/>
    <addaction name="actionDrawLine"/>
+   <addaction name="actionBuildSkeleton"/>
    <addaction name="actionAdd"/>
    <addaction name="actionDelete"/>
    <addaction name="actionUndoLasted"/>
@@ -491,6 +492,17 @@
   <action name="actionLight">
    <property name="text">
     <string>Light</string>
+   </property>
+  </action>
+  <action name="actionBuildSkeleton">
+   <property name="icon">
+    <iconset theme="format-text-strikethrough"/>
+   </property>
+   <property name="text">
+    <string>BuildSkeleton</string>
+   </property>
+   <property name="menuRole">
+    <enum>QAction::MenuRole::NoRole</enum>
    </property>
   </action>
  </widget>

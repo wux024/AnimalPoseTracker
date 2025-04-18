@@ -340,8 +340,6 @@ class AnimalPoseTrackerPage(QMainWindow, Ui_AnimalPoseTracker):
         except Exception as e:
             QMessageBox.warning(self, "Theme Error", str(e))
         
-        
-    
     def onBrowseConfigureFile(self):
         """Slot for browsing and selecting YAML configuration files.
         Opens a file dialog to select .yaml or .yml files, validates the selection,
