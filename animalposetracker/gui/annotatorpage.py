@@ -21,8 +21,8 @@ class AnimalPoseAnnotatorPage(QMainWindow, Ui_AnimalPoseAnnotator):
     def __init__(self, parent=None):
         super().__init__(parent)
         self.setupUi(self)
-        self.initialize_controls()
         self.setupConnections()
+        self.initialize_controls()
         self.current_drawing_mode = "none"
         self.annotation_targets = []
 
@@ -32,6 +32,7 @@ class AnimalPoseAnnotatorPage(QMainWindow, Ui_AnimalPoseAnnotator):
         self.project_config = {}
         self.images = {}
         self.current_image_index = -1
+        self.current_image_path = ""
         self.sorted_keys = []
         self._CreateGraphicsScene()
         self.ConfigureDisplay.header().close()
@@ -79,9 +80,15 @@ class AnimalPoseAnnotatorPage(QMainWindow, Ui_AnimalPoseAnnotator):
         self.KeypointsSeletion.currentIndexChanged.connect(self.onKeypointSelectionChanged)
         self.ClassesSelection.currentIndexChanged.connect(self.onClassSelectionChanged)
         self.SkeletonSelection.currentIndexChanged.connect(self.onSkeletonSelectionChanged)
-        
+        self.Visible.currentIndexChanged.connect(self.onVisibleChanged)
+        self.Visible.addItems(['Invisible', 'Occluded', 'Visible'])
+        self.Visible.setCurrentIndex(2)
         # Tree view selections
         self.ConfigureDisplay.itemSelectionChanged.connect(self.onConfigureDisplaySelectionChanged)
+
+        # Line Width and Radius
+        self.LineWidth.valueChanged.connect(self.onLineWidthChanged)
+        self.Radius.valueChanged.connect(self.onRadiusChanged)
 
 
     def _CreateGraphicsScene(self):
@@ -103,7 +110,13 @@ class AnimalPoseAnnotatorPage(QMainWindow, Ui_AnimalPoseAnnotator):
         self.drawing_label = DrawingBoard(keypoints=self.KeypointsSeletion,
                                           classes=self.ClassesSelection,
                                           skeletons=self.SkeletonSelection,
-                                          labels=self.LabelInformationView)
+                                          labels=self.LabelInformationView,
+                                          visible=self.Visible)
+        
+        if hasattr(self, 'LineWidth'):
+            self.drawing_label.pen_settings["width"] = self.LineWidth.value()
+        if hasattr(self, 'Radius'):
+            self.drawing_label.pen_settings["radius"] = self.Radius.value()
         if hasattr(self.drawing_label, 'targets') and self.drawing_label.targets:
             self.drawing_label.set_current_target()
         self.drawing_label.setAutoFillBackground(True)
@@ -111,6 +124,7 @@ class AnimalPoseAnnotatorPage(QMainWindow, Ui_AnimalPoseAnnotator):
         self.drawing_proxy = self.scene.addWidget(self.drawing_label)
         self.drawing_proxy.setZValue(1)
         self.drawing_label.setVisible(True)
+        
 
     def _ReplaceGraphicsView(self):
         """Replace default graphics view with custom zoomable version"""
@@ -351,7 +365,6 @@ class AnimalPoseAnnotatorPage(QMainWindow, Ui_AnimalPoseAnnotator):
         iterator = QTreeWidgetItemIterator(self.ConfigureDisplay)
         while iterator.value():
             item = iterator.value()
-            idx = int(item.text(0))
             if config_type == 'skeleton':
                 try:
                     src, dest = item.text(1).split('->')
@@ -503,6 +516,10 @@ class AnimalPoseAnnotatorPage(QMainWindow, Ui_AnimalPoseAnnotator):
         """
         print(f"Skeleton selection changed to index: {index}")
         # Implementation for skeleton selection change goes here
+    
+    def onVisibleChanged(self, index):
+        """Handle visibility change for current target"""
+        pass
 
     def onConfigureDisplaySelectionChanged(self):
         """
@@ -531,43 +548,54 @@ class AnimalPoseAnnotatorPage(QMainWindow, Ui_AnimalPoseAnnotator):
         if not self.drawing_label.targets:
             QMessageBox.warning(self, "Warning", "No annotations to save")
             return
-
+    
+        image = {
+                "id": self.current_image_index,
+                "file_name": self.sorted_keys[self.current_image_index],
+                "width": self.drawing_label.main_pixmap.width(),
+                "height": self.drawing_label.main_pixmap.height(),
+                "license": "",
+                "date_captured": "",
+        }
         annotations = []
         for target in self.drawing_label.targets:
+            if target.keypoints:
+                keypoints = [target.keypoints[kp_id]["pos"] for kp_id in sorted(target.keypoints.keys())]
+            else:
+                keypoints = []
             annotation = {
                 "id": target.id,
-                "image_id": self.sorted_keys[self.current_image_index],
-                "class_id": target.class_id,
-                "class_name": target.class_name,
-                "bbox": {
-                    "x": target.bounding_rect.x(),
-                    "y": target.bounding_rect.y(),
-                    "width": target.bounding_rect.width(),
-                    "height": target.bounding_rect.height()
-                },
-                "points": [[p.x(), p.y()] for p in target.key_points],  # 修复属性名称
-                "lines": [[line[0].x(), line[0].y(), line[1].x(), line[1].y()] 
-                        for line in target.connections]  # 修复属性名称
+                "image_id": self.current_image_index,
+                "category_id": target.bounding_rect.get('category_id'),
+                "bbox": target.bounding_rect.get('bbox'),
+                "area": target.bounding_rect.get('area'),
+                "iscrowd": int(self.IsCrowd.isChecked()),
+                "keypoints": keypoints, 
             }
             annotations.append(annotation)
-            print(annotation)
+        coco_dict = {
+            "images": [image],
+            "annotations": annotations,
+        }
+        print(coco_dict)
+
+    def onLineWidthChanged(self, value):
+        """Handle line width change"""
+        if hasattr(self, 'drawing_label'):
+            self.drawing_label.pen_settings['width'] = value
+            self.drawing_label._commit_changes()
+    
+    def onRadiusChanged(self, value):
+        """Handle radius change"""
+        if hasattr(self, 'drawing_label'):
+            self.drawing_label.pen_settings['radius'] = value
+            self.drawing_label._commit_changes()
         
     def closeEvent(self, event):
         """Handle closing of the save dialog"""
         self.scene.clear()
         self.drawing_label = None
         event.accept()
-
-    def wheelEvent(self, event):
-        """Adjust keypoint size with mouse wheel"""
-        if self.current_drawing_mode != "point" or not self.drawing_label.current_target:
-            return
-        
-        delta = event.angleDelta().y() / 120
-        self.drawing_label.current_target.point_radius = max(
-            1, min(self.drawing_label.current_target.point_radius + delta, 20)
-        )
-        self.drawing_label._commit_drawing()
 
     def resizeEvent(self, event):
         """Maintain aspect ratio when resizing window"""

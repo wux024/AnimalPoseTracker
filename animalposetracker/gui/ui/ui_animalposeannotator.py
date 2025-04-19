@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 
 ################################################################################
-## Form generated from reading UI file 'animalposeannotatorrhBMkm.ui'
+## Form generated from reading UI file 'animalposeannotatorCfYrbY.ui'
 ##
 ## Created by: Qt User Interface Compiler version 6.8.2
 ##
@@ -16,11 +16,12 @@ from PySide6.QtGui import (QAction, QBrush, QColor, QConicalGradient,
     QIcon, QImage, QKeySequence, QLinearGradient,
     QPainter, QPalette, QPixmap, QRadialGradient,
     QTransform)
-from PySide6.QtWidgets import (QApplication, QComboBox, QGraphicsView, QGroupBox,
-    QHBoxLayout, QHeaderView, QLabel, QMainWindow,
-    QMenu, QMenuBar, QPushButton, QSizePolicy,
-    QStatusBar, QToolBar, QTreeView, QTreeWidget,
-    QTreeWidgetItem, QVBoxLayout, QWidget)
+from PySide6.QtWidgets import (QApplication, QCheckBox, QComboBox, QGraphicsView,
+    QGroupBox, QHBoxLayout, QHeaderView, QLabel,
+    QMainWindow, QMenu, QMenuBar, QPushButton,
+    QSizePolicy, QSlider, QStatusBar, QToolBar,
+    QTreeView, QTreeWidget, QTreeWidgetItem, QVBoxLayout,
+    QWidget)
 
 class Ui_AnimalPoseAnnotator(object):
     def setupUi(self, AnimalPoseAnnotator):
@@ -113,7 +114,7 @@ class Ui_AnimalPoseAnnotator(object):
         self.ToolsLayout = QVBoxLayout()
         self.ToolsLayout.setObjectName(u"ToolsLayout")
         self.SubToolsLayout = QHBoxLayout()
-        self.SubToolsLayout.setSpacing(10)
+        self.SubToolsLayout.setSpacing(5)
         self.SubToolsLayout.setObjectName(u"SubToolsLayout")
         self.KeypointsSeletion = QComboBox(self.AnimalPoseAnnotatorLayout)
         self.KeypointsSeletion.setObjectName(u"KeypointsSeletion")
@@ -122,8 +123,8 @@ class Ui_AnimalPoseAnnotator(object):
         sizePolicy.setVerticalStretch(0)
         sizePolicy.setHeightForWidth(self.KeypointsSeletion.sizePolicy().hasHeightForWidth())
         self.KeypointsSeletion.setSizePolicy(sizePolicy)
-        self.KeypointsSeletion.setMinimumSize(QSize(180, 0))
-        self.KeypointsSeletion.setMaximumSize(QSize(180, 16777215))
+        self.KeypointsSeletion.setMinimumSize(QSize(120, 0))
+        self.KeypointsSeletion.setMaximumSize(QSize(120, 16777215))
 
         self.SubToolsLayout.addWidget(self.KeypointsSeletion)
 
@@ -131,10 +132,19 @@ class Ui_AnimalPoseAnnotator(object):
         self.ClassesSelection.setObjectName(u"ClassesSelection")
         sizePolicy.setHeightForWidth(self.ClassesSelection.sizePolicy().hasHeightForWidth())
         self.ClassesSelection.setSizePolicy(sizePolicy)
-        self.ClassesSelection.setMinimumSize(QSize(180, 0))
-        self.ClassesSelection.setMaximumSize(QSize(180, 16777215))
+        self.ClassesSelection.setMinimumSize(QSize(120, 0))
+        self.ClassesSelection.setMaximumSize(QSize(120, 16777215))
 
         self.SubToolsLayout.addWidget(self.ClassesSelection)
+
+        self.Visible = QComboBox(self.AnimalPoseAnnotatorLayout)
+        self.Visible.setObjectName(u"Visible")
+        sizePolicy.setHeightForWidth(self.Visible.sizePolicy().hasHeightForWidth())
+        self.Visible.setSizePolicy(sizePolicy)
+        self.Visible.setMinimumSize(QSize(120, 0))
+        self.Visible.setMaximumSize(QSize(120, 16777215))
+
+        self.SubToolsLayout.addWidget(self.Visible)
 
 
         self.ToolsLayout.addLayout(self.SubToolsLayout)
@@ -212,6 +222,55 @@ class Ui_AnimalPoseAnnotator(object):
 
         self.AnimalPoseAnnotatorHLayout.addLayout(self.ToolsLayout)
 
+        self.LabelAreaLayout = QVBoxLayout()
+        self.LabelAreaLayout.setObjectName(u"LabelAreaLayout")
+        self.LabelToolsLayout = QHBoxLayout()
+        self.LabelToolsLayout.setObjectName(u"LabelToolsLayout")
+        self.LineWidthLayout = QHBoxLayout()
+        self.LineWidthLayout.setObjectName(u"LineWidthLayout")
+        self.LineWidthLabel = QLabel(self.AnimalPoseAnnotatorLayout)
+        self.LineWidthLabel.setObjectName(u"LineWidthLabel")
+
+        self.LineWidthLayout.addWidget(self.LineWidthLabel)
+
+        self.LineWidth = QSlider(self.AnimalPoseAnnotatorLayout)
+        self.LineWidth.setObjectName(u"LineWidth")
+        self.LineWidth.setMinimum(1)
+        self.LineWidth.setMaximum(10)
+        self.LineWidth.setOrientation(Qt.Orientation.Horizontal)
+
+        self.LineWidthLayout.addWidget(self.LineWidth)
+
+
+        self.LabelToolsLayout.addLayout(self.LineWidthLayout)
+
+        self.RadiusLayout = QHBoxLayout()
+        self.RadiusLayout.setObjectName(u"RadiusLayout")
+        self.RadiusLabel = QLabel(self.AnimalPoseAnnotatorLayout)
+        self.RadiusLabel.setObjectName(u"RadiusLabel")
+
+        self.RadiusLayout.addWidget(self.RadiusLabel)
+
+        self.Radius = QSlider(self.AnimalPoseAnnotatorLayout)
+        self.Radius.setObjectName(u"Radius")
+        self.Radius.setMinimum(1)
+        self.Radius.setMaximum(10)
+        self.Radius.setValue(3)
+        self.Radius.setOrientation(Qt.Orientation.Horizontal)
+
+        self.RadiusLayout.addWidget(self.Radius)
+
+
+        self.LabelToolsLayout.addLayout(self.RadiusLayout)
+
+        self.IsCrowd = QCheckBox(self.AnimalPoseAnnotatorLayout)
+        self.IsCrowd.setObjectName(u"IsCrowd")
+
+        self.LabelToolsLayout.addWidget(self.IsCrowd)
+
+
+        self.LabelAreaLayout.addLayout(self.LabelToolsLayout)
+
         self.FrameDisplayGroup = QGroupBox(self.AnimalPoseAnnotatorLayout)
         self.FrameDisplayGroup.setObjectName(u"FrameDisplayGroup")
         self.FrameDisplayGroupLayout = QVBoxLayout(self.FrameDisplayGroup)
@@ -222,7 +281,10 @@ class Ui_AnimalPoseAnnotator(object):
         self.FrameDisplayGroupLayout.addWidget(self.FrameDisplay)
 
 
-        self.AnimalPoseAnnotatorHLayout.addWidget(self.FrameDisplayGroup)
+        self.LabelAreaLayout.addWidget(self.FrameDisplayGroup)
+
+
+        self.AnimalPoseAnnotatorHLayout.addLayout(self.LabelAreaLayout)
 
         AnimalPoseAnnotator.setCentralWidget(self.AnimalPoseAnnotatorLayout)
         self.menubar = QMenuBar(AnimalPoseAnnotator)
@@ -305,6 +367,9 @@ class Ui_AnimalPoseAnnotator(object):
         ___qtreewidgetitem.setText(1, QCoreApplication.translate("AnimalPoseAnnotator", u"Keypoint Name", None));
         ___qtreewidgetitem.setText(0, QCoreApplication.translate("AnimalPoseAnnotator", u"Keypoint Number", None));
         self.LabelInformationViewLabel.setText(QCoreApplication.translate("AnimalPoseAnnotator", u"Label Information View", None))
+        self.LineWidthLabel.setText(QCoreApplication.translate("AnimalPoseAnnotator", u"Line Width", None))
+        self.RadiusLabel.setText(QCoreApplication.translate("AnimalPoseAnnotator", u"Radius", None))
+        self.IsCrowd.setText(QCoreApplication.translate("AnimalPoseAnnotator", u"iscrowd", None))
         self.FrameDisplayGroup.setTitle("")
         self.menuFile.setTitle(QCoreApplication.translate("AnimalPoseAnnotator", u"File", None))
         self.menuView.setTitle(QCoreApplication.translate("AnimalPoseAnnotator", u"View", None))

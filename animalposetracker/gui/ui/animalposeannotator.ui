@@ -24,7 +24,7 @@
       <item>
        <layout class="QHBoxLayout" name="SubToolsLayout">
         <property name="spacing">
-         <number>10</number>
+         <number>5</number>
         </property>
         <item>
          <widget class="QComboBox" name="KeypointsSeletion">
@@ -36,13 +36,13 @@
           </property>
           <property name="minimumSize">
            <size>
-            <width>180</width>
+            <width>120</width>
             <height>0</height>
            </size>
           </property>
           <property name="maximumSize">
            <size>
-            <width>180</width>
+            <width>120</width>
             <height>16777215</height>
            </size>
           </property>
@@ -58,13 +58,35 @@
           </property>
           <property name="minimumSize">
            <size>
-            <width>180</width>
+            <width>120</width>
             <height>0</height>
            </size>
           </property>
           <property name="maximumSize">
            <size>
-            <width>180</width>
+            <width>120</width>
+            <height>16777215</height>
+           </size>
+          </property>
+         </widget>
+        </item>
+        <item>
+         <widget class="QComboBox" name="Visible">
+          <property name="sizePolicy">
+           <sizepolicy hsizetype="Fixed" vsizetype="Fixed">
+            <horstretch>0</horstretch>
+            <verstretch>0</verstretch>
+           </sizepolicy>
+          </property>
+          <property name="minimumSize">
+           <size>
+            <width>120</width>
+            <height>0</height>
+           </size>
+          </property>
+          <property name="maximumSize">
+           <size>
+            <width>120</width>
             <height>16777215</height>
            </size>
           </property>
@@ -252,16 +274,82 @@
      </layout>
     </item>
     <item>
-     <widget class="QGroupBox" name="FrameDisplayGroup">
-      <property name="title">
-       <string/>
-      </property>
-      <layout class="QVBoxLayout" name="FrameDisplayGroupLayout">
-       <item>
-        <widget class="QGraphicsView" name="FrameDisplay"/>
-       </item>
-      </layout>
-     </widget>
+     <layout class="QVBoxLayout" name="LabelAreaLayout">
+      <item>
+       <layout class="QHBoxLayout" name="LabelToolsLayout">
+        <item>
+         <layout class="QHBoxLayout" name="LineWidthLayout">
+          <item>
+           <widget class="QLabel" name="LineWidthLabel">
+            <property name="text">
+             <string>Line Width</string>
+            </property>
+           </widget>
+          </item>
+          <item>
+           <widget class="QSlider" name="LineWidth">
+            <property name="minimum">
+             <number>1</number>
+            </property>
+            <property name="maximum">
+             <number>10</number>
+            </property>
+            <property name="orientation">
+             <enum>Qt::Orientation::Horizontal</enum>
+            </property>
+           </widget>
+          </item>
+         </layout>
+        </item>
+        <item>
+         <layout class="QHBoxLayout" name="RadiusLayout">
+          <item>
+           <widget class="QLabel" name="RadiusLabel">
+            <property name="text">
+             <string>Radius</string>
+            </property>
+           </widget>
+          </item>
+          <item>
+           <widget class="QSlider" name="Radius">
+            <property name="minimum">
+             <number>1</number>
+            </property>
+            <property name="maximum">
+             <number>10</number>
+            </property>
+            <property name="value">
+             <number>3</number>
+            </property>
+            <property name="orientation">
+             <enum>Qt::Orientation::Horizontal</enum>
+            </property>
+           </widget>
+          </item>
+         </layout>
+        </item>
+        <item>
+         <widget class="QCheckBox" name="IsCrowd">
+          <property name="text">
+           <string>iscrowd</string>
+          </property>
+         </widget>
+        </item>
+       </layout>
+      </item>
+      <item>
+       <widget class="QGroupBox" name="FrameDisplayGroup">
+        <property name="title">
+         <string/>
+        </property>
+        <layout class="QVBoxLayout" name="FrameDisplayGroupLayout">
+         <item>
+          <widget class="QGraphicsView" name="FrameDisplay"/>
+         </item>
+        </layout>
+       </widget>
+      </item>
+     </layout>
     </item>
    </layout>
   </widget>

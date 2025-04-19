@@ -1,7 +1,7 @@
 from PySide6.QtCore import Qt, QPoint, QRect, QSize, Signal, QObject
 from PySide6.QtWidgets import (QWidget, QHBoxLayout, QLabel, QLineEdit, 
                               QListWidgetItem, QGraphicsView, QCheckBox, 
-                              QLayout, QTreeView, QHeaderView)
+                              QLayout, QTreeView, QHeaderView, QSlider, QVBoxLayout)
 from PySide6.QtGui import (QPainter, QPixmap, QPen, QColor, QCursor,
                            QWheelEvent, QBrush, QFont, QFontMetrics, 
                            QStandardItemModel, QStandardItem)
@@ -231,7 +231,6 @@ class AnnotationTarget:
         self.keypoints =  {}   
         # List of line connections {"id": {"skeleton":[id_n,id_m], "pos": [x1, y1, x2, y2]}}    
         self.skeletons = {}       
-        self.point_radius = 5  # Radius for key points
 
 class AnnotationViewer:
     def __init__(self, tree_view: QTreeView):
@@ -342,6 +341,7 @@ class DrawingBoard(QLabel):
                  keypoints=None, 
                  classes=None, 
                  skeletons=None,
+                 visible=None,
                  labels=None):
         super().__init__(parent)
         self.setMouseTracking(True)
@@ -365,15 +365,18 @@ class DrawingBoard(QLabel):
         self.keypoints = keypoints
         self.classes = classes
         self.skeletons = skeletons
+        self.visible = visible
         self.labels = labels
         self.labels_view = AnnotationViewer(labels)
         self.labels.clicked.connect(self._on_label_click)
-        
+        self.visible.currentIndexChanged.connect(self._on_visible_change)
+
         # Visual settings
         self.pen_settings = {
             "width": 2,
             "style": Qt.SolidLine,
-            "preview_alpha": 180
+            "preview_alpha": 180,
+            "radius": 3
         }
         self.preview_style = {
             "rect": {
@@ -387,7 +390,7 @@ class DrawingBoard(QLabel):
                 "style": Qt.DashLine
             }
         }
-    
+
     def _on_label_click(self, index):
         """Handle label selection from parent widget"""
         target_id = index.data(Qt.UserRole)
@@ -460,16 +463,19 @@ class DrawingBoard(QLabel):
         if self.start_position is None:
             self.start_position = pos
             self.current_target = self.create_target()
+            self.current_target._is_temp = True
         else:
             end_pos = pos
             if (abs(self.start_position.x() - end_pos.x()) > 5 or 
                 abs(self.start_position.y() - end_pos.y()) > 5):
                 rect = QRect(self.start_position, end_pos).normalized()
                 self.current_target.bounding_rect = self._get_class_info(rect)
+                self.current_target._is_temp = False
                 self._commit_changes()
-                self.start_position = None
-                self.current_target = None
-                self.reset_temp_canvas()
+
+            self.start_position = None
+            self.current_target = None
+            self.reset_temp_canvas()
 
     def _get_class_info(self, rect: QRect):
         """Get classification metadata from parent widget"""
@@ -498,14 +504,19 @@ class DrawingBoard(QLabel):
     
         next_idx = (self.keypoints.currentIndex() + 1) % self.keypoints.count()
         self.keypoints.setCurrentIndex(next_idx)
-        
-
-
+        self.visible.setCurrentIndex(2)
+    
+    def _on_visible_change(self, index):
+        """Handle keypoint visibility change"""
+        if index == 0:
+            self._handle_point_mode(QPoint())
+            
     def _get_keypoint_info(self, pos):
         """Get keypoint metadata from parent widget"""
         kpt_id = self.keypoints.currentIndex()
         kpt_name = self.keypoints.currentText()
-        return {kpt_id: {"name": kpt_name, "pos": (pos.x(), pos.y())}}
+        keypoint_visible = self.visible.currentIndex()
+        return {kpt_id: {"name": kpt_name, "pos": [pos.x(), pos.y(), keypoint_visible]}}
 
     def _handle_bline_mode(self, click_pos):
         """Process bone line drawing operations"""
@@ -675,7 +686,7 @@ class DrawingBoard(QLabel):
         painter.setBrush(target.color)
         for kpt_data in target.keypoints.values():
             pos = QPoint(*kpt_data["pos"])
-            painter.drawEllipse(pos, target.point_radius, target.point_radius)
+            painter.drawEllipse(pos, self.pen_settings["radius"], self.pen_settings["radius"])
         
         # Draw skeletons
         painter.setBrush(Qt.NoBrush)
@@ -748,3 +759,33 @@ class DrawingBoard(QLabel):
         self.targets.clear()
         self.reset_canvases()
         self.update_pixmap()
+
+    def keyPressEvent(self, event):
+        """Handle key press events"""
+        if event.key() == Qt.Key_Escape and self.drawing_mode not in ["none", "point"]:
+            self._cancel_current_operation()
+        super().keyPressEvent(event)
+
+    def _cancel_current_operation(self):
+        """Cancel current drawing operation based on mode"""
+        if self.drawing_mode == "rect":
+            self._cancel_rect_drawing()
+        elif self.drawing_mode == "bline":
+            self._cancel_bline_drawing()
+        
+        self.reset_temp_canvas()
+        self.update_pixmap()
+    
+    def _cancel_rect_drawing(self):
+        """Cancel rectangle drawing operation"""
+        if self.start_position is not None:
+            if self.current_target and not self.current_target.bounding_rect:
+                self.targets.remove(self.current_target)
+                self.color_index -= 1
+            self.start_position = None
+            self.current_target = None
+    
+    def _cancel_bline_drawing(self):
+        """Cancel bone line drawing operation"""
+        if hasattr(self, '_bline_temp_points'):
+            del self._bline_temp_points
