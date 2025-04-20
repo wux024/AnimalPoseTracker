@@ -230,7 +230,8 @@ class AnnotationTarget:
         # List of keypoints {"keypoint_id": {"keypoint_name": str, "pos": [x, y]}}  
         self.keypoints =  {}   
         # List of line connections {"id": {"skeleton":[id_n,id_m], "pos": [x1, y1, x2, y2]}}    
-        self.skeletons = {}       
+        self.skeletons = {} 
+        self.current_keypoint_id = 0       
 
 class AnnotationViewer:
     def __init__(self, tree_view: QTreeView):
@@ -289,7 +290,7 @@ class AnnotationViewer:
                     
                     # Position property-value pair
                     pos_prop = QStandardItem("Position")
-                    x, y = kpt_data['pos']
+                    x, y, _ = kpt_data['pos']
                     pos_val = QStandardItem(f"({x}, {y})")
                     kp_parent.appendRow([pos_prop, pos_val])
 
@@ -412,6 +413,8 @@ class DrawingBoard(QLabel):
             raise ValueError(f"Target {target_id} not found")
             
         self.current_target_id = target_id
+        self.current_target = self.targets[self.current_target_id]
+        self.keypoints.setCurrentIndex(self.current_target.current_keypoint_id)
         self.labels_view.highlight_target(target_id)
 
     def reset_canvases(self):
@@ -441,6 +444,7 @@ class DrawingBoard(QLabel):
         new_target = AnnotationTarget(len(self.targets), color)
         self.current_target_id = new_target.id
         self.targets.append(new_target)
+        self.set_current_target(self.current_target_id)
         return new_target
 
     def mousePressEvent(self, event):
@@ -502,7 +506,7 @@ class DrawingBoard(QLabel):
 
         self._commit_changes()
     
-        next_idx = (self.keypoints.currentIndex() + 1) % self.keypoints.count()
+        next_idx = (self.current_target.current_keypoint_id + 1) % self.keypoints.count()
         self.keypoints.setCurrentIndex(next_idx)
         self.visible.setCurrentIndex(2)
     
@@ -516,6 +520,7 @@ class DrawingBoard(QLabel):
         kpt_id = self.keypoints.currentIndex()
         kpt_name = self.keypoints.currentText()
         keypoint_visible = self.visible.currentIndex()
+        self.current_target.current_keypoint_id = kpt_id
         return {kpt_id: {"name": kpt_name, "pos": [pos.x(), pos.y(), keypoint_visible]}}
 
     def _handle_bline_mode(self, click_pos):
@@ -685,7 +690,9 @@ class DrawingBoard(QLabel):
         # Draw keypoints
         painter.setBrush(target.color)
         for kpt_data in target.keypoints.values():
-            pos = QPoint(*kpt_data["pos"])
+            print(kpt_data)
+            keypoint = kpt_data["pos"][0:2]
+            pos = QPoint(*keypoint)
             painter.drawEllipse(pos, self.pen_settings["radius"], self.pen_settings["radius"])
         
         # Draw skeletons

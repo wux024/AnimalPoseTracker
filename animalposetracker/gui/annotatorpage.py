@@ -10,6 +10,7 @@ import os
 import sys
 from pathlib import Path
 import yaml
+import json
 from animalposetracker.data import AnimalPoseAnnotation, AnimalPoseAnnotator
 
 from .ui_animalposeannotator import Ui_AnimalPoseAnnotator
@@ -368,7 +369,7 @@ class AnimalPoseAnnotatorPage(QMainWindow, Ui_AnimalPoseAnnotator):
             if config_type == 'skeleton':
                 try:
                     src, dest = item.text(1).split('->')
-                    updated_data.append((int(src.strip()), int(dest.strip())))
+                    updated_data.append([int(src.strip()), int(dest.strip())])
                 except ValueError as e:
                     raise ValueError(
                         f"Invalid skeleton format: {item.text(1)}") from e
@@ -378,7 +379,12 @@ class AnimalPoseAnnotatorPage(QMainWindow, Ui_AnimalPoseAnnotator):
             iterator +=1
         
         # Update config and refresh UI
-        self.project_config[config_type+'name'] = updated_data
+        if config_type == 'classes':
+            self.project_config['classes_name'] = updated_data
+        elif config_type == 'keypoints':
+            self.project_config['keypoints_name'] = updated_data
+        elif config_type =='skeleton':
+            self.project_config['skeleton'] = updated_data
         self._populate_comboboxes()
     
     def _HandleConfigDisplay(self, config_type):
@@ -577,7 +583,10 @@ class AnimalPoseAnnotatorPage(QMainWindow, Ui_AnimalPoseAnnotator):
             "images": [image],
             "annotations": annotations,
         }
-        print(coco_dict)
+        key = self.sorted_keys[self.current_image_index]
+        label_file = Path(self.images[key]).with_suffix('.json')
+        with open(label_file, 'w') as f:
+            json.dump(coco_dict, f, indent=4)
 
     def onLineWidthChanged(self, value):
         """Handle line width change"""
