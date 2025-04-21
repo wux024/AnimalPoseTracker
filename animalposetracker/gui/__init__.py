@@ -2,6 +2,7 @@
 import os
 import sys
 from PySide6.QtCore import Qt
+from PySide6.QtGui import QColor
 
 BASE_DIR = os.path.dirname(__file__)
 LOGO_PATH_TRANSPARENT = os.path.join(BASE_DIR, "assets", "logo_transparent.png")
@@ -38,3 +39,19 @@ class WindowFactory:
         except Exception as e:
             print(f"Window creation failed: {str(e)}")
             raise
+
+
+COLORS = [
+        Qt.red, Qt.green, Qt.blue, Qt.yellow, Qt.magenta, Qt.cyan,
+        QColor(255, 128, 0), 
+        QColor(128, 255, 0), 
+        QColor(0, 255, 128), 
+        QColor(0, 128, 255),
+        QColor(128, 0, 255),
+        QColor(255, 0, 128),
+        Qt.darkRed, Qt.darkGreen, Qt.darkBlue, Qt.darkYellow,
+        QColor(128, 64, 0), 
+        QColor(64, 128, 0),
+        QColor(0, 128, 64),
+        QColor(0, 64, 128),
+    ]

@@ -1,20 +1,18 @@
-from PySide6.QtCore import Qt, QFile, QTextStream
-from PySide6.QtWidgets import (QApplication, QFileDialog, QMainWindow,
+from PySide6.QtCore import Qt, QFile, QTextStream, QTimer
+from PySide6.QtWidgets import (QApplication, QFileDialog, QMainWindow, QTreeWidget,
                                QMessageBox, QTreeWidgetItem, QTreeWidgetItemIterator,
-                               QGraphicsScene, QGraphicsView)
-from PySide6.QtGui import QPixmap, QPainter, QStandardItemModel
+                               QGraphicsScene, QGraphicsView, QMenu)
+from PySide6.QtGui import QPixmap, QPainter
 from animalposetracker.gui import (DARK_THEME_PATH, LIGHT_THEME_PATH,
-                                  LOGO_PATH_TRANSPARENT, LOGO_PATH,
-                                  LOGO_SMALL_PATH, WELCOME_PATH)
+                                  LOGO_PATH_TRANSPARENT, COLORS)
 import os
 import sys
 from pathlib import Path
 import yaml
 import json
-from animalposetracker.data import AnimalPoseAnnotation, AnimalPoseAnnotator
 
 from .ui_animalposeannotator import Ui_AnimalPoseAnnotator
-from .utils import ZoomableGraphicsView, DrawingBoard
+from .utils import ZoomableGraphicsView, DrawingBoard, AnnotationTarget
 
 class AnimalPoseAnnotatorPage(QMainWindow, Ui_AnimalPoseAnnotator):
     """Main application window for animal pose annotation"""
@@ -24,20 +22,27 @@ class AnimalPoseAnnotatorPage(QMainWindow, Ui_AnimalPoseAnnotator):
         self.setupUi(self)
         self.setupConnections()
         self.initialize_controls()
-        self.current_drawing_mode = "none"
-        self.annotation_targets = []
+        
 
     def initialize_controls(self):
         """Initialize UI controls and state"""
         os.chdir(Path.cwd())
         self.project_config = {}
         self.images = {}
+        self.config_path = None
         self.current_image_index = -1
         self.current_image_path = ""
         self.sorted_keys = []
+        self.labels_cache = {}
         self._CreateGraphicsScene()
         self.ConfigureDisplay.header().close()
         self._edit_mode = False
+        self.current_drawing_mode = "none"
+
+        self.actionDrawBBox.setEnabled(False)
+        self.actionDrawLine.setEnabled(False)
+        self.actionDrawPoint.setEnabled(False)
+        self.actionBuildSkeleton.setEnabled(False)
 
     def setupConnections(self):
         """Connect all UI signals to their corresponding slot functions"""
@@ -56,19 +61,14 @@ class AnimalPoseAnnotatorPage(QMainWindow, Ui_AnimalPoseAnnotator):
         self.actionDrawLine.triggered.connect(lambda: self.setDrawingMode("line"))
         self.actionBuildSkeleton.triggered.connect(lambda: self.setDrawingMode("bline"))
         self.actionNoLabel.triggered.connect(lambda: self.setDrawingMode("none"))
-        self.actionDrawLine.setEnabled(False)
-        self.actionDrawPoint.setEnabled(False)
-        
-        # Editing operations
-        self.actionAdd.triggered.connect(self.onAddItem)
-        self.actionDelete.triggered.connect(self.onDeleteItem)
-        self.actionDeleteLabel.triggered.connect(self.onDeleteLabel)
-        self.actionUndoLasted.triggered.connect(self.onUndoLastAction)
         
         # Configuration editing
         self.EditClasses.clicked.connect(self.onEditParameters)
         self.EditSkeleton.clicked.connect(self.onEditParameters)
         self.EditKeypoints.clicked.connect(self.onEditParameters)
+
+        self.ConfigureDisplay.setContextMenuPolicy(Qt.CustomContextMenu)
+        self.ConfigureDisplay.customContextMenuRequested.connect(self._show_config_context_menu)
         
         # View settings
         self.actionDark.triggered.connect(lambda: self.onChangeTheme("dark"))
@@ -77,20 +77,12 @@ class AnimalPoseAnnotatorPage(QMainWindow, Ui_AnimalPoseAnnotator):
         # Help
         self.actionHelp.triggered.connect(self.onShowHelp)
         
-        # Combo box changes
-        self.KeypointsSeletion.currentIndexChanged.connect(self.onKeypointSelectionChanged)
-        self.ClassesSelection.currentIndexChanged.connect(self.onClassSelectionChanged)
-        self.SkeletonSelection.currentIndexChanged.connect(self.onSkeletonSelectionChanged)
-        self.Visible.currentIndexChanged.connect(self.onVisibleChanged)
         self.Visible.addItems(['Invisible', 'Occluded', 'Visible'])
         self.Visible.setCurrentIndex(2)
-        # Tree view selections
-        self.ConfigureDisplay.itemSelectionChanged.connect(self.onConfigureDisplaySelectionChanged)
 
         # Line Width and Radius
         self.LineWidth.valueChanged.connect(self.onLineWidthChanged)
         self.Radius.valueChanged.connect(self.onRadiusChanged)
-
 
     def _CreateGraphicsScene(self):
         """Create and configure the graphics scene"""
@@ -125,6 +117,7 @@ class AnimalPoseAnnotatorPage(QMainWindow, Ui_AnimalPoseAnnotator):
         self.drawing_proxy = self.scene.addWidget(self.drawing_label)
         self.drawing_proxy.setZValue(1)
         self.drawing_label.setVisible(True)
+        self.drawing_label.addskeletons.connect(self.onAddSkeletons)
         
 
     def _ReplaceGraphicsView(self):
@@ -147,6 +140,8 @@ class AnimalPoseAnnotatorPage(QMainWindow, Ui_AnimalPoseAnnotator):
             self.actionBuildSkeleton.setEnabled(False)
         elif mode == "rect":
             self.actionDrawPoint.setEnabled(True)
+            self.actionDrawLine.setEnabled(False)
+            self.actionBuildSkeleton.setEnabled(False)
         elif mode == "point":
             self.actionDrawLine.setEnabled(True)
             self.actionBuildSkeleton.setEnabled(True)
@@ -162,6 +157,7 @@ class AnimalPoseAnnotatorPage(QMainWindow, Ui_AnimalPoseAnnotator):
             return
         
         self.images.clear()
+        self.labels_cache.clear()
         supported_extensions = {'.jpg', '.jpeg', '.png', '.bmp', 
                                 '.gif', '.tif', '.tiff', '.webp'}
         folder = Path(folder_path)
@@ -170,13 +166,119 @@ class AnimalPoseAnnotatorPage(QMainWindow, Ui_AnimalPoseAnnotator):
             if img_file.suffix.lower() in supported_extensions:
                 self.images[img_file.name] = str(img_file)
         
-        if self.images:
-            self.statusBar().showMessage(f"Loaded {len(self.images)} images")
-            self.sorted_keys = sorted(self.images.keys())
-            self.current_image_index = 0
-            self._DisplayCurrentImage()
-        else:
+        if not self.images:
             QMessageBox.warning(self, "Warning", "No supported images found")
+            return
+        
+        self.statusBar().showMessage(f"Loaded {len(self.images)} images")
+        self.sorted_keys = sorted(self.images.keys())
+        self.current_image_index = 0
+        self._DisplayCurrentImage()
+        
+        for img_name, img_path in self.images.items():
+            json_path = Path(img_path).with_suffix('.json')
+            if json_path.exists():
+                try:
+                    with open(json_path, 'r') as f:
+                        annotation_data = json.load(f)
+                    self._LoadAnnotationtoCache(img_path, annotation_data)
+                except Exception as e:
+                    QMessageBox.warning(self, "Warning", 
+                                    f"Failed to load annotation for {img_name}: {str(e)}")
+        
+        self.actionDrawBBox.setEnabled(True)
+        self.actionDrawLine.setEnabled(False)
+        self.actionDrawPoint.setEnabled(False)
+        self.actionBuildSkeleton.setEnabled(False)
+    
+    def _LoadAnnotationtoCache(self, img_path, annotation_data):
+        """Parse annotation data and store in labels_cache as AnnotationTarget objects
+        
+        Args:
+            img_path: Path to the image file
+            annotation_data: Parsed JSON annotation data
+        """
+        targets = []
+        
+        # Get image info (validate we have matching image in annotations)
+        img_info = next((img for img in annotation_data.get('images', []) 
+                        if img['file_name'] == Path(img_path).name), None)
+        if not img_info:
+            return
+        
+        # Process each annotation
+        for i, ann in enumerate(annotation_data.get('annotations', [])):
+            if ann['image_id'] != img_info['id']:
+                continue
+                
+            # Create new target with unique color
+            target = AnnotationTarget(
+                target_id=ann.get('id', i),
+                color=COLORS[i % len(COLORS)]
+            )
+            
+            # 1. Process bounding box if exists
+            if 'bbox' in ann and len(ann['bbox']) >= 4:
+                x, y, w, h = ann['bbox']
+                target.bounding_rect = {
+                    'category_id': ann.get('category_id', 0),
+                    'category_name': self._GetCategoryName(ann.get('category_id', 0)),
+                    'bbox': [x, y, w, h],
+                    'area': ann.get('area', w * h)
+                }
+            
+            # 2. Process keypoints if they exist (COCO format: [x1,y1,v1, x2,y2,v2,...])
+            if 'keypoints' in ann:
+                kpt_data = ann['keypoints']
+                for kpt_id in range(len(kpt_data) // 3):
+                    idx = kpt_id * 3
+                    x, y, v = kpt_data[idx], kpt_data[idx+1], kpt_data[idx+2]
+                    
+                    # Get keypoint name from config if available
+                    kpt_name = (self.project_config['keypoints_name'][kpt_id] 
+                            if ('keypoints_name' in self.project_config and 
+                                kpt_id < len(self.project_config['keypoints_name']))
+                            else f"kpt_{kpt_id}")
+                    
+                    target.keypoints[kpt_id] = {
+                        'name': kpt_name,
+                        'pos': [x, y, v]  # x, y, visibility
+                    }
+                    target.current_keypoint_id = kpt_id  # Track last used ID
+            
+            # 3. Process skeleton connections if they exist
+            if 'skeleton' in self.project_config:
+                for conn_id, (src_kpt, dst_kpt) in enumerate(self.project_config['skeleton']):
+                    # Only create connection if both keypoints exist
+                    if (src_kpt in target.keypoints and 
+                        dst_kpt in target.keypoints):
+                        src_pos = target.keypoints[src_kpt]['pos'][:2]  # Get x,y only
+                        dst_pos = target.keypoints[dst_kpt]['pos'][:2]
+                        
+                        target.skeletons[conn_id] = {
+                            'skeleton': [src_kpt, dst_kpt],
+                            'pos': [*src_pos, *dst_pos]  # x1,y1,x2,y2
+                        }
+            
+            targets.append(target)
+        
+        # Store in cache
+        self.labels_cache[img_path] = {
+            'targets': targets
+        }
+    
+        # Update the DrawingBoard if this is the current image
+        if img_path == self.current_image_path:
+            self.drawing_label.targets = targets.copy()
+            self.drawing_label.set_current_target(0)
+            self.drawing_label._commit_changes()
+    
+    def _GetCategoryName(self, category_id):
+        """Get category name from project config"""
+        if ('classes_name' in self.project_config and 
+            0 <= category_id < len(self.project_config['classes_name'])):
+            return self.project_config['classes_name'][category_id]
+        return f"class_{category_id}"
 
     def _DisplayCurrentImage(self):
         """Display current image with annotations"""
@@ -188,6 +290,12 @@ class AnimalPoseAnnotatorPage(QMainWindow, Ui_AnimalPoseAnnotator):
         image_path = Path(self.images[key])
         
         try:
+            if hasattr(self, 'drawing_label') and self.drawing_label and self.current_image_path:
+                self.labels_cache[self.current_image_path] = {
+                    'targets': self.drawing_label.targets.copy()
+                }
+
+
             pixmap = QPixmap(str(image_path))
 
             if pixmap.isNull():
@@ -205,6 +313,11 @@ class AnimalPoseAnnotatorPage(QMainWindow, Ui_AnimalPoseAnnotator):
             self.drawing_label.main_pixmap.fill(Qt.transparent)
             self.drawing_label.temp_pixmap = QPixmap(pixmap.size())
             self.drawing_label.temp_pixmap.fill(Qt.transparent)
+
+            self.current_image_path = str(image_path)
+            if self.current_image_path in self.labels_cache:
+                self.drawing_label.targets = self.labels_cache[self.current_image_path]['targets']
+                self.drawing_label._commit_changes()
             
             # Set view parameters
             self.FrameDisplay.fitInView(self.scene.itemsBoundingRect(), Qt.KeepAspectRatio)
@@ -224,6 +337,7 @@ class AnimalPoseAnnotatorPage(QMainWindow, Ui_AnimalPoseAnnotator):
             return
             
         try:
+            self.config_path = file_path
             with open(file_path, 'r', encoding='utf-8') as f:
                 # Use safe loader instead of FullLoader
                 self.project_config = yaml.safe_load(f)
@@ -283,12 +397,13 @@ class AnimalPoseAnnotatorPage(QMainWindow, Ui_AnimalPoseAnnotator):
         if not self._check_images_loaded():
             return
         self._advance_image_index(1)
+        self.setDrawingMode("none")
 
     def onPreviousFrame(self):
         """Display the previous image (with wrap-around)"""
         if not self._check_images_loaded():
             return
-        self._advance_image_index(-1)
+        self.setDrawingMode("none")
 
     def _check_images_loaded(self):
         """Helper method to check if images are loaded"""
@@ -296,42 +411,155 @@ class AnimalPoseAnnotatorPage(QMainWindow, Ui_AnimalPoseAnnotator):
             self.statusBar().showMessage("No images loaded")
             return False
         return True
-
-    def onAddItem(self):
-        """
-        Handle adding new annotation item.
+    
+    def _show_config_context_menu(self, pos):
+        """Show context menu with add/delete options for config table"""
+        item = self.ConfigureDisplay.itemAt(pos)
+        menu = QMenu()
         
-        Creates a new annotation element in the current frame.
-        """
-        print("Adding item")
-        # Implementation for adding items goes here
-
-    def onDeleteItem(self):
-        """
-        Handle deleting selected item.
+        # Add "Add Row Above" and "Add Row Below" actions
+        add_above_action = menu.addAction("Add Row Above")
+        add_above_action.triggered.connect(lambda: self._add_config_row(pos, "above"))
+        add_below_action = menu.addAction("Add Row Below") 
+        add_below_action.triggered.connect(lambda: self._add_config_row(pos, "below"))
         
-        Removes the currently selected annotation element.
-        """
-        print("Deleting item")
-        # Implementation for deleting items goes here
-
-    def onDeleteLabel(self):
-        """
-        Handle deleting current label.
+        # Add separator
+        menu.addSeparator()
         
-        Clears all annotations for the current frame.
-        """
-        print("Deleting label")
-        # Implementation for deleting labels goes here
-
-    def onUndoLastAction(self):
-        """
-        Handle undoing last action.
+        # Add "Delete Row" action if clicking on existing row
+        if item:
+            delete_action = menu.addAction("Delete Row")
+            delete_action.triggered.connect(lambda: self._delete_config_row(item))
         
-        Reverts the most recent annotation change.
-        """
-        print("Undoing last action")
-        # Implementation for undo functionality goes here
+        menu.exec_(self.ConfigureDisplay.viewport().mapToGlobal(pos))
+    
+    def _add_config_row(self, pos, insert_position="below"):
+        """Add a new row to the configuration table with reliable editing"""
+        item = self.ConfigureDisplay.itemAt(pos)
+        config_type = self._get_current_config_type()
+        
+        if not config_type:
+            QMessageBox.warning(self, "Warning", "Please enter edit mode first")
+            return
+        
+        # Block signals during the operation
+        self.ConfigureDisplay.blockSignals(True)
+        
+        try:
+            # Create new item
+            new_item = QTreeWidgetItem()
+            new_item.setFlags(new_item.flags() | Qt.ItemIsEditable)
+            
+            # Set default values based on config type
+            if config_type == 'classes':
+                default_text = "New Class"
+            elif config_type == 'keypoints':
+                default_text = "New Keypoint"
+            elif config_type == 'skeleton':
+                # Generate default skeleton connection
+                last_id = 0
+                if self.ConfigureDisplay.topLevelItemCount() > 0:
+                    last_item = self.ConfigureDisplay.topLevelItem(self.ConfigureDisplay.topLevelItemCount()-1)
+                    try:
+                        last_part = last_item.text(1).split('->')[-1]
+                        last_id = int(last_part.strip())
+                    except (ValueError, IndexError):
+                        pass
+                default_text = f"{last_id+1}->{last_id+2}"
+            
+            # Set initial text
+            new_item.setText(0, str(self.ConfigureDisplay.topLevelItemCount()))
+            new_item.setText(1, default_text)
+            
+            # Determine insert position
+            if item:
+                parent = self.ConfigureDisplay.invisibleRootItem()
+                index = parent.indexOfChild(item)
+                if insert_position == "above":
+                    parent.insertChild(index, new_item)
+                else:
+                    parent.insertChild(index + 1, new_item)
+            else:
+                self.ConfigureDisplay.addTopLevelItem(new_item)
+            
+            # Renumber all rows
+            self._renumber_rows()
+            
+            # Ensure proper editing triggers are set
+            self.ConfigureDisplay.setEditTriggers(QTreeWidget.DoubleClicked | QTreeWidget.EditKeyPressed)
+            
+            # Make sure the item is visible and selected
+            self.ConfigureDisplay.scrollToItem(new_item)
+            self.ConfigureDisplay.setCurrentItem(new_item)
+            
+            # Start editing with a slight delay to ensure UI readiness
+            QTimer.singleShot(100, lambda: (
+                self.ConfigureDisplay.editItem(new_item, 1),
+                self.ConfigureDisplay.setFocus()
+            ))
+            
+        except Exception as e:
+            QMessageBox.critical(self, "Error", f"Failed to add row: {str(e)}")
+        finally:
+            # Restore signal handling
+            self.ConfigureDisplay.blockSignals(False)
+
+    def _delete_config_row(self, item):
+        """Delete row with validation for skeleton integrity"""
+        config_type = self._get_current_config_type()
+        
+        if not config_type:
+            QMessageBox.warning(self, "Warning", "Please enter edit mode first")
+            return
+        
+        # Special validation for skeleton connections
+        if config_type == 'skeleton':
+            connection = item.text(1)
+            src, dest = map(int, connection.split('->'))
+            
+            # Check if this connection is used in annotations
+            if self._is_skeleton_used(src, dest):
+                QMessageBox.warning(self, "Warning", 
+                                "This connection is used in existing annotations!\n"
+                                "Please delete annotations first.")
+                return
+        
+        # Confirm deletion
+        reply = QMessageBox.question(
+            self, 'Confirm', 
+            f"Delete {item.text(1)}?",
+            QMessageBox.Yes | QMessageBox.No
+        )
+        if reply == QMessageBox.No:
+            return
+        
+        # Perform deletion
+        self.ConfigureDisplay.takeTopLevelItem(self.ConfigureDisplay.indexOfTopLevelItem(item))
+        self._renumber_rows()
+    
+    def _get_current_config_type(self):
+        """Determine which config type is currently being edited"""
+        if self.EditClasses.text().startswith('Save'):
+            return 'classes'
+        elif self.EditKeypoints.text().startswith('Save'):
+            return 'keypoints'
+        elif self.EditSkeleton.text().startswith('Save'):
+            return 'skeleton'
+        return None
+
+    def _renumber_rows(self):
+        """Renumber all rows sequentially after add/delete operations"""
+        for i in range(self.ConfigureDisplay.topLevelItemCount()):
+            self.ConfigureDisplay.topLevelItem(i).setText(0, str(i))
+
+    def _is_skeleton_used(self, src, dest):
+        """Check if skeleton connection exists in any annotation"""
+        for img_data in self.labels_cache.values():
+            for target in img_data['targets']:
+                for skeleton in target.skeletons.values():
+                    if {src, dest} == set(skeleton['skeleton']):
+                        return True
+        return False
 
     def onEditParameters(self):
         """Handle parameter editing with state tracking"""
@@ -350,42 +578,58 @@ class AnimalPoseAnnotatorPage(QMainWindow, Ui_AnimalPoseAnnotator):
             self._HandleConfigDisplay(config_type)
             button.setText(f"Save {config_type.title()}")
             self.ConfigureDisplay.itemChanged.connect(
-                self.onConfigureEdited)
+                self.onConfigureEdited,
+                Qt.QueuedConnection)
         else:
+            self.ConfigureDisplay.blockSignals(True)
             try:
                 self._SaveConfigChanges(config_type)
                 button.setText(f"Edit {config_type.title()}")
                 self.ConfigureDisplay.itemChanged.disconnect()
             except Exception as e:
                 QMessageBox.warning(self, "Save Error", str(e))
+            finally:
+                self.ConfigureDisplay.blockSignals(False)
 
     def _SaveConfigChanges(self, config_type):
         """Validate and save configuration changes"""
-        updated_data = []
-        
-        iterator = QTreeWidgetItemIterator(self.ConfigureDisplay)
-        while iterator.value():
-            item = iterator.value()
-            if config_type == 'skeleton':
-                try:
-                    src, dest = item.text(1).split('->')
-                    updated_data.append([int(src.strip()), int(dest.strip())])
-                except ValueError as e:
-                    raise ValueError(
-                        f"Invalid skeleton format: {item.text(1)}") from e
-            else:
-                updated_data.append(item.text(1))
+        try:
+            updated_data = []
             
-            iterator +=1
-        
-        # Update config and refresh UI
-        if config_type == 'classes':
-            self.project_config['classes_name'] = updated_data
-        elif config_type == 'keypoints':
-            self.project_config['keypoints_name'] = updated_data
-        elif config_type =='skeleton':
-            self.project_config['skeleton'] = updated_data
-        self._populate_comboboxes()
+            iterator = QTreeWidgetItemIterator(self.ConfigureDisplay)
+            while iterator.value():
+                item = iterator.value()
+                if config_type == 'skeleton':
+                    try:
+                        src, dest = item.text(1).split('->')
+                        updated_data.append([int(src.strip()), int(dest.strip())])
+                    except ValueError as e:
+                        raise ValueError(
+                            f"Invalid skeleton format: {item.text(1)}") from e
+                else:
+                    updated_data.append(item.text(1))
+                
+                iterator +=1
+            
+            # Update config and refresh UI
+            if config_type == 'classes':
+                self.project_config['classes_name'] = updated_data
+            elif config_type == 'keypoints':
+                self.project_config['keypoints_name'] = updated_data
+            elif config_type =='skeleton':
+                self.project_config['skeleton'] = updated_data
+            
+            with open(self.config_path, "w", encoding="utf-8") as f:
+                yaml.safe_dump(self.project_config, 
+                        f, 
+                        indent=2, 
+                        sort_keys=False, 
+                        default_flow_style=False
+                    )
+            self._populate_comboboxes()
+        except Exception as e:
+            QMessageBox.critical(self, "Error", f"Save failed: {str(e)}")
+            raise
     
     def _HandleConfigDisplay(self, config_type):
         """Generic handler for configuration display (DRY)"""
@@ -406,27 +650,42 @@ class AnimalPoseAnnotatorPage(QMainWindow, Ui_AnimalPoseAnnotator):
             list_item.setText(0, str(idx))
             
             if config_type == 'skeleton':
-                connection_text = f"{item[0]}->{item[1]}"
+            # Ensure item is in the correct format
+                if isinstance(item, list) and len(item) == 2:
+                    connection_text = f"{item[0]}->{item[1]}"
+                else:
+                    connection_text = "0->1"  # Default if invalid
                 list_item.setText(1, connection_text)
             else:
                 list_item.setText(1, str(item))
             
             list_item.setFlags(list_item.flags() | Qt.ItemIsEditable)
             list_item.setData(0, Qt.UserRole, idx)
+        
+        self.ConfigureDisplay.setEditTriggers(QTreeWidget.DoubleClicked | QTreeWidget.EditKeyPressed)
 
 
     def onConfigureEdited(self, item, column):
         """Slot function for handling other parameters editing"""
-        if column == 1:
-            new_value = item.text(1)
-            key = item.text(0)
-            if self.EditClasses.text().startswith('Save'):
-                self.project_config['classes_name'][key] = new_value
-            elif self.EditKeypoints.text().startswith('Save'):
-                self.project_config['keypoints_name'][key] = new_value
-            elif self.EditSkeleton.text().startswith('Save'):
-                if isinstance(new_value, list) and len(new_value) == 2:
-                    self.project_config['skeleton'][key] = new_value
+        if not hasattr(self, '_edit_lock'):
+            self._edit_lock = False
+        if self._edit_lock:
+            return
+        
+        try:
+            self._edit_lock = True
+            if column == 1:
+                new_value = item.text(1)
+                key = item.text(0)
+                if self.EditClasses.text().startswith('Save'):
+                    self.project_config['classes_name'][key] = new_value
+                elif self.EditKeypoints.text().startswith('Save'):
+                    self.project_config['keypoints_name'][key] = new_value
+                elif self.EditSkeleton.text().startswith('Save'):
+                    if isinstance(new_value, list) and len(new_value) == 2:
+                        self.project_config['skeleton'][key] = new_value
+        finally:
+            self._edit_lock = False
 
     def convert_value(self, value):
         """
@@ -495,65 +754,17 @@ class AnimalPoseAnnotatorPage(QMainWindow, Ui_AnimalPoseAnnotator):
         Displays application help documentation.
         """
         print("Showing help")
-
-    def onKeypointSelectionChanged(self, index):
-        """
-        Handle keypoint selection change.
-        
-        Args:
-            index (int): New selected index in keypoints combo box
-        """
-        print(f"Keypoint selection changed to index: {index}")
-        # Implementation for keypoint selection change goes here
-
-    def onClassSelectionChanged(self):
-        """Handle class selection changes"""
-        if self.drawing_label.current_target:
-            self.drawing_label.current_target.class_id = self.ClassesSelection.currentIndex()
-            self.drawing_label.current_target.class_name = self.ClassesSelection.currentText()
-            self.drawing_label._commit_changes()
-
-    def onSkeletonSelectionChanged(self, index):
-        """
-        Handle skeleton selection change.
-        
-        Args:
-            index (int): New selected index in skeleton combo box
-        """
-        print(f"Skeleton selection changed to index: {index}")
-        # Implementation for skeleton selection change goes here
-    
-    def onVisibleChanged(self, index):
-        """Handle visibility change for current target"""
-        pass
-
-    def onConfigureDisplaySelectionChanged(self):
-        """
-        Handle configure display selection change.
-        
-        Updates UI when items in configuration tree are selected.
-        """
-        selected_items = self.ConfigureDisplay.selectedItems()
-        if selected_items:
-            print(f"Configure display selection changed: {selected_items[0].text(0)}")
-            # Implementation for config display selection goes here
-
-    def onLabelInfoSelectionChanged(self):
-        """
-        Handle label information selection change.
-        
-        Updates UI when items in label info view are selected.
-        """
-        selected_indexes = self.LabelInformationView.selectedIndexes()
-        if selected_indexes:
-            print(f"Label info selection changed: {selected_indexes[0].data()}")
-            # Implementation for label info selection goes here
     
     def onSaveLabel(self):
         """Save current annotations to file"""
         if not self.drawing_label.targets:
             QMessageBox.warning(self, "Warning", "No annotations to save")
             return
+        
+        if self.current_image_path:
+            self.labels_cache[self.current_image_path] = {
+                'targets': self.drawing_label.targets.copy()
+            }
     
         image = {
                 "id": self.current_image_index,
@@ -599,6 +810,21 @@ class AnimalPoseAnnotatorPage(QMainWindow, Ui_AnimalPoseAnnotator):
         if hasattr(self, 'drawing_label'):
             self.drawing_label.pen_settings['radius'] = value
             self.drawing_label._commit_changes()
+    
+    def onAddSkeletons(self, value):
+        """Handle skeleton link change"""
+        if hasattr(self, 'drawing_label'):
+            self.SkeletonSelection.addItem(f"{value[0]}->{value[1]}")
+            if value not in self.project_config['skeleton']:
+                self.project_config['skeleton'].append(value)
+            with open(self.config_path, "w", encoding="utf-8") as f:
+                yaml.safe_dump(self.project_config, 
+                        f, 
+                        indent=2, 
+                        sort_keys=False, 
+                        default_flow_style=False
+                    )
+            
         
     def closeEvent(self, event):
         """Handle closing of the save dialog"""

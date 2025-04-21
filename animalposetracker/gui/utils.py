@@ -1,11 +1,11 @@
 from PySide6.QtCore import Qt, QPoint, QRect, QSize, Signal, QObject
 from PySide6.QtWidgets import (QWidget, QHBoxLayout, QLabel, QLineEdit, 
                               QListWidgetItem, QGraphicsView, QCheckBox, 
-                              QLayout, QTreeView, QHeaderView, QSlider, QVBoxLayout)
-from PySide6.QtGui import (QPainter, QPixmap, QPen, QColor, QCursor,
-                           QWheelEvent, QBrush, QFont, QFontMetrics, 
+                              QLayout, QTreeView, QMenu)
+from PySide6.QtGui import (QPainter, QPixmap, QPen, QColor,QWheelEvent, QBrush, 
                            QStandardItemModel, QStandardItem)
 from typing import List
+from animalposetracker.gui import COLORS
 
 
 class ListManager(QObject):
@@ -233,13 +233,19 @@ class AnnotationTarget:
         self.skeletons = {} 
         self.current_keypoint_id = 0       
 
-class AnnotationViewer:
+class AnnotationViewer(QObject):
+    target_deleted = Signal(int)
+    keypoints_cleared = Signal(int)
+    keypoint_deleted = Signal(int, int)
+    skeletons_cleared = Signal(int)
+    skeleton_deleted = Signal(int, int)
     def __init__(self, tree_view: QTreeView):
         """Initialize the annotation viewer with a QTreeView
         
         Args:
             tree_view: The QTreeView widget to display annotation hierarchy
         """
+        super().__init__()
         self.tree_view = tree_view
         self.model = QStandardItemModel()
         self.tree_view.setModel(self.model)
@@ -251,6 +257,61 @@ class AnnotationViewer:
         self.tree_view.setEditTriggers(QTreeView.NoEditTriggers)
         self.tree_view.setIndentation(20)
         self.tree_view.setColumnWidth(0, 200)  # Fixed width for property column
+
+        self.tree_view.setContextMenuPolicy(Qt.CustomContextMenu)
+        self.tree_view.customContextMenuRequested.connect(self._show_context_menu)
+    
+    def _show_context_menu(self, pos):
+        """Show context menu for tree view items"""
+        menu = QMenu()
+        delete_action = menu.addAction("Delete")
+        delete_action.triggered.connect(self._handle_delete_action)
+        menu.exec(self.tree_view.viewport().mapToGlobal(pos))
+    
+    def _handle_delete_action(self):
+        """Handle delete action from context menu"""
+        index = self.tree_view.currentIndex()
+        if not index.isValid():
+            return
+        item = self.model.itemFromIndex(index)
+        target_id = item.data(Qt.UserRole)
+
+        if "Target" in item.text():
+            self._delete_target(target_id)
+        elif "Keypoint" in item.text():
+            self._delete_keypoint_group(item)
+        elif item.parent() and "Keypoint" in item.parent().text():
+            self._delete_single_keypoint(item)
+        elif "Skeleton" in item.text():
+            self._delete_skeleton_group(target_id)
+        elif item.parent() and "Skeleton" in item.parent().text():
+            self._delete_single_skeleton(item)
+    
+    def _delete_target(self, target_id):
+        """Delete a target and all associated data"""
+        self.target_deleted.emit(target_id)
+    
+    def _delete_keypoint_group(self, parent_item):
+        """Delete a group of keypoints and all associated data"""
+        target_id = parent_item.data(Qt.UserRole)
+        self.keypoints_cleared.emit(target_id)
+    
+    def _delete_single_keypoint(self, item):
+        """Delete a single keypoint and all associated data"""
+        target_id = item.parent().data(Qt.UserRole)
+        kpt_id = int(item.text()) 
+        self.keypoint_deleted.emit(target_id, kpt_id)
+    
+    def _delete_skeleton_group(self, parent_item):
+        """delete a group of skeletons and all associated data"""
+        target_id = parent_item.data(Qt.UserRole)
+        self.skeletons_cleared.emit(target_id) 
+
+    def _delete_single_skeleton(self, item):
+        """Delete a single skeleton and all associated data"""
+        target_id = item.parent().parent().data(Qt.UserRole)
+        skeleton_id = int(item.text().split("-")[1])
+        self.skeleton_deleted.emit(target_id, skeleton_id)
     
     def display_target(self, targets: List[AnnotationTarget]):
         """Display target data with proper two-column expansion"""
@@ -337,7 +398,7 @@ class AnnotationViewer:
     
 class DrawingBoard(QLabel):
     """Main canvas for creating and managing annotations"""
-    
+    addskeletons = Signal(list)
     def __init__(self, parent=None, 
                  keypoints=None, 
                  classes=None, 
@@ -360,7 +421,6 @@ class DrawingBoard(QLabel):
         self.current_target_id = 0
         self.start_position = None
         self.current_pos = None
-        self.color_index = 0
 
         # keypoints, classes and skeleton selection
         self.keypoints = keypoints
@@ -368,9 +428,15 @@ class DrawingBoard(QLabel):
         self.skeletons = skeletons
         self.visible = visible
         self.labels = labels
-        self.labels_view = AnnotationViewer(labels)
         self.labels.clicked.connect(self._on_label_click)
         self.visible.currentIndexChanged.connect(self._on_visible_change)
+
+        self.labels_view = AnnotationViewer(labels)
+        self.labels_view.target_deleted.connect(self._on_target_deleted)
+        self.labels_view.keypoints_cleared.connect(self._on_keypoints_cleared)
+        self.labels_view.keypoint_deleted.connect(self._on_keypoint_deleted)
+        self.labels_view.skeletons_cleared.connect(self._on_skeletons_cleared)
+        self.labels_view.skeleton_deleted.connect(self._on_skeleton_deleted)
 
         # Visual settings
         self.pen_settings = {
@@ -432,16 +498,13 @@ class DrawingBoard(QLabel):
         self.temp_pixmap.fill(Qt.transparent)
         self.update()
 
-    def generate_color(self):
-        """Generate distinct color using HSV cycling"""
-        hue = (self.color_index * 30) % 360
-        self.color_index += 1
-        return QColor.fromHsv(hue, 255, 200)
+    def _generate_color_for_id(self, target_id):
+        color_index = target_id % len(COLORS) 
+        return COLORS[color_index]
 
     def create_target(self):
         """Create new annotation target with initial properties"""
-        color = self.generate_color()
-        new_target = AnnotationTarget(len(self.targets), color)
+        new_target = AnnotationTarget(len(self.targets), COLORS[len(self.targets)% len(COLORS)])
         self.current_target_id = new_target.id
         self.targets.append(new_target)
         self.set_current_target(self.current_target_id)
@@ -548,23 +611,25 @@ class DrawingBoard(QLabel):
     def _create_skeleton_connection(self, start_id, end_id):
         """Create a skeleton connection between two keypoints"""
         skeleton_id = len(self.current_target.skeletons)
-        start_pos = self.current_target.keypoints[start_id]["pos"]
-        end_pos = self.current_target.keypoints[end_id]["pos"]
+        start_pos = self.current_target.keypoints[start_id]["pos"][0:2]
+        end_pos = self.current_target.keypoints[end_id]["pos"][0:2]
         self.current_target.skeletons[skeleton_id] = {
             "skeleton": (start_id, end_id),
             "pos": [*start_pos, *end_pos]
         }
+        self.addskeletons.emit([start_id, end_id])
 
     def _find_nearest_keypoint(self, pos):
         """Find nearest keypoint within tolerance range"""
         if not self.current_target or not self.current_target.keypoints:
             return None
             
-        min_distance = self.current_target.point_radius * 2
+        min_distance = self.pen_settings["radius"] * 2
         nearest_id, best_dist = None, float('inf')
         
         for kpt_id, kpt_data in self.current_target.keypoints.items():
-            kpt_pos = QPoint(*kpt_data["pos"])
+            kpt = kpt_data["pos"][0:2]
+            kpt_pos = QPoint(*kpt)
             current_dist = (kpt_pos - pos).manhattanLength()
             if current_dist < min_distance and current_dist < best_dist:
                 best_dist = current_dist
@@ -629,22 +694,29 @@ class DrawingBoard(QLabel):
     def _draw_bline_preview(self, painter):
         """Draw bone line connection preview"""
         if not self.current_target:
-            return
-            
+            raise ValueError("No current target for bone line preview")
+        
         # Draw hovered point highlight
         if hasattr(self, '_nearest_point_id') and self._nearest_point_id is not None:
             kpt_data = self.current_target.keypoints[self._nearest_point_id]
-            pos = QPoint(*kpt_data["pos"])
+            kpt = kpt_data["pos"][0:2]
+            pos = QPoint(*kpt)
             painter.setBrush(QColor(255, 255, 0, 180))
-            painter.drawEllipse(pos, self.current_target.point_radius * 1.5, 
-                              self.current_target.point_radius * 1.5)
+            painter.drawEllipse(pos, self.pen_settings["radius"] * 1.5, 
+                              self.pen_settings["radius"] * 1.5)
         
         # Draw temporary connection preview
         if hasattr(self, '_bline_temp_points') and len(self._bline_temp_points) == 1:
             start_id = self._bline_temp_points[0]
-            start_pos = QPoint(*self.current_target.keypoints[start_id]["pos"])
-            end_pos = QPoint(*self.current_target.keypoints[self._nearest_point_id]["pos"])
-            
+            start_pos = self.current_target.keypoints[start_id]["pos"][0:2]
+            start_pos = QPoint(*start_pos)
+
+            if hasattr(self, '_nearest_point_id') and self._nearest_point_id is not None:
+                end_pos = self.current_target.keypoints[self._nearest_point_id]["pos"][0:2]
+                end_pos = QPoint(*end_pos)
+            else:
+                end_pos = self.current_pos
+
             pen = QPen(QColor(100, 255, 100, 150), 2, Qt.DashLine)
             painter.setPen(pen)
             painter.drawLine(start_pos, end_pos)
@@ -690,7 +762,6 @@ class DrawingBoard(QLabel):
         # Draw keypoints
         painter.setBrush(target.color)
         for kpt_data in target.keypoints.values():
-            print(kpt_data)
             keypoint = kpt_data["pos"][0:2]
             pos = QPoint(*keypoint)
             painter.drawEllipse(pos, self.pen_settings["radius"], self.pen_settings["radius"])
@@ -788,7 +859,6 @@ class DrawingBoard(QLabel):
         if self.start_position is not None:
             if self.current_target and not self.current_target.bounding_rect:
                 self.targets.remove(self.current_target)
-                self.color_index -= 1
             self.start_position = None
             self.current_target = None
     
@@ -796,3 +866,52 @@ class DrawingBoard(QLabel):
         """Cancel bone line drawing operation"""
         if hasattr(self, '_bline_temp_points'):
             del self._bline_temp_points
+    
+    def _on_target_deleted(self, target_id):
+        """Handle target deletion event"""
+        self.targets = [t for t in self.targets if t.id != target_id]
+        for new_id, target in enumerate(self.targets):
+            target.id = new_id
+            target.color = self._generate_color_for_id(new_id)
+        
+        if self.current_target_id == target_id:
+             self.current_target_id = min(target_id, len(self.targets) - 1) if self.targets else None
+        elif self.current_target_id > target_id:
+            self.current_target_id -= 1
+        self.labels_view.display_target(self.targets)
+        self._commit_changes()
+    
+    def _on_keypoints_cleared(self, target_id):
+        """Handle keypoints clear event"""
+        target = next((t for t in self.targets if t.id == target_id), None)
+        if target:
+            target.keypoints.clear()
+            target.skeletons.clear()
+            self._commit_changes()
+
+    def _on_keypoint_deleted(self, target_id, kpt_id):
+        """Handle keypoint deletion event"""
+        target = next((t for t in self.targets if t.id == target_id), None)
+        if target and kpt_id in target.keypoints:
+            del target.keypoints[kpt_id]
+            skeletons_to_delete = [
+                skel_id for skel_id, skel_data in target.skeletons.items()
+                if kpt_id in skel_data["skeleton"]
+            ]
+            for skel_id in skeletons_to_delete:
+                del target.skeletons[skel_id]
+            self._commit_changes()
+    
+    def _on_skeletons_cleared(self, target_id):
+        """Handle skeletons clear event"""
+        target = next((t for t in self.targets if t.id == target_id), None)
+        if target:
+            target.skeletons.clear()
+            self._commit_changes()
+
+    def _on_skeleton_deleted(self, target_id, skeleton_id):
+        """Handle skeleton deletion event"""
+        target = next((t for t in self.targets if t.id == target_id), None)
+        if target and skeleton_id in target.skeletons:
+            del target.skeletons[skeleton_id]
+            self._commit_changes()
