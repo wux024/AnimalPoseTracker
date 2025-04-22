@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 
 ################################################################################
-## Form generated from reading UI file 'animalposetrackerSYPFrN.ui'
+## Form generated from reading UI file 'animalposetrackerKuXDZg.ui'
 ##
 ## Created by: Qt User Interface Compiler version 6.8.2
 ##
@@ -23,8 +23,6 @@ from PySide6.QtWidgets import (QApplication, QCheckBox, QComboBox, QFrame,
     QSpinBox, QStackedWidget, QTabWidget, QToolBar,
     QTreeWidget, QTreeWidgetItem, QVBoxLayout, QWidget)
 
-from animalposetracker.gui import LOGO_PATH_TRANSPARENT, LOGO_SMALL_PATH
-
 class Ui_AnimalPoseTracker(object):
     def setupUi(self, AnimalPoseTracker):
         if not AnimalPoseTracker.objectName():
@@ -40,7 +38,7 @@ class Ui_AnimalPoseTracker(object):
         font.setFamilies([u"Times New Roman"])
         AnimalPoseTracker.setFont(font)
         icon = QIcon()
-        icon.addFile(LOGO_SMALL_PATH, QSize(), QIcon.Mode.Normal, QIcon.State.Off)
+        icon.addFile(u"../media/logo.png", QSize(), QIcon.Mode.Normal, QIcon.State.Off)
         AnimalPoseTracker.setWindowIcon(icon)
         AnimalPoseTracker.setLayoutDirection(Qt.LayoutDirection.LeftToRight)
         AnimalPoseTracker.setAutoFillBackground(False)
@@ -134,7 +132,7 @@ class Ui_AnimalPoseTracker(object):
         self.Logo.setSizePolicy(sizePolicy3)
         self.Logo.setMaximumSize(QSize(200, 200))
         self.Logo.setTextFormat(Qt.TextFormat.AutoText)
-        self.Logo.setPixmap(QPixmap(LOGO_PATH_TRANSPARENT))
+        self.Logo.setPixmap(QPixmap(u"assets/logo_transparent.png"))
         self.Logo.setScaledContents(True)
 
         self.LogoLayout.addWidget(self.Logo)
@@ -532,17 +530,17 @@ class Ui_AnimalPoseTracker(object):
 
         self.LabelFrameLayout.addWidget(self.StartLabelFrames)
 
-        self.CheckLabelledFrames = QPushButton(self.LabelFramesGroupLayout)
-        self.CheckLabelledFrames.setObjectName(u"CheckLabelledFrames")
+        self.StartCreateDatasets = QPushButton(self.LabelFramesGroupLayout)
+        self.StartCreateDatasets.setObjectName(u"StartCreateDatasets")
 
-        self.LabelFrameLayout.addWidget(self.CheckLabelledFrames)
+        self.LabelFrameLayout.addWidget(self.StartCreateDatasets)
 
-        self.BuildSkeleton = QPushButton(self.LabelFramesGroupLayout)
-        self.BuildSkeleton.setObjectName(u"BuildSkeleton")
-        sizePolicy2.setHeightForWidth(self.BuildSkeleton.sizePolicy().hasHeightForWidth())
-        self.BuildSkeleton.setSizePolicy(sizePolicy2)
+        self.CheckDatasets = QPushButton(self.LabelFramesGroupLayout)
+        self.CheckDatasets.setObjectName(u"CheckDatasets")
+        sizePolicy2.setHeightForWidth(self.CheckDatasets.sizePolicy().hasHeightForWidth())
+        self.CheckDatasets.setSizePolicy(sizePolicy2)
 
-        self.LabelFrameLayout.addWidget(self.BuildSkeleton)
+        self.LabelFrameLayout.addWidget(self.CheckDatasets)
 
 
         self.LabelFramesGroupVLayout.addLayout(self.LabelFrameLayout)
@@ -966,8 +964,8 @@ class Ui_AnimalPoseTracker(object):
 
         self.retranslateUi(AnimalPoseTracker)
 
-        self.AnimalPoseTrackerPage.setCurrentIndex(1)
-        self.ConfigureTabPage.setCurrentIndex(2)
+        self.AnimalPoseTrackerPage.setCurrentIndex(0)
+        self.ConfigureTabPage.setCurrentIndex(0)
 
 
         QMetaObject.connectSlotsByName(AnimalPoseTracker)
@@ -1095,8 +1093,8 @@ class Ui_AnimalPoseTracker(object):
         self.SaveYOLO.setText(QCoreApplication.translate("AnimalPoseTracker", u"Save YOLO Format", None))
         self.SaveCOCO.setText(QCoreApplication.translate("AnimalPoseTracker", u"Save COCO Format", None))
         self.StartLabelFrames.setText(QCoreApplication.translate("AnimalPoseTracker", u"Start Label Frames", None))
-        self.CheckLabelledFrames.setText(QCoreApplication.translate("AnimalPoseTracker", u"Check Labelled Frames", None))
-        self.BuildSkeleton.setText(QCoreApplication.translate("AnimalPoseTracker", u"Build Skeleton", None))
+        self.StartCreateDatasets.setText(QCoreApplication.translate("AnimalPoseTracker", u"Start Create Datasets", None))
+        self.CheckDatasets.setText(QCoreApplication.translate("AnimalPoseTracker", u"Check Datasets", None))
         self.ConfigureTabPage.setTabText(self.ConfigureTabPage.indexOf(self.ExtractLabelFrames), QCoreApplication.translate("AnimalPoseTracker", u"Extract and Label Frames", None))
         self.TrainingConfigureLabel.setText(QCoreApplication.translate("AnimalPoseTracker", u"AnimalPoseTracker-Training Configure", None))
         self.TrainingConfigureGroup.setTitle("")

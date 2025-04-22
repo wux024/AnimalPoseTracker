@@ -51,7 +51,7 @@
     <item>
      <widget class="QStackedWidget" name="AnimalPoseTrackerPage">
       <property name="currentIndex">
-       <number>1</number>
+       <number>0</number>
       </property>
       <widget class="QWidget" name="MainPage">
        <layout class="QVBoxLayout" name="MainPageLayout">
@@ -317,7 +317,7 @@
            </sizepolicy>
           </property>
           <property name="currentIndex">
-           <number>2</number>
+           <number>0</number>
           </property>
           <property name="tabBarAutoHide">
            <bool>false</bool>
@@ -957,14 +957,14 @@
                   </widget>
                  </item>
                  <item>
-                  <widget class="QPushButton" name="CheckLabelledFrames">
+                  <widget class="QPushButton" name="StartCreateDatasets">
                    <property name="text">
-                    <string>Check Labelled Frames</string>
+                    <string>Start Create Datasets</string>
                    </property>
                   </widget>
                  </item>
                  <item>
-                  <widget class="QPushButton" name="BuildSkeleton">
+                  <widget class="QPushButton" name="CheckDatasets">
                    <property name="sizePolicy">
                     <sizepolicy hsizetype="Preferred" vsizetype="Fixed">
                      <horstretch>0</horstretch>
@@ -972,7 +972,7 @@
                     </sizepolicy>
                    </property>
                    <property name="text">
-                    <string>Build Skeleton</string>
+                    <string>Check Datasets</string>
                    </property>
                   </widget>
                  </item>

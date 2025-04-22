@@ -1,10 +1,14 @@
 from PySide6.QtCore import Qt, QPoint, QRect, QSize, Signal, QObject
 from PySide6.QtWidgets import (QWidget, QHBoxLayout, QLabel, QLineEdit, 
                               QListWidgetItem, QGraphicsView, QCheckBox, 
-                              QLayout, QTreeView, QMenu)
+                              QLayout, QTreeView, QMenu, QDialog, QPushButton, 
+                              QVBoxLayout, QMessageBox)
 from PySide6.QtGui import (QPainter, QPixmap, QPen, QColor,QWheelEvent, QBrush, 
-                           QStandardItemModel, QStandardItem)
+                           QStandardItemModel, QStandardItem, QFontMetrics)
 from typing import List
+import shutil
+import json
+from sklearn.model_selection import train_test_split
 from animalposetracker.gui import COLORS
 
 
@@ -217,7 +221,249 @@ class ZoomableGraphicsView(QGraphicsView):
         event.accept()
         self.zoom_changed.emit(self.zoom_factor)
 
+class DatasetSplitDialog(QDialog):
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.setWindowTitle("Set Dataset Split Ratios")
+        self.ratios = (0.8, 0.1, 0.1)  # Default ratios
+        self.setup_ui()
+        
+    def setup_ui(self):
+        layout = QVBoxLayout()
+        # Training set ratio
+        train_layout = QHBoxLayout()
+        train_layout.addWidget(QLabel("Training set ratio:"))
+        self.train_edit = QLineEdit("0.8")
+        train_layout.addWidget(self.train_edit)
+        layout.addLayout(train_layout)
+        
+        # Validation set ratio
+        val_layout = QHBoxLayout()
+        val_layout.addWidget(QLabel("Validation set ratio:"))
+        self.val_edit = QLineEdit("0.1")
+        val_layout.addWidget(self.val_edit)
+        layout.addLayout(val_layout)
+        
+        # Test set ratio
+        test_layout = QHBoxLayout()
+        test_layout.addWidget(QLabel("Test set ratio:"))
+        self.test_edit = QLineEdit("0.1")
+        test_layout.addWidget(self.test_edit)
+        layout.addLayout(test_layout)
+        
+        # Buttons
+        btn_layout = QHBoxLayout()
+        ok_btn = QPushButton("OK")
+        ok_btn.clicked.connect(self.validate_and_accept)
+        btn_layout.addWidget(ok_btn)
+        
+        cancel_btn = QPushButton("Cancel")
+        cancel_btn.clicked.connect(self.reject)
+        btn_layout.addWidget(cancel_btn)
+        
+        layout.addLayout(btn_layout)
+        self.setLayout(layout)
+    
+    def validate_and_accept(self):
+        try:
+            train = float(self.train_edit.text())
+            val = float(self.val_edit.text())
+            test = float(self.test_edit.text())
+            
+            if abs(train + val + test - 1.0) > 0.001:
+                QMessageBox.warning(self, "Invalid Ratios", "Ratios must sum to 1.0")
+                return
+                
+            if train <= 0 or val <= 0 or test <= 0:
+                QMessageBox.warning(self, "Invalid Ratios", "All ratios must be positive")
+                return
+                
+            self.ratios = (train, val, test)
+            self.accept()
+        except ValueError:
+            QMessageBox.warning(self, "Invalid Input", "Please enter valid numbers")
 
+class DatasetSplitDialog(QDialog):
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.setWindowTitle("Set Dataset Split Ratios")
+        self.ratios = (0.8, 0.1, 0.1)  # Default ratios
+        self.setup_ui()
+        
+    def setup_ui(self):
+        layout = QVBoxLayout()
+        
+        # Training set ratio
+        train_layout = QHBoxLayout()
+        train_layout.addWidget(QLabel("Training set ratio:"))
+        self.train_edit = QLineEdit("0.8")
+        train_layout.addWidget(self.train_edit)
+        layout.addLayout(train_layout)
+        
+        # Validation set ratio
+        val_layout = QHBoxLayout()
+        val_layout.addWidget(QLabel("Validation set ratio:"))
+        self.val_edit = QLineEdit("0.1")
+        val_layout.addWidget(self.val_edit)
+        layout.addLayout(val_layout)
+        
+        # Test set ratio
+        test_layout = QHBoxLayout()
+        test_layout.addWidget(QLabel("Test set ratio:"))
+        self.test_edit = QLineEdit("0.1")
+        test_layout.addWidget(self.test_edit)
+        layout.addLayout(test_layout)
+        
+        # Buttons
+        btn_layout = QHBoxLayout()
+        ok_btn = QPushButton("OK")
+        ok_btn.clicked.connect(self.validate_and_accept)
+        btn_layout.addWidget(ok_btn)
+        
+        cancel_btn = QPushButton("Cancel")
+        cancel_btn.clicked.connect(self.reject)
+        btn_layout.addWidget(cancel_btn)
+        
+        layout.addLayout(btn_layout)
+        self.setLayout(layout)
+    
+    def validate_and_accept(self):
+        try:
+            train = float(self.train_edit.text())
+            val = float(self.val_edit.text())
+            test = float(self.test_edit.text())
+            
+            if abs(train + val + test - 1.0) > 0.001:
+                QMessageBox.warning(self, "Invalid Ratios", "Ratios must sum to 1.0")
+                return
+                
+            if train <= 0 or val <= 0 or test <= 0:
+                QMessageBox.warning(self, "Invalid Ratios", "All ratios must be positive")
+                return
+                
+            self.ratios = (train, val, test)
+            self.accept()
+        except ValueError:
+            QMessageBox.warning(self, "Invalid Input", "Please enter valid numbers")
+
+
+def split_dataset_sklearn(image_paths, 
+                          label_paths, 
+                          ratios=(0.8, 0.1, 0.1), 
+                          random_state=42):
+    """
+    Split dataset using sklearn's train_test_split with proper stratification
+        
+    Args:
+        image_paths: List of Path objects to images
+        label_paths: List of Path objects to corresponding labels
+        ratios: (train, val, test) ratios (should sum to 1)
+        random_state: Random seed for reproducibility
+            
+    Returns:
+        (train_images, train_labels), 
+        (val_images, val_labels), 
+        (test_images, test_labels)
+    """
+    # First split into train+val and test
+    train_val_ratio = ratios[0] + ratios[1]
+    test_ratio = ratios[2]
+        
+    # First split to separate test set
+    train_val_imgs, test_imgs, train_val_lbls, test_lbls = train_test_split(
+            image_paths, label_paths, 
+            test_size=test_ratio,
+            random_state=random_state
+    )
+        
+    # Then split train_val into train and val
+    val_ratio = ratios[1] / train_val_ratio  # Adjusted ratio for second split
+    train_imgs, val_imgs, train_lbls, val_lbls = train_test_split(
+        train_val_imgs, train_val_lbls,
+        test_size=val_ratio,
+        random_state=random_state
+    )
+        
+    return (train_imgs, train_lbls), (val_imgs, val_lbls), (test_imgs, test_lbls)
+
+def create_dataset_structure(base_path):
+    """Create the required directory structure"""
+    dirs = {
+        'annotations': base_path / "annotations",
+        'images_train': base_path / "images" / "train",
+        'images_val': base_path / "images" / "val",
+        'images_test': base_path / "images" / "test",
+        'labels_train': base_path / "labels" / "train",
+        'labels_val': base_path / "labels" / "val",
+        'labels_test': base_path / "labels" / "test",
+    }
+        
+    for d in dirs.values():
+        d.mkdir(parents=True, exist_ok=True)
+    return dirs
+
+def create_coco_annotations(annotations_input_dir, 
+                            annotations_ouput_dir, 
+                            train_pairs, val_pairs, test_pairs):
+    """
+    Generate COCO format annotation files for train/val/test splits while preserving original IDs
+    
+    Args:
+        annotations_dir: Directory to store annotation JSON files
+        train_pairs: (train_image_paths, train_label_paths)
+        val_pairs: (val_image_paths, val_label_paths)
+        test_pairs: (test_image_paths, test_label_paths)
+    """
+    # Load original COCO annotations
+    with open(annotations_input_dir, "r") as f:
+        source_ann = json.load(f)
+    
+    # Create lookup dictionaries:
+    # filename → image_id
+    # image_id → image_info
+    # image_id → [annotations]
+    file_name_to_image_id = {img['file_name']: img['id'] for img in source_ann['images']}
+    image_id_to_info = {img['id']: img for img in source_ann['images']}
+    image_id_to_anns = {img_id: [] for img_id in image_id_to_info}
+    
+    # Build annotation index (preserve original IDs)
+    for ann in source_ann['annotations']:
+        image_id_to_anns[ann['image_id']].append(ann)
+
+    # Process each split
+    for split_name, pairs in [('train', train_pairs), ('val', val_pairs), ('test', test_pairs)]:
+        split_ann = {
+            "info": source_ann['info'],
+            "licenses": source_ann['licenses'],
+            "categories": source_ann['categories'],
+            "images": [],
+            "annotations": []
+        }
+        
+        # Process each image in current split
+        for img_path in pairs[0]:  # pairs[0] = image paths
+            filename = img_path.name
+            
+            if filename not in file_name_to_image_id:
+                continue  # Skip if not in original annotations
+                
+            image_id = file_name_to_image_id[filename]
+            
+            # Add image info (preserve original data)
+            split_ann['images'].append(image_id_to_info[image_id])
+            
+            # Add all annotations (preserve original IDs)
+            split_ann['annotations'].extend(image_id_to_anns[image_id])
+        
+        # Save split annotations
+        with open(annotations_ouput_dir / f"{split_name}.json", 'w') as f:
+            json.dump(split_ann, f, indent=4)
+
+def copy_split_files(pairs, img_dir, lbl_dir):
+    """Copy image-label pairs to their destination directories"""
+    for img, lbl in pairs:
+        shutil.copy(img, img_dir)
+        shutil.copy(lbl, lbl_dir)
 class AnnotationTarget:
     """Represents a single annotated object with visual elements"""
     def __init__(self, target_id, color):
@@ -274,16 +520,16 @@ class AnnotationViewer(QObject):
         if not index.isValid():
             return
         item = self.model.itemFromIndex(index)
-        target_id = item.data(Qt.UserRole)
 
         if "Target" in item.text():
+            target_id = item.data(Qt.UserRole)
             self._delete_target(target_id)
         elif "Keypoint" in item.text():
             self._delete_keypoint_group(item)
         elif item.parent() and "Keypoint" in item.parent().text():
             self._delete_single_keypoint(item)
         elif "Skeleton" in item.text():
-            self._delete_skeleton_group(target_id)
+            self._delete_skeleton_group(item)
         elif item.parent() and "Skeleton" in item.parent().text():
             self._delete_single_skeleton(item)
     
@@ -293,18 +539,18 @@ class AnnotationViewer(QObject):
     
     def _delete_keypoint_group(self, parent_item):
         """Delete a group of keypoints and all associated data"""
-        target_id = parent_item.data(Qt.UserRole)
+        target_id = parent_item.parent().data(Qt.UserRole)
         self.keypoints_cleared.emit(target_id)
     
     def _delete_single_keypoint(self, item):
         """Delete a single keypoint and all associated data"""
-        target_id = item.parent().data(Qt.UserRole)
+        target_id = item.parent().parent().data(Qt.UserRole)
         kpt_id = int(item.text()) 
         self.keypoint_deleted.emit(target_id, kpt_id)
     
     def _delete_skeleton_group(self, parent_item):
         """delete a group of skeletons and all associated data"""
-        target_id = parent_item.data(Qt.UserRole)
+        target_id = parent_item.parent().data(Qt.UserRole)
         self.skeletons_cleared.emit(target_id) 
 
     def _delete_single_skeleton(self, item):
@@ -758,10 +1004,13 @@ class DrawingBoard(QLabel):
             painter.setPen(QPen(target.color, self.pen_settings["width"]))
             rect = QRect(*target.bounding_rect["bbox"])
             painter.drawRect(rect)
+            painter = self._display_target_info(target.id, target, rect, painter)
         
         # Draw keypoints
         painter.setBrush(target.color)
-        for kpt_data in target.keypoints.values():
+        for _, kpt_data in target.keypoints.items():
+            if kpt_data["pos"][2] == 0:
+                continue
             keypoint = kpt_data["pos"][0:2]
             pos = QPoint(*keypoint)
             painter.drawEllipse(pos, self.pen_settings["radius"], self.pen_settings["radius"])
@@ -770,10 +1019,29 @@ class DrawingBoard(QLabel):
         painter.setBrush(Qt.NoBrush)
         painter.setPen(QPen(target.color, self.pen_settings["width"], 
                           Qt.SolidLine))
-        for skeleton in target.skeletons.values():
+        for _, skeleton in target.skeletons.items():
             start = QPoint(skeleton["pos"][0], skeleton["pos"][1])
             end = QPoint(skeleton["pos"][2], skeleton["pos"][3])
+            start_id = skeleton["skeleton"][0]
+            end_id = skeleton["skeleton"][1]
+            start_id_visible = target.keypoints[start_id]["pos"][2]
+            end_id_visible = target.keypoints[end_id]["pos"][2]
+            if start_id_visible == 0 or end_id_visible == 0:
+                continue
             painter.drawLine(start, end)
+    
+    def _display_target_info(self, target_id, target, rect, painter):
+        """Display target information in parent widget"""
+        font = painter.font()
+        font_metrics = QFontMetrics(font) 
+        class_name = target.bounding_rect["category_name"]
+        text = f"Target {target_id}: {class_name}"
+        text_width = font_metrics.horizontalAdvance(text)
+        text_height = font_metrics.height()
+        text_rect = QRect(rect.x(), rect.y() - text_height * 1.2, text_width, text_height)
+        painter.drawText(text_rect, Qt.AlignLeft | Qt.AlignTop, text)
+        return painter
+        
 
     def set_drawing_mode(self, mode):
         """Set active drawing tool"""
@@ -859,6 +1127,7 @@ class DrawingBoard(QLabel):
         if self.start_position is not None:
             if self.current_target and not self.current_target.bounding_rect:
                 self.targets.remove(self.current_target)
+                self.current_target_id = self.current_target_id - 1 if self.targets else 0
             self.start_position = None
             self.current_target = None
     
@@ -904,6 +1173,7 @@ class DrawingBoard(QLabel):
     
     def _on_skeletons_cleared(self, target_id):
         """Handle skeletons clear event"""
+        print(target_id)
         target = next((t for t in self.targets if t.id == target_id), None)
         if target:
             target.skeletons.clear()

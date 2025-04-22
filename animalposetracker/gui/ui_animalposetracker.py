@@ -8,17 +8,11 @@
 ## WARNING! All changes made in this file will be lost when recompiling UI file!
 ################################################################################
 
-from PySide6.QtCore import (QCoreApplication, QDate, QDateTime, QLocale,
-    QMetaObject, QObject, QPoint, QRect,
-    QSize, QTime, QUrl, Qt)
-from PySide6.QtGui import (QAction, QBrush, QColor, QConicalGradient,
-    QCursor, QFont, QFontDatabase, QGradient,
-    QIcon, QImage, QKeySequence, QLinearGradient,
-    QPainter, QPalette, QPixmap, QRadialGradient,
-    QTransform)
-from PySide6.QtWidgets import (QApplication, QCheckBox, QComboBox, QFrame,
-    QGroupBox, QHBoxLayout, QHeaderView, QLabel,
-    QLayout, QLineEdit, QMainWindow, QMenu,
+from PySide6.QtCore import QCoreApplication, QMetaObject, QRect, QSize, Qt
+from PySide6.QtGui import QAction, QFont, QIcon, QPixmap
+from PySide6.QtWidgets import (QCheckBox, QComboBox, QFrame,
+    QGroupBox, QHBoxLayout, QLabel,
+    QLayout, QLineEdit, QMenu,
     QMenuBar, QPushButton, QSizePolicy, QSpacerItem,
     QSpinBox, QStackedWidget, QTabWidget, QToolBar,
     QTreeWidget, QTreeWidgetItem, QVBoxLayout, QWidget)
@@ -40,7 +34,7 @@ class Ui_AnimalPoseTracker(object):
         font.setFamilies([u"Times New Roman"])
         AnimalPoseTracker.setFont(font)
         icon = QIcon()
-        icon.addFile(LOGO_SMALL_PATH, QSize(), QIcon.Mode.Normal, QIcon.State.Off)
+        icon.addFile(LOGO_PATH_TRANSPARENT, QSize(), QIcon.Mode.Normal, QIcon.State.Off)
         AnimalPoseTracker.setWindowIcon(icon)
         AnimalPoseTracker.setLayoutDirection(Qt.LayoutDirection.LeftToRight)
         AnimalPoseTracker.setAutoFillBackground(False)
@@ -134,7 +128,7 @@ class Ui_AnimalPoseTracker(object):
         self.Logo.setSizePolicy(sizePolicy3)
         self.Logo.setMaximumSize(QSize(200, 200))
         self.Logo.setTextFormat(Qt.TextFormat.AutoText)
-        self.Logo.setPixmap(QPixmap(LOGO_PATH_TRANSPARENT))
+        self.Logo.setPixmap(QPixmap(LOGO_SMALL_PATH))
         self.Logo.setScaledContents(True)
 
         self.LogoLayout.addWidget(self.Logo)
@@ -532,17 +526,17 @@ class Ui_AnimalPoseTracker(object):
 
         self.LabelFrameLayout.addWidget(self.StartLabelFrames)
 
-        self.CheckLabelledFrames = QPushButton(self.LabelFramesGroupLayout)
-        self.CheckLabelledFrames.setObjectName(u"CheckLabelledFrames")
+        self.StartCreateDatasets = QPushButton(self.LabelFramesGroupLayout)
+        self.StartCreateDatasets.setObjectName(u"StartCreateDatasets")
 
-        self.LabelFrameLayout.addWidget(self.CheckLabelledFrames)
+        self.LabelFrameLayout.addWidget(self.StartCreateDatasets)
 
-        self.BuildSkeleton = QPushButton(self.LabelFramesGroupLayout)
-        self.BuildSkeleton.setObjectName(u"BuildSkeleton")
-        sizePolicy2.setHeightForWidth(self.BuildSkeleton.sizePolicy().hasHeightForWidth())
-        self.BuildSkeleton.setSizePolicy(sizePolicy2)
+        self.CheckDatasets = QPushButton(self.LabelFramesGroupLayout)
+        self.CheckDatasets.setObjectName(u"CheckDatasets")
+        sizePolicy2.setHeightForWidth(self.CheckDatasets.sizePolicy().hasHeightForWidth())
+        self.CheckDatasets.setSizePolicy(sizePolicy2)
 
-        self.LabelFrameLayout.addWidget(self.BuildSkeleton)
+        self.LabelFrameLayout.addWidget(self.CheckDatasets)
 
 
         self.LabelFramesGroupVLayout.addLayout(self.LabelFrameLayout)
@@ -966,8 +960,8 @@ class Ui_AnimalPoseTracker(object):
 
         self.retranslateUi(AnimalPoseTracker)
 
-        self.AnimalPoseTrackerPage.setCurrentIndex(1)
-        self.ConfigureTabPage.setCurrentIndex(2)
+        self.AnimalPoseTrackerPage.setCurrentIndex(0)
+        self.ConfigureTabPage.setCurrentIndex(0)
 
 
         QMetaObject.connectSlotsByName(AnimalPoseTracker)
@@ -975,7 +969,7 @@ class Ui_AnimalPoseTracker(object):
 
     def retranslateUi(self, AnimalPoseTracker):
         AnimalPoseTracker.setWindowTitle(QCoreApplication.translate("AnimalPoseTracker", u"AnimalPoseTracker", None))
-        self.actionLoadProject.setText(QCoreApplication.translate("AnimalPoseTracker", u"Open Old Project", None))
+        self.actionLoadProject.setText(QCoreApplication.translate("AnimalPoseTracker", u"Open Old Project Ctrl+O", None))
         self.actionOpenRecent.setText(QCoreApplication.translate("AnimalPoseTracker", u"Open Recent", None))
         self.actionSave.setText(QCoreApplication.translate("AnimalPoseTracker", u"Save", None))
         self.actionExit.setText(QCoreApplication.translate("AnimalPoseTracker", u"Exit", None))
@@ -987,12 +981,11 @@ class Ui_AnimalPoseTracker(object):
         self.actionPublicDatasetsProject.setText(QCoreApplication.translate("AnimalPoseTracker", u"Public Datasets Project", None))
         self.actionDark.setText(QCoreApplication.translate("AnimalPoseTracker", u"Dark", None))
         self.actionLight.setText(QCoreApplication.translate("AnimalPoseTracker", u"Light", None))
-        self.actionCreateNewProject.setText(QCoreApplication.translate("AnimalPoseTracker", u"New Project", None))
+        self.actionCreateNewProject.setText(QCoreApplication.translate("AnimalPoseTracker", u"New Project Ctrl+N", None))
         self.actionTracker.setText(QCoreApplication.translate("AnimalPoseTracker", u"Tracker", None))
         self.WelcomeLabel.setText(QCoreApplication.translate("AnimalPoseTracker", u"Welcome to the AnimalPoseTracker!", None))
         self.Logo.setText("")
-        self.Introdution.setText(QCoreApplication.translate("AnimalPoseTracker", u"AnimalPoseTracker is an open source tool for " \
-        "cross-species animal pose estimation based on deep learning. Wu X. | https://wux024.github.io", None))
+        self.Introdution.setText(QCoreApplication.translate("AnimalPoseTracker", u"AnimalPoseTracker is an open source tool for animal pose estimation with deep learning. Wu X. | https://wux024.github.io", None))
         self.Note.setText(QCoreApplication.translate("AnimalPoseTracker", u"To get started, you can create a new project, load an existing project, or use opensource public datasets.", None))
         self.CreateNewProjectButton.setText(QCoreApplication.translate("AnimalPoseTracker", u"Create New Project", None))
         self.LoadProjectButton.setText(QCoreApplication.translate("AnimalPoseTracker", u"Load Project", None))
@@ -1088,7 +1081,7 @@ class Ui_AnimalPoseTracker(object):
 
         self.ClusterStepLabel.setText(QCoreApplication.translate("AnimalPoseTracker", u"Cluster step", None))
         self.SelectionVideosImages.setText(QCoreApplication.translate("AnimalPoseTracker", u"Selection videos or images", None))
-        self.SelectionVideosImagesLabel.setText(QCoreApplication.translate("AnimalPoseTracker", u"0 video or image selected", None))
+        self.SelectionVideosImagesLabel.setText(QCoreApplication.translate("AnimalPoseTracker", u"50 videos or images selected", None))
         self.ClearVideosImages.setText(QCoreApplication.translate("AnimalPoseTracker", u"Clear selection", None))
         self.ExtracFrames.setText(QCoreApplication.translate("AnimalPoseTracker", u"Extract Frames", None))
         self.LabelFramesGroupLayout.setTitle("")
@@ -1096,12 +1089,12 @@ class Ui_AnimalPoseTracker(object):
         self.SaveYOLO.setText(QCoreApplication.translate("AnimalPoseTracker", u"Save YOLO Format", None))
         self.SaveCOCO.setText(QCoreApplication.translate("AnimalPoseTracker", u"Save COCO Format", None))
         self.StartLabelFrames.setText(QCoreApplication.translate("AnimalPoseTracker", u"Start Label Frames", None))
-        self.CheckLabelledFrames.setText(QCoreApplication.translate("AnimalPoseTracker", u"Check Labelled Frames", None))
-        self.BuildSkeleton.setText(QCoreApplication.translate("AnimalPoseTracker", u"Build Skeleton", None))
+        self.StartCreateDatasets.setText(QCoreApplication.translate("AnimalPoseTracker", u"Start Create Datasets", None))
+        self.CheckDatasets.setText(QCoreApplication.translate("AnimalPoseTracker", u"Check Datasets", None))
         self.ConfigureTabPage.setTabText(self.ConfigureTabPage.indexOf(self.ExtractLabelFrames), QCoreApplication.translate("AnimalPoseTracker", u"Extract and Label Frames", None))
         self.TrainingConfigureLabel.setText(QCoreApplication.translate("AnimalPoseTracker", u"AnimalPoseTracker-Training Configure", None))
         self.TrainingConfigureGroup.setTitle("")
-        self.EditTrainingParameters.setText(QCoreApplication.translate("AnimalPoseTracker", u"Edit Training Parameters", None))
+        self.EditTrainingParameters.setText(QCoreApplication.translate("AnimalPoseTracker", u"Edit training parameters", None))
         self.StartTrain.setText(QCoreApplication.translate("AnimalPoseTracker", u"Start Train", None))
         self.EndTrain.setText(QCoreApplication.translate("AnimalPoseTracker", u"End Train", None))
         self.ResumeTrain.setText(QCoreApplication.translate("AnimalPoseTracker", u"Resume Train", None))
@@ -1237,7 +1230,7 @@ class Ui_AnimalPoseTracker(object):
         self.ConfigureTabPage.setTabText(self.ConfigureTabPage.indexOf(self.TrainingConfigure), QCoreApplication.translate("AnimalPoseTracker", u"Training Configure", None))
         self.EvaluateModelLabel.setText(QCoreApplication.translate("AnimalPoseTracker", u"AnimalPoseTracker-Evaluate Model", None))
         self.EvaluateModelGroup.setTitle("")
-        self.EditEvaluationParameters.setText(QCoreApplication.translate("AnimalPoseTracker", u"Edit Evaluation Parameters", None))
+        self.EditEvaluationParameters.setText(QCoreApplication.translate("AnimalPoseTracker", u"Edit evaluation parameters", None))
         self.StartEvaluate.setText(QCoreApplication.translate("AnimalPoseTracker", u"Start evaluate", None))
         self.EndEvaluate.setText(QCoreApplication.translate("AnimalPoseTracker", u"End evaluate", None))
         ___qtreewidgetitem66 = self.EvaluateConfigure.headerItem()
@@ -1325,7 +1318,7 @@ class Ui_AnimalPoseTracker(object):
         self.ConfigureTabPage.setTabText(self.ConfigureTabPage.indexOf(self.EvaluateModel), QCoreApplication.translate("AnimalPoseTracker", u"Evaluate Model", None))
         self.InferenceSourceLabel.setText(QCoreApplication.translate("AnimalPoseTracker", u"AnimalPoseTracker-Inference Source", None))
         self.InferenceSourceGroup.setTitle("")
-        self.EditInferenceParameters.setText(QCoreApplication.translate("AnimalPoseTracker", u"Edit Inference Parameters", None))
+        self.EditInferenceParameters.setText(QCoreApplication.translate("AnimalPoseTracker", u"Edit inference parameters", None))
         self.SelectionSource.setText(QCoreApplication.translate("AnimalPoseTracker", u"Selection Source", None))
         self.StartInference.setText(QCoreApplication.translate("AnimalPoseTracker", u"Start Inference", None))
         self.EndInference.setText(QCoreApplication.translate("AnimalPoseTracker", u"End Inference", None))
@@ -1420,7 +1413,7 @@ class Ui_AnimalPoseTracker(object):
         self.ConfigureTabPage.setTabText(self.ConfigureTabPage.indexOf(self.InferenceSource), QCoreApplication.translate("AnimalPoseTracker", u"Inference Source", None))
         self.ExportModelLabel.setText(QCoreApplication.translate("AnimalPoseTracker", u"AnimalPoseTracker-Export Model", None))
         self.ExportConfigureGroup.setTitle("")
-        self.EditExportParameters.setText(QCoreApplication.translate("AnimalPoseTracker", u"Edit Export Parameters", None))
+        self.EditExportParameters.setText(QCoreApplication.translate("AnimalPoseTracker", u"Edit export parameters", None))
         self.StartModelWeights.setText(QCoreApplication.translate("AnimalPoseTracker", u"Selection model weights ", None))
         self.StartExport.setText(QCoreApplication.translate("AnimalPoseTracker", u"Start Export", None))
         ___qtreewidgetitem133 = self.ExportConfigure.headerItem()

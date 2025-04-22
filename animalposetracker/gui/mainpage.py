@@ -1,7 +1,8 @@
-from PySide6.QtCore import  Qt, QSettings, QProcess, QFile, QTextStream, QTimer, QSize
+from PySide6.QtCore import  Qt, QSettings, QProcess, QFile, QTextStream, QTimer
 from PySide6.QtWidgets import  (QMenu, QApplication, QFileDialog, QMainWindow,
                                  QMessageBox, QTreeWidget, QTreeWidgetItem, QLabel, 
-                                 QTreeWidgetItemIterator, QSplashScreen, QProgressBar)
+                                 QTreeWidgetItemIterator, QSplashScreen, QProgressBar,
+                                 QDialog)
 from PySide6.QtGui import QCursor, QPixmap
 import os
 import sys
@@ -13,8 +14,12 @@ from .inferencepage import AnimalPoseInferencePage
 from .createnewprojectpage import CreateNewProjectPage
 from .publicdatasetsprojectpage import PublicDatasetProjectPage
 from .annotatorpage import AnimalPoseAnnotatorPage
+from .utils import (DatasetSplitDialog, split_dataset_sklearn, 
+                    create_dataset_structure, copy_split_files,
+                    create_coco_annotations)
 from animalposetracker.gui import WindowFactory
 from animalposetracker.projector import AnimalPoseTrackerProject
+from animalposetracker.utils.dataset import convert_labels_to_coco, convert_labels_to_yolo
 from animalposetracker.gui import (DARK_THEME_PATH, LIGHT_THEME_PATH, 
                                    LOGO_PATH_TRANSPARENT, LOGO_PATH, WELCOME_PATH)
 
@@ -105,11 +110,11 @@ class AnimalPoseTrackerPage(QMainWindow, Ui_AnimalPoseTracker):
         self.ExtracFrames.clicked.connect(self.onExtractFrames)
         
         # frames section
-        self.SaveYOLO.stateChanged.connect(self.onYOLOFormatChanged)
-        self.SaveCOCO.stateChanged.connect(self.onCOCOFormatChanged)
+        self.SaveYOLO.setChecked(True)
+        self.SaveYOLO.setEnabled(False)
         self.StartLabelFrames.clicked.connect(self.onStartLabelFrames)
-        self.CheckLabelledFrames.clicked.connect(self.onCheckLabelledFrames)
-        self.BuildSkeleton.clicked.connect(self.onBuildSkeleton)
+        self.StartCreateDatasets.clicked.connect(self.onCreateDatasets)
+        self.CheckDatasets.clicked.connect(self.onCheckDatasets)
         
         # Training tab
         self.ResumeTrain.clicked.connect(self.onResumeTrain)
@@ -300,22 +305,22 @@ class AnimalPoseTrackerPage(QMainWindow, Ui_AnimalPoseTracker):
     
     def onOpenTracker(self):
         """Slot for opening the tracker tool"""
-        print("Tracker clicked")
+        self.statusBar().showMessage("Tracker clicked")
         # Add your implementation here
 
     def onOpenDocumentation(self):
         """Slot for opening documentation"""
-        print("Documentation clicked")
+        self.statusBar().showMessage("Documentation clicked")
         # Add your implementation here
 
     def onCheckUpdates(self):
         """Slot for checking for updates"""
-        print("Check Updates clicked")
+        self.statusBar().showMessage("Check updates clicked")
         # Add your implementation here
 
     def onHelp(self):
         """Slot for opening help"""
-        print("Help clicked")
+        self.statusBar().showMessage("Help clicked")
         # Add your implementation here
 
     def onChangeTheme(self, theme):
@@ -508,7 +513,7 @@ class AnimalPoseTrackerPage(QMainWindow, Ui_AnimalPoseTracker):
             if valid:
                 self.project.add_source_to_project(valid)
             else:
-                self.showErrorMessage("Invalid Selection", "No valid video files selected")
+                QMessageBox.warning(self, "No Valid Videos", "No valid video files selected")
                 
 
     def _handleImageDirSelection(self):
@@ -527,10 +532,9 @@ class AnimalPoseTrackerPage(QMainWindow, Ui_AnimalPoseTracker):
             non_images = [f for f in all_files if f.suffix.lower() not in IMAGE_EXTS]
             
             if len(images) == 0:
-                self.showErrorMessage("Empty Directory", "No images found in selected folder")
+                QMessageBox.warning(self, "No Valid Images", "No valid image files found in directory")
             elif non_images:
-                self.showErrorMessage("Invalid Directory", 
-                                    f"Contains {len(non_images)} non-image files")
+                QMessageBox.warning(self, "Non-Image Files", "Non-image files found in directory")
             else:
                 self.project.add_source_to_project(dir_path)
         
@@ -541,18 +545,9 @@ class AnimalPoseTrackerPage(QMainWindow, Ui_AnimalPoseTracker):
 
     def onExtractFrames(self):
         """Slot for extracting frames"""
-        print("Extract Frames clicked")
-        # Add your implementation here
-
-    def onYOLOFormatChanged(self, state):
-        """Slot for YOLO format checkbox state changed"""
-        print(f"YOLO format state changed to {state}")
-        # Add your implementation here
-
-    def onCOCOFormatChanged(self, state):
-        """Slot for COCO format checkbox state changed"""
-        print(f"COCO format state changed to {state}")
-        # Add your implementation here
+        save_dir = self.project.project_path / "sources" / "extracted"
+        if not save_dir.exists():
+            save_dir.mkdir(parents=True)
 
     def onStartLabelFrames(self):
         """Slot for starting frame labeling"""
@@ -562,15 +557,146 @@ class AnimalPoseTrackerPage(QMainWindow, Ui_AnimalPoseTracker):
             self.sub_page.deleteLater()
         self.sub_page = WindowFactory.run(AnimalPoseAnnotatorPage)
 
-    def onCheckLabelledFrames(self):
-        """Slot for checking labelled frames"""
-        print("Check Labelled Frames clicked")
-        # Add your implementation here
+    def onCreateDatasets(self):
+        """Slot for starting dataset creation"""
+        extracted_path = self.project.project_path / "sources" / "extracted"
+        if not extracted_path.exists():
+            QMessageBox.warning(self, "No Extracted Frames", "No extracted frames found. Please extract frames first.")
+            return
+        yolo_path = extracted_path / "yolo_format"
+        coco_path = extracted_path / "coco_format"
+        if not yolo_path.exists() and not coco_path.exists():
+            self.statusBar().showMessage("Stating export process...")
+            if self.SaveCOCO.isChecked():
+                convert_labels_to_coco(extracted_path, self.project.project_config)
+                self.statusBar().showMessage("COCO dataset export complete.")
+            if self.SaveYOLO.isChecked():
+                convert_labels_to_yolo(extracted_path)
+                self.statusBar().showMessage("YOLO dataset export complete.")
+            self.statusBar().showMessage("Dataset export complete.")
+        self._SplitDataset()
+        
+    def _SplitDataset(self):
+        """Main function to handle dataset splitting"""
+        # Show ratio dialog
+        dialog = DatasetSplitDialog(self)
+        if dialog.exec_() != QDialog.Accepted:
+            return
+        # Proceed with dataset creation
+        self._CreateDatasetsWithSplit(dialog.ratios)
 
-    def onBuildSkeleton(self):
-        """Slot for building skeleton"""
-        print("Build Skeleton clicked")
-        # Add your implementation here
+    def _CreateDatasetsWithSplit(self, ratios):
+        """Main function that uses proper sklearn splitting"""
+        # 1. Validate inputs and prepare paths
+        extracted_path = self.project.project_path / "sources" / "extracted"
+        yolo_path = extracted_path / "yolo_format"
+        
+        if not yolo_path.exists():
+            QMessageBox.warning(self, "Error", "YOLO format labels not found.")
+            return
+        
+        # 2. Get all valid image-label pairs
+        image_files = sorted(extracted_path.glob("*.*"))  # Get all files
+        image_files = [f for f in image_files if f.suffix.lower() in ('.jpg', '.jpeg', '.png')]
+        label_files = [yolo_path / f"{f.stem}.txt" for f in image_files]
+        
+        # Filter only pairs where both files exist
+        valid_pairs = [(img, lbl) for img, lbl in zip(image_files, label_files) if lbl.exists()]
+        if not valid_pairs:
+            QMessageBox.warning(self, "Error", "No valid image-label pairs found.")
+            return
+        
+        # 3. Split using sklearn (unpack the pairs)
+        image_paths, label_paths = zip(*valid_pairs)
+        train, val, test = split_dataset_sklearn(image_paths, label_paths, ratios)
+
+        # 4. Create directory structure
+        dataset_path = self.project.project_path / "datasets"
+        dirs = create_dataset_structure(dataset_path)
+        
+        # 5. Copy files to their destinations
+        copy_split_files(zip(*train), dirs['images_train'], dirs['labels_train'])
+        copy_split_files(zip(*val), dirs['images_val'], dirs['labels_val'])
+        copy_split_files(zip(*test), dirs['images_test'], dirs['labels_test'])
+        
+        # 6. Handle COCO format if needed
+        if hasattr(self, 'SaveCOCO') and self.SaveCOCO.isChecked():
+            coco_path = extracted_path / "coco_format" / "coco_format.json"
+            create_coco_annotations(coco_path, 
+                                    dirs['annotations'], 
+                                    train, val, test)
+        
+        QMessageBox.information(self, "Success", "Dataset splitting completed!")
+
+    def onCheckDatasets(self):
+        """
+        Verify that every image in the dataset has a corresponding YOLO annotation file
+        """
+        
+        # 1. Get paths to dataset directories
+        dataset_path = self.project.project_path / "datasets"
+        yolo_labels_path = dataset_path / "labels"
+        
+        # 2. Check all splits (train/val/test)
+        splits = ["train", "val", "test"]
+        issues_found = 0
+        
+        for split in splits:
+            self.statusBar().showMessage(f"Checking {split} split...")
+            # Get all image files in the split
+            image_dir = dataset_path / "images" / split
+            if not image_dir.exists():
+                self.statusBar().showMessage(f"No {split} split found.")
+                continue
+                
+            image_files = list(image_dir.glob("*.*"))
+            image_files = [f for f in image_files if f.suffix.lower() in ('.jpg', '.jpeg', '.png')]
+            
+            # Get corresponding label files
+            label_dir = yolo_labels_path / split
+            missing_labels = []
+            empty_labels = []
+            
+            for img_path in image_files:
+                label_path = label_dir / f"{img_path.stem}.txt"
+                
+                # Case 1: Label file missing
+                if not label_path.exists():
+                    missing_labels.append(img_path.name)
+                    issues_found += 1
+                    continue
+                    
+                # Case 2: Label file exists but is empty
+                if label_path.stat().st_size == 0:
+                    empty_labels.append(img_path.name)
+                    issues_found += 1
+                    
+            # Print results for current split
+            if missing_labels:
+                print(f"Missing YOLO labels for {len(missing_labels)} images:")
+                for name in missing_labels[:5]:  # Show first 5 examples
+                    print(f"  - {name}")
+                if len(missing_labels) > 5:
+                    print(f"  (...and {len(missing_labels)-5} more)")
+                    
+            if empty_labels:
+                print(f"Empty YOLO labels for {len(empty_labels)} images:")
+                for name in empty_labels[:5]:
+                    print(f"  - {name}")
+                if len(empty_labels) > 5:
+                    print(f"  (...and {len(empty_labels)-5} more)")
+                    
+            if not missing_labels and not empty_labels:
+                self.statusBar().showMessage(f"All {len(image_files)} images have valid YOLO annotations")
+        
+        # 3. Show summary
+        if issues_found:
+            msg = f"Found {issues_found} issues in dataset annotations!"
+            print(msg)
+            QMessageBox.warning(self, "Dataset Issues", msg)
+        else:
+            msg = "All dataset splits are valid - every image has a proper YOLO annotation"
+            QMessageBox.information(self, "Dataset Check", msg)
 
     def onResumeTrain(self):
         """Slot for resuming training"""

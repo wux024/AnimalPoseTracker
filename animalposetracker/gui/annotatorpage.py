@@ -3,13 +3,16 @@ from PySide6.QtWidgets import (QApplication, QFileDialog, QMainWindow, QTreeWidg
                                QMessageBox, QTreeWidgetItem, QTreeWidgetItemIterator,
                                QGraphicsScene, QGraphicsView, QMenu)
 from PySide6.QtGui import QPixmap, QPainter
-from animalposetracker.gui import (DARK_THEME_PATH, LIGHT_THEME_PATH,
-                                  LOGO_PATH_TRANSPARENT, COLORS)
+
 import os
 import sys
 from pathlib import Path
 import yaml
 import json
+
+from animalposetracker.gui import (DARK_THEME_PATH, LIGHT_THEME_PATH,
+                                  LOGO_PATH_TRANSPARENT, COLORS)
+from animalposetracker.utils.dataset import convert_labels_to_coco, convert_labels_to_yolo
 
 from .ui_animalposeannotator import Ui_AnimalPoseAnnotator
 from .utils import ZoomableGraphicsView, DrawingBoard, AnnotationTarget
@@ -32,6 +35,7 @@ class AnimalPoseAnnotatorPage(QMainWindow, Ui_AnimalPoseAnnotator):
         self.config_path = None
         self.current_image_index = -1
         self.current_image_path = ""
+        self.current_image = ""
         self.sorted_keys = []
         self.labels_cache = {}
         self._CreateGraphicsScene()
@@ -39,10 +43,16 @@ class AnimalPoseAnnotatorPage(QMainWindow, Ui_AnimalPoseAnnotator):
         self._edit_mode = False
         self.current_drawing_mode = "none"
 
+        self.EditKeypoints.setEnabled(False)
+        self.EditSkeleton.setEnabled(False)
+        self.EditClasses.setEnabled(False)
+
         self.actionDrawBBox.setEnabled(False)
         self.actionDrawLine.setEnabled(False)
         self.actionDrawPoint.setEnabled(False)
         self.actionBuildSkeleton.setEnabled(False)
+
+        self.onChangeTheme("light")
 
     def setupConnections(self):
         """Connect all UI signals to their corresponding slot functions"""
@@ -50,6 +60,7 @@ class AnimalPoseAnnotatorPage(QMainWindow, Ui_AnimalPoseAnnotator):
         self.actionOpenConfigureFile.triggered.connect(self.onOpenConfigFile)
         self.actionOpenFileFolder.triggered.connect(self.onOpenFileFolder)
         self.actionSaveLabel.triggered.connect(self.onSaveLabel)
+        self.actionDeleteLabel.triggered.connect(self.onDeleteLabel)
         
         # Navigation controls
         self.actionNextFrame.triggered.connect(self.onNextFrame)
@@ -76,6 +87,10 @@ class AnimalPoseAnnotatorPage(QMainWindow, Ui_AnimalPoseAnnotator):
         
         # Help
         self.actionHelp.triggered.connect(self.onShowHelp)
+
+        # Export
+        self.actionExportCOCOFormat.triggered.connect(lambda: self.onExportFormat("COCO"))
+        self.actionExportYOLOFormat.triggered.connect(lambda: self.onExportFormat("YOLO"))
         
         self.Visible.addItems(['Invisible', 'Occluded', 'Visible'])
         self.Visible.setCurrentIndex(2)
@@ -161,7 +176,7 @@ class AnimalPoseAnnotatorPage(QMainWindow, Ui_AnimalPoseAnnotator):
         supported_extensions = {'.jpg', '.jpeg', '.png', '.bmp', 
                                 '.gif', '.tif', '.tiff', '.webp'}
         folder = Path(folder_path)
-        
+        self.current_image_path = str(folder_path)
         for img_file in folder.iterdir():
             if img_file.suffix.lower() in supported_extensions:
                 self.images[img_file.name] = str(img_file)
@@ -268,7 +283,7 @@ class AnimalPoseAnnotatorPage(QMainWindow, Ui_AnimalPoseAnnotator):
         }
     
         # Update the DrawingBoard if this is the current image
-        if img_path == self.current_image_path:
+        if img_path == self.current_image:
             self.drawing_label.targets = targets.copy()
             self.drawing_label.set_current_target(0)
             self.drawing_label._commit_changes()
@@ -290,8 +305,8 @@ class AnimalPoseAnnotatorPage(QMainWindow, Ui_AnimalPoseAnnotator):
         image_path = Path(self.images[key])
         
         try:
-            if hasattr(self, 'drawing_label') and self.drawing_label and self.current_image_path:
-                self.labels_cache[self.current_image_path] = {
+            if hasattr(self, 'drawing_label') and self.drawing_label and self.current_image:
+                self.labels_cache[self.current_image] = {
                     'targets': self.drawing_label.targets.copy()
                 }
 
@@ -314,9 +329,9 @@ class AnimalPoseAnnotatorPage(QMainWindow, Ui_AnimalPoseAnnotator):
             self.drawing_label.temp_pixmap = QPixmap(pixmap.size())
             self.drawing_label.temp_pixmap.fill(Qt.transparent)
 
-            self.current_image_path = str(image_path)
-            if self.current_image_path in self.labels_cache:
-                self.drawing_label.targets = self.labels_cache[self.current_image_path]['targets']
+            self.current_image = str(image_path)
+            if self.current_image in self.labels_cache:
+                self.drawing_label.targets = self.labels_cache[self.current_image]['targets']
                 self.drawing_label._commit_changes()
             
             # Set view parameters
@@ -341,6 +356,10 @@ class AnimalPoseAnnotatorPage(QMainWindow, Ui_AnimalPoseAnnotator):
             with open(file_path, 'r', encoding='utf-8') as f:
                 # Use safe loader instead of FullLoader
                 self.project_config = yaml.safe_load(f)
+            
+            self.EditKeypoints.setEnabled(True)
+            self.EditSkeleton.setEnabled(True)
+            self.EditClasses.setEnabled(True)
             
             # Validate required sections
             required = ['keypoints_name', 'classes_name', 'skeleton']
@@ -403,6 +422,7 @@ class AnimalPoseAnnotatorPage(QMainWindow, Ui_AnimalPoseAnnotator):
         """Display the previous image (with wrap-around)"""
         if not self._check_images_loaded():
             return
+        self._advance_image_index(-1)
         self.setDrawingMode("none")
 
     def _check_images_loaded(self):
@@ -739,11 +759,6 @@ class AnimalPoseAnnotatorPage(QMainWindow, Ui_AnimalPoseAnnotator):
                 stream = QTextStream(file)
                 self.setStyleSheet(stream.readAll())
                 file.close()
-            if theme == "dark":
-                self.Logo.setPixmap(QPixmap(LOGO_PATH_TRANSPARENT))
-            elif theme == "light":
-                # self.Logo.setPixmap(QPixmap(LOGO_PATH))
-                self.Logo.setPixmap(QPixmap(LOGO_PATH_TRANSPARENT))
         except Exception as e:
             QMessageBox.warning(self, "Theme Error", str(e))
 
@@ -761,8 +776,8 @@ class AnimalPoseAnnotatorPage(QMainWindow, Ui_AnimalPoseAnnotator):
             QMessageBox.warning(self, "Warning", "No annotations to save")
             return
         
-        if self.current_image_path:
-            self.labels_cache[self.current_image_path] = {
+        if self.current_image:
+            self.labels_cache[self.current_image] = {
                 'targets': self.drawing_label.targets.copy()
             }
     
@@ -771,13 +786,15 @@ class AnimalPoseAnnotatorPage(QMainWindow, Ui_AnimalPoseAnnotator):
                 "file_name": self.sorted_keys[self.current_image_index],
                 "width": self.drawing_label.main_pixmap.width(),
                 "height": self.drawing_label.main_pixmap.height(),
-                "license": "",
-                "date_captured": "",
         }
         annotations = []
         for target in self.drawing_label.targets:
             if target.keypoints:
-                keypoints = [target.keypoints[kp_id]["pos"] for kp_id in sorted(target.keypoints.keys())]
+                keypoints = [
+                        coord 
+                        for kp_id in sorted(target.keypoints.keys())
+                        for coord in target.keypoints[kp_id]["pos"]
+                    ]
             else:
                 keypoints = []
             annotation = {
@@ -787,7 +804,7 @@ class AnimalPoseAnnotatorPage(QMainWindow, Ui_AnimalPoseAnnotator):
                 "bbox": target.bounding_rect.get('bbox'),
                 "area": target.bounding_rect.get('area'),
                 "iscrowd": int(self.IsCrowd.isChecked()),
-                "keypoints": keypoints, 
+                "keypoints": [*keypoints], 
             }
             annotations.append(annotation)
         coco_dict = {
@@ -798,6 +815,14 @@ class AnimalPoseAnnotatorPage(QMainWindow, Ui_AnimalPoseAnnotator):
         label_file = Path(self.images[key]).with_suffix('.json')
         with open(label_file, 'w') as f:
             json.dump(coco_dict, f, indent=4)
+    
+    def onDeleteLabel(self):
+        """Delete current annotations"""
+        if not self.drawing_label.targets:
+            QMessageBox.warning(self, "Warning", "No annotations to delete")
+            return
+        self.drawing_label.targets = []
+        self.drawing_label._commit_changes()
 
     def onLineWidthChanged(self, value):
         """Handle line width change"""
@@ -824,6 +849,27 @@ class AnimalPoseAnnotatorPage(QMainWindow, Ui_AnimalPoseAnnotator):
                         sort_keys=False, 
                         default_flow_style=False
                     )
+    
+    def onExportFormat(self, format='COCO'):
+        """Handle export format change"""
+        try:
+            if format == 'COCO':
+                output_dir = convert_labels_to_coco(
+                    labels_path=self.current_image_path,  
+                    project_config=self.project_config
+                )
+            elif format == 'YOLO':
+                output_dir = convert_labels_to_yolo(
+                    labels_path=self.current_image_path
+                )
+            else:
+                QMessageBox.warning(self, "Warning", "Invalid export format")
+                return
+                
+            self.statusBar().showMessage(f"Labels exported to {output_dir}")
+            
+        except Exception as e:
+            QMessageBox.critical(self, "Export Error", str(e))
             
         
     def closeEvent(self, event):

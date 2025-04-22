@@ -1,7 +1,6 @@
 QWidget {
     background-color: #F0F0F0;
     color: #000000;
-    border: none;
 }
 QPushButton {
     background-color: #E0E0E0;
@@ -17,7 +16,6 @@ QPushButton:pressed {
 }
 QLineEdit, QTextEdit, QPlainTextEdit {
     background-color: #FFFFFF;
-    color: #000000;
     border: 1px solid #AAA;
     border-radius: 4px;
     padding: 3px;
@@ -25,34 +23,15 @@ QLineEdit, QTextEdit, QPlainTextEdit {
 QMenuBar {
     background-color: #F0F0F0;
 }
-QMenuBar::item {
-    background-color: transparent;
-}
-QMenuBar::item:selected {
-    background-color: #E0E0E0;
-}
 QMenu {
     background-color: #FFFFFF;
     border: 1px solid #AAA;
-}
-QMenu::item:selected {
-    background-color: #E0E0E0;
 }
 QTabWidget::pane {
     border: 1px solid #AAA;
 }
 QTabBar::tab {
     background-color: #E0E0E0;
-    color: #000000;
     padding: 5px;
     border: 1px solid #AAA;
-}
-QTabBar::tab:selected {
-    background-color: #F0F0F0;
-}
-QScrollBar:vertical {
-    background: #F0F0F0;
-}
-QScrollBar::handle:vertical {
-    background: #D0D0D0;
 }
