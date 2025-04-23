@@ -34,7 +34,7 @@ class Ui_AnimalPoseTracker(object):
         font.setFamilies([u"Times New Roman"])
         AnimalPoseTracker.setFont(font)
         icon = QIcon()
-        icon.addFile(LOGO_PATH_TRANSPARENT, QSize(), QIcon.Mode.Normal, QIcon.State.Off)
+        icon.addFile(LOGO_SMALL_PATH, QSize(), QIcon.Mode.Normal, QIcon.State.Off)
         AnimalPoseTracker.setWindowIcon(icon)
         AnimalPoseTracker.setLayoutDirection(Qt.LayoutDirection.LeftToRight)
         AnimalPoseTracker.setAutoFillBackground(False)
@@ -128,7 +128,7 @@ class Ui_AnimalPoseTracker(object):
         self.Logo.setSizePolicy(sizePolicy3)
         self.Logo.setMaximumSize(QSize(200, 200))
         self.Logo.setTextFormat(Qt.TextFormat.AutoText)
-        self.Logo.setPixmap(QPixmap(LOGO_SMALL_PATH))
+        self.Logo.setPixmap(QPixmap(LOGO_PATH_TRANSPARENT))
         self.Logo.setScaledContents(True)
 
         self.LogoLayout.addWidget(self.Logo)
@@ -434,11 +434,35 @@ class Ui_AnimalPoseTracker(object):
         self.ClusterStepSetup.setObjectName(u"ClusterStepSetup")
         sizePolicy2.setHeightForWidth(self.ClusterStepSetup.sizePolicy().hasHeightForWidth())
         self.ClusterStepSetup.setSizePolicy(sizePolicy2)
+        self.ClusterStepSetup.setMinimum(1)
+        self.ClusterStepSetup.setMaximum(1000)
+        self.ClusterStepSetup.setValue(25)
 
         self.ClusterStepLayout.addWidget(self.ClusterStepSetup)
 
 
         self.ExtractionAlgorithmClusterStepLayout.addLayout(self.ClusterStepLayout)
+
+        self.SampleIntervalLayout = QHBoxLayout()
+        self.SampleIntervalLayout.setObjectName(u"SampleIntervalLayout")
+        self.SampleIntervalLabel = QLabel(self.ExtractFramesGroupLayout)
+        self.SampleIntervalLabel.setObjectName(u"SampleIntervalLabel")
+        sizePolicy.setHeightForWidth(self.SampleIntervalLabel.sizePolicy().hasHeightForWidth())
+        self.SampleIntervalLabel.setSizePolicy(sizePolicy)
+
+        self.SampleIntervalLayout.addWidget(self.SampleIntervalLabel)
+
+        self.SampleIntervalSetup = QSpinBox(self.ExtractFramesGroupLayout)
+        self.SampleIntervalSetup.setObjectName(u"SampleIntervalSetup")
+        sizePolicy2.setHeightForWidth(self.SampleIntervalSetup.sizePolicy().hasHeightForWidth())
+        self.SampleIntervalSetup.setSizePolicy(sizePolicy2)
+        self.SampleIntervalSetup.setMinimum(1)
+        self.SampleIntervalSetup.setMaximum(1000)
+
+        self.SampleIntervalLayout.addWidget(self.SampleIntervalSetup)
+
+
+        self.ExtractionAlgorithmClusterStepLayout.addLayout(self.SampleIntervalLayout)
 
 
         self.ExtractFramesGroupVLayout.addLayout(self.ExtractionAlgorithmClusterStepLayout)
@@ -1072,14 +1096,14 @@ class Ui_AnimalPoseTracker(object):
         self.ExtractionMethodLabel.setText(QCoreApplication.translate("AnimalPoseTracker", u"Extraction method", None))
         self.ExtractionMethodSelection.setItemText(0, QCoreApplication.translate("AnimalPoseTracker", u"auto", None))
         self.ExtractionMethodSelection.setItemText(1, QCoreApplication.translate("AnimalPoseTracker", u"manual", None))
-        self.ExtractionMethodSelection.setItemText(2, QCoreApplication.translate("AnimalPoseTracker", u"No", None))
+        self.ExtractionMethodSelection.setItemText(2, QCoreApplication.translate("AnimalPoseTracker", u"all", None))
 
         self.ExtractionAlgorithmLabel.setText(QCoreApplication.translate("AnimalPoseTracker", u"Extraction algorithm", None))
-        self.ExtractionAlgorithmSelection.setItemText(0, QCoreApplication.translate("AnimalPoseTracker", u"kmeas", None))
+        self.ExtractionAlgorithmSelection.setItemText(0, QCoreApplication.translate("AnimalPoseTracker", u"kmeans", None))
         self.ExtractionAlgorithmSelection.setItemText(1, QCoreApplication.translate("AnimalPoseTracker", u"uniform", None))
-        self.ExtractionAlgorithmSelection.setItemText(2, QCoreApplication.translate("AnimalPoseTracker", u"None", None))
 
         self.ClusterStepLabel.setText(QCoreApplication.translate("AnimalPoseTracker", u"Cluster step", None))
+        self.SampleIntervalLabel.setText(QCoreApplication.translate("AnimalPoseTracker", u"Sample Interval", None))
         self.SelectionVideosImages.setText(QCoreApplication.translate("AnimalPoseTracker", u"Selection videos or images", None))
         self.SelectionVideosImagesLabel.setText(QCoreApplication.translate("AnimalPoseTracker", u"50 videos or images selected", None))
         self.ClearVideosImages.setText(QCoreApplication.translate("AnimalPoseTracker", u"Clear selection", None))

@@ -408,7 +408,7 @@ class AnimalPoseAnnotatorPage(QMainWindow, Ui_AnimalPoseAnnotator):
         if not self.images:
             return
         self.current_image_index += step
-        self.current_image_index = max(0, min(self.current_image_index, len(self.images)-1))
+        self.current_image_index = self.current_image_index % len(self.images)
         self._DisplayCurrentImage()
 
     def onNextFrame(self):

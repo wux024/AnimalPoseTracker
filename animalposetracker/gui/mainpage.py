@@ -19,7 +19,9 @@ from .utils import (DatasetSplitDialog, split_dataset_sklearn,
                     create_coco_annotations)
 from animalposetracker.gui import WindowFactory
 from animalposetracker.projector import AnimalPoseTrackerProject
-from animalposetracker.utils.dataset import convert_labels_to_coco, convert_labels_to_yolo
+from animalposetracker.utils import (convert_labels_to_coco, 
+                                     convert_labels_to_yolo,
+                                     KeyframeExtractor)
 from animalposetracker.gui import (DARK_THEME_PATH, LIGHT_THEME_PATH, 
                                    LOGO_PATH_TRANSPARENT, LOGO_PATH, WELCOME_PATH)
 
@@ -38,6 +40,7 @@ class AnimalPoseTrackerPage(QMainWindow, Ui_AnimalPoseTracker):
         os.chdir(Path.cwd())
         self.source_type = 'image' 
         self.project = AnimalPoseTrackerProject()
+        self.extractor = KeyframeExtractor(Path.home())
         self.config_data = {}
         self.config_type = "project"
         self.process = QProcess()
@@ -60,7 +63,8 @@ class AnimalPoseTrackerPage(QMainWindow, Ui_AnimalPoseTracker):
         self.ConfigureFile.setEditTriggers(QTreeWidget.DoubleClicked | QTreeWidget.EditKeyPressed)
         self.TrainingConfigureEdit.setEditTriggers(QTreeWidget.DoubleClicked | QTreeWidget.EditKeyPressed)
 
-        self.onChangeTheme("light") 
+        self.onChangeTheme("light")
+        self.SelectionVideosImagesLabel.setText("0 video or image selected")
 
         self.setupConnections()
         
@@ -102,9 +106,6 @@ class AnimalPoseTrackerPage(QMainWindow, Ui_AnimalPoseTracker):
         self.CannelConfigureFile.clicked.connect(self.onCancelConfigureFile)
         
         # Extract and Label Frames tab
-        self.ExtractionMethodSelection.currentTextChanged.connect(self.onExtractionMethodChanged)
-        self.ClusterStepSetup.valueChanged.connect(self.onClusterStepChanged)
-        self.ExtractionAlgorithmSelection.currentTextChanged.connect(self.onExtractionAlgorithmChanged)
         self.SelectionVideosImages.clicked.connect(self.onSelectVideosImages)
         self.ClearVideosImages.clicked.connect(self.onClearVideosImages)
         self.ExtracFrames.clicked.connect(self.onExtractFrames)
@@ -450,21 +451,6 @@ class AnimalPoseTrackerPage(QMainWindow, Ui_AnimalPoseTracker):
         """Slot for canceling configure file changes"""
         self.ConfigureFile.clear()
 
-    def onExtractionMethodChanged(self, index):
-        """Slot for extraction method selection changed"""
-        print(f"Extraction method changed to index {index}")
-        # Add your implementation here
-
-    def onClusterStepChanged(self, value):
-        """Slot for cluster step value changed"""
-        print(f"Cluster step changed to {value}")
-        # implementation here
-
-    def onExtractionAlgorithmChanged(self, index):
-        """Slot for extraction algorithm selection changed"""
-        print(f"Extraction algorithm changed to index {index}")
-        # Add your implementation here
-
     def onSelectVideosImages(self):
         """Slot for selecting videos/images
         Handles media source selection with context menu for type selection.
@@ -511,7 +497,8 @@ class AnimalPoseTrackerPage(QMainWindow, Ui_AnimalPoseTracker):
                         valid.append(str(path_obj))
             
             if valid:
-                self.project.add_source_to_project(valid)
+                self.project.add_source_to_project(valid, move_or_copy='copy')
+                self.SelectionVideosImagesLabel.setText(f"{len(valid)} video(s) selected")
             else:
                 QMessageBox.warning(self, "No Valid Videos", "No valid video files selected")
                 
@@ -532,11 +519,16 @@ class AnimalPoseTrackerPage(QMainWindow, Ui_AnimalPoseTracker):
             non_images = [f for f in all_files if f.suffix.lower() not in IMAGE_EXTS]
             
             if len(images) == 0:
-                QMessageBox.warning(self, "No Valid Images", "No valid image files found in directory")
+                QMessageBox.warning(self, 
+                                    "No Valid Images", 
+                                    "No valid image files found in directory")
             elif non_images:
-                QMessageBox.warning(self, "Non-Image Files", "Non-image files found in directory")
+                QMessageBox.warning(self, 
+                                    "Non-Image Files", 
+                                    "Non-image files found in directory")
             else:
                 self.project.add_source_to_project(dir_path)
+                self.SelectionVideosImagesLabel.setText(f"{len(images)} images selected")
         
     def onClearVideosImages(self):
         """Slot for clearing videos/images selection"""
@@ -545,9 +537,34 @@ class AnimalPoseTrackerPage(QMainWindow, Ui_AnimalPoseTracker):
 
     def onExtractFrames(self):
         """Slot for extracting frames"""
-        save_dir = self.project.project_path / "sources" / "extracted"
-        if not save_dir.exists():
-            save_dir.mkdir(parents=True)
+        self.statusBar().showMessage("Starting frame extraction...")
+        self.extractor.output_dir = self.project.project_path / "sources" / "extracted"
+        extract_mode = self.ExtractionMethodSelection.currentText()
+        extract_algorithm = self.ExtractionAlgorithmSelection.currentText()
+        sources = self.project.project_config.get("sources", [])
+        n_clusters = self.ClusterStepSetup.value()
+        interval = self.SampleIntervalSetup.value()
+        if not sources:
+            QMessageBox.warning(self, "No Sources", "No sources found in project.yaml")
+            return
+        self.source_type = "image" if Path(sources[0]).is_dir() else "video"
+        if self.source_type == "video":
+            self.extractor.extract_keyframes_from_videos(
+                video_paths=sources, 
+                mode=extract_mode,
+                algorithm=extract_algorithm,
+                n_clusters=n_clusters,
+                interval=interval 
+            )
+        elif self.source_type == "image":
+            self.extractor.extract_keyframes_from_images(
+                image_path=sources[0], 
+                mode=extract_mode,
+                algorithm=extract_algorithm,
+                n_clusters=n_clusters,
+                interval=interval 
+            )
+        self.statusBar().showMessage("Frame extraction complete.")
 
     def onStartLabelFrames(self):
         """Slot for starting frame labeling"""
@@ -561,7 +578,9 @@ class AnimalPoseTrackerPage(QMainWindow, Ui_AnimalPoseTracker):
         """Slot for starting dataset creation"""
         extracted_path = self.project.project_path / "sources" / "extracted"
         if not extracted_path.exists():
-            QMessageBox.warning(self, "No Extracted Frames", "No extracted frames found. Please extract frames first.")
+            QMessageBox.warning(self, 
+                                "No Extracted Frames", 
+                                "No extracted frames found. Please extract frames first.")
             return
         yolo_path = extracted_path / "yolo_format"
         coco_path = extracted_path / "coco_format"

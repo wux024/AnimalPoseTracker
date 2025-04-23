@@ -296,14 +296,9 @@ class CreateNewProjectPage(QWidget, Ui_CreateNewProject):
 
         if self.CopySourceData.isChecked():
             sources = self.project.project_config['sources']
-            if self.source_type == "image":
-                shutil.copy(sources[0], self.project.project_path / "sources")
-            elif self.source_type == "video":
-                for video_path in sources:
-                    shutil.copy(video_path, self.project.project_path / "sources")
+            self.project.add_source_to_project(sources, 'copy')
 
         self.CreateProjectClicked.emit()
-        # self.deleteLater()
         
     def onKeypointConfigChanged(self, keypoints):
         self.project.update_config("project", {"keypoints": keypoints})

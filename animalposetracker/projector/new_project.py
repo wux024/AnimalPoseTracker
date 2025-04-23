@@ -3,6 +3,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Optional, List, Dict, Any, Union
 from animalposetracker.cfg import DATA_YAML_PATHS, MODEL_YAML_PATHS, DEFAULT_CFG_PATH
+import shutil
 
 class AnimalPoseTrackerProject:
     """Manage animal pose tracking projects including configurations and directory structure."""
@@ -16,11 +17,22 @@ class AnimalPoseTrackerProject:
         "configs",
         "datasets",
         "datasets/images",
+        "datasets/images/train",
+        "datasets/images/val",
+        "datasets/images/test",
         "datasets/labels",
+        "datasets/labels/train",
+        "datasets/labels/val",
+        "datasets/labels/test",
         "datasets/annotations",
         "pretrained",
         "runs",
         "sources",
+        "sources/images",
+        "sources/videos",
+        "sources/extracted",
+        "sources/extracted/yolo_format",
+        "sources/extracted/coco_format",
     ]
 
     def __init__(self, local_path: Union[str, Path] = None, 
@@ -169,7 +181,7 @@ class AnimalPoseTrackerProject:
             config['worker'],
             config['model_type'],
             config['model_scale'],
-            config['date']
+            str(config['date'])
         ]
         return self.local_path / "-".join(components)
 
@@ -255,7 +267,9 @@ class AnimalPoseTrackerProject:
         """Helper to load a configuration file."""
         self._load_config_from_file(config_type, config_path)
 
-    def add_source_to_project(self, source_paths: Union[str, Path, List[Union[str, Path]]]) -> None:
+    def add_source_to_project(self, 
+                              source_paths: Union[str, Path, List[Union[str, Path]]],
+                              move_or_copy: str = 'copy') -> None:
         """Add source path(s) to the project after validation."""
         if not source_paths:
             raise ValueError("No source paths provided")
@@ -273,16 +287,68 @@ class AnimalPoseTrackerProject:
                 raise FileNotFoundError(f"path not found: {src_path}")
                 
             src_resolved = src_path.resolve()
-            if any(s == src_resolved for s in current_sources):
+            if any(s == str(src_resolved) for s in current_sources):
                 print(f"Source already exists: {src_path}")
                 continue
-                
+
+            src_path = self._handle_file_move_or_copy(src_path, move_or_copy)
+
             added_sources.append(str(src_path))
             current_sources.append(src_resolved)
             
         if added_sources:
             self.project_config.setdefault("sources", []).extend(added_sources)
             self.update_config("project", {"sources": self.project_config["sources"]})
+    
+    def _handle_file_move_or_copy(self, src_path, move_or_copy):
+        """
+        Handle file or directory move or copy operations.
+
+        Args:
+            src_path (Path or str): The source file or directory path.
+            move_or_copy (str): Operation type, 'copy' or 'move'.
+
+        Returns:
+            Path: The destination path if the operation is successful, None otherwise.
+        """
+        src_path = Path(src_path)
+
+        try:
+            if src_path.is_dir():
+                dst_path = self.project_path / "sources" / "images"
+                dst_path.mkdir(parents=True, exist_ok=True)
+                for item in src_path.rglob('*'):
+                    if item.is_file():
+                        self._perform_operation(item, dst_path / item.name, move_or_copy)
+            else:
+                dst_path = self.project_path / "sources" / "videos" / src_path.name
+                dst_path.parent.mkdir(parents=True, exist_ok=True)
+                self._perform_operation(src_path, dst_path, move_or_copy)
+            return dst_path
+        except FileNotFoundError:
+            print(f"Error: The source file or directory {src_path} was not found.")
+        except PermissionError:
+            print(f"Error: You do not have sufficient permissions to perform the {move_or_copy} operation.")
+        except FileExistsError:
+            print(f"Error: The destination path {dst_path} already exists.")
+        except Exception as e:
+            print(f"An unknown error occurred: {e}")
+        return src_path
+
+    def _perform_operation(self, src, dst, operation):
+        """
+        Perform the copy or move operation.
+
+        Args:
+            src (Path): The source path.
+            dst (Path): The destination path.
+            operation (str): Operation type, 'copy' or 'move'.
+        """
+        if operation == 'copy':
+            shutil.copy2(src, dst)
+        elif operation =='move':
+            shutil.move(src, dst)
+
 
     def save_configs(self, config_type: str = "all") -> None:
         """Save configurations to files."""
@@ -319,6 +385,10 @@ class AnimalPoseTrackerProject:
         """Create the standard directory structure for the project."""
         for rel_dir in self.DEFAULT_DIRS:
             (self.project_path / rel_dir).mkdir(parents=True, exist_ok=True)
+    
+    def create_project_config(self) -> None:
+        """Create and save the project configuration."""
+        self._save_config("project")
     
     def create_dataset_config(self) -> None:
         """Create and save the dataset configuration."""
