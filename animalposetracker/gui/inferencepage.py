@@ -1,4 +1,4 @@
-from PySide6.QtCore import QMetaObject, Qt, Slot, Q_ARG, Signal
+from PySide6.QtCore import QMetaObject, Qt, Slot, Q_ARG
 from PySide6.QtGui import QImage, QPixmap
 from PySide6.QtWidgets import  QApplication, QFileDialog, QWidget
 import os
@@ -6,10 +6,12 @@ import yaml
 import cv2
 import numpy as np
 import sys
+import cpuinfo
+import platform
+from pathlib import Path
 
 from .ui_animalposeinference import Ui_AnimalPoseInference
 from animalposetracker.utils import PreviewThread
-from animalposetracker.gui import LOGO_PATH_TRANSPARENT
 from animalposetracker.engine import InferenceEngine
 class AnimalPoseInferencePage(QWidget, Ui_AnimalPoseInference):
     def __init__(self, parent=None):
@@ -24,7 +26,7 @@ class AnimalPoseInferencePage(QWidget, Ui_AnimalPoseInference):
         self.data_config_path = None
         self.data_config = dict()
         self.weights_path = None
-        #self.inference = InferenceEngine()
+        self.inference = None
 
         # init button
         self.initialize_controls()
@@ -57,6 +59,8 @@ class AnimalPoseInferencePage(QWidget, Ui_AnimalPoseInference):
         
         # Display option signals
         self.Save.stateChanged.connect(self.onSaveStateChanged)
+        self.IoU.valueChanged.connect(self.onIoUChanged)
+        self.Conf.valueChanged.connect(self.onConfChanged)
         self.Show.stateChanged.connect(self.onShowStateChanged)
         self.Backgroud.stateChanged.connect(self.onBackgroudStateChanged)
         self.ShowClasses.stateChanged.connect(self.onShowClassesStateChanged)
@@ -69,6 +73,7 @@ class AnimalPoseInferencePage(QWidget, Ui_AnimalPoseInference):
     
     def initialize_controls(self):
         """Initialize all buttons and dependent controls"""
+        os.chdir(Path.cwd())
         self.SelectConfigure.setEnabled(True)
         self.SelectWeights.setEnabled(False)
         self.CameraORVideos.setEnabled(False)
@@ -83,11 +88,14 @@ class AnimalPoseInferencePage(QWidget, Ui_AnimalPoseInference):
         self.End.setEnabled(False)
 
         self.Save.setEnabled(False)
+        self.IoU.setEnabled(False)
+        self.Conf.setEnabled(False)
         self.Show.setEnabled(False)
         self.Show.setCheckState(Qt.CheckState.Checked)
         self.Backgroud.setEnabled(False)
         self.ShowClasses.setEnabled(False)
         self.Classes.clear()
+        self.ShowKeypoints.setEnabled(False)
         self.ShowKeypoints.setCheckState(Qt.CheckState.Checked)
         self.ShowKeypointsRadius.setEnabled(False)
         self.ShowSkeletons.setEnabled(False)
@@ -104,6 +112,8 @@ class AnimalPoseInferencePage(QWidget, Ui_AnimalPoseInference):
         self.Start.setEnabled(True)
         self.End.setEnabled(True)
         self.Save.setEnabled(True)
+        self.IoU.setEnabled(True)
+        self.Conf.setEnabled(True)
         self.Show.setEnabled(True)
         self.Backgroud.setEnabled(True)
         self.ShowClasses.setEnabled(True)
@@ -122,6 +132,8 @@ class AnimalPoseInferencePage(QWidget, Ui_AnimalPoseInference):
         self.Start.setEnabled(False)
         self.End.setEnabled(False)
         self.Save.setEnabled(False)
+        self.IoU.setEnabled(False)
+        self.Conf.setEnabled(False)
         self.Show.setEnabled(False)
         self.Backgroud.setEnabled(False)
         self.ShowClasses.setEnabled(False)
@@ -180,15 +192,15 @@ class AnimalPoseInferencePage(QWidget, Ui_AnimalPoseInference):
     def onSelectWeightsClicked(self):
         """Open file dialog to select model weights and 
         auto-configure supported engines and devices.
-        
+
         Supported Engines:
-        - OpenVINO (.onnx, .xml/.bin)
+        - OpenVINO (.onnx)
         - OpenCV (.onnx)
         - Ultralytics (.pt, .torchscript, .onnx, etc.)
         - MMdeploy (.onnx, .pt, deploy configs)
         - CANN (.om for Ascend NPU)
         - Hailo (.hef for Hailo NPU)
-        
+
         The function will:
         1. Detect file format and hardware availability
         2. Filter available engines and devices based on format and platform
@@ -205,54 +217,63 @@ class AnimalPoseInferencePage(QWidget, Ui_AnimalPoseInference):
             "CANN Model (*.om);;"
             "Hailo Model (*.hef);;"
             "TensorRT (*.engine);;"
-            "OpenVINO (select .xml or .onnx);;"
-            "MMdeploy Config (select .json);;"
+            "OpenVINO (select .ir or .onnx);;"
+            "MMdeploy Config (select .pt, .pth or .onnx);;"
             "All Files (*)",
             options=options
         )
-        
+
         if not file_path:
             self.PrintInformation.setText("Weight selection cancelled")
             return
-        
+
         self.EngineSelection.setEnabled(True)
         self.DeviceSelection.setEnabled(True)
         self.CameraORVideos.setEnabled(True)
         self.CheckCameraVideosConnect.setEnabled(True)
-        
+
         # Clear and prepare engine selection
         self.EngineSelection.clear()
         self.DeviceSelection.clear()
-        file_ext = os.path.splitext(file_path)[1].lower()
-        is_dir = os.path.isdir(file_path)
-        
+        file_path = Path(file_path)
+        file_ext = file_path.suffix.lower()
+        is_dir = file_path.is_dir()
+
         # Hardware detection
         device_info = self._detect_available_devices()
-        
+
         # Format to engine mapping
         if file_ext == '.onnx':
             self.weights_path = file_path
             engines = []
-            
+
             # Add available engines based on device support
-            if device_info['cpu']:
+            if device_info['intel_cpu']:
                 engines.extend(["OpenCV", "OpenVINO", "Ultralytics", "MMdeploy"])
-            if device_info['gpu']:
-                engines.extend(["OpenCV", "OpenVINO", "Ultralytics"])  # GPU-specific engines
+            if device_info['amd_cpu']:
+                engines.extend(["OpenCV", "Ultralytics", "MMdeploy"])
+            if device_info['arm_cpu']:
+                engines.extend(["OpenCV", "Ultralytics", "MMdeploy"])
+            if device_info['nvidia_gpu']:
+                engines.extend(["OpenCV", "Ultralytics", "MMdeploy"])
             if device_info['ascend_npu']:
                 engines.append("CANN")
-                
+            if device_info['hailo_npu']:
+                engines.append("Hailo")
+            if device_info['intel_npu']:
+                engines.append("OpenVINO")
+
             # Remove duplicates and set UI
             engines = sorted(list(set(engines)))
             self.EngineSelection.addItems(engines)
-            self.EngineSelection.setCurrentText("OpenVINO" if "OpenVINO" in engines else engines[0])
+            self.EngineSelection.setCurrentText("Ultralytics" if "Ultralytics" in engines else engines[0])
             self.PrintInformation.setText(f"ONNX model loaded ({os.path.basename(file_path)})")
-            
-        elif file_ext == '.pt':
+
+        elif file_ext in ['.pt', '.pth']:
             self.weights_path = file_path
             self.EngineSelection.addItems(["Ultralytics", "MMdeploy"])
             self.PrintInformation.setText(f"PyTorch model loaded ({os.path.basename(file_path)})")
-            
+
         elif file_ext == '.om':
             if device_info['ascend_npu']:
                 self.weights_path = file_path
@@ -261,7 +282,7 @@ class AnimalPoseInferencePage(QWidget, Ui_AnimalPoseInference):
             else:
                 self.PrintInformation.setText("Ascend NPU not available for CANN engine")
                 return
-                
+
         elif file_ext == '.hef':
             if device_info['hailo_npu']:
                 self.weights_path = file_path
@@ -270,72 +291,98 @@ class AnimalPoseInferencePage(QWidget, Ui_AnimalPoseInference):
             else:
                 self.PrintInformation.setText("Hailo NPU not detected")
                 return
-                
+
         elif file_ext == '.engine':
-            if device_info['gpu']:
+            if device_info['nvidia_gpu']:
                 self.weights_path = file_path
                 self.EngineSelection.addItems(["Ultralytics"])
                 self.PrintInformation.setText(f"TensorRT engine loaded ({os.path.basename(file_path)})")
             else:
                 self.PrintInformation.setText("NVIDIA GPU required for TensorRT")
                 return
-                
+
         elif is_dir and self._is_openvino_dir(file_path):
             self.weights_path = file_path
             available = []
-            if device_info['cpu']: available.append("OpenVINO")
-            if device_info['gpu']: available.append("OpenVINO")  # OpenVINO GPU
+            if device_info['intel_cpu']:
+                available.append("OpenVINO")
+            if device_info['nvidia_gpu']:
+                available.append("OpenVINO")  # OpenVINO GPU
             available.append("Ultralytics")  # CPU fallback
-            
+
             self.EngineSelection.addItems(available)
             self.EngineSelection.setCurrentText("OpenVINO" if "OpenVINO" in available else available[0])
             self.PrintInformation.setText("OpenVINO model loaded")
-            
-        elif file_ext == '.json' and self._is_mmdeploy_config(file_path):
-            self.weights_path = file_path
-            self.EngineSelection.addItems(["MMdeploy"])
-            self.PrintInformation.setText("MMdeploy config loaded")
-            
+
         else:
             self.PrintInformation.setText("Unsupported format for current platform")
-            return
-        
+            raise ValueError(f"Unsupported format: {file_ext}")
+
         # Update available devices based on selected engine
         self._update_available_devices()
-        
+
         # Enable Start button if config is also loaded
         if hasattr(self, 'model_config_path'):
             self.Start.setEnabled(True)
 
+    def _is_openvino_dir(self, path):
+        # Placeholder implementation, you need to define the actual logic
+        return True
+
     def _detect_available_devices(self):
         """Detect available hardware devices in the system"""
         device_info = {
-            'cpu': True,  # Always available
-            'gpu': self._check_nvidia_gpu(),
+            'intel_cpu': self._check_intel_cpu(),
+            'amd_cpu': self._check_amd_cpu(),
+            'arm_cpu': self._check_arm_cpu(),
+            'nvidia_gpu': self._check_nvidia_gpu(),
             'ascend_npu': self._check_cann_environment(),
             'hailo_npu': self._check_hailo_environment(),
             'intel_npu': self._check_openvino_npu()
         }
         return device_info
 
+    def _get_supported_devices(self, engine):
+        engine_device_mapping = {
+            "CANN": (["Ascend NPU"], self._check_cann_environment),
+            "Hailo": (["Hailo-8"], self._check_hailo_environment),
+            "OpenVINO": (["Intel CPU", "Intel NPU"], [self._check_intel_cpu, 
+                                                      self._check_openvino_npu]),
+            "Ultralytics": (["Intel CPU", "AMD CPU", "ARM CPU", "NVIDIA GPU"],
+                            [self._check_intel_cpu, self._check_amd_cpu, 
+                             self._check_arm_cpu, self._check_nvidia_gpu]),
+            "OpenCV": (["Intel CPU", "AMD CPU", "ARM CPU", "NVIDIA GPU"],
+                    [self._check_intel_cpu, self._check_amd_cpu, 
+                     self._check_arm_cpu, self._check_nvidia_gpu]),
+            "MMdeploy": (["Intel CPU", "AMD CPU", "ARM CPU", "NVIDIA GPU"],
+                        [self._check_intel_cpu, self._check_amd_cpu, self._check_arm_cpu, self._check_nvidia_gpu])
+        }
+
+        if engine not in engine_device_mapping:
+            raise ValueError(f"Unsupported engine: {engine}")
+
+        devices, checks = engine_device_mapping[engine]
+        if isinstance(checks, list):
+            available_devices = [device for device, check in zip(devices, checks) if check()]
+        else:
+            if checks():
+                available_devices = devices
+            else:
+                available_devices = []
+
+        return available_devices
+
     def _update_available_devices(self):
         """Update device selection based on chosen engine"""
         current_engine = self.EngineSelection.currentText()
         self.DeviceSelection.clear()
-        
-        if current_engine == "CANN":
-            self.DeviceSelection.addItems(["Ascend NPU"])
-        elif current_engine == "Hailo":
-            self.DeviceSelection.addItems(["Hailo-8"])
-        elif current_engine == "OpenVINO":
-            devices = ["CPU"]
-            if self._check_nvidia_gpu(): devices.append("GPU")
-            if self._check_openvino_npu(): devices.append("Intel NPU")
-            self.DeviceSelection.addItems(devices)
-        else:  # General engines
-            devices = ["CPU"]
-            if self._check_nvidia_gpu(): devices.append("NVIDIA GPU")
-            self.DeviceSelection.addItems(devices)
+
+        available_devices = self._get_supported_devices(current_engine)
+        if available_devices:
+            self.DeviceSelection.addItems(available_devices)
+        else:
+            self.PrintInformation.setText(f"{current_engine} engine not available or no supported devices found")
+            raise ValueError(f"{current_engine} engine not available or no supported devices found")
 
     def _check_nvidia_gpu(self):
         """Check if NVIDIA GPU is available in the system"""
@@ -344,15 +391,10 @@ class AnimalPoseInferencePage(QWidget, Ui_AnimalPoseInference):
             return torch.cuda.is_available()
         except ImportError:
             try:
-                import tensorflow as tf
-                return tf.test.is_gpu_available()
+                import cv2
+                return cv2.cuda.getCudaEnabledDeviceCount() > 0
             except:
-                # Fallback to OpenCV check
-                try:
-                    import cv2
-                    return cv2.cuda.getCudaEnabledDeviceCount() > 0
-                except:
-                    return False
+                return False
 
     def _check_cann_environment(self):
         """Check if CANN environment is available for Ascend NPU"""
@@ -378,7 +420,24 @@ class AnimalPoseInferencePage(QWidget, Ui_AnimalPoseInference):
             return 'NPU' in core.available_devices
         except:
             return False
-    
+
+    def _check_intel_cpu(self):
+        """Check if Intel CPU is available in the system"""
+        info = cpuinfo.get_cpu_info()
+        brand = info.get('brand_raw', '').lower()
+        return 'intel' in brand
+
+    def _check_amd_cpu(self):
+        """Check if AMD CPU is available in the system"""
+        info = cpuinfo.get_cpu_info()
+        brand = info.get('brand_raw', '').lower()
+        return 'amd' in brand
+
+    def _check_arm_cpu(self):
+        """Check if ARM CPU is available in the system"""
+        machine = platform.machine().lower()
+        return 'arm' in machine or 'aarch' in machine
+
     @Slot(bool)
     def onCameraORVideosToggled(self, checked):
         """Handle toggling between camera and video source options"""
@@ -483,8 +542,8 @@ class AnimalPoseInferencePage(QWidget, Ui_AnimalPoseInference):
         """Read and display parameters from selected camera"""
         try:
             current_text = self.CameraVideosSelection.currentText()
-            cam_index = self.camera_list[current_text]
-            cap = cv2.VideoCapture(cam_index)
+            cam_id = self.camera_list[current_text]
+            cap = cv2.VideoCapture(cam_id)
             
             if not cap.isOpened():
                 self.PrintInformation.setText("Failed to open camera")
@@ -517,21 +576,21 @@ class AnimalPoseInferencePage(QWidget, Ui_AnimalPoseInference):
         btn.setEnabled(False)
         try:
             if current_text == "Preview Camera":
-                self._start_preview(is_camera=True)
+                self._start_preview()
             elif current_text == "Close Camera":
                 self._stop_preview()
             elif current_text == "Preview Video":
-                self._start_preview(is_camera=False)
+                self._start_preview()
             elif current_text == "Close Video":
                 self._stop_preview()
         finally:
             btn.setEnabled(True)
     
-    def _start_preview(self, is_camera: bool):
+    def _start_preview(self):
         if hasattr(self, 'preview_thread'):
             self._stop_preview()
 
-        source = self._get_preview_source(is_camera)
+        source = self._get_source()
         if source is None:
             return
 
@@ -540,7 +599,7 @@ class AnimalPoseInferencePage(QWidget, Ui_AnimalPoseInference):
         self.preview_thread.status_update.connect(self.update_preview_status)
         self.preview_thread.finished.connect(self._on_preview_finished)
 
-        mode = "Camera" if is_camera else "Video"
+        mode = "Camera" if self.CameraORVideos.isChecked() else "Video"
         self.CheckCameraVideosConnect.setText(f"Close {mode}")
         self.preview_thread.start()
 
@@ -552,10 +611,9 @@ class AnimalPoseInferencePage(QWidget, Ui_AnimalPoseInference):
     def _on_preview_finished(self):
         mode = "Camera" if "Camera" in self.CameraVideosSelection.currentText() else "Video"
         self.CheckCameraVideosConnect.setText(f"Preview {mode}")
-        self.Display.setPixmap(QPixmap(LOGO_PATH_TRANSPARENT))
 
-    def _get_preview_source(self, is_camera):
-        if is_camera:
+    def _get_source(self):
+        if self.CameraORVideos.isChecked():
             try:
                 current_text = self.CameraVideosSelection.currentText()
                 cam_index = self.camera_list[current_text]
@@ -592,106 +650,103 @@ class AnimalPoseInferencePage(QWidget, Ui_AnimalPoseInference):
     def update_preview_status(self, message):
         self.PrintInformation.setText(message)
 
-    @Slot(int)
-    def onWidthSetupChanged(self):
-        """Handle changes to the width parameter setting"""
-        self.width = self.WidthSetup.value()
+    def onWidthSetupChanged(self, value):
+        """Handle changes to the Width slider value"""
+        self.width = value
         self.PrintInformation.setText(f"Set Camera output Width: {self.width}")
     
-    @Slot(int)
-    def onHeightSetupChanged(self):
-        """Handle changes to the height parameter setting"""
-        self.height = self.HeightSetup.value()
+    def onHeightSetupChanged(self, value):
+        """Handle changes to the Height slider value"""
+        self.height = value
         self.PrintInformation.setText(f"Set Camera output Height: {self.height}")
 
-    @Slot(int)
-    def onFPSSetupChanged(self):
-        """Handle changes to the FPS parameter setting"""
-        self.fps = self.FPSSetup.value()
+    def onFPSSetupChanged(self, value):
+        """Handle changes to the FPS slider value"""
+        self.fps = value
         self.PrintInformation.setText(f"Set Camera output FPS: {self.fps}")
     
-    @Slot(int)
-    def onEngineSelectionChanged(self):
-        """Handle changes to the inference engine selection"""
-        self.engine = self.EngineSelection.currentText()
+    def onEngineSelectionChanged(self, index):
+        """Handle changes in engine selection"""
+        self.engine = self.EngineSelection.itemText(index)
         self.PrintInformation.setText(f"Selected Inference Engine: {self.engine}")
     
-    @Slot(int)
-    def onDeviceSelectionChanged(self):
-        """Handle changes to the inference device selection"""
-        self.device = self.DeviceSelection.currentText()
+    def onDeviceSelectionChanged(self, index):
+        """Handle changes in device selection"""
+        self.device = self.DeviceSelection.itemText(index)
         self.PrintInformation.setText(f"Selected Inference Device: {self.device}")
     
-    @Slot()
     def onStartClicked(self):
         """Handle when the Start button is clicked to begin processing"""
         if self.Start.text() == "Start":
+            source = self._get_source()
+            if source is None:
+                return
             self.Start.setText("Pause")
         elif self.Start.text() == "Pause":
             self.Start.setText("Resume")
         else:
             self.Start.setText("Start")
     
-    @Slot()
     def onEndClicked(self):
         """Handle when the End button is clicked to stop processing"""
         pass
     
-    @Slot(int)
     def onSaveStateChanged(self, state):
         """Handle changes to the Save output checkbox state"""
-        self.save = bool(state)
+        self.inference.update_config({"save": bool(state)})
+    
+    def onIoUChanged(self, value):
+        """Handle changes to the IOU threshold slider value"""
+        self.inference.update_config({"iou": value})
+    
+    def onConfChanged(self, value):
+        """Handle changes to the Confidence threshold slider value"""
+        self.inference.update_config({"conf": value})
 
-    @Slot(int)
     def onShowStateChanged(self, state):
         """Handle changes to the Show output checkbox state"""
-        self.show_ = bool(state)
+        self.inference.update_config({"show": bool(state)})
 
-    @Slot(int)
     def onBackgroudStateChanged(self, state):
         """Handle changes to the Show Backgroud checkbox state"""
         if state == 0:
-            self.Backgroud.setText("Original")
+            background = "Original"
         elif state == 1:
-            self.Backgroud.setText("White")
+            background = "White"
         else:
-            self.Backgroud.setText("Black")
-        self.show_Backgroud = state
+            background = "Black"
+        self.inference.update_config({"background": background})
+        self.Backgroud.setText(f"{background}")
     
-    @Slot(int)
     def onShowClassesStateChanged(self, state):
         """Handle changes to the Show Classes checkbox state"""
-        self.show_classes = bool(state)
+        self.inference.update_config({"show_classes": bool(state)})
     
-    @Slot(int)
     def onShowKeypointsStateChanged(self, state):
         """Handle changes to the Show Keypoints checkbox state"""
-        self.show_keypoints = bool(state)
+        self.inference.update_config({"show_keypoints": bool(state)})
     
-    @Slot(int)
     def onShowKeypointsRadiusChanged(self, value):
         """Handle changes to the keypoint radius slider value"""
-        self.kpt_radius = value
+        self.inference.update_config({"radius": value})
     
-    @Slot(int)
     def onShowSkeletonsStateChanged(self, state):
         """Handle changes to the Show Skeletons checkbox state"""
-        self.show_skeletons = bool(state)
+        self.inference.update_config({"show_skeletons": bool(state)})
     
-    @Slot(int)
     def onShowSkeletonsLineWidthChanged(self, value):
         """Handle changes to the skeleton line width slider value"""
-        self.line_width = value
+        self.inference.update_config({"skeleton_line_width": value})
     
     @Slot(int)
     def onShowBBoxStateChanged(self, state):
         """Handle changes to the Show Bounding Box checkbox state"""
-        self.show_bbox = bool(state)
+        self.inference.update_config({"show_bbox": bool(state)})
     
     @Slot(int)
     def onShowBBoxWidthChanged(self, value):
         """Handle changes to the bounding box width slider value"""
-        self.bbox_width = value
+        self.inference.update_config({"bbox_line_width": value})
     
     def closeEvent(self, event):
         if self.preview_thread.isRunning():

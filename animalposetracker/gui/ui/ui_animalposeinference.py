@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 
 ################################################################################
-## Form generated from reading UI file 'animalposeinferenceXZyvEG.ui'
+## Form generated from reading UI file 'animalposeinferenceFbFnhj.ui'
 ##
 ## Created by: Qt User Interface Compiler version 6.8.2
 ##
@@ -20,8 +20,6 @@ from PySide6.QtWidgets import (QApplication, QCheckBox, QComboBox, QDoubleSpinBo
     QPushButton, QRadioButton, QSizePolicy, QSlider,
     QSpinBox, QVBoxLayout, QWidget)
 
-from animalposetracker.gui import LOGO_SMALL_PATH
-
 class Ui_AnimalPoseInference(object):
     def setupUi(self, AnimalPoseInference):
         if not AnimalPoseInference.objectName():
@@ -34,7 +32,7 @@ class Ui_AnimalPoseInference(object):
         AnimalPoseInference.setSizePolicy(sizePolicy)
         AnimalPoseInference.setAcceptDrops(False)
         icon = QIcon()
-        icon.addFile(LOGO_SMALL_PATH, QSize(), QIcon.Mode.Normal, QIcon.State.Off)
+        icon.addFile(u"media/logo.png", QSize(), QIcon.Mode.Normal, QIcon.State.Off)
         AnimalPoseInference.setWindowIcon(icon)
         self.AnimalPoseInferenceLayout = QVBoxLayout(AnimalPoseInference)
         self.AnimalPoseInferenceLayout.setObjectName(u"AnimalPoseInferenceLayout")
@@ -517,5 +515,4 @@ class Ui_AnimalPoseInference(object):
         self.DisplayGroup.setTitle("")
         self.Display.setText("")
     # retranslateUi
-
 

@@ -6,8 +6,8 @@
    <rect>
     <x>0</x>
     <y>0</y>
-    <width>740</width>
-    <height>664</height>
+    <width>877</width>
+    <height>667</height>
    </rect>
   </property>
   <property name="sizePolicy">
@@ -469,9 +469,9 @@
        <property name="title">
         <string/>
        </property>
-       <layout class="QVBoxLayout" name="ShowToolsGroupLayout">
+       <layout class="QVBoxLayout" name="ShowToolsGroupVLayout">
         <item>
-         <layout class="QVBoxLayout" name="ShowToolsLayout">
+         <layout class="QHBoxLayout" name="SaveIoUConfLayout">
           <item>
            <widget class="QCheckBox" name="Save">
             <property name="sizePolicy">
@@ -498,265 +498,325 @@
            </widget>
           </item>
           <item>
-           <layout class="QHBoxLayout" name="ShowLayout">
-            <property name="spacing">
-             <number>0</number>
-            </property>
-            <property name="sizeConstraint">
-             <enum>QLayout::SizeConstraint::SetDefaultConstraint</enum>
-            </property>
+           <layout class="QHBoxLayout" name="IoULayout">
             <item>
-             <widget class="QCheckBox" name="Show">
+             <widget class="QLabel" name="IoULabel">
               <property name="sizePolicy">
                <sizepolicy hsizetype="Fixed" vsizetype="Fixed">
                 <horstretch>0</horstretch>
                 <verstretch>0</verstretch>
                </sizepolicy>
               </property>
-              <property name="minimumSize">
-               <size>
-                <width>120</width>
-                <height>25</height>
-               </size>
-              </property>
-              <property name="maximumSize">
-               <size>
-                <width>120</width>
-                <height>25</height>
-               </size>
-              </property>
               <property name="text">
-               <string>Show</string>
+               <string>IoU</string>
               </property>
              </widget>
             </item>
             <item>
-             <widget class="QCheckBox" name="Backgroud">
-              <property name="enabled">
-               <bool>true</bool>
-              </property>
-              <property name="sizePolicy">
-               <sizepolicy hsizetype="Preferred" vsizetype="Fixed">
-                <horstretch>0</horstretch>
-                <verstretch>0</verstretch>
-               </sizepolicy>
-              </property>
-              <property name="minimumSize">
-               <size>
-                <width>120</width>
-                <height>25</height>
-               </size>
-              </property>
-              <property name="text">
-               <string>Original</string>
-              </property>
-              <property name="tristate">
-               <bool>true</bool>
-              </property>
-             </widget>
-            </item>
-           </layout>
-          </item>
-          <item>
-           <layout class="QHBoxLayout" name="ShowClassesLayout">
-            <item>
-             <widget class="QCheckBox" name="ShowClasses">
-              <property name="sizePolicy">
-               <sizepolicy hsizetype="Fixed" vsizetype="Fixed">
-                <horstretch>0</horstretch>
-                <verstretch>0</verstretch>
-               </sizepolicy>
-              </property>
-              <property name="minimumSize">
-               <size>
-                <width>120</width>
-                <height>25</height>
-               </size>
-              </property>
-              <property name="maximumSize">
-               <size>
-                <width>120</width>
-                <height>25</height>
-               </size>
-              </property>
-              <property name="text">
-               <string>Show Classes</string>
-              </property>
-             </widget>
-            </item>
-            <item>
-             <widget class="QLabel" name="Classes">
-              <property name="minimumSize">
-               <size>
-                <width>0</width>
-                <height>25</height>
-               </size>
-              </property>
-              <property name="maximumSize">
-               <size>
-                <width>16777215</width>
-                <height>25</height>
-               </size>
-              </property>
-              <property name="text">
-               <string>There are 50 classes!</string>
-              </property>
-             </widget>
-            </item>
-           </layout>
-          </item>
-          <item>
-           <layout class="QHBoxLayout" name="ShowKeypointsLayout">
-            <item>
-             <widget class="QCheckBox" name="ShowKeypoints">
-              <property name="sizePolicy">
-               <sizepolicy hsizetype="Fixed" vsizetype="Fixed">
-                <horstretch>0</horstretch>
-                <verstretch>0</verstretch>
-               </sizepolicy>
-              </property>
-              <property name="minimumSize">
-               <size>
-                <width>120</width>
-                <height>25</height>
-               </size>
-              </property>
-              <property name="maximumSize">
-               <size>
-                <width>120</width>
-                <height>25</height>
-               </size>
-              </property>
-              <property name="text">
-               <string>Show Keypoints</string>
-              </property>
-             </widget>
-            </item>
-            <item>
-             <widget class="QSlider" name="ShowKeypointsRadius">
-              <property name="minimum">
-               <number>1</number>
-              </property>
+             <widget class="QDoubleSpinBox" name="IoU">
               <property name="maximum">
-               <number>20</number>
+               <double>1.000000000000000</double>
               </property>
-              <property name="pageStep">
-               <number>2</number>
-              </property>
-              <property name="sliderPosition">
-               <number>6</number>
-              </property>
-              <property name="orientation">
-               <enum>Qt::Orientation::Horizontal</enum>
-              </property>
-              <property name="invertedAppearance">
-               <bool>false</bool>
-              </property>
-              <property name="invertedControls">
-               <bool>false</bool>
-              </property>
-              <property name="tickPosition">
-               <enum>QSlider::TickPosition::NoTicks</enum>
-              </property>
-             </widget>
-            </item>
-           </layout>
-          </item>
-          <item>
-           <layout class="QHBoxLayout" name="ShowSkeletonsLayout">
-            <item>
-             <widget class="QCheckBox" name="ShowSkeletons">
-              <property name="sizePolicy">
-               <sizepolicy hsizetype="Fixed" vsizetype="Fixed">
-                <horstretch>0</horstretch>
-                <verstretch>0</verstretch>
-               </sizepolicy>
-              </property>
-              <property name="minimumSize">
-               <size>
-                <width>120</width>
-                <height>25</height>
-               </size>
-              </property>
-              <property name="maximumSize">
-               <size>
-                <width>120</width>
-                <height>25</height>
-               </size>
-              </property>
-              <property name="text">
-               <string>Show Skeletons</string>
-              </property>
-             </widget>
-            </item>
-            <item>
-             <widget class="QSlider" name="ShowSkeletonsLineWidth">
-              <property name="minimum">
-               <number>1</number>
-              </property>
-              <property name="maximum">
-               <number>10</number>
-              </property>
-              <property name="pageStep">
-               <number>1</number>
+              <property name="singleStep">
+               <double>0.010000000000000</double>
               </property>
               <property name="value">
-               <number>2</number>
-              </property>
-              <property name="orientation">
-               <enum>Qt::Orientation::Horizontal</enum>
+               <double>0.700000000000000</double>
               </property>
              </widget>
             </item>
            </layout>
           </item>
           <item>
-           <layout class="QHBoxLayout" name="ShowBBoxLayout">
+           <layout class="QHBoxLayout" name="ConfLayout">
             <item>
-             <widget class="QCheckBox" name="ShowBBox">
+             <widget class="QLabel" name="ConfLabel">
               <property name="sizePolicy">
                <sizepolicy hsizetype="Fixed" vsizetype="Fixed">
                 <horstretch>0</horstretch>
                 <verstretch>0</verstretch>
                </sizepolicy>
               </property>
-              <property name="minimumSize">
-               <size>
-                <width>120</width>
-                <height>25</height>
-               </size>
-              </property>
-              <property name="maximumSize">
-               <size>
-                <width>120</width>
-                <height>25</height>
-               </size>
-              </property>
               <property name="text">
-               <string>Show BBox</string>
+               <string>Conf</string>
               </property>
              </widget>
             </item>
             <item>
-             <widget class="QSlider" name="ShowBBoxWidth">
-              <property name="minimum">
-               <number>1</number>
-              </property>
+             <widget class="QDoubleSpinBox" name="Conf">
               <property name="maximum">
-               <number>10</number>
+               <double>1.000000000000000</double>
               </property>
-              <property name="pageStep">
-               <number>1</number>
+              <property name="singleStep">
+               <double>0.010000000000000</double>
               </property>
               <property name="value">
-               <number>2</number>
-              </property>
-              <property name="orientation">
-               <enum>Qt::Orientation::Horizontal</enum>
+               <double>0.250000000000000</double>
               </property>
              </widget>
             </item>
            </layout>
+          </item>
+         </layout>
+        </item>
+        <item>
+         <layout class="QHBoxLayout" name="ShowLayout">
+          <property name="spacing">
+           <number>0</number>
+          </property>
+          <property name="sizeConstraint">
+           <enum>QLayout::SizeConstraint::SetDefaultConstraint</enum>
+          </property>
+          <item>
+           <widget class="QCheckBox" name="Show">
+            <property name="sizePolicy">
+             <sizepolicy hsizetype="Fixed" vsizetype="Fixed">
+              <horstretch>0</horstretch>
+              <verstretch>0</verstretch>
+             </sizepolicy>
+            </property>
+            <property name="minimumSize">
+             <size>
+              <width>120</width>
+              <height>25</height>
+             </size>
+            </property>
+            <property name="maximumSize">
+             <size>
+              <width>120</width>
+              <height>25</height>
+             </size>
+            </property>
+            <property name="text">
+             <string>Show</string>
+            </property>
+           </widget>
+          </item>
+          <item>
+           <widget class="QCheckBox" name="Backgroud">
+            <property name="enabled">
+             <bool>true</bool>
+            </property>
+            <property name="sizePolicy">
+             <sizepolicy hsizetype="Preferred" vsizetype="Fixed">
+              <horstretch>0</horstretch>
+              <verstretch>0</verstretch>
+             </sizepolicy>
+            </property>
+            <property name="minimumSize">
+             <size>
+              <width>120</width>
+              <height>25</height>
+             </size>
+            </property>
+            <property name="text">
+             <string>Original</string>
+            </property>
+            <property name="tristate">
+             <bool>true</bool>
+            </property>
+           </widget>
+          </item>
+         </layout>
+        </item>
+        <item>
+         <layout class="QHBoxLayout" name="ShowClassesLayout">
+          <item>
+           <widget class="QCheckBox" name="ShowClasses">
+            <property name="sizePolicy">
+             <sizepolicy hsizetype="Fixed" vsizetype="Fixed">
+              <horstretch>0</horstretch>
+              <verstretch>0</verstretch>
+             </sizepolicy>
+            </property>
+            <property name="minimumSize">
+             <size>
+              <width>120</width>
+              <height>25</height>
+             </size>
+            </property>
+            <property name="maximumSize">
+             <size>
+              <width>120</width>
+              <height>25</height>
+             </size>
+            </property>
+            <property name="text">
+             <string>Show Classes</string>
+            </property>
+           </widget>
+          </item>
+          <item>
+           <widget class="QLabel" name="Classes">
+            <property name="minimumSize">
+             <size>
+              <width>0</width>
+              <height>25</height>
+             </size>
+            </property>
+            <property name="maximumSize">
+             <size>
+              <width>16777215</width>
+              <height>25</height>
+             </size>
+            </property>
+            <property name="text">
+             <string>There are 50 classes!</string>
+            </property>
+           </widget>
+          </item>
+         </layout>
+        </item>
+        <item>
+         <layout class="QHBoxLayout" name="ShowKeypointsLayout">
+          <item>
+           <widget class="QCheckBox" name="ShowKeypoints">
+            <property name="sizePolicy">
+             <sizepolicy hsizetype="Fixed" vsizetype="Fixed">
+              <horstretch>0</horstretch>
+              <verstretch>0</verstretch>
+             </sizepolicy>
+            </property>
+            <property name="minimumSize">
+             <size>
+              <width>120</width>
+              <height>25</height>
+             </size>
+            </property>
+            <property name="maximumSize">
+             <size>
+              <width>120</width>
+              <height>25</height>
+             </size>
+            </property>
+            <property name="text">
+             <string>Show Keypoints</string>
+            </property>
+           </widget>
+          </item>
+          <item>
+           <widget class="QSlider" name="ShowKeypointsRadius">
+            <property name="minimum">
+             <number>1</number>
+            </property>
+            <property name="maximum">
+             <number>20</number>
+            </property>
+            <property name="pageStep">
+             <number>2</number>
+            </property>
+            <property name="sliderPosition">
+             <number>6</number>
+            </property>
+            <property name="orientation">
+             <enum>Qt::Orientation::Horizontal</enum>
+            </property>
+            <property name="invertedAppearance">
+             <bool>false</bool>
+            </property>
+            <property name="invertedControls">
+             <bool>false</bool>
+            </property>
+            <property name="tickPosition">
+             <enum>QSlider::TickPosition::NoTicks</enum>
+            </property>
+           </widget>
+          </item>
+         </layout>
+        </item>
+        <item>
+         <layout class="QHBoxLayout" name="ShowSkeletonsLayout">
+          <item>
+           <widget class="QCheckBox" name="ShowSkeletons">
+            <property name="sizePolicy">
+             <sizepolicy hsizetype="Fixed" vsizetype="Fixed">
+              <horstretch>0</horstretch>
+              <verstretch>0</verstretch>
+             </sizepolicy>
+            </property>
+            <property name="minimumSize">
+             <size>
+              <width>120</width>
+              <height>25</height>
+             </size>
+            </property>
+            <property name="maximumSize">
+             <size>
+              <width>120</width>
+              <height>25</height>
+             </size>
+            </property>
+            <property name="text">
+             <string>Show Skeletons</string>
+            </property>
+           </widget>
+          </item>
+          <item>
+           <widget class="QSlider" name="ShowSkeletonsLineWidth">
+            <property name="minimum">
+             <number>1</number>
+            </property>
+            <property name="maximum">
+             <number>10</number>
+            </property>
+            <property name="pageStep">
+             <number>1</number>
+            </property>
+            <property name="value">
+             <number>2</number>
+            </property>
+            <property name="orientation">
+             <enum>Qt::Orientation::Horizontal</enum>
+            </property>
+           </widget>
+          </item>
+         </layout>
+        </item>
+        <item>
+         <layout class="QHBoxLayout" name="ShowBBoxLayout">
+          <item>
+           <widget class="QCheckBox" name="ShowBBox">
+            <property name="sizePolicy">
+             <sizepolicy hsizetype="Fixed" vsizetype="Fixed">
+              <horstretch>0</horstretch>
+              <verstretch>0</verstretch>
+             </sizepolicy>
+            </property>
+            <property name="minimumSize">
+             <size>
+              <width>120</width>
+              <height>25</height>
+             </size>
+            </property>
+            <property name="maximumSize">
+             <size>
+              <width>120</width>
+              <height>25</height>
+             </size>
+            </property>
+            <property name="text">
+             <string>Show BBox</string>
+            </property>
+           </widget>
+          </item>
+          <item>
+           <widget class="QSlider" name="ShowBBoxWidth">
+            <property name="minimum">
+             <number>1</number>
+            </property>
+            <property name="maximum">
+             <number>10</number>
+            </property>
+            <property name="pageStep">
+             <number>1</number>
+            </property>
+            <property name="value">
+             <number>2</number>
+            </property>
+            <property name="orientation">
+             <enum>Qt::Orientation::Horizontal</enum>
+            </property>
+           </widget>
           </item>
          </layout>
         </item>
@@ -820,9 +880,6 @@
         </property>
         <property name="text">
          <string/>
-        </property>
-        <property name="pixmap">
-         <pixmap>../../assets/logo_transparent.png</pixmap>
         </property>
         <property name="scaledContents">
          <bool>true</bool>

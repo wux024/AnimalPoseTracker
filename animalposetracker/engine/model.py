@@ -1,31 +1,51 @@
-from ultralytics import YOLO
-
+import subprocess
 class ModelEngine:
-    def __init__(self, config = None):
+    def __init__(self, config: str):
         self.config = config
-        self.model = None
-
-    def model_init(self, config):
-        self.config = config
-        self.model = YOLO(model=self.config['model'])
 
     def train(self):
-        self.config['name'] = 'train'
-        self.model.train(**self.config)
+        cmd = [
+            "yolo",
+            "pose",
+            "train",
+            f"cfg={self.config}"
+        ]
+        subprocess.run(cmd)
+            
     
     def val(self):
-        self.config['name'] = 'val'
-        self.model.val(**self.config)
+        cmd = [
+            "yolo",
+            "pose",
+            "val",
+            f"cfg={self.config}"
+        ]
+        subprocess.run(cmd)
 
     def evaluate(self):
-        self.config['name'] = 'evaluate'
-        self.model.val(**self.config)
+        cmd = [
+            "yolo",
+            "pose",
+            "val",
+            f"cfg={self.config}"
+        ]
+        subprocess.run(cmd)
 
     def predict(self):  
-        self.config['name'] = 'predict'
-        self.model.predict(**self.config)
+        cmd = [
+            "yolo",
+            "pose",
+            "predict",
+            f"cfg={self.config}"
+        ]
+        subprocess.run(cmd)
 
     def export(self):
-        self.config['name'] = 'export'
-        self.model.export(**self.config)
+        cmd = [
+            "yolo",
+            "pose",
+            "export",
+            f"cfg={self.config}"
+        ]
+        subprocess.run(cmd)
 
