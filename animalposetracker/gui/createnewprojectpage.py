@@ -2,7 +2,6 @@ from PySide6.QtCore import Signal, QTimer, Qt, QSignalBlocker
 from PySide6.QtWidgets import  (QFileDialog, QWidget, QMenu)
 from PySide6.QtGui import QCursor
 from pathlib import Path
-import shutil
 
 from .ui_createnewproject import Ui_CreateNewProject
 from .utils import ListManager, CheckableListWidgetItem

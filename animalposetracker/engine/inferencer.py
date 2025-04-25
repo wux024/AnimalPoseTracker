@@ -5,6 +5,7 @@ from datetime import datetime
 import yaml
 from pathlib import Path
 
+
 def measure_time(func, *args, **kwargs):
     start_time = datetime.now()
     result = func(*args, **kwargs)
@@ -16,12 +17,12 @@ def measure_time(func, *args, **kwargs):
 class InferenceEngine:
     ENGINE = ["OpenCV", "OpenVINO", "Ultralytics", "MMdeploy", "CANN", "Hailo"]
     DEVICE = ["CPU", "NVIDIA GPU", "Intel NPU", "Ascend NPU", "Hailo-8"]
-    def __init__(self, 
-                 config: Union[str, Path, Dict], 
-                 weights_path: Union[str, Path], 
+
+    def __init__(self,
+                 config: Union[str, Path, Dict] = None,
+                 weights_path: Union[str, Path] = None,
                  engine: str = 'Ultralytics',
                  device: str = 'CPU',
-                 save: bool = False,
                  show: bool = False,
                  conf: float = 0.25,
                  iou: float = 0.45,
@@ -39,22 +40,21 @@ class InferenceEngine:
         self._engine = engine
         self._device = device
         self.visualize_config = {
-            'save': save,
             'conf': conf,
             'iou': iou,
-            'show': show,
-            'show_classes': show_classes,
-            'show_keypoints': show_keypoints,
-            'show_skeletons': show_skeletons,
-            'show_bbox': show_bbox,
+           'show': show,
+           'show_classes': show_classes,
+           'show_keypoints': show_keypoints,
+           'show_skeletons': show_skeletons,
+           'show_bbox': show_bbox,
             'radius': radius,
-            'skeleton_line_width': skeleton_line_width,
+           'skeleton_line_width': skeleton_line_width,
             'bbox_line_width': bbox_line_width,
             'background': background
         }
+        self._data_config = None
         self._load_config(config)
-        self.model_init()
-    
+
     @property
     def engine(self):
         return self._engine
@@ -70,7 +70,7 @@ class InferenceEngine:
     @device.setter
     def device(self, device):
         self._device = device
-    
+
     @property
     def weights_path(self):
         return self._weights_path
@@ -78,7 +78,26 @@ class InferenceEngine:
     @weights_path.setter
     def weights_path(self, weights_path):
         self._weights_path = weights_path
-    
+
+    @property
+    def data_config(self):
+        return self._data_config
+
+    @data_config.setter
+    def data_config(self, config):
+        self._data_config = config
+        self._update_config_vars()
+
+    def _update_config_vars(self):
+        self.classes = self.data_config.get('names', {})
+        self.keypoints = self.data_config.get('kpt_shape', [])
+        self.skeleton = self.data_config.get('skeleton', [])
+
+        # Generate a color palette for the classes
+        self.classes_color_palette = np.random.uniform(0, 255, size=(len(self.classes.keys()), 3))
+        self.keypoints_color_palette = np.random.uniform(0, 255, size=(len(self.keypoints), 3))
+        self.skeleton_color_palette = np.random.uniform(0, 255, size=(len(self.skeleton), 3))
+
     def update_config(self, config: Dict):
         for key, value in config.items():
             if key in self.visualize_config:
@@ -87,32 +106,32 @@ class InferenceEngine:
                 raise ValueError(f"Invalid key {key} in config. Please choose from {self.visualize_config.keys()}")
 
     def _load_config(self, config: Union[str, Path, Dict] = None):
+
         if isinstance(config, str) or isinstance(config, Path):
             with open(config, 'r') as f:
-                self.data_config = yaml.safe_load(f)
+                self._data_config = yaml.safe_load(f)
         elif isinstance(config, dict):
-            self.data_config = config
-        self.classes = self.data_config['names']
-        self.keypoints = self.data_config['kpt_shape'][0]
-        self.skeleton = self.data_config['skeleton']
-
-        # Generate a color palette for the classes
-        self.classes_color_palette = np.random.uniform(0, 255, size=(len(self.classes), 3))
-        self.keypoints_color_palette = np.random.uniform(0, 255, size=(self.keypoints, 3))
-        self.skeleton_color_palette = np.random.uniform(0, 255, size=(len(self.skeleton), 3))
+            self._data_config = config
+        else:
+            self._data_config = {
+                'names': {},
+                'kpt_shape': [],
+               'skeleton': []
+            }
+        self._update_config_vars()
 
     def model_init(self):
         if self.engine not in self.ENGINE:
             raise ValueError(f"Engine {self.engine} is not supported. Please choose from {self.ENGINE}")
         if self.device not in self.DEVICE:
             raise ValueError(f"Device {self.device} is not supported. Please choose from {self.DEVICE}")
-        
+
         if self.engine == 'Ultralytics':
             try:
                 from ultralytics import YOLO
-                self.model = YOLO(data=self.data_config, 
-                                weights=self.weights_path, 
-                                device=self.device)
+                self.model = YOLO(data=self.data_config,
+                                  weights=self.weights_path,
+                                  device=self.device)
             except ImportError:
                 raise ImportError("Please install ultralytics to use Ultralytics engine.")
         elif self.engine == 'OpenCV':
@@ -137,10 +156,10 @@ class InferenceEngine:
                 self.model = InferAPI(self.weights_path, self.device)
             except ImportError:
                 raise ImportError("Please install hailo_model_zoo to use Hailo engine.")
-    
+
     def inference(self, frame):
         """
-        Performs inference using an ONNX model and returns the 
+        Performs inference using an ONNX model and returns the
         output image with drawn detections.
 
         Returns:
@@ -154,7 +173,7 @@ class InferenceEngine:
         if self.engine == 'Ultralytics':
             pred, inference_time = measure_time(self.model, [img], verbose=False)
         elif self.engine == 'OpenCV':
-           pass
+            pass
         elif self.engine == 'OpenVINO':
             pass
         elif self.engine == 'MMdeploy':
@@ -172,7 +191,6 @@ class InferenceEngine:
         results['fps'] = 1.0 / (inference_time + postprecess_time + preprocess_time + 1e-7)
 
         return results
-    
 
     def preprocess(self, input_image):
         """
@@ -195,7 +213,7 @@ class InferenceEngine:
         M = np.array([
             [scale, 0, ox],
             [0, scale, oy],
-            ], dtype="float32"
+        ], dtype="float32"
         )
 
         img = cv2.warpAffine(img, M,
@@ -250,7 +268,7 @@ class InferenceEngine:
         # Iterate over each row in the outputs array
         for i in range(rows):
             # Extract the class scores from the current row
-            classes_scores = outputs[i][4:4+len(self.classes)]
+            classes_scores = outputs[i][4:4 + len(self.classes)]
 
             # Find the maximum score among the class scores
             max_score = np.amax(classes_scores)
@@ -269,7 +287,7 @@ class InferenceEngine:
                 width = w * IM[0][0]
                 height = h * IM[1][1]
 
-                keypoints = outputs[i][4+len(self.classes):].reshape(-1, 3)
+                keypoints = outputs[i][4 + len(self.classes):].reshape(-1, 3)
                 keypoints[:, 0] = keypoints[:, 0] * IM[0][0] + IM[0][2]
                 keypoints[:, 1] = keypoints[:, 1] * IM[1][1] + IM[1][2]
 
@@ -297,18 +315,18 @@ class InferenceEngine:
                 'boxes': boxes,
                 'keypoints_list': keypoints_list,
                 'class_ids': class_ids,
-                'scores': scores,
+               'scores': scores,
             }
         else:
             results = {
                 'boxes': None,
                 'keypoints_list': None,
                 'class_ids': None,
-                'scores': None,
+               'scores': None,
             }
         # Return the modified input image
         return results
-    
+
     def draw_detections(self, img, box, score, class_id, line_width=2):
         """
         Draws bounding boxes and labels on the input image based on the detected objects.
@@ -368,14 +386,13 @@ class InferenceEngine:
             x, y = keypoint[0], keypoint[1]
             color_k = [int(x) for x in self.keypoints_color_palette[i]]
 
-            if x!=0 and y!=0:
+            if x != 0 and y != 0:
                 cv2.circle(img,
                            (int(x), int(y)),
                            radius=radius,
                            color=color_k,
                            thickness=-1,
                            lineType=cv2.LINE_AA)
-
 
     def draw_skeleton(self, img, keypoints, line_width=1):
         for i, sk in enumerate(self.skeleton):
@@ -391,7 +408,6 @@ class InferenceEngine:
                      thickness=line_width,
                      lineType=cv2.LINE_AA
                      )
-    
 
     def process_frame(self, frame):
         """
@@ -408,33 +424,38 @@ class InferenceEngine:
 
         results = self.inference(frame)
 
-
         boxes = results['boxes']
         keypoints_list = results['keypoints_list']
         scores = results['scores']
         class_ids = results['class_ids']
+
+        if self.visualize_config['background'] == 'Black':
+            frame = np.zeros_like(frame)
+        elif self.visualize_config['background'] == 'White':
+            frame = np.ones_like(frame) * 255
+        elif self.visualize_config['background'] == 'Original':
+            pass
 
         if len(boxes) > 0:
             if boxes.ndim == 1:
                 if self.visualize_config['show_bbox']:
                     self.draw_detections(frame, boxes, scores, class_ids)
                 if self.visualize_config['show_keypoints']:
-                    self.draw_keypoints(frame, keypoints_list, 
+                    self.draw_keypoints(frame, keypoints_list,
                                         radius=self.visualize_config['radius'])
                 if self.visualize_config['show_skeletons']:
-                    self.draw_skeleton(frame, keypoints_list, 
+                    self.draw_skeleton(frame, keypoints_list,
                                        line_width=self.visualize_config['skeleton_line_width'])
             else:
                 for i, box in enumerate(boxes):
                     if self.visualize_config['show_bbox']:
                         self.draw_detections(frame, box, scores[i], class_ids[i])
                     if self.visualize_config['show_keypoints']:
-                        self.draw_keypoints(frame, keypoints_list[i], 
+                        self.draw_keypoints(frame, keypoints_list[i],
                                             radius=self.visualize_config['radius'])
                     if self.visualize_config['show_skeletons']:
-                        self.draw_skeleton(frame, keypoints_list[i], 
+                        self.draw_skeleton(frame, keypoints_list[i],
                                            line_width=self.visualize_config['skeleton_line_width'])
-
 
         times = {
             'preprocess_time': 'preprocess: {:.3f} ms'.format(results['preprocess_time'] * 1000.0),
@@ -457,5 +478,4 @@ class InferenceEngine:
                     0.5, (0, 255, 0), 1, cv2.LINE_AA)
 
         return frame, results
-
-            
+    

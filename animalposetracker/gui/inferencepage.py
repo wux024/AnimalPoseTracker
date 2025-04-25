@@ -1,6 +1,6 @@
 from PySide6.QtCore import QMetaObject, Qt, Slot, Q_ARG
 from PySide6.QtGui import QImage, QPixmap
-from PySide6.QtWidgets import  QApplication, QFileDialog, QWidget
+from PySide6.QtWidgets import  QApplication, QFileDialog, QWidget, QMessageBox
 import os
 import yaml
 import cv2
@@ -11,7 +11,7 @@ import platform
 from pathlib import Path
 
 from .ui_animalposeinference import Ui_AnimalPoseInference
-from animalposetracker.utils import PreviewThread
+from animalposetracker.utils import VideoProcessorThread, VideoWriterThread
 from animalposetracker.engine import InferenceEngine
 class AnimalPoseInferencePage(QWidget, Ui_AnimalPoseInference):
     def __init__(self, parent=None):
@@ -22,11 +22,13 @@ class AnimalPoseInferencePage(QWidget, Ui_AnimalPoseInference):
         # constants
         self.camera_list = {}
 
-        self.preview_thread = PreviewThread()
+        self.video_process_thread = VideoProcessorThread()
+        self.video_writer_thread = VideoWriterThread()
+        self.inference = InferenceEngine()
         self.data_config_path = None
         self.data_config = dict()
         self.weights_path = None
-        self.inference = None
+        
 
         # init button
         self.initialize_controls()
@@ -76,9 +78,6 @@ class AnimalPoseInferencePage(QWidget, Ui_AnimalPoseInference):
         os.chdir(Path.cwd())
         self.SelectConfigure.setEnabled(True)
         self.SelectWeights.setEnabled(False)
-        self.CameraORVideos.setEnabled(False)
-        self.CameraVideosSelection.setEnabled(False)
-        self.CheckCameraVideosConnect.setEnabled(False)
         self.WidthSetup.setEnabled(False)
         self.HeightSetup.setEnabled(False)
         self.FPSSetup.setEnabled(False)
@@ -466,8 +465,7 @@ class AnimalPoseInferencePage(QWidget, Ui_AnimalPoseInference):
     def _setup_camera_ui(self):
         """Initialize camera mode UI according to the original design"""
         # Set camera mode toggle state
-        self.CameraORVideos.setChecked(True)
-        self.CameraORVideos.setText("Use Video")  # Ensure text matches design
+        self.CameraORVideos.setText("Use Cramera")  # Ensure text matches design
         self.CheckCameraVideosConnect.setText("Preview Camera")
         
         # Configure camera selection dropdown
@@ -478,6 +476,7 @@ class AnimalPoseInferencePage(QWidget, Ui_AnimalPoseInference):
         else:
             self.CameraVideosSelection.addItem("Select camera...")
             self.CameraVideosSelection.addItems(self.camera_list.keys())
+            self.CameraVideosSelection.setEnabled(True)
         
         # Set default camera parameters (from design)
         self._set_camera_setup()
@@ -485,13 +484,13 @@ class AnimalPoseInferencePage(QWidget, Ui_AnimalPoseInference):
     def _setup_video_ui(self):
         """Initialize file mode UI according to the original design"""
         # Set file mode toggle state
-        self.CameraORVideos.setChecked(False)
-        self.CameraORVideos.setText("Use Camera")
+        self.CameraORVideos.setText("Use Video")
         
         # Configure file selection
         self.CameraVideosSelection.clear()
         self.CameraVideosSelection.addItem("...")
         self.CameraVideosSelection.addItem("Select video file...")
+        self.CameraVideosSelection.setEnabled(True)
 
         self.CheckCameraVideosConnect.setText("Preview Video")
 
@@ -575,40 +574,37 @@ class AnimalPoseInferencePage(QWidget, Ui_AnimalPoseInference):
         current_text = btn.text()
         btn.setEnabled(False)
         try:
-            if current_text == "Preview Camera":
+            if current_text in {"Preview Camera", "Preview Video"}:
                 self._start_preview()
-            elif current_text == "Close Camera":
-                self._stop_preview()
-            elif current_text == "Preview Video":
-                self._start_preview()
-            elif current_text == "Close Video":
+            elif current_text in {"Close Camera", "Close Video"}:
                 self._stop_preview()
         finally:
             btn.setEnabled(True)
     
     def _start_preview(self):
-        if hasattr(self, 'preview_thread'):
-            self._stop_preview()
+        # if hasattr(self, 'video_process_thread'):
+        #     self._stop_preview()
 
         source = self._get_source()
         if source is None:
             return
 
-        self.preview_thread = PreviewThread(source=source)
-        self.preview_thread.frame_ready.connect(self.update_preview_frame)
-        self.preview_thread.status_update.connect(self.update_preview_status)
-        self.preview_thread.finished.connect(self._on_preview_finished)
+        self.video_process_thread.source = source
+        self.video_process_thread.frame_ready.connect(self.update_frame)
+        self.video_process_thread.status_update.connect(self.update_status)
+        self.video_process_thread.finished.connect(self._on_finished)
 
         mode = "Camera" if self.CameraORVideos.isChecked() else "Video"
         self.CheckCameraVideosConnect.setText(f"Close {mode}")
-        self.preview_thread.start()
+        self.video_process_thread.start()
 
     def _stop_preview(self):
-        if hasattr(self, 'preview_thread'):
-            self.preview_thread.safe_stop()
-            self.previe_thread = None
+        if hasattr(self, 'video_process_thread'):
+            self.video_process_thread.safe_stop()
+            self.video_process_thread = None
+            self.Display.clear()
     
-    def _on_preview_finished(self):
+    def _on_finished(self):
         mode = "Camera" if "Camera" in self.CameraVideosSelection.currentText() else "Video"
         self.CheckCameraVideosConnect.setText(f"Preview {mode}")
 
@@ -628,8 +624,13 @@ class AnimalPoseInferencePage(QWidget, Ui_AnimalPoseInference):
             return None
 
     @Slot(np.ndarray)
-    def update_preview_frame(self, frame):
+    def update_frame(self, frame):
         """Handle new frame from camera/video source"""
+        if (self.Save.isChecked() and 
+            self.video_writer_thread is not None 
+            and self.video_writer_thread.isRunning()):
+            self.video_writer_thread.add_frame(frame)
+            
         RGB = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
         height, width, _ = RGB.shape
         QImg = QImage(RGB.data, width, height, QImage.Format_RGB888)
@@ -647,7 +648,8 @@ class AnimalPoseInferencePage(QWidget, Ui_AnimalPoseInference):
         )
 
     @Slot(str)
-    def update_preview_status(self, message):
+    def update_status(self, message):
+        #QMessageBox.information(self, "Status", message)
         self.PrintInformation.setText(message)
 
     def onWidthSetupChanged(self, value):
@@ -680,7 +682,17 @@ class AnimalPoseInferencePage(QWidget, Ui_AnimalPoseInference):
         if self.Start.text() == "Start":
             source = self._get_source()
             if source is None:
-                return
+                QMessageBox.warning(self, "Warning", "Please select a source")
+            # inference config
+            self.inference.weights_path = self.weights_path
+            self.video_process_thread.source = source
+            self.video_process_thread.processing_function = self.inference.process_frame
+            if self.Save.isChecked():
+                self.video_writer_thread.save_path = Path.cwd() / "output.avi"
+                self.video_writer_thread.fps = self.fps
+                self.video_writer_thread.frame_size = (self.width, self.height)
+            self.video_process_thread.start()
+            self.video_writer_thread.start()
             self.Start.setText("Pause")
         elif self.Start.text() == "Pause":
             self.Start.setText("Resume")
@@ -749,8 +761,12 @@ class AnimalPoseInferencePage(QWidget, Ui_AnimalPoseInference):
         self.inference.update_config({"bbox_line_width": value})
     
     def closeEvent(self, event):
-        if self.preview_thread.isRunning():
-            self.preview_thread.safe_stop()
+        """Handle window close event"""
+        if self.video_process_thread is not None and self.video_process_thread.isRunning():
+            self.video_process_thread.safe_stop()
+        if self.video_writer_thread is not None and self.video_writer_thread.isRunning():
+            self.video_writer_thread.stop()
+            self.video_writer_thread.wait()
         event.accept()
 
 def main():

@@ -21,8 +21,8 @@ Revision History:
 """
 from .dataset import convert_labels_to_coco, convert_labels_to_yolo
 from .extract_frame import KeyframeExtractor
-from .preview_thread import PreviewThread
-from .visualize import Visualizer
+from .videoprocessthread import VideoProcessorThread, VideoWriterThread
 
 __all__ = ['convert_labels_to_coco', 'convert_labels_to_yolo', 
-           'KeyframeExtractor', 'PreviewThread', 'Visualizer']
+           'KeyframeExtractor', 'VideoProcessorThread',
+           'VideoWriterThread']
