@@ -32,10 +32,24 @@ class AnimalPoseInferencePage(QWidget, Ui_AnimalPoseInference):
 
         # init button
         self.initialize_controls()
-        
+    
+    def initialize_controls(self):
+        """Initialize all buttons and dependent controls"""
+        os.chdir(Path.cwd())
+
+        self.tools_disabled()
+
+        self.SelectConfigure.setEnabled(True)
+        self.ShowKeypoints.setCheckState(Qt.CheckState.Checked)
+        self.Show.setCheckState(Qt.CheckState.Checked)
+        self.PrintInformation.setText("Please select configuration and weights")
+
         # Connect all signals to their respective slots
         self.setupConnections()
-    
+
+        # Set default visualization configuration
+        self._init_visualization_config()
+
     def setupConnections(self):
         """Connect all UI signals to their corresponding slot functions"""
         
@@ -72,36 +86,6 @@ class AnimalPoseInferencePage(QWidget, Ui_AnimalPoseInference):
         self.ShowSkeletonsLineWidth.valueChanged.connect(self.onShowSkeletonsLineWidthChanged)
         self.ShowBBox.stateChanged.connect(self.onShowBBoxStateChanged)
         self.ShowBBoxWidth.valueChanged.connect(self.onShowBBoxWidthChanged)
-    
-    def initialize_controls(self):
-        """Initialize all buttons and dependent controls"""
-        os.chdir(Path.cwd())
-        self.SelectConfigure.setEnabled(True)
-        self.SelectWeights.setEnabled(False)
-        self.WidthSetup.setEnabled(False)
-        self.HeightSetup.setEnabled(False)
-        self.FPSSetup.setEnabled(False)
-        self.EngineSelection.setEnabled(False)
-        self.DeviceSelection.setEnabled(False)
-        self.Start.setEnabled(False)
-        self.End.setEnabled(False)
-
-        self.Save.setEnabled(False)
-        self.IoU.setEnabled(False)
-        self.Conf.setEnabled(False)
-        self.Show.setEnabled(False)
-        self.Show.setCheckState(Qt.CheckState.Checked)
-        self.Backgroud.setEnabled(False)
-        self.ShowClasses.setEnabled(False)
-        self.Classes.clear()
-        self.ShowKeypoints.setEnabled(False)
-        self.ShowKeypoints.setCheckState(Qt.CheckState.Checked)
-        self.ShowKeypointsRadius.setEnabled(False)
-        self.ShowSkeletons.setEnabled(False)
-        self.ShowSkeletonsLineWidth.setEnabled(False)
-        self.ShowBBox.setEnabled(False)
-        self.ShowBBoxWidth.setEnabled(False)
-        self.PrintInformation.setText("Please select configuration and weights")
 
     def tools_enabled(self):
         self.CheckCameraVideosConnect.setEnabled(True)
@@ -142,6 +126,27 @@ class AnimalPoseInferencePage(QWidget, Ui_AnimalPoseInference):
         self.ShowSkeletons.setEnabled(False)
         self.ShowSkeletonsLineWidth.setEnabled(False)
         self.ShowBBox.setEnabled(False)
+    
+    def _init_visualization_config(self):
+        """Initialize visualization configuration"""
+        self.inference.update_config(
+            {
+            'conf': self.Conf.value(),
+            'iou': self.IoU.value(),
+           'show': self.Show.isChecked(),
+           'show_classes': self.ShowClasses.isChecked(),
+           'show_keypoints': self.ShowKeypoints.isChecked(),
+           'show_skeletons': self.ShowSkeletons.isChecked(),
+           'show_bbox': self.ShowBBox.isChecked(),
+            'radius': self.ShowKeypointsRadius.value(),
+           'skeleton_line_width': self.ShowSkeletonsLineWidth.value(),
+            'bbox_line_width': self.ShowBBoxWidth.value(),
+            'background': {
+                0: 'Original',
+                1: 'White',
+                2: 'Black',
+            }[self.Backgroud.checkState().value]
+        })
 
     def onSelectConfigureClicked(self):
         """
@@ -582,9 +587,7 @@ class AnimalPoseInferencePage(QWidget, Ui_AnimalPoseInference):
             btn.setEnabled(True)
     
     def _start_preview(self):
-        # if hasattr(self, 'video_process_thread'):
-        #     self._stop_preview()
-
+        
         source = self._get_source()
         if source is None:
             return
@@ -685,6 +688,8 @@ class AnimalPoseInferencePage(QWidget, Ui_AnimalPoseInference):
                 QMessageBox.warning(self, "Warning", "Please select a source")
             # inference config
             self.inference.weights_path = self.weights_path
+            self.inference.data_config = self.data_config_path
+            self.inference.model_init()
             self.video_process_thread.source = source
             self.video_process_thread.processing_function = self.inference.process_frame
             if self.Save.isChecked():

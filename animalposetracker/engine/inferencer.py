@@ -1,4 +1,4 @@
-from typing import Dict, List, Tuple, Union
+from typing import Dict, Union
 import cv2
 import numpy as np
 from datetime import datetime
@@ -16,11 +16,14 @@ def measure_time(func, *args, **kwargs):
 
 class InferenceEngine:
     ENGINE = ["OpenCV", "OpenVINO", "Ultralytics", "MMdeploy", "CANN", "Hailo"]
-    DEVICE = ["CPU", "NVIDIA GPU", "Intel NPU", "Ascend NPU", "Hailo-8"]
+    DEVICE = ["Intel CPU", "AMD CPU", "ARM CPU", 
+              "NVIDIA GPU", "Intel NPU", "Ascend NPU", "Hailo-8"]
 
     def __init__(self,
                  config: Union[str, Path, Dict] = None,
                  weights_path: Union[str, Path] = None,
+                 input_width: int = 640,
+                 input_height: int = 640,
                  engine: str = 'Ultralytics',
                  device: str = 'CPU',
                  show: bool = False,
@@ -36,9 +39,11 @@ class InferenceEngine:
                  bbox_line_width: int = 2
                  ):
         self.model = None
-        self._weights_path = weights_path
-        self._engine = engine
-        self._device = device
+        self.weights_path = weights_path
+        self.engine = engine
+        self.device = device
+        self.input_width = input_width
+        self.input_height = input_height
         self.visualize_config = {
             'conf': conf,
             'iou': iou,
@@ -56,30 +61,6 @@ class InferenceEngine:
         self._load_config(config)
 
     @property
-    def engine(self):
-        return self._engine
-
-    @engine.setter
-    def engine(self, engine):
-        self._engine = engine
-
-    @property
-    def device(self):
-        return self._device
-
-    @device.setter
-    def device(self, device):
-        self._device = device
-
-    @property
-    def weights_path(self):
-        return self._weights_path
-
-    @weights_path.setter
-    def weights_path(self, weights_path):
-        self._weights_path = weights_path
-
-    @property
     def data_config(self):
         return self._data_config
 
@@ -89,9 +70,16 @@ class InferenceEngine:
         self._update_config_vars()
 
     def _update_config_vars(self):
-        self.classes = self.data_config.get('names', {})
-        self.keypoints = self.data_config.get('kpt_shape', [])
-        self.skeleton = self.data_config.get('skeleton', [])
+        if self.data_config is None:
+            return
+
+        # Load the data config file
+        with open(self.data_config, 'r') as f:
+            config = yaml.load(f, Loader=yaml.FullLoader)
+
+        self.classes = config.get('names', {})
+        self.keypoints = config.get('kpt_shape', [])
+        self.skeleton = config.get('skeleton', [])
 
         # Generate a color palette for the classes
         self.classes_color_palette = np.random.uniform(0, 255, size=(len(self.classes.keys()), 3))
@@ -105,19 +93,8 @@ class InferenceEngine:
             else:
                 raise ValueError(f"Invalid key {key} in config. Please choose from {self.visualize_config.keys()}")
 
-    def _load_config(self, config: Union[str, Path, Dict] = None):
-
-        if isinstance(config, str) or isinstance(config, Path):
-            with open(config, 'r') as f:
-                self._data_config = yaml.safe_load(f)
-        elif isinstance(config, dict):
-            self._data_config = config
-        else:
-            self._data_config = {
-                'names': {},
-                'kpt_shape': [],
-               'skeleton': []
-            }
+    def _load_config(self, config: Union[str, Path] = None):
+        self.data_config = config
         self._update_config_vars()
 
     def model_init(self):
@@ -126,36 +103,74 @@ class InferenceEngine:
         if self.device not in self.DEVICE:
             raise ValueError(f"Device {self.device} is not supported. Please choose from {self.DEVICE}")
 
-        if self.engine == 'Ultralytics':
-            try:
-                from ultralytics import YOLO
-                self.model = YOLO(data=self.data_config,
-                                  weights=self.weights_path,
-                                  device=self.device)
-            except ImportError:
-                raise ImportError("Please install ultralytics to use Ultralytics engine.")
-        elif self.engine == 'OpenCV':
+        engine_init_method = {
+            'Ultralytics': self._init_ultralytics,
+            'OpenCV': self._init_opencv,
+            'OpenVINO': self._init_openvino,
+            'MMdeploy': self._init_mmdeploy,
+            'CANN': self._init_cann,
+            'Hailo': self._init_hailo
+        }
+        engine_init_method[self.engine]()
+
+    def _init_ultralytics(self):
+        try:
+            from ultralytics import YOLO
+            device_mapping = {
+                'Intel CPU': 'cpu',
+                'AMD CPU': 'cpu',
+                'ARM CPU': 'cpu',
+                'NVIDIA GPU': 'cuda:0'
+            }
+            self.model = YOLO(data=self.data_config, 
+                              weights=self.weights_path, 
+                              device=device_mapping[self.device])
+        except ImportError:
+            raise ImportError("Please install ultralytics to use Ultralytics engine.")
+
+    def _init_opencv(self):
+        if Path(self.weights_path).suffix == '.onnx':
             self.model = cv2.dnn.readNetFromONNX(self.weights_path)
-        elif self.engine == 'OpenVINO':
-            try:
-                from openvino.inference_engine import IECore
-                self.model = IECore().read_network(self.weights_path, self.data_config)
-            except ImportError:
-                raise ImportError("Please install openvino to use OpenVINO engine.")
-        elif self.engine == 'MMdeploy':
-            pass
-        elif self.engine == 'CANN':
-            try:
-                from ais_bench.infer.interface import InferSession
-                self.model = InferSession(0, self.weights_path)
-            except ImportError:
-                raise ImportError("Please install ais_bench to use CANN engine.")
-        elif self.engine == 'Hailo':
-            try:
-                from hailo_model_zoo.core.infer.infer_utils import InferAPI
-                self.model = InferAPI(self.weights_path, self.device)
-            except ImportError:
-                raise ImportError("Please install hailo_model_zoo to use Hailo engine.")
+
+    def _init_openvino(self):
+        try:
+            from openvino.runtime import Core
+            core = Core()
+            device_mapping = {
+                'Intel CPU': 'CPU',
+                'AMD CPU': 'CPU',
+                'ARM CPU': 'CPU',
+                'Intel GPU': 'GPU',
+                'Intel NPU': 'MYRIAD'
+            }
+            device_name = device_mapping.get(self.device, 'AUTO')
+            if Path(self.weights_path).suffix == '.onnx':
+                model = core.read_model(self.weights_path)
+            else:
+                xml_path = Path(self.weights_path).with_suffix('.xml')
+                bin_path = Path(self.weights_path).with_suffix('.bin')
+                model = core.read_model(model=str(xml_path), weights=str(bin_path))
+            self.model = core.compile_model(model=model, device_name=device_name)
+        except ImportError:
+            raise ImportError("Please install openvino to use OpenVINO engine.")
+
+    def _init_mmdeploy(self):
+        pass
+
+    def _init_cann(self):
+        try:
+            from ais_bench.infer.interface import InferSession
+            self.model = InferSession(0, self.weights_path)
+        except ImportError:
+            raise ImportError("Please install ais_bench to use CANN engine.")
+
+    def _init_hailo(self):
+        try:
+            from hailo_model_zoo.core.infer.infer_utils import InferAPI
+            self.model = InferAPI(self.weights_path, self.device)
+        except ImportError:
+            raise ImportError("Please install hailo_model_zoo to use Hailo engine.")
+    
 
     def inference(self, frame):
         """
@@ -173,13 +188,14 @@ class InferenceEngine:
         if self.engine == 'Ultralytics':
             pred, inference_time = measure_time(self.model, [img], verbose=False)
         elif self.engine == 'OpenCV':
-            pass
+            self.model.setInput(img)
+            pred, inference_time = measure_time(self.model.forward)
         elif self.engine == 'OpenVINO':
-            pass
-        elif self.engine == 'MMdeploy':
-            pass
+            pred, inference_time = measure_time(self.model, [img])
         elif self.engine == 'CANN':
             pred, inference_time = measure_time(self.model.infer, [img])
+        elif self.engine == 'MMdeploy':
+            pass
         elif self.engine == 'Hailo':
             pass
         # Perform post-processing on the outputs to obtain output image.

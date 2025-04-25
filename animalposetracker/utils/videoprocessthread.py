@@ -83,7 +83,7 @@ class VideoProcessorThread(QThread):
                     if self._processing_function:
                         try:
                             # Process the frame
-                            processed_frame = self._processing_function(frame)
+                            processed_frame, _ = self._processing_function(frame)
                             self.frame_ready.emit(processed_frame)
                         except Exception as e:
                             self.status_update.emit(f"Processing error: {str(e)}")
@@ -128,12 +128,10 @@ class VideoProcessorThread(QThread):
             self.cap.release()
             self.status_update.emit("Video capture resources released")
 
-
-
 class VideoWriterThread(QThread):
     """Thread to run video writing"""
     # Signal emitted when a frame is written to file
-    def __init__(self, save_path, fps=30, frame_size=(640, 480)):
+    def __init__(self, save_path = None, fps=30, frame_size=(640, 480)):
         super().__init__()
         self._save_path = save_path
         self._fps = fps
