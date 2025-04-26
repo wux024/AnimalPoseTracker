@@ -1,4 +1,4 @@
-from PySide6.QtCore import QMetaObject, Qt, Slot, Q_ARG
+from PySide6.QtCore import QMetaObject, Qt, Slot, Q_ARG, QTimer
 from PySide6.QtGui import QImage, QPixmap
 from PySide6.QtWidgets import  QApplication, QFileDialog, QWidget, QMessageBox
 import os
@@ -9,9 +9,11 @@ import sys
 import cpuinfo
 import platform
 from pathlib import Path
+import queue
 
 from .ui_animalposeinference import Ui_AnimalPoseInference
-from animalposetracker.utils import VideoProcessorThread, VideoWriterThread
+from animalposetracker.utils import (VideoReaderThread, VideoWriterThread, 
+                                     FrameProcessorThread)
 from animalposetracker.engine import InferenceEngine
 class AnimalPoseInferencePage(QWidget, Ui_AnimalPoseInference):
     def __init__(self, parent=None):
@@ -21,9 +23,13 @@ class AnimalPoseInferencePage(QWidget, Ui_AnimalPoseInference):
 
         # constants
         self.camera_list = {}
+        self.original_frame_cache = queue.Queue(maxsize=1024)
+        self.processed_frame_cache = queue.Queue(maxsize=1024)
 
-        self.video_process_thread = VideoProcessorThread()
+        self.video_reader_thread = VideoReaderThread()
         self.video_writer_thread = VideoWriterThread()
+        self.frame_processor_thread = FrameProcessorThread(buffer_queue=self.original_frame_cache)
+        self.display_thread = QTimer()
         self.inference = InferenceEngine()
         self.data_config_path = None
         self.data_config = dict()
@@ -42,7 +48,7 @@ class AnimalPoseInferencePage(QWidget, Ui_AnimalPoseInference):
         self.SelectConfigure.setEnabled(True)
         self.ShowKeypoints.setCheckState(Qt.CheckState.Checked)
         self.Show.setCheckState(Qt.CheckState.Checked)
-        self.PrintInformation.setText("Please select configuration and weights")
+        self._show_info("Please select configuration and weights")
 
         # Connect all signals to their respective slots
         self.setupConnections()
@@ -133,7 +139,6 @@ class AnimalPoseInferencePage(QWidget, Ui_AnimalPoseInference):
             {
             'conf': self.Conf.value(),
             'iou': self.IoU.value(),
-           'show': self.Show.isChecked(),
            'show_classes': self.ShowClasses.isChecked(),
            'show_keypoints': self.ShowKeypoints.isChecked(),
            'show_skeletons': self.ShowSkeletons.isChecked(),
@@ -168,7 +173,7 @@ class AnimalPoseInferencePage(QWidget, Ui_AnimalPoseInference):
         )
         
         if not file_path:  # User cancelled
-            self.PrintInformation.setText("Configuration selection cancelled")
+            self._show_info("Configuration selection cancelled")
             return
             
         try:
@@ -182,15 +187,15 @@ class AnimalPoseInferencePage(QWidget, Ui_AnimalPoseInference):
             
             # Update UI
             filename = os.path.basename(file_path)
-            self.PrintInformation.setText(f"Configuration loaded: {filename}")
+            self._show_info(f"Configuration loaded: {filename}")
             self.SelectWeights.setEnabled(True)
             
         except yaml.YAMLError as e:
-            self.PrintInformation.setText(f"Invalid YAML: {str(e)}")
+            self._show_info(f"Invalid YAML: {str(e)}")
             self.data_config_path = None
 
         except Exception as e:
-            self.PrintInformation.setText(f"Error: {str(e)}")
+            self._show_info(f"Error: {str(e)}")
             self.data_config_path = None
 
     def onSelectWeightsClicked(self):
@@ -228,106 +233,94 @@ class AnimalPoseInferencePage(QWidget, Ui_AnimalPoseInference):
         )
 
         if not file_path:
-            self.PrintInformation.setText("Weight selection cancelled")
+            self._show_info("Weight selection cancelled")
             return
 
+        self._enable_widgets()
+        self._clear_selections()
+
+        file_path = Path(file_path)
+        file_ext = file_path.suffix.lower()
+        is_dir = file_path.is_dir()
+
+        device_info = self._detect_available_devices()
+        engines = self._get_engines_for_extension(file_ext, is_dir, device_info, file_path)
+
+        if not engines:
+            self._show_info("Unsupported format for current platform")
+            raise ValueError(f"Unsupported format: {file_ext}")
+
+        self._populate_engine_selection(engines)
+        self._update_available_devices()
+
+        if hasattr(self, 'model_config_path'):
+            self.Start.setEnabled(True)
+
+    def _enable_widgets(self):
         self.EngineSelection.setEnabled(True)
         self.DeviceSelection.setEnabled(True)
         self.CameraORVideos.setEnabled(True)
         self.CheckCameraVideosConnect.setEnabled(True)
 
-        # Clear and prepare engine selection
+    def _clear_selections(self):
         self.EngineSelection.clear()
         self.DeviceSelection.clear()
-        file_path = Path(file_path)
-        file_ext = file_path.suffix.lower()
-        is_dir = file_path.is_dir()
 
-        # Hardware detection
-        device_info = self._detect_available_devices()
+    def _get_engines_for_extension(self, file_ext, is_dir, device_info, file_path):
+        format_engine_mapping = {
+            '.onnx': self._get_onnx_engines(device_info),
+            '.pt': ["Ultralytics", "MMdeploy"],
+            '.pth': ["Ultralytics", "MMdeploy"],
+            '.om': ["CANN"] if device_info['ascend_npu'] else [],
+            '.hef': ["Hailo"] if device_info['hailo_npu'] else [],
+            '.engine': ["Ultralytics"] if device_info['nvidia_gpu'] else []
+        }
 
-        # Format to engine mapping
-        if file_ext == '.onnx':
-            self.weights_path = file_path
-            engines = []
-
-            # Add available engines based on device support
-            if device_info['intel_cpu']:
-                engines.extend(["OpenCV", "OpenVINO", "Ultralytics", "MMdeploy"])
-            if device_info['amd_cpu']:
-                engines.extend(["OpenCV", "Ultralytics", "MMdeploy"])
-            if device_info['arm_cpu']:
-                engines.extend(["OpenCV", "Ultralytics", "MMdeploy"])
-            if device_info['nvidia_gpu']:
-                engines.extend(["OpenCV", "Ultralytics", "MMdeploy"])
-            if device_info['ascend_npu']:
-                engines.append("CANN")
-            if device_info['hailo_npu']:
-                engines.append("Hailo")
-            if device_info['intel_npu']:
-                engines.append("OpenVINO")
-
-            # Remove duplicates and set UI
-            engines = sorted(list(set(engines)))
-            self.EngineSelection.addItems(engines)
-            self.EngineSelection.setCurrentText("Ultralytics" if "Ultralytics" in engines else engines[0])
-            self.PrintInformation.setText(f"ONNX model loaded ({os.path.basename(file_path)})")
-
-        elif file_ext in ['.pt', '.pth']:
-            self.weights_path = file_path
-            self.EngineSelection.addItems(["Ultralytics", "MMdeploy"])
-            self.PrintInformation.setText(f"PyTorch model loaded ({os.path.basename(file_path)})")
-
-        elif file_ext == '.om':
-            if device_info['ascend_npu']:
+        if file_ext in format_engine_mapping:
+            engines = format_engine_mapping[file_ext]
+            if engines:
                 self.weights_path = file_path
-                self.EngineSelection.addItems(["CANN"])
-                self.PrintInformation.setText(f"CANN model loaded ({os.path.basename(file_path)})")
-            else:
-                self.PrintInformation.setText("Ascend NPU not available for CANN engine")
-                return
+                self._show_info(f"{engines[0].split(' ')[0]} model loaded ({os.path.basename(file_path)})")
+            return engines
 
-        elif file_ext == '.hef':
-            if device_info['hailo_npu']:
-                self.weights_path = file_path
-                self.EngineSelection.addItems(["Hailo"])
-                self.PrintInformation.setText(f"Hailo model loaded ({os.path.basename(file_path)})")
-            else:
-                self.PrintInformation.setText("Hailo NPU not detected")
-                return
-
-        elif file_ext == '.engine':
-            if device_info['nvidia_gpu']:
-                self.weights_path = file_path
-                self.EngineSelection.addItems(["Ultralytics"])
-                self.PrintInformation.setText(f"TensorRT engine loaded ({os.path.basename(file_path)})")
-            else:
-                self.PrintInformation.setText("NVIDIA GPU required for TensorRT")
-                return
-
-        elif is_dir and self._is_openvino_dir(file_path):
-            self.weights_path = file_path
+        if is_dir and self._is_openvino_dir(file_path):
             available = []
             if device_info['intel_cpu']:
                 available.append("OpenVINO")
             if device_info['nvidia_gpu']:
-                available.append("OpenVINO")  # OpenVINO GPU
-            available.append("Ultralytics")  # CPU fallback
+                available.append("OpenVINO")
+            available.append("Ultralytics")
+            self.weights_path = file_path
+            self._show_info("OpenVINO model loaded")
+            return available
 
-            self.EngineSelection.addItems(available)
-            self.EngineSelection.setCurrentText("OpenVINO" if "OpenVINO" in available else available[0])
-            self.PrintInformation.setText("OpenVINO model loaded")
+        return []
 
-        else:
-            self.PrintInformation.setText("Unsupported format for current platform")
-            raise ValueError(f"Unsupported format: {file_ext}")
+    def _get_onnx_engines(self, device_info):
+        engine_device_mapping = {
+            'intel_cpu': ["OpenCV", "OpenVINO", "Ultralytics", "MMdeploy"],
+            'amd_cpu': ["OpenCV", "Ultralytics", "MMdeploy"],
+            'arm_cpu': ["OpenCV", "Ultralytics", "MMdeploy"],
+            'nvidia_gpu': ["OpenCV", "Ultralytics", "MMdeploy"],
+            'ascend_npu': ["CANN"],
+            'hailo_npu': ["Hailo"],
+            'intel_npu': ["OpenVINO"]
+        }
 
-        # Update available devices based on selected engine
-        self._update_available_devices()
+        engines = []
+        for device, engine_list in engine_device_mapping.items():
+            if device_info[device]:
+                engines.extend(engine_list)
 
-        # Enable Start button if config is also loaded
-        if hasattr(self, 'model_config_path'):
-            self.Start.setEnabled(True)
+        return sorted(list(set(engines)))
+
+    def _populate_engine_selection(self, engines):
+        self.EngineSelection.addItems(engines)
+        default_engine = "Ultralytics" if "Ultralytics" in engines else engines[0]
+        self.EngineSelection.setCurrentText(default_engine)
+
+    def _show_info(self, message):
+        self.PrintInformation.setText(message)
 
     def _is_openvino_dir(self, path):
         # Placeholder implementation, you need to define the actual logic
@@ -335,7 +328,7 @@ class AnimalPoseInferencePage(QWidget, Ui_AnimalPoseInference):
 
     def _detect_available_devices(self):
         """Detect available hardware devices in the system"""
-        device_info = {
+        return {
             'intel_cpu': self._check_intel_cpu(),
             'amd_cpu': self._check_amd_cpu(),
             'arm_cpu': self._check_arm_cpu(),
@@ -344,7 +337,6 @@ class AnimalPoseInferencePage(QWidget, Ui_AnimalPoseInference):
             'hailo_npu': self._check_hailo_environment(),
             'intel_npu': self._check_openvino_npu()
         }
-        return device_info
 
     def _get_supported_devices(self, engine):
         engine_device_mapping = {
@@ -385,7 +377,7 @@ class AnimalPoseInferencePage(QWidget, Ui_AnimalPoseInference):
         if available_devices:
             self.DeviceSelection.addItems(available_devices)
         else:
-            self.PrintInformation.setText(f"{current_engine} engine not available or no supported devices found")
+            self._show_info(f"{current_engine} engine not available or no supported devices found")
             raise ValueError(f"{current_engine} engine not available or no supported devices found")
 
     def _check_nvidia_gpu(self):
@@ -419,7 +411,7 @@ class AnimalPoseInferencePage(QWidget, Ui_AnimalPoseInference):
     def _check_openvino_npu(self):
         """Check if Intel NPU is available through OpenVINO"""
         try:
-            from openvino.runtime import Core
+            from openvino import Core
             core = Core()
             return 'NPU' in core.available_devices
         except:
@@ -477,7 +469,7 @@ class AnimalPoseInferencePage(QWidget, Ui_AnimalPoseInference):
         self.CameraVideosSelection.clear()
         self._detect_available_cameras()
         if not self.camera_list:
-            self.PrintInformation.setText("No camera detected")
+            self._show_info("No camera detected")
         else:
             self.CameraVideosSelection.addItem("Select camera...")
             self.CameraVideosSelection.addItems(self.camera_list.keys())
@@ -528,14 +520,14 @@ class AnimalPoseInferencePage(QWidget, Ui_AnimalPoseInference):
         
         self.tools_enabled()
         
-        self.PrintInformation.setText(f"Selected: {os.path.basename(file_path)}")
+        self._show_info(f"Selected: {os.path.basename(file_path)}")
         
         # Store the file path for later use
         self.current_video_path = file_path
 
         cap = cv2.VideoCapture(file_path)
         if not cap.isOpened():
-            self.PrintInformation.setText("Failed to open video file")
+            self._show_info("Failed to open video file")
             return
         
         # Update UI with actual video parameters
@@ -550,7 +542,7 @@ class AnimalPoseInferencePage(QWidget, Ui_AnimalPoseInference):
             cap = cv2.VideoCapture(cam_id)
             
             if not cap.isOpened():
-                self.PrintInformation.setText("Failed to open camera")
+                self._show_info("Failed to open camera")
                 return
             
             self.tools_enabled()
@@ -587,29 +579,101 @@ class AnimalPoseInferencePage(QWidget, Ui_AnimalPoseInference):
             btn.setEnabled(True)
     
     def _start_preview(self):
-        
+        """Start camera/video preview"""
+        self._init_threads(processor_function=cv2.resize,
+                           processor_kwargs={
+                               'dsize': (self.height, self.width),
+                           })
+        self._start_threads()
+        mode = "Camera" if self.CameraORVideos.isChecked() else "Video"
+        self.CheckCameraVideosConnect.setText(f"Close {mode}")
+    
+    def _stop_preview(self):
+        """Stop camera/video preview"""
+        self._stop_threads()
+        mode = "Camera" if self.CameraORVideos.isChecked() else "Video"
+        self.CheckCameraVideosConnect.setText(f"Preview {mode}")
+    
+
+    def _init_threads(self, processor_function=None, processor_kwargs={}):
         source = self._get_source()
         if source is None:
             return
+        if self.video_reader_thread is None:
+            self.video_reader_thread = VideoReaderThread()
+        if self.frame_processor_thread is None:
+            self.frame_processor_thread = FrameProcessorThread()
+        if self.display_thread is None:
+            self.display_thread = QTimer()
+        if self.Save.isChecked() and self.video_writer_thread is None:
+            self.video_writer_thread = VideoWriterThread()
 
-        self.video_process_thread.source = source
-        self.video_process_thread.frame_ready.connect(self.update_frame)
-        self.video_process_thread.status_update.connect(self.update_status)
-        self.video_process_thread.finished.connect(self._on_finished)
+        # Set up video reader thread
+        self.video_reader_thread.cap = cv2.VideoCapture(source)
+        self.video_reader_thread.original_frame.connect(self.add_original_frame)
+        self.video_reader_thread.status_update.connect(self.read_thread_status)
+        self.video_reader_thread.finished.connect(self._on_read_finished)
 
-        mode = "Camera" if self.CameraORVideos.isChecked() else "Video"
-        self.CheckCameraVideosConnect.setText(f"Close {mode}")
-        self.video_process_thread.start()
+        # Set up frame processor thread
+        self.frame_processor_thread.processing_function = processor_function
+        self.frame_processor_thread.processing_kwargs = processor_kwargs
+        self.frame_processor_thread.frame_processed.connect(self.add_processed_frame)
+        self.frame_processor_thread.status_update.connect(self.procesed_thread_status)
+        self.frame_processor_thread.finished.connect(self._on_processed_finished)
 
-    def _stop_preview(self):
-        if hasattr(self, 'video_process_thread'):
-            self.video_process_thread.safe_stop()
-            self.video_process_thread = None
-            self.Display.clear()
+        # set up video writer thread
+        if self.Save.isChecked():
+            self.video_writer_thread.save_path = Path.cwd() / "output.avi"
+            self.video_writer_thread.fps = self.fps
+            self.video_writer_thread.frame_size = (self.width, self.height)
+
+        # Set up display qtimer thread
+        self.display_thread.timeout.connect(self.display_frame)
+
+    def _start_threads(self):
+        self.video_reader_thread.start()
+        self.frame_processor_thread.start()
+        if self.Save.isChecked():
+            self.video_writer_thread.start()
+        self.display_thread.start(1000 // self.fps)
     
-    def _on_finished(self):
-        mode = "Camera" if "Camera" in self.CameraVideosSelection.currentText() else "Video"
-        self.CheckCameraVideosConnect.setText(f"Preview {mode}")
+    def _pause_threads(self):
+        self.video_reader_thread.pause()
+        self.frame_processor_thread.pause()
+        if self.Save.isChecked():
+            self.video_writer_thread.pause()
+        self.display_thread.stop()
+    
+    def _resume_threads(self):
+        self.video_reader_thread.resume()
+        self.frame_processor_thread.resume()
+        if self.Save.isChecked():
+            self.video_writer_thread.resume()
+        self.display_thread.start(1000 // self.fps)
+
+    def _stop_threads(self):
+        if hasattr(self, 'video_reader_thread'):
+            self.video_reader_thread.safe_stop()
+            self.video_reader_thread = None
+        if hasattr(self, 'frame_processor_thread'):
+            self.frame_processor_thread.safe_stop()
+        if hasattr(self, 'display_thread'):
+            self.display_thread.stop()
+            self.display_thread = None
+        with self.original_frame_cache.mutex:
+            self.original_frame_cache.queue.clear()
+        with self.processed_frame_cache.mutex:
+            self.processed_frame_cache.queue.clear()
+        self.Display.clear()
+    
+    def _on_read_finished(self):
+        pass
+        
+    def _on_processed_finished(self):
+        pass
+
+    def _on_display_finished(self):
+        pass
 
     def _get_source(self):
         if self.CameraORVideos.isChecked():
@@ -618,67 +682,99 @@ class AnimalPoseInferencePage(QWidget, Ui_AnimalPoseInference):
                 cam_index = self.camera_list[current_text]
                 return cam_index
             except:
-                self.PrintInformation.setText("Failed to parse camera index")
+                self._show_info("Failed to parse camera index")
                 return None
         else:
             if hasattr(self, 'current_video_path'):
                 return self.current_video_path
-            self.PrintInformation.setText("No video file selected")
+            self._show_info("No video file selected")
             return None
+    
 
     @Slot(np.ndarray)
-    def update_frame(self, frame):
+    def add_original_frame(self, frame):
+        """Handle original frame from camera/video source"""
+        try:
+            self.original_frame_cache.put(frame, block=False)
+        except queue.Full:
+            pass
+    
+    @Slot(str)
+    def read_thread_status(self, message):
+        #QMessageBox.information(self, "Status", message)
+        self._show_info(message)
+        print(message)
+
+    @Slot(np.ndarray)
+    def add_processed_frame(self, frame):
         """Handle new frame from camera/video source"""
+        try:
+            self.processed_frame_cache.put(frame, block=False)
+        except queue.Full:
+            pass
+
+    @Slot(str)
+    def procesed_thread_status(self, message):
+        #QMessageBox.information(self, "Status", message)
+        self._show_info(message)
+        print(message)
+
+    def display_frame(self):
+        """Handle new frame from camera/video source"""
+
+        if self.processed_frame_cache.empty():
+            return
+
+        frame = self.processed_frame_cache.get(block=False)
+
         if (self.Save.isChecked() and 
             self.video_writer_thread is not None 
             and self.video_writer_thread.isRunning()):
             self.video_writer_thread.add_frame(frame)
-            
-        RGB = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-        height, width, _ = RGB.shape
-        QImg = QImage(RGB.data, width, height, QImage.Format_RGB888)
-        pixmap = QPixmap.fromImage(QImg).scaled(
-            self.Display.size(),
-            Qt.KeepAspectRatio,
-            Qt.SmoothTransformation
-        )
+        
+        if self.Show.isChecked():
+            RGB = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+            height, width, _ = RGB.shape
+            QImg = QImage(RGB.data, width, height, QImage.Format_RGB888)
+            pixmap = QPixmap.fromImage(QImg).scaled(
+                self.Display.size(),
+                Qt.KeepAspectRatio,
+                Qt.SmoothTransformation
+            )
 
-        QMetaObject.invokeMethod(
-            self.Display,
-            "setPixmap",
-            Qt.QueuedConnection,
-            Q_ARG(QPixmap, pixmap)
-        )
-
-    @Slot(str)
-    def update_status(self, message):
-        #QMessageBox.information(self, "Status", message)
-        self.PrintInformation.setText(message)
+            QMetaObject.invokeMethod(
+                self.Display,
+                "setPixmap",
+                Qt.QueuedConnection,
+                Q_ARG(QPixmap, pixmap)
+            )
+        else:
+            self.Display.clear()
 
     def onWidthSetupChanged(self, value):
         """Handle changes to the Width slider value"""
         self.width = value
-        self.PrintInformation.setText(f"Set Camera output Width: {self.width}")
+        self._show_info(f"Set Camera output Width: {self.width}")
     
     def onHeightSetupChanged(self, value):
         """Handle changes to the Height slider value"""
         self.height = value
-        self.PrintInformation.setText(f"Set Camera output Height: {self.height}")
+        self._show_info(f"Set Camera output Height: {self.height}")
 
     def onFPSSetupChanged(self, value):
         """Handle changes to the FPS slider value"""
         self.fps = value
-        self.PrintInformation.setText(f"Set Camera output FPS: {self.fps}")
+        self._show_info(f"Set Camera output FPS: {self.fps}")
     
     def onEngineSelectionChanged(self, index):
         """Handle changes in engine selection"""
         self.engine = self.EngineSelection.itemText(index)
-        self.PrintInformation.setText(f"Selected Inference Engine: {self.engine}")
+        self._show_info(f"Selected Inference Engine: {self.engine}")
     
     def onDeviceSelectionChanged(self, index):
         """Handle changes in device selection"""
         self.device = self.DeviceSelection.itemText(index)
-        self.PrintInformation.setText(f"Selected Inference Device: {self.device}")
+        self._show_info(f"Selected Inference Device: {self.device}")
     
     def onStartClicked(self):
         """Handle when the Start button is clicked to begin processing"""
@@ -689,24 +785,25 @@ class AnimalPoseInferencePage(QWidget, Ui_AnimalPoseInference):
             # inference config
             self.inference.weights_path = self.weights_path
             self.inference.data_config = self.data_config_path
+            self.inference.engine = self.engine
+            self.inference.device = self.device
+            self.inference.print_config()
             self.inference.model_init()
-            self.video_process_thread.source = source
-            self.video_process_thread.processing_function = self.inference.process_frame
-            if self.Save.isChecked():
-                self.video_writer_thread.save_path = Path.cwd() / "output.avi"
-                self.video_writer_thread.fps = self.fps
-                self.video_writer_thread.frame_size = (self.width, self.height)
-            self.video_process_thread.start()
-            self.video_writer_thread.start()
+            # init threads
+            self._init_threads(processor_function=self.inference.process_frame)
+            # start threads
+            self._start_threads()
             self.Start.setText("Pause")
         elif self.Start.text() == "Pause":
+            self._pause_threads()
             self.Start.setText("Resume")
         else:
+            self._resume_threads()
             self.Start.setText("Start")
     
     def onEndClicked(self):
         """Handle when the End button is clicked to stop processing"""
-        pass
+        self._stop_threads()
     
     def onSaveStateChanged(self, state):
         """Handle changes to the Save output checkbox state"""
@@ -767,11 +864,12 @@ class AnimalPoseInferencePage(QWidget, Ui_AnimalPoseInference):
     
     def closeEvent(self, event):
         """Handle window close event"""
-        if self.video_process_thread is not None and self.video_process_thread.isRunning():
-            self.video_process_thread.safe_stop()
+        if self.video_reader_thread is not None and self.video_reader_thread.isRunning():
+            self.video_reader_thread.safe_stop()
         if self.video_writer_thread is not None and self.video_writer_thread.isRunning():
-            self.video_writer_thread.stop()
-            self.video_writer_thread.wait()
+            self.video_writer_thread.safe_stop()
+        if self.frame_processor_thread is not None and self.frame_processor_thread.isRunning():
+            self.frame_processor_thread.safe_stop()
         event.accept()
 
 def main():

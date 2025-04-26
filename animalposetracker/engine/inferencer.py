@@ -24,9 +24,8 @@ class InferenceEngine:
                  weights_path: Union[str, Path] = None,
                  input_width: int = 640,
                  input_height: int = 640,
-                 engine: str = 'Ultralytics',
-                 device: str = 'CPU',
-                 show: bool = False,
+                 engine: str = 'OpenCV',
+                 device: str = 'Intel CPU',
                  conf: float = 0.25,
                  iou: float = 0.45,
                  background: bool = 'Original',
@@ -40,14 +39,13 @@ class InferenceEngine:
                  ):
         self.model = None
         self.weights_path = weights_path
-        self.engine = engine
-        self.device = device
+        self._engine = engine
+        self._device = device
         self.input_width = input_width
         self.input_height = input_height
         self.visualize_config = {
             'conf': conf,
             'iou': iou,
-           'show': show,
            'show_classes': show_classes,
            'show_keypoints': show_keypoints,
            'show_skeletons': show_skeletons,
@@ -68,6 +66,31 @@ class InferenceEngine:
     def data_config(self, config):
         self._data_config = config
         self._update_config_vars()
+    
+    @property
+    def engine(self):
+        return self._engine
+
+    @engine.setter
+    def engine(self, engine):
+        self._engine = engine
+
+    @property
+    def device(self):
+        return self._device
+
+    @device.setter
+    def device(self, device):
+        self._device = device
+    
+    def print_config(self):
+        print(f"Engine: {self.engine}")
+        print(f"Device: {self.device}")
+        print(f"Input Width: {self.input_width}")
+        print(f"Input Height: {self.input_height}")
+        for key, value in self.visualize_config.items():
+            print(f"{key}: {value}")
+
 
     def _update_config_vars(self):
         if self.data_config is None:
@@ -77,12 +100,12 @@ class InferenceEngine:
         with open(self.data_config, 'r') as f:
             config = yaml.load(f, Loader=yaml.FullLoader)
 
-        self.classes = config.get('names', {})
-        self.keypoints = config.get('kpt_shape', [])
+        self.classes = config.get('classes_name', [])
+        self.keypoints = config.get('keypoints_name', [])
         self.skeleton = config.get('skeleton', [])
 
         # Generate a color palette for the classes
-        self.classes_color_palette = np.random.uniform(0, 255, size=(len(self.classes.keys()), 3))
+        self.classes_color_palette = np.random.uniform(0, 255, size=(len(self.classes), 3))
         self.keypoints_color_palette = np.random.uniform(0, 255, size=(len(self.keypoints), 3))
         self.skeleton_color_palette = np.random.uniform(0, 255, size=(len(self.skeleton), 3))
 
@@ -104,7 +127,7 @@ class InferenceEngine:
             raise ValueError(f"Device {self.device} is not supported. Please choose from {self.DEVICE}")
 
         engine_init_method = {
-            'Ultralytics': self._init_ultralytics,
+            # 'Ultralytics': self._init_ultralytics,
             'OpenCV': self._init_opencv,
             'OpenVINO': self._init_openvino,
             'MMdeploy': self._init_mmdeploy,
@@ -116,15 +139,7 @@ class InferenceEngine:
     def _init_ultralytics(self):
         try:
             from ultralytics import YOLO
-            device_mapping = {
-                'Intel CPU': 'cpu',
-                'AMD CPU': 'cpu',
-                'ARM CPU': 'cpu',
-                'NVIDIA GPU': 'cuda:0'
-            }
-            self.model = YOLO(data=self.data_config, 
-                              weights=self.weights_path, 
-                              device=device_mapping[self.device])
+            self.model = YOLO(self.weights_path)
         except ImportError:
             raise ImportError("Please install ultralytics to use Ultralytics engine.")
 
@@ -134,7 +149,7 @@ class InferenceEngine:
 
     def _init_openvino(self):
         try:
-            from openvino.runtime import Core
+            from openvino import Core
             core = Core()
             device_mapping = {
                 'Intel CPU': 'CPU',
@@ -185,9 +200,7 @@ class InferenceEngine:
         [img, IM], preprocess_time = measure_time(self.preprocess, frame)
 
         # Run inference using the preprocessed image data
-        if self.engine == 'Ultralytics':
-            pred, inference_time = measure_time(self.model, [img], verbose=False)
-        elif self.engine == 'OpenCV':
+        if self.engine == 'OpenCV':
             self.model.setInput(img)
             pred, inference_time = measure_time(self.model.forward)
         elif self.engine == 'OpenVINO':
@@ -198,8 +211,25 @@ class InferenceEngine:
             pass
         elif self.engine == 'Hailo':
             pass
+        # elif self.engine == 'Ultralytics':
+        #     device_mapping = {
+        #         'Intel CPU': 'cpu',
+        #         'AMD CPU': 'cpu',
+        #         'ARM CPU': 'cpu',
+        #         'NVIDIA GPU': 'cuda:0'
+        #     }
+        #     pred, inference_time = measure_time(self.model, 
+        #                                         frame, 
+        #                                         conf=self.visualize_config['conf'], 
+        #                                         iou=self.visualize_config['iou'], 
+        #                                         imgsz=(self.input_height, self.input_width),
+        #                                         device=device_mapping[self.device],
+        #                                         verbose=False)
         # Perform post-processing on the outputs to obtain output image.
-        results, postprecess_time = measure_time(self.postprocess, pred, IM)
+        if self.engine == 'Ultralytics':
+            results, postprecess_time = measure_time(self.postprocess_ultralytics, pred, frame)
+        else:
+            results, postprecess_time = measure_time(self.postprocess, pred, IM)
 
         results['preprocess_time'] = preprocess_time
         results['inference_time'] = inference_time
@@ -290,7 +320,7 @@ class InferenceEngine:
             max_score = np.amax(classes_scores)
 
             # If the maximum score is above the confidence threshold
-            if max_score >= self.conf:
+            if max_score >= self.visualize_config['conf']:
                 # Get the class ID with the highest score
                 class_id = np.argmax(classes_scores)
 
@@ -314,7 +344,9 @@ class InferenceEngine:
                 keypoints_list.append(keypoints)
 
         # Apply non-maximum suppression to filter out overlapping bounding boxes
-        indices = cv2.dnn.NMSBoxes(boxes, scores, self.conf, self.iou)
+        indices = cv2.dnn.NMSBoxes(boxes, scores, 
+                                   self.visualize_config['conf'], 
+                                   self.visualize_config['iou'])
 
         boxes = np.array(boxes)
         keypoints_list = np.array(keypoints_list)
@@ -342,6 +374,10 @@ class InferenceEngine:
             }
         # Return the modified input image
         return results
+    
+    def postprocess_ultralytics(self, preds, frame):
+        pass
+        
 
     def draw_detections(self, img, box, score, class_id, line_width=2):
         """
@@ -439,6 +475,9 @@ class InferenceEngine:
             raise TypeError("Input frame must be a numpy array.")
 
         results = self.inference(frame)
+
+        if results is None:
+            return frame, None
 
         boxes = results['boxes']
         keypoints_list = results['keypoints_list']

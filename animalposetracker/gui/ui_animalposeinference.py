@@ -479,7 +479,7 @@ class Ui_AnimalPoseInference(object):
         self.BaseToolsGroup.setTitle("")
         self.SelectConfigure.setText(QCoreApplication.translate("AnimalPoseInference", u"Select Configure", None))
         self.SelectWeights.setText(QCoreApplication.translate("AnimalPoseInference", u"Select Weights", None))
-        self.CameraORVideos.setText(QCoreApplication.translate("AnimalPoseInference", u"Use Camera", None))
+        self.CameraORVideos.setText(QCoreApplication.translate("AnimalPoseInference", u"Use Video", None))
         self.CameraVideosSelection.setItemText(0, QCoreApplication.translate("AnimalPoseInference", u"...", None))
         self.CameraVideosSelection.setItemText(1, QCoreApplication.translate("AnimalPoseInference", u"Select video file...", None))
 

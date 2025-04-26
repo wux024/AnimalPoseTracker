@@ -2,16 +2,18 @@ import cv2
 import time
 import numpy as np
 from PySide6.QtCore import QThread, Signal, QMutex
+import queue
+import traceback
 
 
-class VideoProcessorThread(QThread):
-    """Thread to run video processing and preview"""
-    # Signal emitted when a frame (raw or processed) is ready
-    frame_ready = Signal(np.ndarray)
+class VideoReaderThread(QThread):
+    """Thread to run video reading"""
+    # Signal emitted when a frame is read from file
+    original_frame = Signal(np.ndarray)
     # Signal emitted to update the processing status
     status_update = Signal(str)
 
-    def __init__(self, source=None, parent=None, processing_function=None):
+    def __init__(self, cap=None, parent=None):
         """
         Initialize the VideoProcessorThread.
 
@@ -20,48 +22,27 @@ class VideoProcessorThread(QThread):
         :param processing_function: Function to process each frame
         """
         super().__init__(parent)
-        self._source = source
+        self._cap = cap
         self.running = False
         self._lock = QMutex()
-        # Frame processing function, default is None
-        self._processing_function = processing_function
-        self.cap = None
 
     @property
-    def source(self):
+    def cap(self):
         """
         Get the video source.
 
         :return: Video source
         """
-        return self._source
+        return self._cap
 
-    @source.setter
-    def source(self, value):
+    @cap.setter
+    def cap(self, value):
         """
         Set the video source.
 
         :param value: Video source
         """
-        self._source = value
-
-    @property
-    def processing_function(self):
-        """
-        Get the frame processing function.
-
-        :return: Frame processing function
-        """
-        return self._processing_function
-
-    @processing_function.setter
-    def processing_function(self, value):
-        """
-        Set the frame processing function.
-
-        :param value: Frame processing function
-        """
-        self._processing_function = value
+        self._cap = value
 
     def run(self):
         """
@@ -71,30 +52,19 @@ class VideoProcessorThread(QThread):
             self._lock.lock()
             self.running = True
             self._lock.unlock()
-            self.cap = cv2.VideoCapture(self._source)
-            if not self.cap.isOpened():
-                self.status_update.emit("Preview failed to start")
-                return
             fps = self.cap.get(cv2.CAP_PROP_FPS)
-            self.status_update.emit("Preview started")
+            self.status_update.emit("Read started")
             while self.is_running:
                 ret, frame = self.cap.read()
                 if ret:
-                    if self._processing_function:
-                        try:
-                            # Process the frame
-                            processed_frame, _ = self._processing_function(frame)
-                            self.frame_ready.emit(processed_frame)
-                        except Exception as e:
-                            self.status_update.emit(f"Processing error: {str(e)}")
-                    else:
-                        self.frame_ready.emit(frame)
+                    self.original_frame.emit(frame.copy())
                 else:
-                    self.status_update.emit("Preview stopped: No more frames")
+                    self.status_update.emit("Read stopped: No more frames")
                     break
                 time.sleep(1.0 / fps)
         except Exception as e:
-            self.status_update.emit(f"Unexpected error: {str(e)}")
+            error_info = traceback.format_exc()
+            self.status_update.emit(f"(VideoReaderThread) Unexpected error: \n{error_info}")
         finally:
             self._release_resources()
 
@@ -139,6 +109,7 @@ class VideoWriterThread(QThread):
         self.video_writer = None
         self.frames = []
         self._stop_flag = False
+        self._lock = QMutex()
     
     @property
     def save_path(self):
@@ -176,5 +147,121 @@ class VideoWriterThread(QThread):
     def add_frame(self, frame):
         self.frames.append(frame)
     
-    def stop(self):
+    def safe_stop(self):
+        """
+        Safely stop the video processing thread.
+        """
+        self._lock.lock()
         self._stop_flag = True
+        self._lock.unlock()
+        self.wait()
+        self._release_resources()
+
+class FrameProcessorThread(QThread):
+    """Thread to run frame processing"""
+    # Signal emitted when a frame is processed
+    frame_processed = Signal(np.ndarray)
+    # Signal emitted to update the processing status
+    status_update = Signal(str)
+
+    def __init__(self, processing_function=None, processing_kwargs=None, buffer_queue=None, parent=None):
+        """
+        Initialize the FrameProcessorThread.
+
+        :param processing_function: Function to process each frame
+        :param parent: Parent object
+        """
+        super().__init__(parent)
+        self._processing_function = processing_function
+        self._processing_kwargs = processing_kwargs if processing_kwargs is not None else {}
+        self.running = False
+        self._lock = QMutex()
+        self.buffer_queue = buffer_queue
+
+    @property
+    def processing_function(self):
+        """
+        Get the processing function.
+
+        :return: Processing function
+        """
+        return self._processing_function
+
+    @processing_function.setter
+    def processing_function(self, value):
+        """
+        Set the processing function.
+
+        :param value: Processing function
+        """
+        self._processing_function = value
+    
+    @property
+    def processing_kwargs(self):
+        """
+        Get the processing function keyword arguments.
+
+        :return: Processing function keyword arguments
+        """
+        return self._processing_kwargs
+
+    @processing_kwargs.setter
+    def processing_kwargs(self, value):
+        """
+        Set the processing function keyword arguments.
+
+        :param value: Processing function keyword arguments
+        """
+        self._processing_kwargs = value
+
+    def run(self):
+        """
+        Start the frame processing loop.
+        """
+        try:
+            self._lock.lock()
+            self.running = True
+            self._lock.unlock()
+            self.status_update.emit("Frame processor started")
+            while self.is_running:
+                try:
+                    frame = self.buffer_queue.get(timeout=1)
+                    if self._processing_kwargs:
+                        processed_frame = self._processing_function(frame, **self._processing_kwargs)
+                    else:
+                        processed_frame = self._processing_function(frame)
+                    if isinstance(processed_frame, tuple):
+                        self.frame_processed.emit(processed_frame[0])
+                    else:
+                        self.frame_processed.emit(processed_frame)
+                except queue.Empty:
+                    pass
+        except Exception as e:
+            error_info = traceback.format_exc()
+            self.status_update.emit(f"(FrameProcessorThread) Unexpected error: \n{error_info}")
+        finally:
+            self._lock.lock()
+            self.running = False
+            self._lock.unlock()
+
+    @property
+    def is_running(self):
+        """
+        Check if the thread is running.
+
+        :return: True if running, False otherwise
+        """
+        self._lock.lock()
+        is_running = self.running
+        self._lock.unlock()
+        return is_running
+
+    def safe_stop(self):
+        """
+        Safely stop the frame processing thread.
+        """
+        self._lock.lock()
+        self.running = False
+        self._lock.unlock()
+        self.wait()
+
