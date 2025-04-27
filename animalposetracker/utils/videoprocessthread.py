@@ -66,7 +66,7 @@ class VideoReaderThread(QThread):
             error_info = traceback.format_exc()
             self.status_update.emit(f"(VideoReaderThread) Unexpected error: \n{error_info}")
         finally:
-            self._release_resources()
+            self.safe_stop()
 
     @property
     def is_running(self):

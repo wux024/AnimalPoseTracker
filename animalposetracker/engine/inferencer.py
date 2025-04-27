@@ -386,9 +386,6 @@ class InferenceEngine:
             }
         # Return the modified input image
         return results
-    
-    def postprocess_ultralytics(self, preds, frame):
-        pass
         
 
     def draw_detections(self, img, box, score, class_id, line_width=2, bbox=True, classes=True):
@@ -475,6 +472,7 @@ class InferenceEngine:
                      thickness=line_width,
                      lineType=cv2.LINE_AA
                      )
+    
 
     def process_frame(self, frame):
         """
@@ -491,8 +489,74 @@ class InferenceEngine:
 
         results = self.inference(frame)
 
-        if results is None:
-            return frame, None
+        boxes = results['boxes']
+        keypoints_list = results['keypoints_list']
+        scores = results['scores']
+        class_ids = results['class_ids']
+
+        if self.visualize_config['background'] == 'Black':
+            frame = np.zeros_like(frame)
+        elif self.visualize_config['background'] == 'White':
+            frame = np.ones_like(frame) * 255
+        elif self.visualize_config['background'] == 'Original':
+            pass
+
+        if len(boxes) > 0 and boxes is not None:
+            if boxes.ndim == 1:
+                self.draw_detections(frame, boxes, scores, class_ids, 
+                                     bbox=self.visualize_config['show_bbox'],
+                                     classes=self.visualize_config['show_classes'])
+                if self.visualize_config['show_keypoints']:
+                    self.draw_keypoints(frame, keypoints_list,
+                                        radius=self.visualize_config['radius'])
+                if self.visualize_config['show_skeletons']:
+                    self.draw_skeleton(frame, keypoints_list,
+                                       line_width=self.visualize_config['skeleton_line_width'])
+            else:
+                for i, box in enumerate(boxes):
+                    self.draw_detections(frame, box, scores[i], class_ids[i],
+                                        bbox=self.visualize_config['show_bbox'],
+                                        classes=self.visualize_config['show_classes'])
+                    if self.visualize_config['show_keypoints']:
+                        self.draw_keypoints(frame, keypoints_list[i],
+                                            radius=self.visualize_config['radius'])
+                    if self.visualize_config['show_skeletons']:
+                        self.draw_skeleton(frame, keypoints_list[i],
+                                           line_width=self.visualize_config['skeleton_line_width'])
+
+        times = {
+            'preprocess_time': 'preprocess: {:.3f} ms'.format(results['preprocess_time'] * 1000.0),
+            'inference_time': 'inference: {:.3f} ms'.format(results['inference_time'] * 1000.0),
+            'postprocess_time': 'postprocess: {:.3f} ms'.format(results['postprecess_time'] * 1000.0),
+            'fps': 'FPS: {:.1f} FPS'.format(results['fps'])
+        }
+
+        cv2.putText(frame, times['fps'], (5, 20),
+                    cv2.FONT_HERSHEY_SIMPLEX,
+                    0.5, (0, 255, 0), 1, cv2.LINE_AA)
+        cv2.putText(frame, times['preprocess_time'], (5, 40),
+                    cv2.FONT_HERSHEY_SIMPLEX,
+                    0.5, (0, 255, 0), 1, cv2.LINE_AA)
+        cv2.putText(frame, times['inference_time'], (5, 60),
+                    cv2.FONT_HERSHEY_SIMPLEX,
+                    0.5, (0, 255, 0), 1, cv2.LINE_AA)
+        cv2.putText(frame, times['postprocess_time'], (5, 80),
+                    cv2.FONT_HERSHEY_SIMPLEX,
+                    0.5, (0, 255, 0), 1, cv2.LINE_AA)
+
+        return frame, results
+    
+    def visualize(self, frame, results):
+        """
+        Visualizes the output of the model on a single frame of video.
+
+        Args:
+            frame: The input frame to process.
+            results: The output of the model on the input frame.
+
+        Returns:
+            output_img: The output image with drawn detections.
+        """
 
         boxes = results['boxes']
         keypoints_list = results['keypoints_list']
@@ -548,6 +612,5 @@ class InferenceEngine:
         cv2.putText(frame, times['postprocess_time'], (5, 80),
                     cv2.FONT_HERSHEY_SIMPLEX,
                     0.5, (0, 255, 0), 1, cv2.LINE_AA)
-
-        return frame, results
-    
+        
+        return frame

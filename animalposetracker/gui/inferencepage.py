@@ -205,10 +205,9 @@ class AnimalPoseInferencePage(QWidget, Ui_AnimalPoseInference):
         Supported Engines:
         - OpenVINO (.onnx and .xml)
         - OpenCV (.onnx)
-        - CANN (.om for Ascend NPU)
+        - CANN (.om)
         - ONNX (.onnx)
         - TensorRT (.engine)
-        - CANN (.om)
         - CoreML (.mlmodel)
 
         The function will:
@@ -576,14 +575,12 @@ class AnimalPoseInferencePage(QWidget, Ui_AnimalPoseInference):
         self.video_reader_thread.cap = cv2.VideoCapture(source)
         self.video_reader_thread.original_frame.connect(self.add_original_frame)
         self.video_reader_thread.status_update.connect(self.read_thread_status)
-        self.video_reader_thread.finished.connect(self._on_read_finished)
 
         # Set up frame processor thread
         self.frame_processor_thread.processing_function = processor_function
         self.frame_processor_thread.processing_kwargs = processor_kwargs
         self.frame_processor_thread.frame_processed.connect(self.add_processed_frame)
         self.frame_processor_thread.status_update.connect(self.procesed_thread_status)
-        self.frame_processor_thread.finished.connect(self._on_processed_finished)
 
         # set up video writer thread
         if self.Save.isChecked():
@@ -600,20 +597,6 @@ class AnimalPoseInferencePage(QWidget, Ui_AnimalPoseInference):
         if self.Save.isChecked():
             self.video_writer_thread.start()
         self.display_thread.start(1000 // self.fps)
-    
-    def _pause_threads(self):
-        self.video_reader_thread.pause()
-        self.frame_processor_thread.pause()
-        if self.Save.isChecked():
-            self.video_writer_thread.pause()
-        self.display_thread.stop()
-    
-    def _resume_threads(self):
-        self.video_reader_thread.resume()
-        self.frame_processor_thread.resume()
-        if self.Save.isChecked():
-            self.video_writer_thread.resume()
-        self.display_thread.start(1000 // self.fps)
 
     def _stop_threads(self):
         if hasattr(self, 'video_reader_thread'):
@@ -629,15 +612,6 @@ class AnimalPoseInferencePage(QWidget, Ui_AnimalPoseInference):
         with self.processed_frame_cache.mutex:
             self.processed_frame_cache.queue.clear()
         self.Display.clear()
-    
-    def _on_read_finished(self):
-        pass
-        
-    def _on_processed_finished(self):
-        pass
-
-    def _on_display_finished(self):
-        pass
 
     def _get_source(self):
         if self.CameraORVideos.isChecked():
@@ -686,9 +660,19 @@ class AnimalPoseInferencePage(QWidget, Ui_AnimalPoseInference):
     def display_frame(self):
         """Handle new frame from camera/video source"""
 
-        if self.processed_frame_cache.empty():
+        if (self.processed_frame_cache.empty() and 
+            self.video_reader_thread.isRunning() and 
+            self.frame_processor_thread.isRunning()):
             return
-
+        elif (self.processed_frame_cache.empty() and 
+              not self.video_reader_thread.isRunning()):
+            self._stop_threads()
+            mode = "Camera" if self.CameraORVideos.isChecked() else "Video"
+            self.CheckCameraVideosConnect.setText(f"Preview {mode}")
+            self.Start.setText("Start")
+            self.Start.setEnabled(True)
+            return
+        
         frame = self.processed_frame_cache.get(block=False)
 
         if (self.Save.isChecked() and 
@@ -758,17 +742,13 @@ class AnimalPoseInferencePage(QWidget, Ui_AnimalPoseInference):
             self._init_threads(processor_function=self.inference.process_frame)
             # start threads
             self._start_threads()
-            self.Start.setText("Pause")
-        elif self.Start.text() == "Pause":
-            self._pause_threads()
-            self.Start.setText("Resume")
-        else:
-            self._resume_threads()
-            self.Start.setText("Start")
+            self.Start.setEnabled(False)
     
     def onEndClicked(self):
         """Handle when the End button is clicked to stop processing"""
         self._stop_threads()
+        self.Start.setText("Start")
+        self.Start.setEnabled(True)
     
     def onSaveStateChanged(self, state):
         """Handle changes to the Save output checkbox state"""
