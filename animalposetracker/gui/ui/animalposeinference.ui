@@ -6,8 +6,8 @@
    <rect>
     <x>0</x>
     <y>0</y>
-    <width>877</width>
-    <height>667</height>
+    <width>1321</width>
+    <height>845</height>
    </rect>
   </property>
   <property name="sizePolicy">
@@ -26,7 +26,7 @@
    <iconset>
     <normaloff>media/logo.png</normaloff>media/logo.png</iconset>
   </property>
-  <layout class="QVBoxLayout" name="AnimalPoseInferenceLayout">
+  <layout class="QVBoxLayout" name="verticalLayout">
    <item>
     <layout class="QHBoxLayout" name="BaseConfigure">
      <item>
@@ -104,7 +104,7 @@
                </sizepolicy>
               </property>
               <property name="text">
-               <string>Use Camera</string>
+               <string>Use Video</string>
               </property>
              </widget>
             </item>
@@ -177,25 +177,20 @@
              <layout class="QHBoxLayout" name="WidthLayout">
               <item>
                <widget class="QLabel" name="WidthLabel">
-                <property name="minimumSize">
-                 <size>
-                  <width>50</width>
-                  <height>25</height>
-                 </size>
-                </property>
-                <property name="maximumSize">
-                 <size>
-                  <width>50</width>
-                  <height>25</height>
-                 </size>
-                </property>
                 <property name="text">
                  <string>Width</string>
                 </property>
                </widget>
               </item>
               <item>
-               <widget class="QSpinBox" name="WidthSetup"/>
+               <widget class="QSpinBox" name="WidthSetup">
+                <property name="sizePolicy">
+                 <sizepolicy hsizetype="Expanding" vsizetype="Fixed">
+                  <horstretch>0</horstretch>
+                  <verstretch>0</verstretch>
+                 </sizepolicy>
+                </property>
+               </widget>
               </item>
              </layout>
             </item>
@@ -203,25 +198,20 @@
              <layout class="QHBoxLayout" name="HeightLayout">
               <item>
                <widget class="QLabel" name="HeightLabel">
-                <property name="minimumSize">
-                 <size>
-                  <width>50</width>
-                  <height>25</height>
-                 </size>
-                </property>
-                <property name="maximumSize">
-                 <size>
-                  <width>50</width>
-                  <height>25</height>
-                 </size>
-                </property>
                 <property name="text">
                  <string>Height</string>
                 </property>
                </widget>
               </item>
               <item>
-               <widget class="QSpinBox" name="HeightSetup"/>
+               <widget class="QSpinBox" name="HeightSetup">
+                <property name="sizePolicy">
+                 <sizepolicy hsizetype="Expanding" vsizetype="Fixed">
+                  <horstretch>0</horstretch>
+                  <verstretch>0</verstretch>
+                 </sizepolicy>
+                </property>
+               </widget>
               </item>
              </layout>
             </item>
@@ -229,25 +219,20 @@
              <layout class="QHBoxLayout" name="FPSLayout">
               <item>
                <widget class="QLabel" name="FPSLabel">
-                <property name="minimumSize">
-                 <size>
-                  <width>50</width>
-                  <height>25</height>
-                 </size>
-                </property>
-                <property name="maximumSize">
-                 <size>
-                  <width>50</width>
-                  <height>25</height>
-                 </size>
-                </property>
                 <property name="text">
                  <string>FPS</string>
                 </property>
                </widget>
               </item>
               <item>
-               <widget class="QSpinBox" name="FPSSetup"/>
+               <widget class="QSpinBox" name="FPSSetup">
+                <property name="sizePolicy">
+                 <sizepolicy hsizetype="Expanding" vsizetype="Fixed">
+                  <horstretch>0</horstretch>
+                  <verstretch>0</verstretch>
+                 </sizepolicy>
+                </property>
+               </widget>
               </item>
              </layout>
             </item>
@@ -255,6 +240,54 @@
           </item>
           <item>
            <layout class="QHBoxLayout" name="EngineDeviceLayout">
+            <item>
+             <layout class="QHBoxLayout" name="ModelBitsLayout">
+              <item>
+               <widget class="QLabel" name="ModelBitsLabel">
+                <property name="text">
+                 <string>Model Bits</string>
+                </property>
+               </widget>
+              </item>
+              <item>
+               <widget class="QComboBox" name="ModelBits">
+                <property name="sizePolicy">
+                 <sizepolicy hsizetype="Expanding" vsizetype="Fixed">
+                  <horstretch>0</horstretch>
+                  <verstretch>0</verstretch>
+                 </sizepolicy>
+                </property>
+                <property name="minimumSize">
+                 <size>
+                  <width>0</width>
+                  <height>25</height>
+                 </size>
+                </property>
+                <property name="maximumSize">
+                 <size>
+                  <width>16777215</width>
+                  <height>25</height>
+                 </size>
+                </property>
+                <item>
+                 <property name="text">
+                  <string>FP32</string>
+                 </property>
+                </item>
+                <item>
+                 <property name="text">
+                  <string>FP16</string>
+                 </property>
+                </item>
+                <item>
+                 <property name="text">
+                  <string>INT8</string>
+                 </property>
+                </item>
+               </widget>
+              </item>
+             </layout>
+            </item>
             <item>
              <layout class="QHBoxLayout" name="EngineLayout">
               <item>
@@ -284,6 +317,12 @@
               </item>
               <item>
                <widget class="QComboBox" name="EngineSelection">
+                <property name="sizePolicy">
+                 <sizepolicy hsizetype="Expanding" vsizetype="Fixed">
+                  <horstretch>0</horstretch>
+                  <verstretch>0</verstretch>
+                 </sizepolicy>
+                </property>
                 <property name="minimumSize">
                  <size>
                   <width>0</width>
@@ -298,12 +337,12 @@
                 </property>
                 <item>
                  <property name="text">
-                  <string>Ultralytics</string>
+                  <string>OpenCV</string>
                  </property>
                 </item>
                 <item>
                  <property name="text">
-                  <string>OpenCV</string>
+                  <string>ONNX</string>
                  </property>
                 </item>
                 <item>
@@ -313,7 +352,17 @@
                 </item>
                 <item>
                  <property name="text">
-                  <string>MMdeploy</string>
+                  <string>TensorRT</string>
+                 </property>
+                </item>
+                <item>
+                 <property name="text">
+                  <string>CoreML</string>
+                 </property>
+                </item>
+                <item>
+                 <property name="text">
+                  <string>CANN</string>
                  </property>
                 </item>
                </widget>
@@ -324,18 +373,6 @@
              <layout class="QHBoxLayout" name="DeviceLayout">
               <item>
                <widget class="QLabel" name="DeviceLabel">
-                <property name="minimumSize">
-                 <size>
-                  <width>100</width>
-                  <height>25</height>
-                 </size>
-                </property>
-                <property name="maximumSize">
-                 <size>
-                  <width>100</width>
-                  <height>25</height>
-                 </size>
-                </property>
                 <property name="text">
                  <string>Inference Device</string>
                 </property>
@@ -343,6 +380,12 @@
               </item>
               <item>
                <widget class="QComboBox" name="DeviceSelection">
+                <property name="sizePolicy">
+                 <sizepolicy hsizetype="Expanding" vsizetype="Fixed">
+                  <horstretch>0</horstretch>
+                  <verstretch>0</verstretch>
+                 </sizepolicy>
+                </property>
                 <property name="minimumSize">
                  <size>
                   <width>0</width>
@@ -357,17 +400,12 @@
                 </property>
                 <item>
                  <property name="text">
-                  <string>CPU</string>
+                  <string>Intel CPU</string>
                  </property>
                 </item>
                 <item>
                  <property name="text">
-                  <string>NVIDIA GPU</string>
-                 </property>
-                </item>
-                <item>
-                 <property name="text">
-                  <string>Ascend NPU</string>
+                  <string>Intel GPU</string>
                  </property>
                 </item>
                 <item>
@@ -377,7 +415,27 @@
                 </item>
                 <item>
                  <property name="text">
-                  <string>Hailo NPU</string>
+                  <string>NVIDIA GPU</string>
+                 </property>
+                </item>
+                <item>
+                 <property name="text">
+                  <string>AMD CPU</string>
+                 </property>
+                </item>
+                <item>
+                 <property name="text">
+                  <string>AMD GPU</string>
+                 </property>
+                </item>
+                <item>
+                 <property name="text">
+                  <string>ARM CPU</string>
+                 </property>
+                </item>
+                <item>
+                 <property name="text">
+                  <string>Ascend NPU</string>
                  </property>
                 </item>
                </widget>
@@ -839,22 +897,7 @@
      <property name="alignment">
       <set>Qt::AlignmentFlag::AlignCenter</set>
      </property>
-     <layout class="QHBoxLayout" name="DisplayGroupLayout">
-      <property name="spacing">
-       <number>0</number>
-      </property>
-      <property name="leftMargin">
-       <number>10</number>
-      </property>
-      <property name="topMargin">
-       <number>10</number>
-      </property>
-      <property name="rightMargin">
-       <number>10</number>
-      </property>
-      <property name="bottomMargin">
-       <number>10</number>
-      </property>
+     <layout class="QHBoxLayout" name="DisplayGroupHLayout">
       <item>
        <widget class="QLabel" name="Display">
         <property name="sizePolicy">

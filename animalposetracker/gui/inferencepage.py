@@ -6,8 +6,6 @@ import yaml
 import cv2
 import numpy as np
 import sys
-import cpuinfo
-import platform
 from pathlib import Path
 import queue
 
@@ -15,11 +13,19 @@ from .ui_animalposeinference import Ui_AnimalPoseInference
 from animalposetracker.utils import (VideoReaderThread, VideoWriterThread, 
                                      FrameProcessorThread)
 from animalposetracker.engine import InferenceEngine
+from animalposetracker.engine import ENGINEtoDEVICE
 class AnimalPoseInferencePage(QWidget, Ui_AnimalPoseInference):
     def __init__(self, parent=None):
         super().__init__(parent)
 
         self.setupUi(self)
+
+        # init 
+        self.initialize_controls()
+    
+    def initialize_controls(self):
+        """Initialize all buttons and dependent controls"""
+        os.chdir(Path.cwd())
 
         # constants
         self.camera_list = {}
@@ -34,17 +40,10 @@ class AnimalPoseInferencePage(QWidget, Ui_AnimalPoseInference):
         self.data_config_path = None
         self.data_config = dict()
         self.weights_path = None
-        
 
-        # init button
-        self.initialize_controls()
-    
-    def initialize_controls(self):
-        """Initialize all buttons and dependent controls"""
-        os.chdir(Path.cwd())
+        self.platform = self._detect_platform()
 
         self.tools_disabled()
-
         self.SelectConfigure.setEnabled(True)
         self.ShowKeypoints.setCheckState(Qt.CheckState.Checked)
         self.Show.setCheckState(Qt.CheckState.Checked)
@@ -52,7 +51,6 @@ class AnimalPoseInferencePage(QWidget, Ui_AnimalPoseInference):
 
         # Connect all signals to their respective slots
         self.setupConnections()
-
         # Set default visualization configuration
         self._init_visualization_config()
 
@@ -112,6 +110,7 @@ class AnimalPoseInferencePage(QWidget, Ui_AnimalPoseInference):
         self.ShowSkeletons.setEnabled(True)
         self.ShowSkeletonsLineWidth.setEnabled(True)
         self.ShowBBox.setEnabled(True)
+        self.ShowBBoxWidth.setEnabled(True)
 
     def tools_disabled(self):
         self.CheckCameraVideosConnect.setEnabled(False)
@@ -132,6 +131,7 @@ class AnimalPoseInferencePage(QWidget, Ui_AnimalPoseInference):
         self.ShowSkeletons.setEnabled(False)
         self.ShowSkeletonsLineWidth.setEnabled(False)
         self.ShowBBox.setEnabled(False)
+        self.ShowBBoxWidth.setEnabled(False)
     
     def _init_visualization_config(self):
         """Initialize visualization configuration"""
@@ -203,12 +203,13 @@ class AnimalPoseInferencePage(QWidget, Ui_AnimalPoseInference):
         auto-configure supported engines and devices.
 
         Supported Engines:
-        - OpenVINO (.onnx)
+        - OpenVINO (.onnx and .xml)
         - OpenCV (.onnx)
-        - Ultralytics (.pt, .torchscript, .onnx, etc.)
-        - MMdeploy (.onnx, .pt, deploy configs)
         - CANN (.om for Ascend NPU)
-        - Hailo (.hef for Hailo NPU)
+        - ONNX (.onnx)
+        - TensorRT (.engine)
+        - CANN (.om)
+        - CoreML (.mlmodel)
 
         The function will:
         1. Detect file format and hardware availability
@@ -220,14 +221,12 @@ class AnimalPoseInferencePage(QWidget, Ui_AnimalPoseInference):
             self,
             "Select Model Weights",
             "",
-            "All Supported Formats (*.pt *.onnx *.om *.hef *.engine);;"
-            "PyTorch (*.pt);;"
+            "All Supported Formats (*.xml *.onnx *.om *.engine);;"
             "ONNX (*.onnx);;"
             "CANN Model (*.om);;"
-            "Hailo Model (*.hef);;"
             "TensorRT (*.engine);;"
-            "OpenVINO (select .ir or .onnx);;"
-            "MMdeploy Config (select .pt, .pth or .onnx);;"
+            "OpenVINO (select .xml);;"
+            "CoreML (*.mlmodel);;"
             "All Files (*)",
             options=options
         )
@@ -241,10 +240,9 @@ class AnimalPoseInferencePage(QWidget, Ui_AnimalPoseInference):
 
         file_path = Path(file_path)
         file_ext = file_path.suffix.lower()
-        is_dir = file_path.is_dir()
+        self.weights_path = file_path
 
-        device_info = self._detect_available_devices()
-        engines = self._get_engines_for_extension(file_ext, is_dir, device_info, file_path)
+        engines = self._get_supported_engines(file_ext)
 
         if not engines:
             self._show_info("Unsupported format for current platform")
@@ -265,120 +263,120 @@ class AnimalPoseInferencePage(QWidget, Ui_AnimalPoseInference):
     def _clear_selections(self):
         self.EngineSelection.clear()
         self.DeviceSelection.clear()
-
-    def _get_engines_for_extension(self, file_ext, is_dir, device_info, file_path):
-        format_engine_mapping = {
-            '.onnx': self._get_onnx_engines(device_info),
-            '.pt': ["Ultralytics", "MMdeploy"],
-            '.pth': ["Ultralytics", "MMdeploy"],
-            '.om': ["CANN"] if device_info['ascend_npu'] else [],
-            '.hef': ["Hailo"] if device_info['hailo_npu'] else [],
-            '.engine': ["Ultralytics"] if device_info['nvidia_gpu'] else []
-        }
-
-        if file_ext in format_engine_mapping:
-            engines = format_engine_mapping[file_ext]
-            if engines:
-                self.weights_path = file_path
-                self._show_info(f"{engines[0].split(' ')[0]} model loaded ({os.path.basename(file_path)})")
-            return engines
-
-        if is_dir and self._is_openvino_dir(file_path):
-            available = []
-            if device_info['intel_cpu']:
-                available.append("OpenVINO")
-            if device_info['nvidia_gpu']:
-                available.append("OpenVINO")
-            available.append("Ultralytics")
-            self.weights_path = file_path
-            self._show_info("OpenVINO model loaded")
-            return available
-
-        return []
-
-    def _get_onnx_engines(self, device_info):
-        engine_device_mapping = {
-            'intel_cpu': ["OpenCV", "OpenVINO", "Ultralytics", "MMdeploy"],
-            'amd_cpu': ["OpenCV", "Ultralytics", "MMdeploy"],
-            'arm_cpu': ["OpenCV", "Ultralytics", "MMdeploy"],
-            'nvidia_gpu': ["OpenCV", "Ultralytics", "MMdeploy"],
-            'ascend_npu': ["CANN"],
-            'hailo_npu': ["Hailo"],
-            'intel_npu': ["OpenVINO"]
-        }
-
-        engines = []
-        for device, engine_list in engine_device_mapping.items():
-            if device_info[device]:
-                engines.extend(engine_list)
-
-        return sorted(list(set(engines)))
+    
+    def _get_supported_engines(self, file_ext):
+        """Get supported engines based on file extension"""
+        if file_ext == '.onnx':
+            supported_engines = ["OpenCV", "ONNX", 'OpenVINO']
+        elif file_ext == '.xml':
+            supported_engines =  ["OpenVINO"]
+        elif file_ext == '.om':
+            supported_engines =  ["CANN"]
+        elif file_ext == '.engine':
+            supported_engines =  ["TensorRT"]
+        elif file_ext == '.mlmodel':
+            supported_engines =  ["CoreML"]
+        else:
+            raise ValueError(f"Unsupported format: {file_ext}")
+        
+        return supported_engines
 
     def _populate_engine_selection(self, engines):
         self.EngineSelection.addItems(engines)
-        default_engine = "Ultralytics" if "Ultralytics" in engines else engines[0]
+        default_engine = engines[0]
         self.EngineSelection.setCurrentText(default_engine)
 
     def _show_info(self, message):
         self.PrintInformation.setText(message)
 
-    def _is_openvino_dir(self, path):
-        # Placeholder implementation, you need to define the actual logic
-        return True
-
-    def _detect_available_devices(self):
-        """Detect available hardware devices in the system"""
-        return {
-            'intel_cpu': self._check_intel_cpu(),
-            'amd_cpu': self._check_amd_cpu(),
-            'arm_cpu': self._check_arm_cpu(),
-            'nvidia_gpu': self._check_nvidia_gpu(),
-            'ascend_npu': self._check_cann_environment(),
-            'hailo_npu': self._check_hailo_environment(),
-            'intel_npu': self._check_openvino_npu()
-        }
-
-    def _get_supported_devices(self, engine):
-        engine_device_mapping = {
-            "CANN": (["Ascend NPU"], self._check_cann_environment),
-            "Hailo": (["Hailo-8"], self._check_hailo_environment),
-            "OpenVINO": (["Intel CPU", "Intel NPU"], [self._check_intel_cpu, 
-                                                      self._check_openvino_npu]),
-            "Ultralytics": (["Intel CPU", "AMD CPU", "ARM CPU", "NVIDIA GPU"],
-                            [self._check_intel_cpu, self._check_amd_cpu, 
-                             self._check_arm_cpu, self._check_nvidia_gpu]),
-            "OpenCV": (["Intel CPU", "AMD CPU", "ARM CPU", "NVIDIA GPU"],
-                    [self._check_intel_cpu, self._check_amd_cpu, 
-                     self._check_arm_cpu, self._check_nvidia_gpu]),
-            "MMdeploy": (["Intel CPU", "AMD CPU", "ARM CPU", "NVIDIA GPU"],
-                        [self._check_intel_cpu, self._check_amd_cpu, self._check_arm_cpu, self._check_nvidia_gpu])
-        }
-
-        if engine not in engine_device_mapping:
-            raise ValueError(f"Unsupported engine: {engine}")
-
-        devices, checks = engine_device_mapping[engine]
-        if isinstance(checks, list):
-            available_devices = [device for device, check in zip(devices, checks) if check()]
-        else:
-            if checks():
-                available_devices = devices
+    def _detect_platform(self):
+        """Detect platform and hardware availability"""
+        try:
+            import cpuinfo
+            info = cpuinfo.get_cpu_info()
+            vendor = info.get('vendor_id_raw')
+            if vendor == 'GenuineIntel':
+                return 'Intel'
+            elif vendor == 'AuthenticAMD':
+                return 'AMD'
+            elif 'ARM' in info.get('brand_raw', ''):
+                return 'ARM'
             else:
-                available_devices = []
-
-        return available_devices
+                raise ValueError(f"Unsupported CPU vendor: {vendor}")
+        except ImportError:
+            raise ImportError("Please install 'py-cpuinfo' module")
+    
 
     def _update_available_devices(self):
         """Update device selection based on chosen engine"""
         current_engine = self.EngineSelection.currentText()
         self.DeviceSelection.clear()
-
         available_devices = self._get_supported_devices(current_engine)
         if available_devices:
             self.DeviceSelection.addItems(available_devices)
         else:
             self._show_info(f"{current_engine} engine not available or no supported devices found")
             raise ValueError(f"{current_engine} engine not available or no supported devices found")
+
+    def _get_supported_devices(self, engine):
+        supported_devices = []
+        if engine in ENGINEtoDEVICE:
+            for device in ENGINEtoDEVICE[engine][self.platform]:
+                if device in ["Intel CPU", "AMD CPU", "ARM CPU"]:
+                    supported_devices.append(device)
+                elif device == "Intel GPU" and self._check_intel_gpu():
+                    supported_devices.append(device)
+                elif device == "Intel NPU" and self._check_intel_npu():
+                    supported_devices.append(device)
+                elif device == "NVIDIA GPU" and self._check_nvidia_gpu():
+                    supported_devices.append(device)
+                elif device == "AMD GPU" and self._check_amd_gpu():
+                    supported_devices.append(device)
+                elif device == "Metal":
+                    try:
+                        import platform
+                        if platform.system() == "Darwin":
+                            supported_devices.append(device)
+                    except ImportError:
+                        raise ImportError("Please install 'platform' module")
+                elif device == "Ascend NPU" and self._check_ascend_npu():
+                        supported_devices.append(device)
+        else:
+            raise ValueError(f"Unsupported engine: {engine}")
+
+        return supported_devices
+
+    def _check_intel_gpu(self):
+        """Check if Intel GPU is available in the system"""
+        try:
+            from openvino import Core
+            core = Core()
+            return 'GPU' in core.available_devices
+        except:
+            return False
+        
+    def _check_intel_npu(self):
+        """Check if Intel NPU is available through OpenVINO"""
+        try:
+            from openvino import Core
+            core = Core()
+            return 'NPU' in core.available_devices
+        except:
+            return False
+    
+    def _check_amd_gpu(self):
+        """Check if AMD GPU is available in the system"""
+        try:
+            import pyopencl as cl
+            platforms = cl.get_platforms()
+            for platform in platforms:
+                devices = platform.get_devices()
+                for device in devices:
+                    if device.type == cl.device_type.GPU:
+                        return True
+            return False
+        except:
+            raise ImportError("Please install 'pyopencl' module")
 
     def _check_nvidia_gpu(self):
         """Check if NVIDIA GPU is available in the system"""
@@ -392,47 +390,13 @@ class AnimalPoseInferencePage(QWidget, Ui_AnimalPoseInference):
             except:
                 return False
 
-    def _check_cann_environment(self):
+    def _check_ascend_npu(self):
         """Check if CANN environment is available for Ascend NPU"""
         try:
             from ais_bench.infer.interface import InferSession
             return True
         except ImportError:
             return False
-
-    def _check_hailo_environment(self):
-        """Check if Hailo runtime is available"""
-        try:
-            import hailort
-            return True
-        except ImportError:
-            return False
-
-    def _check_openvino_npu(self):
-        """Check if Intel NPU is available through OpenVINO"""
-        try:
-            from openvino import Core
-            core = Core()
-            return 'NPU' in core.available_devices
-        except:
-            return False
-
-    def _check_intel_cpu(self):
-        """Check if Intel CPU is available in the system"""
-        info = cpuinfo.get_cpu_info()
-        brand = info.get('brand_raw', '').lower()
-        return 'intel' in brand
-
-    def _check_amd_cpu(self):
-        """Check if AMD CPU is available in the system"""
-        info = cpuinfo.get_cpu_info()
-        brand = info.get('brand_raw', '').lower()
-        return 'amd' in brand
-
-    def _check_arm_cpu(self):
-        """Check if ARM CPU is available in the system"""
-        machine = platform.machine().lower()
-        return 'arm' in machine or 'aarch' in machine
 
     @Slot(bool)
     def onCameraORVideosToggled(self, checked):
@@ -787,6 +751,7 @@ class AnimalPoseInferencePage(QWidget, Ui_AnimalPoseInference):
             self.inference.data_config = self.data_config_path
             self.inference.engine = self.engine
             self.inference.device = self.device
+            self.inference.model_bits = self.ModelBits.currentText()
             self.inference.print_config()
             self.inference.model_init()
             # init threads

@@ -23,6 +23,7 @@ Revision History:
 from .model import ModelEngine
 from .inferencer import InferenceEngine
 from .tracker import TrackerEngine
+from .constant import PLATFORM, ENGINEtoDEVICE, ENGINEtoBackend, OpenCV_TARGETS
 
-
-__all__ = ['ModelEngine', 'InferenceEngine', 'TrackerEngine']
+__all__ = ['ModelEngine', 'InferenceEngine', 'TrackerEngine',
+           'PLATFORM', 'ENGINEtoDEVICE', 'ENGINEtoBackend', 'OpenCV_TARGETS']

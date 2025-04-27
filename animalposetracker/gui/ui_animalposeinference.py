@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 
 ################################################################################
-## Form generated from reading UI file 'animalposeinferenceXZyvEG.ui'
+## Form generated from reading UI file 'animalposeinferenceWRNoSL.ui'
 ##
 ## Created by: Qt User Interface Compiler version 6.8.2
 ##
@@ -26,7 +26,7 @@ class Ui_AnimalPoseInference(object):
     def setupUi(self, AnimalPoseInference):
         if not AnimalPoseInference.objectName():
             AnimalPoseInference.setObjectName(u"AnimalPoseInference")
-        AnimalPoseInference.resize(877, 667)
+        AnimalPoseInference.resize(1321, 845)
         sizePolicy = QSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
         sizePolicy.setHorizontalStretch(0)
         sizePolicy.setVerticalStretch(0)
@@ -36,8 +36,8 @@ class Ui_AnimalPoseInference(object):
         icon = QIcon()
         icon.addFile(LOGO_SMALL_PATH, QSize(), QIcon.Mode.Normal, QIcon.State.Off)
         AnimalPoseInference.setWindowIcon(icon)
-        self.AnimalPoseInferenceLayout = QVBoxLayout(AnimalPoseInference)
-        self.AnimalPoseInferenceLayout.setObjectName(u"AnimalPoseInferenceLayout")
+        self.verticalLayout = QVBoxLayout(AnimalPoseInference)
+        self.verticalLayout.setObjectName(u"verticalLayout")
         self.BaseConfigure = QHBoxLayout()
         self.BaseConfigure.setObjectName(u"BaseConfigure")
         self.BaseToolsGroup = QGroupBox(AnimalPoseInference)
@@ -115,13 +115,16 @@ class Ui_AnimalPoseInference(object):
         self.WidthLayout.setObjectName(u"WidthLayout")
         self.WidthLabel = QLabel(self.BaseToolsGroup)
         self.WidthLabel.setObjectName(u"WidthLabel")
-        self.WidthLabel.setMinimumSize(QSize(50, 25))
-        self.WidthLabel.setMaximumSize(QSize(50, 25))
 
         self.WidthLayout.addWidget(self.WidthLabel)
 
         self.WidthSetup = QSpinBox(self.BaseToolsGroup)
         self.WidthSetup.setObjectName(u"WidthSetup")
+        sizePolicy3 = QSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
+        sizePolicy3.setHorizontalStretch(0)
+        sizePolicy3.setVerticalStretch(0)
+        sizePolicy3.setHeightForWidth(self.WidthSetup.sizePolicy().hasHeightForWidth())
+        self.WidthSetup.setSizePolicy(sizePolicy3)
 
         self.WidthLayout.addWidget(self.WidthSetup)
 
@@ -132,13 +135,13 @@ class Ui_AnimalPoseInference(object):
         self.HeightLayout.setObjectName(u"HeightLayout")
         self.HeightLabel = QLabel(self.BaseToolsGroup)
         self.HeightLabel.setObjectName(u"HeightLabel")
-        self.HeightLabel.setMinimumSize(QSize(50, 25))
-        self.HeightLabel.setMaximumSize(QSize(50, 25))
 
         self.HeightLayout.addWidget(self.HeightLabel)
 
         self.HeightSetup = QSpinBox(self.BaseToolsGroup)
         self.HeightSetup.setObjectName(u"HeightSetup")
+        sizePolicy3.setHeightForWidth(self.HeightSetup.sizePolicy().hasHeightForWidth())
+        self.HeightSetup.setSizePolicy(sizePolicy3)
 
         self.HeightLayout.addWidget(self.HeightSetup)
 
@@ -149,13 +152,13 @@ class Ui_AnimalPoseInference(object):
         self.FPSLayout.setObjectName(u"FPSLayout")
         self.FPSLabel = QLabel(self.BaseToolsGroup)
         self.FPSLabel.setObjectName(u"FPSLabel")
-        self.FPSLabel.setMinimumSize(QSize(50, 25))
-        self.FPSLabel.setMaximumSize(QSize(50, 25))
 
         self.FPSLayout.addWidget(self.FPSLabel)
 
         self.FPSSetup = QSpinBox(self.BaseToolsGroup)
         self.FPSSetup.setObjectName(u"FPSSetup")
+        sizePolicy3.setHeightForWidth(self.FPSSetup.sizePolicy().hasHeightForWidth())
+        self.FPSSetup.setSizePolicy(sizePolicy3)
 
         self.FPSLayout.addWidget(self.FPSSetup)
 
@@ -167,15 +170,37 @@ class Ui_AnimalPoseInference(object):
 
         self.EngineDeviceLayout = QHBoxLayout()
         self.EngineDeviceLayout.setObjectName(u"EngineDeviceLayout")
+        self.ModelBitsLayout = QHBoxLayout()
+        self.ModelBitsLayout.setObjectName(u"ModelBitsLayout")
+        self.ModelBitsLabel = QLabel(self.BaseToolsGroup)
+        self.ModelBitsLabel.setObjectName(u"ModelBitsLabel")
+
+        self.ModelBitsLayout.addWidget(self.ModelBitsLabel)
+
+        self.ModelBits = QComboBox(self.BaseToolsGroup)
+        self.ModelBits.addItem("")
+        self.ModelBits.addItem("")
+        self.ModelBits.addItem("")
+        self.ModelBits.setObjectName(u"ModelBits")
+        sizePolicy3.setHeightForWidth(self.ModelBits.sizePolicy().hasHeightForWidth())
+        self.ModelBits.setSizePolicy(sizePolicy3)
+        self.ModelBits.setMinimumSize(QSize(0, 25))
+        self.ModelBits.setMaximumSize(QSize(16777215, 25))
+
+        self.ModelBitsLayout.addWidget(self.ModelBits)
+
+
+        self.EngineDeviceLayout.addLayout(self.ModelBitsLayout)
+
         self.EngineLayout = QHBoxLayout()
         self.EngineLayout.setObjectName(u"EngineLayout")
         self.EngineLabel = QLabel(self.BaseToolsGroup)
         self.EngineLabel.setObjectName(u"EngineLabel")
-        sizePolicy3 = QSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
-        sizePolicy3.setHorizontalStretch(0)
-        sizePolicy3.setVerticalStretch(0)
-        sizePolicy3.setHeightForWidth(self.EngineLabel.sizePolicy().hasHeightForWidth())
-        self.EngineLabel.setSizePolicy(sizePolicy3)
+        sizePolicy4 = QSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
+        sizePolicy4.setHorizontalStretch(0)
+        sizePolicy4.setVerticalStretch(0)
+        sizePolicy4.setHeightForWidth(self.EngineLabel.sizePolicy().hasHeightForWidth())
+        self.EngineLabel.setSizePolicy(sizePolicy4)
         self.EngineLabel.setMinimumSize(QSize(40, 25))
         self.EngineLabel.setMaximumSize(QSize(40, 25))
 
@@ -186,7 +211,11 @@ class Ui_AnimalPoseInference(object):
         self.EngineSelection.addItem("")
         self.EngineSelection.addItem("")
         self.EngineSelection.addItem("")
+        self.EngineSelection.addItem("")
+        self.EngineSelection.addItem("")
         self.EngineSelection.setObjectName(u"EngineSelection")
+        sizePolicy3.setHeightForWidth(self.EngineSelection.sizePolicy().hasHeightForWidth())
+        self.EngineSelection.setSizePolicy(sizePolicy3)
         self.EngineSelection.setMinimumSize(QSize(0, 25))
         self.EngineSelection.setMaximumSize(QSize(16777215, 25))
 
@@ -199,8 +228,6 @@ class Ui_AnimalPoseInference(object):
         self.DeviceLayout.setObjectName(u"DeviceLayout")
         self.DeviceLabel = QLabel(self.BaseToolsGroup)
         self.DeviceLabel.setObjectName(u"DeviceLabel")
-        self.DeviceLabel.setMinimumSize(QSize(100, 25))
-        self.DeviceLabel.setMaximumSize(QSize(100, 25))
 
         self.DeviceLayout.addWidget(self.DeviceLabel)
 
@@ -210,7 +237,12 @@ class Ui_AnimalPoseInference(object):
         self.DeviceSelection.addItem("")
         self.DeviceSelection.addItem("")
         self.DeviceSelection.addItem("")
+        self.DeviceSelection.addItem("")
+        self.DeviceSelection.addItem("")
+        self.DeviceSelection.addItem("")
         self.DeviceSelection.setObjectName(u"DeviceSelection")
+        sizePolicy3.setHeightForWidth(self.DeviceSelection.sizePolicy().hasHeightForWidth())
+        self.DeviceSelection.setSizePolicy(sizePolicy3)
         self.DeviceSelection.setMinimumSize(QSize(0, 25))
         self.DeviceSelection.setMaximumSize(QSize(16777215, 25))
 
@@ -266,8 +298,8 @@ class Ui_AnimalPoseInference(object):
         self.SaveIoUConfLayout.setObjectName(u"SaveIoUConfLayout")
         self.Save = QCheckBox(self.ShowToolsGroup)
         self.Save.setObjectName(u"Save")
-        sizePolicy3.setHeightForWidth(self.Save.sizePolicy().hasHeightForWidth())
-        self.Save.setSizePolicy(sizePolicy3)
+        sizePolicy4.setHeightForWidth(self.Save.sizePolicy().hasHeightForWidth())
+        self.Save.setSizePolicy(sizePolicy4)
         self.Save.setMinimumSize(QSize(120, 25))
         self.Save.setMaximumSize(QSize(120, 25))
 
@@ -277,8 +309,8 @@ class Ui_AnimalPoseInference(object):
         self.IoULayout.setObjectName(u"IoULayout")
         self.IoULabel = QLabel(self.ShowToolsGroup)
         self.IoULabel.setObjectName(u"IoULabel")
-        sizePolicy3.setHeightForWidth(self.IoULabel.sizePolicy().hasHeightForWidth())
-        self.IoULabel.setSizePolicy(sizePolicy3)
+        sizePolicy4.setHeightForWidth(self.IoULabel.sizePolicy().hasHeightForWidth())
+        self.IoULabel.setSizePolicy(sizePolicy4)
 
         self.IoULayout.addWidget(self.IoULabel)
 
@@ -297,8 +329,8 @@ class Ui_AnimalPoseInference(object):
         self.ConfLayout.setObjectName(u"ConfLayout")
         self.ConfLabel = QLabel(self.ShowToolsGroup)
         self.ConfLabel.setObjectName(u"ConfLabel")
-        sizePolicy3.setHeightForWidth(self.ConfLabel.sizePolicy().hasHeightForWidth())
-        self.ConfLabel.setSizePolicy(sizePolicy3)
+        sizePolicy4.setHeightForWidth(self.ConfLabel.sizePolicy().hasHeightForWidth())
+        self.ConfLabel.setSizePolicy(sizePolicy4)
 
         self.ConfLayout.addWidget(self.ConfLabel)
 
@@ -322,8 +354,8 @@ class Ui_AnimalPoseInference(object):
         self.ShowLayout.setSizeConstraint(QLayout.SizeConstraint.SetDefaultConstraint)
         self.Show = QCheckBox(self.ShowToolsGroup)
         self.Show.setObjectName(u"Show")
-        sizePolicy3.setHeightForWidth(self.Show.sizePolicy().hasHeightForWidth())
-        self.Show.setSizePolicy(sizePolicy3)
+        sizePolicy4.setHeightForWidth(self.Show.sizePolicy().hasHeightForWidth())
+        self.Show.setSizePolicy(sizePolicy4)
         self.Show.setMinimumSize(QSize(120, 25))
         self.Show.setMaximumSize(QSize(120, 25))
 
@@ -346,8 +378,8 @@ class Ui_AnimalPoseInference(object):
         self.ShowClassesLayout.setObjectName(u"ShowClassesLayout")
         self.ShowClasses = QCheckBox(self.ShowToolsGroup)
         self.ShowClasses.setObjectName(u"ShowClasses")
-        sizePolicy3.setHeightForWidth(self.ShowClasses.sizePolicy().hasHeightForWidth())
-        self.ShowClasses.setSizePolicy(sizePolicy3)
+        sizePolicy4.setHeightForWidth(self.ShowClasses.sizePolicy().hasHeightForWidth())
+        self.ShowClasses.setSizePolicy(sizePolicy4)
         self.ShowClasses.setMinimumSize(QSize(120, 25))
         self.ShowClasses.setMaximumSize(QSize(120, 25))
 
@@ -367,8 +399,8 @@ class Ui_AnimalPoseInference(object):
         self.ShowKeypointsLayout.setObjectName(u"ShowKeypointsLayout")
         self.ShowKeypoints = QCheckBox(self.ShowToolsGroup)
         self.ShowKeypoints.setObjectName(u"ShowKeypoints")
-        sizePolicy3.setHeightForWidth(self.ShowKeypoints.sizePolicy().hasHeightForWidth())
-        self.ShowKeypoints.setSizePolicy(sizePolicy3)
+        sizePolicy4.setHeightForWidth(self.ShowKeypoints.sizePolicy().hasHeightForWidth())
+        self.ShowKeypoints.setSizePolicy(sizePolicy4)
         self.ShowKeypoints.setMinimumSize(QSize(120, 25))
         self.ShowKeypoints.setMaximumSize(QSize(120, 25))
 
@@ -394,8 +426,8 @@ class Ui_AnimalPoseInference(object):
         self.ShowSkeletonsLayout.setObjectName(u"ShowSkeletonsLayout")
         self.ShowSkeletons = QCheckBox(self.ShowToolsGroup)
         self.ShowSkeletons.setObjectName(u"ShowSkeletons")
-        sizePolicy3.setHeightForWidth(self.ShowSkeletons.sizePolicy().hasHeightForWidth())
-        self.ShowSkeletons.setSizePolicy(sizePolicy3)
+        sizePolicy4.setHeightForWidth(self.ShowSkeletons.sizePolicy().hasHeightForWidth())
+        self.ShowSkeletons.setSizePolicy(sizePolicy4)
         self.ShowSkeletons.setMinimumSize(QSize(120, 25))
         self.ShowSkeletons.setMaximumSize(QSize(120, 25))
 
@@ -418,8 +450,8 @@ class Ui_AnimalPoseInference(object):
         self.ShowBBoxLayout.setObjectName(u"ShowBBoxLayout")
         self.ShowBBox = QCheckBox(self.ShowToolsGroup)
         self.ShowBBox.setObjectName(u"ShowBBox")
-        sizePolicy3.setHeightForWidth(self.ShowBBox.sizePolicy().hasHeightForWidth())
-        self.ShowBBox.setSizePolicy(sizePolicy3)
+        sizePolicy4.setHeightForWidth(self.ShowBBox.sizePolicy().hasHeightForWidth())
+        self.ShowBBox.setSizePolicy(sizePolicy4)
         self.ShowBBox.setMinimumSize(QSize(120, 25))
         self.ShowBBox.setMaximumSize(QSize(120, 25))
 
@@ -442,17 +474,15 @@ class Ui_AnimalPoseInference(object):
         self.BaseConfigure.addWidget(self.ShowToolsGroup)
 
 
-        self.AnimalPoseInferenceLayout.addLayout(self.BaseConfigure)
+        self.verticalLayout.addLayout(self.BaseConfigure)
 
         self.DisplayGroup = QGroupBox(AnimalPoseInference)
         self.DisplayGroup.setObjectName(u"DisplayGroup")
         sizePolicy.setHeightForWidth(self.DisplayGroup.sizePolicy().hasHeightForWidth())
         self.DisplayGroup.setSizePolicy(sizePolicy)
         self.DisplayGroup.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        self.DisplayGroupLayout = QHBoxLayout(self.DisplayGroup)
-        self.DisplayGroupLayout.setSpacing(0)
-        self.DisplayGroupLayout.setObjectName(u"DisplayGroupLayout")
-        self.DisplayGroupLayout.setContentsMargins(10, 10, 10, 10)
+        self.DisplayGroupHLayout = QHBoxLayout(self.DisplayGroup)
+        self.DisplayGroupHLayout.setObjectName(u"DisplayGroupHLayout")
         self.Display = QLabel(self.DisplayGroup)
         self.Display.setObjectName(u"Display")
         sizePolicy.setHeightForWidth(self.Display.sizePolicy().hasHeightForWidth())
@@ -463,10 +493,10 @@ class Ui_AnimalPoseInference(object):
         self.Display.setScaledContents(True)
         self.Display.setAlignment(Qt.AlignmentFlag.AlignCenter)
 
-        self.DisplayGroupLayout.addWidget(self.Display)
+        self.DisplayGroupHLayout.addWidget(self.Display)
 
 
-        self.AnimalPoseInferenceLayout.addWidget(self.DisplayGroup)
+        self.verticalLayout.addWidget(self.DisplayGroup)
 
 
         self.retranslateUi(AnimalPoseInference)
@@ -487,18 +517,28 @@ class Ui_AnimalPoseInference(object):
         self.WidthLabel.setText(QCoreApplication.translate("AnimalPoseInference", u"Width", None))
         self.HeightLabel.setText(QCoreApplication.translate("AnimalPoseInference", u"Height", None))
         self.FPSLabel.setText(QCoreApplication.translate("AnimalPoseInference", u"FPS", None))
+        self.ModelBitsLabel.setText(QCoreApplication.translate("AnimalPoseInference", u"Model Bits", None))
+        self.ModelBits.setItemText(0, QCoreApplication.translate("AnimalPoseInference", u"FP32", None))
+        self.ModelBits.setItemText(1, QCoreApplication.translate("AnimalPoseInference", u"FP16", None))
+        self.ModelBits.setItemText(2, QCoreApplication.translate("AnimalPoseInference", u"INT8", None))
+
         self.EngineLabel.setText(QCoreApplication.translate("AnimalPoseInference", u"Engine", None))
-        self.EngineSelection.setItemText(0, QCoreApplication.translate("AnimalPoseInference", u"Ultralytics", None))
-        self.EngineSelection.setItemText(1, QCoreApplication.translate("AnimalPoseInference", u"OpenCV", None))
+        self.EngineSelection.setItemText(0, QCoreApplication.translate("AnimalPoseInference", u"OpenCV", None))
+        self.EngineSelection.setItemText(1, QCoreApplication.translate("AnimalPoseInference", u"ONNX", None))
         self.EngineSelection.setItemText(2, QCoreApplication.translate("AnimalPoseInference", u"OpenVINO", None))
-        self.EngineSelection.setItemText(3, QCoreApplication.translate("AnimalPoseInference", u"MMdeploy", None))
+        self.EngineSelection.setItemText(3, QCoreApplication.translate("AnimalPoseInference", u"TensorRT", None))
+        self.EngineSelection.setItemText(4, QCoreApplication.translate("AnimalPoseInference", u"CoreML", None))
+        self.EngineSelection.setItemText(5, QCoreApplication.translate("AnimalPoseInference", u"CANN", None))
 
         self.DeviceLabel.setText(QCoreApplication.translate("AnimalPoseInference", u"Inference Device", None))
-        self.DeviceSelection.setItemText(0, QCoreApplication.translate("AnimalPoseInference", u"CPU", None))
-        self.DeviceSelection.setItemText(1, QCoreApplication.translate("AnimalPoseInference", u"NVIDIA GPU", None))
-        self.DeviceSelection.setItemText(2, QCoreApplication.translate("AnimalPoseInference", u"Ascend NPU", None))
-        self.DeviceSelection.setItemText(3, QCoreApplication.translate("AnimalPoseInference", u"Intel NPU", None))
-        self.DeviceSelection.setItemText(4, QCoreApplication.translate("AnimalPoseInference", u"Hailo NPU", None))
+        self.DeviceSelection.setItemText(0, QCoreApplication.translate("AnimalPoseInference", u"Intel CPU", None))
+        self.DeviceSelection.setItemText(1, QCoreApplication.translate("AnimalPoseInference", u"Intel GPU", None))
+        self.DeviceSelection.setItemText(2, QCoreApplication.translate("AnimalPoseInference", u"Intel NPU", None))
+        self.DeviceSelection.setItemText(3, QCoreApplication.translate("AnimalPoseInference", u"NVIDIA GPU", None))
+        self.DeviceSelection.setItemText(4, QCoreApplication.translate("AnimalPoseInference", u"AMD CPU", None))
+        self.DeviceSelection.setItemText(5, QCoreApplication.translate("AnimalPoseInference", u"AMD GPU", None))
+        self.DeviceSelection.setItemText(6, QCoreApplication.translate("AnimalPoseInference", u"ARM CPU", None))
+        self.DeviceSelection.setItemText(7, QCoreApplication.translate("AnimalPoseInference", u"Ascend NPU", None))
 
         self.Start.setText(QCoreApplication.translate("AnimalPoseInference", u"Start", None))
         self.End.setText(QCoreApplication.translate("AnimalPoseInference", u"End", None))
@@ -517,5 +557,4 @@ class Ui_AnimalPoseInference(object):
         self.DisplayGroup.setTitle("")
         self.Display.setText("")
     # retranslateUi
-
 

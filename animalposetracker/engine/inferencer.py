@@ -5,6 +5,8 @@ from datetime import datetime
 import yaml
 from pathlib import Path
 
+from .constant import ENGINEtoBackend, OpenCV_TARGETS
+
 
 def measure_time(func, *args, **kwargs):
     start_time = datetime.now()
@@ -15,10 +17,6 @@ def measure_time(func, *args, **kwargs):
 
 
 class InferenceEngine:
-    ENGINE = ["OpenCV", "OpenVINO", "Ultralytics", "MMdeploy", "CANN", "Hailo"]
-    DEVICE = ["Intel CPU", "AMD CPU", "ARM CPU", 
-              "NVIDIA GPU", "Intel NPU", "Ascend NPU", "Hailo-8"]
-
     def __init__(self,
                  config: Union[str, Path, Dict] = None,
                  weights_path: Union[str, Path] = None,
@@ -26,6 +24,7 @@ class InferenceEngine:
                  input_height: int = 640,
                  engine: str = 'OpenCV',
                  device: str = 'Intel CPU',
+                 model_bits: str = 'FP32',
                  conf: float = 0.25,
                  iou: float = 0.45,
                  background: bool = 'Original',
@@ -41,6 +40,7 @@ class InferenceEngine:
         self.weights_path = weights_path
         self._engine = engine
         self._device = device
+        self._model_bits = model_bits
         self.input_width = input_width
         self.input_height = input_height
         self.visualize_config = {
@@ -83,9 +83,18 @@ class InferenceEngine:
     def device(self, device):
         self._device = device
     
+    @property
+    def model_bits(self):
+        return self._model_bits
+
+    @model_bits.setter
+    def model_bits(self, model_bits):
+        self._model_bits = model_bits
+    
     def print_config(self):
         print(f"Engine: {self.engine}")
         print(f"Device: {self.device}")
+        print(f"Model Bits: {self.model_bits}")
         print(f"Input Width: {self.input_width}")
         print(f"Input Height: {self.input_height}")
         for key, value in self.visualize_config.items():
@@ -121,56 +130,68 @@ class InferenceEngine:
         self._update_config_vars()
 
     def model_init(self):
-        if self.engine not in self.ENGINE:
-            raise ValueError(f"Engine {self.engine} is not supported. Please choose from {self.ENGINE}")
-        if self.device not in self.DEVICE:
-            raise ValueError(f"Device {self.device} is not supported. Please choose from {self.DEVICE}")
-
         engine_init_method = {
-            # 'Ultralytics': self._init_ultralytics,
             'OpenCV': self._init_opencv,
+            'ONNX': self._init_onnx,
             'OpenVINO': self._init_openvino,
-            'MMdeploy': self._init_mmdeploy,
+            'TensorRT': self._init_tensorrt,
+            'CoreML': self._init_coreml,
             'CANN': self._init_cann,
-            'Hailo': self._init_hailo
+
         }
         engine_init_method[self.engine]()
 
-    def _init_ultralytics(self):
-        try:
-            from ultralytics import YOLO
-            self.model = YOLO(self.weights_path)
-        except ImportError:
-            raise ImportError("Please install ultralytics to use Ultralytics engine.")
-
     def _init_opencv(self):
-        if Path(self.weights_path).suffix == '.onnx':
-            self.model = cv2.dnn.readNetFromONNX(self.weights_path)
+        cv2_backends = ENGINEtoBackend["OpenCV"]
+        if "CPU" in self.device:
+            cv2_backend = cv2_backends.get("CPU")
+            if self.model_bits == "FP16":
+                cv2_target = OpenCV_TARGETS.get("CPU FP16")
+            else:
+                cv2_target = OpenCV_TARGETS.get("CPU")
+        else:
+            cv2_backend = cv2_backends.get(self.device)
+            if self.device == "NVIDIA GPU" and self.model_bits == "FP16":
+                cv2_target = OpenCV_TARGETS.get("NVIDIA GPU FP16")
+            else:
+                cv2_target = OpenCV_TARGETS.get(self.device)
+            
+        self.model = cv2.dnn.readNetFromONNX(self.weights_path)
+        self.model.setPreferableBackend(cv2_backend)
+        self.model.setPreferableTarget(cv2_target)
+
+    def _init_onnx(self):
+        try:
+            import onnxruntime as ort
+            providers_list = ENGINEtoBackend["ONNX"]
+            if "CPU" in self.device:
+                providers = providers_list.get("CPU")
+            else:
+                providers = providers_list.get(self.device)
+            self.model = ort.InferenceSession(self.weights_path, providers=providers)
+            self.input_name = self.model.get_inputs()[0].name
+            self.output_name = self.model.get_outputs()[0].name
+        except ImportError:
+            raise ImportError("Please install onnxruntime to use ONNX engine.")
 
     def _init_openvino(self):
         try:
             from openvino import Core
             core = Core()
-            device_mapping = {
-                'Intel CPU': 'CPU',
-                'AMD CPU': 'CPU',
-                'ARM CPU': 'CPU',
-                'Intel GPU': 'GPU',
-                'Intel NPU': 'MYRIAD'
-            }
-            device_name = device_mapping.get(self.device, 'AUTO')
+            device = ENGINEtoBackend[self.engine]
             if Path(self.weights_path).suffix == '.onnx':
                 model = core.read_model(self.weights_path)
-            else:
-                xml_path = Path(self.weights_path).with_suffix('.xml')
+            elif Path(self.weights_path).suffix == '.xml' and Path(self.weights_path).with_suffix('.bin').exists():
+                xml_path = Path(self.weights_path)
                 bin_path = Path(self.weights_path).with_suffix('.bin')
                 model = core.read_model(model=str(xml_path), weights=str(bin_path))
-            self.model = core.compile_model(model=model, device_name=device_name)
+            else:
+                raise ValueError("Invalid weights file format. Please provide either an ONNX or an XML+BIN file.")
+            devices = ENGINEtoBackend["OpenVINO"]
+            device = devices.get(self.device)
+            self.model = core.compile_model(model=model, device_name=device)
         except ImportError:
             raise ImportError("Please install openvino to use OpenVINO engine.")
-
-    def _init_mmdeploy(self):
-        pass
 
     def _init_cann(self):
         try:
@@ -178,13 +199,16 @@ class InferenceEngine:
             self.model = InferSession(0, self.weights_path)
         except ImportError:
             raise ImportError("Please install ais_bench to use CANN engine.")
+    
+    def _init_tensorrt(self):
+        pass
 
-    def _init_hailo(self):
-        try:
-            from hailo_model_zoo.core.infer.infer_utils import InferAPI
-            self.model = InferAPI(self.weights_path, self.device)
+    def _init_coreml(self):
+        try: 
+            import coremltools as ct
+            self.model = ct.models.MLModel(self.weights_path)
         except ImportError:
-            raise ImportError("Please install hailo_model_zoo to use Hailo engine.")
+            raise ImportError("Please install coremltools to use CoreML engine.")
     
 
     def inference(self, frame):
@@ -205,31 +229,19 @@ class InferenceEngine:
             pred, inference_time = measure_time(self.model.forward)
         elif self.engine == 'OpenVINO':
             pred, inference_time = measure_time(self.model, [img])
+        elif self.engine == 'ONNX':
+            pred, inference_time = measure_time(self.model.run, 
+                                                [self.output_name],
+                                                {self.input_name: img})
+        elif self.engine == 'TensorRT':
+            pass
+        elif self.engine == 'CoreML':
+            pred, inference_time = measure_time(self.model.predict, {'input_name': img})
         elif self.engine == 'CANN':
             pred, inference_time = measure_time(self.model.infer, [img])
-        elif self.engine == 'MMdeploy':
-            pass
-        elif self.engine == 'Hailo':
-            pass
-        # elif self.engine == 'Ultralytics':
-        #     device_mapping = {
-        #         'Intel CPU': 'cpu',
-        #         'AMD CPU': 'cpu',
-        #         'ARM CPU': 'cpu',
-        #         'NVIDIA GPU': 'cuda:0'
-        #     }
-        #     pred, inference_time = measure_time(self.model, 
-        #                                         frame, 
-        #                                         conf=self.visualize_config['conf'], 
-        #                                         iou=self.visualize_config['iou'], 
-        #                                         imgsz=(self.input_height, self.input_width),
-        #                                         device=device_mapping[self.device],
-        #                                         verbose=False)
-        # Perform post-processing on the outputs to obtain output image.
-        if self.engine == 'Ultralytics':
-            results, postprecess_time = measure_time(self.postprocess_ultralytics, pred, frame)
-        else:
-            results, postprecess_time = measure_time(self.postprocess, pred, IM)
+
+        # Postprocess the model's output to extract bounding boxes, scores, and class IDs
+        results, postprecess_time = measure_time(self.postprocess, pred, IM)
 
         results['preprocess_time'] = preprocess_time
         results['inference_time'] = inference_time
@@ -379,7 +391,7 @@ class InferenceEngine:
         pass
         
 
-    def draw_detections(self, img, box, score, class_id, line_width=2):
+    def draw_detections(self, img, box, score, class_id, line_width=2, bbox=True, classes=True):
         """
         Draws bounding boxes and labels on the input image based on the detected objects.
 
@@ -398,40 +410,43 @@ class InferenceEngine:
         # Retrieve the color for the class ID
         color = self.classes_color_palette[class_id]
 
-        # Draw the bounding box on the image
-        cv2.rectangle(
-            img=img,
-            pt1=(int(x1), int(y1)),
-            pt2=(int(x1 + w), int(y1 + h)),
-            color=color,
-            thickness=line_width,
-            lineType=cv2.LINE_AA
-        )
+        if bbox:
 
-        # Create the label text with class name and score
-        label = f"{self.classes[class_id]}: {score:.2f}"
+            # Draw the bounding box on the image
+            cv2.rectangle(
+                img=img,
+                pt1=(int(x1), int(y1)),
+                pt2=(int(x1 + w), int(y1 + h)),
+                color=color,
+                thickness=line_width,
+                lineType=cv2.LINE_AA
+            )
 
-        # Calculate the dimensions of the label text
-        (label_width, label_height), _ = cv2.getTextSize(label, cv2.FONT_HERSHEY_SIMPLEX, 0.5, 1)
+        if classes:
+            # Create the label text with class name and score
+            label = f"{self.classes[class_id]}: {score:.2f}"
 
-        # Calculate the position of the label text
-        label_x = int(x1)
-        label_y = int(y1 - 10) if y1 - 10 > label_height else int(y1 + 10)
+            # Calculate the dimensions of the label text
+            (label_width, label_height), _ = cv2.getTextSize(label, cv2.FONT_HERSHEY_SIMPLEX, 0.5, 1)
 
-        # Draw a filled rectangle as the background for the label text
-        cv2.rectangle(
-            img,
-            (label_x, label_y - label_height),
-            (label_x + label_width, label_y + label_height), color, cv2.FILLED
-        )
+            # Calculate the position of the label text
+            label_x = int(x1)
+            label_y = int(y1 - 10) if y1 - 10 > label_height else int(y1 + 10)
 
-        # Draw the label text on the image
-        cv2.putText(img, label,
-                    (label_x, label_y),
-                    cv2.FONT_HERSHEY_SIMPLEX,
-                    0.5,
-                    (0, 0, 0),
-                    1, cv2.LINE_AA)
+            # Draw a filled rectangle as the background for the label text
+            cv2.rectangle(
+                img,
+                (label_x, label_y - label_height),
+                (label_x + label_width, label_y + label_height), color, cv2.FILLED
+            )
+
+            # Draw the label text on the image
+            cv2.putText(img, label,
+                        (label_x, label_y),
+                        cv2.FONT_HERSHEY_SIMPLEX,
+                        0.5,
+                        (0, 0, 0),
+                        1, cv2.LINE_AA)
 
     def draw_keypoints(self, img, keypoints, radius=5):
         for i, keypoint in enumerate(keypoints):
@@ -493,8 +508,9 @@ class InferenceEngine:
 
         if len(boxes) > 0:
             if boxes.ndim == 1:
-                if self.visualize_config['show_bbox']:
-                    self.draw_detections(frame, boxes, scores, class_ids)
+                self.draw_detections(frame, boxes, scores, class_ids, 
+                                     bbox=self.visualize_config['show_bbox'],
+                                     classes=self.visualize_config['show_classes'])
                 if self.visualize_config['show_keypoints']:
                     self.draw_keypoints(frame, keypoints_list,
                                         radius=self.visualize_config['radius'])
@@ -503,8 +519,9 @@ class InferenceEngine:
                                        line_width=self.visualize_config['skeleton_line_width'])
             else:
                 for i, box in enumerate(boxes):
-                    if self.visualize_config['show_bbox']:
-                        self.draw_detections(frame, box, scores[i], class_ids[i])
+                    self.draw_detections(frame, box, scores[i], class_ids[i],
+                                        bbox=self.visualize_config['show_bbox'],
+                                        classes=self.visualize_config['show_classes'])
                     if self.visualize_config['show_keypoints']:
                         self.draw_keypoints(frame, keypoints_list[i],
                                             radius=self.visualize_config['radius'])
