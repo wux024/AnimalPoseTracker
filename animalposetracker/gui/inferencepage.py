@@ -90,7 +90,6 @@ class AnimalPoseInferencePage(QWidget, Ui_AnimalPoseInference):
         self.Save.stateChanged.connect(self.onSaveStateChanged)
         self.IoU.valueChanged.connect(self.onIoUChanged)
         self.Conf.valueChanged.connect(self.onConfChanged)
-        self.Show.stateChanged.connect(self.onShowStateChanged)
         self.Backgroud.stateChanged.connect(self.onBackgroudStateChanged)
         self.ShowClasses.stateChanged.connect(self.onShowClassesStateChanged)
         self.ShowKeypoints.stateChanged.connect(self.onShowKeypointsStateChanged)
@@ -840,10 +839,6 @@ class AnimalPoseInferencePage(QWidget, Ui_AnimalPoseInference):
     def onConfChanged(self, value):
         """Handle changes to the Confidence threshold slider value"""
         self.inference.update_config({"conf": value})
-
-    def onShowStateChanged(self, state):
-        """Handle changes to the Show output checkbox state"""
-        self.inference.update_config({"show": bool(state)})
 
     def onBackgroudStateChanged(self, state):
         """Handle changes to the Show Backgroud checkbox state"""
