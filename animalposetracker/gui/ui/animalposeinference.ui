@@ -719,7 +719,7 @@
              </size>
             </property>
             <property name="text">
-             <string>There are 50 classes!</string>
+             <string/>
             </property>
            </widget>
           </item>

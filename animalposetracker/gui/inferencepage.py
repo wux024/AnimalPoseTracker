@@ -184,6 +184,10 @@ class AnimalPoseInferencePage(QWidget, Ui_AnimalPoseInference):
             # Store configuration
             self.data_config_path = file_path
             self.data_config = config
+            classes = self.data_config.get('classes', 0)
+            if not isinstance(classes, int):
+                raise ValueError("Invalid 'classes' value in configuration")
+            self.Classes.setText(f"There {'are' if classes > 1 else 'is'} {classes} {'classes' if classes > 1 else 'class'}!")
             
             # Update UI
             filename = os.path.basename(file_path)
