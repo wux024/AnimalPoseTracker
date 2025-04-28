@@ -210,46 +210,6 @@ class InferenceEngine:
         except ImportError:
             raise ImportError("Please install coremltools to use CoreML engine.")
     
-
-    def inference(self, frame):
-        """
-        Performs inference using an ONNX model and returns the
-        output image with drawn detections.
-
-        Returns:
-            output_img: The output image with drawn detections.
-        """
-
-        # Preprocess the image data
-        [img, IM], preprocess_time = measure_time(self.preprocess, frame)
-
-        # Run inference using the preprocessed image data
-        if self.engine == 'OpenCV':
-            self.model.setInput(img)
-            pred, inference_time = measure_time(self.model.forward)
-        elif self.engine == 'OpenVINO':
-            pred, inference_time = measure_time(self.model, [img])
-        elif self.engine == 'ONNX':
-            pred, inference_time = measure_time(self.model.run, 
-                                                [self.output_name],
-                                                {self.input_name: img})
-        elif self.engine == 'TensorRT':
-            pass
-        elif self.engine == 'CoreML':
-            pred, inference_time = measure_time(self.model.predict, {'input_name': img})
-        elif self.engine == 'CANN':
-            pred, inference_time = measure_time(self.model.infer, [img])
-
-        # Postprocess the model's output to extract bounding boxes, scores, and class IDs
-        results, postprecess_time = measure_time(self.postprocess, pred, IM)
-
-        results['preprocess_time'] = preprocess_time
-        results['inference_time'] = inference_time
-        results['postprecess_time'] = postprecess_time
-        results['fps'] = 1.0 / (inference_time + postprecess_time + preprocess_time + 1e-7)
-
-        return results
-
     def preprocess(self, input_image):
         """
         Preprocesses the input image before performing inference.
@@ -386,7 +346,24 @@ class InferenceEngine:
             }
         # Return the modified input image
         return results
+    
+    def inference(self, img):
+        # Run inference using the preprocessed image data
+        if self.engine == 'OpenCV':
+            self.model.setInput(img)
+            pred = self.model.forward()
+        elif self.engine == 'OpenVINO':
+            pred = self.model([img])
+        elif self.engine == 'ONNX':
+            pred = self.model.run([self.output_name], {self.input_name: img})
+        elif self.engine == 'TensorRT':
+            pass
+        elif self.engine == 'CANN':
+            pred = self.model.infer([img])
+        elif self.engine == 'CoreML':
+            pred = self.model.predict({'input_name': img})
         
+        return pred
 
     def draw_detections(self, img, box, score, class_id, line_width=2, bbox=True, classes=True):
         """
@@ -473,79 +450,6 @@ class InferenceEngine:
                      lineType=cv2.LINE_AA
                      )
     
-
-    def process_frame(self, frame):
-        """
-        Processes a single frame of video and returns the output image with drawn detections.
-
-        Args:
-            frame: The input frame to process.
-
-        Returns:
-            output_img: The output image with drawn detections.
-        """
-        if not isinstance(frame, np.ndarray):
-            raise TypeError("Input frame must be a numpy array.")
-
-        results = self.inference(frame)
-
-        boxes = results['boxes']
-        keypoints_list = results['keypoints_list']
-        scores = results['scores']
-        class_ids = results['class_ids']
-
-        if self.visualize_config['background'] == 'Black':
-            frame = np.zeros_like(frame)
-        elif self.visualize_config['background'] == 'White':
-            frame = np.ones_like(frame) * 255
-        elif self.visualize_config['background'] == 'Original':
-            pass
-
-        if len(boxes) > 0 and boxes is not None:
-            if boxes.ndim == 1:
-                self.draw_detections(frame, boxes, scores, class_ids, 
-                                     bbox=self.visualize_config['show_bbox'],
-                                     classes=self.visualize_config['show_classes'])
-                if self.visualize_config['show_keypoints']:
-                    self.draw_keypoints(frame, keypoints_list,
-                                        radius=self.visualize_config['radius'])
-                if self.visualize_config['show_skeletons']:
-                    self.draw_skeleton(frame, keypoints_list,
-                                       line_width=self.visualize_config['skeleton_line_width'])
-            else:
-                for i, box in enumerate(boxes):
-                    self.draw_detections(frame, box, scores[i], class_ids[i],
-                                        bbox=self.visualize_config['show_bbox'],
-                                        classes=self.visualize_config['show_classes'])
-                    if self.visualize_config['show_keypoints']:
-                        self.draw_keypoints(frame, keypoints_list[i],
-                                            radius=self.visualize_config['radius'])
-                    if self.visualize_config['show_skeletons']:
-                        self.draw_skeleton(frame, keypoints_list[i],
-                                           line_width=self.visualize_config['skeleton_line_width'])
-
-        times = {
-            'preprocess_time': 'preprocess: {:.3f} ms'.format(results['preprocess_time'] * 1000.0),
-            'inference_time': 'inference: {:.3f} ms'.format(results['inference_time'] * 1000.0),
-            'postprocess_time': 'postprocess: {:.3f} ms'.format(results['postprecess_time'] * 1000.0),
-            'fps': 'FPS: {:.1f} FPS'.format(results['fps'])
-        }
-
-        cv2.putText(frame, times['fps'], (5, 20),
-                    cv2.FONT_HERSHEY_SIMPLEX,
-                    0.5, (0, 255, 0), 1, cv2.LINE_AA)
-        cv2.putText(frame, times['preprocess_time'], (5, 40),
-                    cv2.FONT_HERSHEY_SIMPLEX,
-                    0.5, (0, 255, 0), 1, cv2.LINE_AA)
-        cv2.putText(frame, times['inference_time'], (5, 60),
-                    cv2.FONT_HERSHEY_SIMPLEX,
-                    0.5, (0, 255, 0), 1, cv2.LINE_AA)
-        cv2.putText(frame, times['postprocess_time'], (5, 80),
-                    cv2.FONT_HERSHEY_SIMPLEX,
-                    0.5, (0, 255, 0), 1, cv2.LINE_AA)
-
-        return frame, results
-    
     def visualize(self, frame, results):
         """
         Visualizes the output of the model on a single frame of video.
@@ -614,3 +518,33 @@ class InferenceEngine:
                     0.5, (0, 255, 0), 1, cv2.LINE_AA)
         
         return frame
+    
+
+    def process_frame(self, frame):
+        """
+        Performs inference and returns the output image with drawn detections.
+
+        Returns:
+            output_img: The output image with drawn detections.
+        """
+
+        # Preprocess the image data
+        [img, IM], preprocess_time = measure_time(self.preprocess, frame)
+
+        # Run inference using the preprocessed image data
+
+        pred, inference_time = measure_time(self.inference, img)
+
+
+        # Postprocess the model's output to extract bounding boxes, scores, and class IDs
+        results, postprecess_time = measure_time(self.postprocess, pred, IM)
+
+        results['preprocess_time'] = preprocess_time
+        results['inference_time'] = inference_time
+        results['postprecess_time'] = postprecess_time
+        results['fps'] = 1.0 / (inference_time + postprecess_time + preprocess_time + 1e-7)
+
+        # Visualize the output of the model on the input image
+        frame = self.visualize(frame, results)
+
+        return frame, results

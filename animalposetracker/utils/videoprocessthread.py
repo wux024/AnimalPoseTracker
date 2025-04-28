@@ -4,23 +4,16 @@ import numpy as np
 from PySide6.QtCore import QThread, Signal, QMutex
 import queue
 import traceback
+from pathlib import Path
+import json
 
 
 class VideoReaderThread(QThread):
     """Thread to run video reading"""
-    # Signal emitted when a frame is read from file
     original_frame = Signal(np.ndarray)
-    # Signal emitted to update the processing status
     status_update = Signal(str)
 
     def __init__(self, cap=None, parent=None):
-        """
-        Initialize the VideoProcessorThread.
-
-        :param source: Video source, e.g., camera index or video file path
-        :param parent: Parent object
-        :param processing_function: Function to process each frame
-        """
         super().__init__(parent)
         self._cap = cap
         self.running = False
@@ -28,26 +21,13 @@ class VideoReaderThread(QThread):
 
     @property
     def cap(self):
-        """
-        Get the video source.
-
-        :return: Video source
-        """
         return self._cap
 
     @cap.setter
     def cap(self, value):
-        """
-        Set the video source.
-
-        :param value: Video source
-        """
         self._cap = value
 
     def run(self):
-        """
-        Start the video processing loop.
-        """
         try:
             self._lock.lock()
             self.running = True
@@ -70,20 +50,12 @@ class VideoReaderThread(QThread):
 
     @property
     def is_running(self):
-        """
-        Check if the thread is running.
-
-        :return: True if running, False otherwise
-        """
         self._lock.lock()
         is_running = self.running
         self._lock.unlock()
         return is_running
 
     def safe_stop(self):
-        """
-        Safely stop the video processing thread.
-        """
         self._lock.lock()
         self.running = False
         self._lock.unlock()
@@ -91,50 +63,273 @@ class VideoReaderThread(QThread):
         self._release_resources()
 
     def _release_resources(self):
-        """
-        Release the video capture resources.
-        """
         if self.cap is not None and self.cap.isOpened():
             self.cap.release()
             self.status_update.emit("Video capture resources released")
 
+
+class PreprocessThread(QThread):
+    """Thread to run preprocess"""
+    # preprocessed_frame: original frame, preprocessed image, affine matrix, preprocess time
+    preprocessed_frame = Signal(np.ndarray, np.ndarray, np.ndarray, float)
+    status_update = Signal(str)
+
+    def __init__(self, preprocess_function=None, buffer_queue=None, parent=None):
+        super().__init__(parent)
+        self._preprocess_function = preprocess_function
+        self.running = False
+        self._lock = QMutex()
+        self.buffer_queue = buffer_queue
+
+    @property
+    def preprocess_function(self):
+        return self._preprocess_function
+
+    @preprocess_function.setter
+    def preprocess_function(self, value):
+        self._preprocess_function = value
+
+    def run(self):
+        try:
+            self._lock.lock()
+            self.running = True
+            self._lock.unlock()
+            while self.is_running:
+                try:
+                    frame = self.buffer_queue.get(timeout=1)
+                    start_time = time.time()
+                    img, IM = self._preprocess_function(frame)
+                    pre_time = time.time() - start_time
+                    self.preprocessed_frame.emit(frame, img, IM, pre_time)
+                except queue.Empty:
+                    pass
+        except Exception as e:
+            error_info = traceback.format_exc()
+            self.status_update.emit(f"(PreprocessThread) Unexpected error: \n{error_info}")
+        finally:
+            self.safe_stop()
+
+    @property
+    def is_running(self):
+        self._lock.lock()
+        is_running = self.running
+        self._lock.unlock()
+        return is_running
+
+    def safe_stop(self):
+        self._lock.lock()
+        self.running = False
+        self._lock.unlock()
+        self.wait()
+
+
+class InferenceThread(QThread):
+    """Thread to run inference"""
+    # inference_done: original frame, predicted results, affine matrix, 
+    # preprocess time, inference time
+    inference_done = Signal(np.ndarray, np.ndarray, np.ndarray, float, float)
+    status_update = Signal(str)
+
+    def __init__(self, inference_function=None, buffer_queue=None, parent=None):
+        super().__init__(parent)
+        self.running = False
+        self._lock = QMutex()
+        self.buffer_queue = buffer_queue
+        self._inference_function = inference_function
+
+    @property
+    def inference_function(self):
+        return self._inference_function
+
+    @inference_function.setter
+    def inference_function(self, value):
+        self._inference_function = value
+
+    def run(self):
+        try:
+            self._lock.lock()
+            self.running = True
+            self._lock.unlock()
+            while self.is_running:
+                try:
+                    frame, img, IM, pre_time = self.buffer_queue.get(timeout=1)
+                    start_time = time.time()
+                    pred = self._inference_function(img)
+                    infer_time = time.time() - start_time
+                    self.inference_done.emit(frame, pred, IM, pre_time, infer_time)
+                except queue.Empty:
+                    pass
+        except Exception as e:
+            error_info = traceback.format_exc()
+            self.status_update.emit(f"(InferenceThread) Unexpected error: \n{error_info}")
+        finally:
+            self.safe_stop()
+
+    @property
+    def is_running(self):
+        self._lock.lock()
+        is_running = self.running
+        self._lock.unlock()
+        return is_running
+
+    def safe_stop(self):
+        self._lock.lock()
+        self.running = False
+        self._lock.unlock()
+        self.wait()
+
+
+class PostprocessThread(QThread):
+    """Thread to run postprocessing"""
+    # postprocessed_frame: original frame, predicted results
+    postprocessed_frame = Signal(np.ndarray, dict)
+    status_update = Signal(str)
+
+    def __init__(self, postprocess_function=None, buffer_queue=None, parent=None):
+        super().__init__(parent)
+        self._postprocess_function = postprocess_function
+        self.running = False
+        self._lock = QMutex()
+        self.buffer_queue = buffer_queue
+
+    @property
+    def postprocess_function(self):
+        return self._postprocess_function
+
+    @postprocess_function.setter
+    def postprocess_function(self, value):
+        self._postprocess_function = value
+
+    def run(self):
+        try:
+            self._lock.lock()
+            self.running = True
+            self._lock.unlock()
+            while self.is_running:
+                try:
+                    frame, pred, IM, pre_time, infer_time = self.buffer_queue.get(timeout=1)
+                    start_time = time.time()
+                    results = self._postprocess_function(pred, IM)
+                    post_time = time.time() - start_time
+                    results.update(
+                        {'preprocess_time': pre_time, 
+                         'inference_time': infer_time, 
+                         'postprecess_time': post_time,
+                         'fps': 1.0 / (pre_time + infer_time + post_time + 1e-7)})
+                    self.postprocessed_frame.emit(frame, results)
+                except queue.Empty:
+                    pass
+        except Exception as e:
+            error_info = traceback.format_exc()
+            self.status_update.emit(f"(PostprocessThread) Unexpected error: \n{error_info}")
+        finally:
+            self.safe_stop()
+
+    @property
+    def is_running(self):
+        self._lock.lock()
+        is_running = self.running
+        self._lock.unlock()
+        return is_running
+
+    def safe_stop(self):
+        self._lock.lock()
+        self.running = False
+        self._lock.unlock()
+        self.wait()
+
+
+class VisualizeThread(QThread):
+    """Thread to run visualization"""
+    # visualized_frame: visualized frame, predicted results
+    visualized_frame = Signal(np.ndarray, dict)
+    status_update = Signal(str)
+
+    def __init__(self, visualize_function=None, buffer_queue=None, parent=None):
+        super().__init__(parent)
+        self._visualize_function = visualize_function
+        self.running = False
+        self._lock = QMutex()
+        self.buffer_queue = buffer_queue
+
+    @property
+    def visualize_function(self):
+        return self._visualize_function
+
+    @visualize_function.setter
+    def visualize_function(self, value):
+        self._visualize_function = value
+
+    def run(self):
+        try:
+            self._lock.lock()
+            self.running = True
+            self._lock.unlock()
+            while self.is_running:
+                try:
+                    frame, results = self.buffer_queue.get(timeout=1)
+                    visualized_frame = self._visualize_function(frame, results)
+                    self.visualized_frame.emit(visualized_frame, results)
+                except queue.Empty:
+                    pass
+        except Exception as e:
+            error_info = traceback.format_exc()
+            self.status_update.emit(f"(VisualizeThread) Unexpected error: \n{error_info}")
+        finally:
+            self.safe_stop()
+
+    @property
+    def is_running(self):
+        self._lock.lock()
+        is_running = self.running
+        self._lock.unlock()
+        return is_running
+
+    def safe_stop(self):
+        self._lock.lock()
+        self.running = False
+        self._lock.unlock()
+        self.wait()
+
+
 class VideoWriterThread(QThread):
     """Thread to run video writing"""
-    # Signal emitted when a frame is written to file
-    def __init__(self, save_path = None, fps=30, frame_size=(640, 480)):
+    def __init__(self, save_path=None, fps=30, frame_size=(640, 480)):
         super().__init__()
         self._save_path = save_path
         self._fps = fps
         self._frame_size = frame_size
         self.video_writer = None
         self.frames = []
+        self.results = []
+        self.frame_count = 0
         self._stop_flag = False
         self._lock = QMutex()
-    
+
     @property
     def save_path(self):
         return self._save_path
-    
+
     @save_path.setter
     def save_path(self, value):
         self._save_path = value
-    
+
     @property
     def fps(self):
         return self._fps
-    
+
     @fps.setter
     def fps(self, value):
         self._fps = value
-    
+
     @property
     def frame_size(self):
         return self._frame_size
-    
+
     @frame_size.setter
     def frame_size(self, value):
         self._frame_size = value
-    
+
     def run(self):
         fourcc = cv2.VideoWriter_fourcc(*'XVID')
         self.video_writer = cv2.VideoWriter(self.save_path, fourcc, self.fps, self.frame_size)
@@ -142,126 +337,29 @@ class VideoWriterThread(QThread):
             if self.frames:
                 frame = self.frames.pop(0)
                 self.video_writer.write(frame)
+                result = self.results.pop(0)
+                self.save_result(result)
+                self.frame_count += 1
         self.video_writer.release()
-    
-    def add_frame(self, frame):
+
+    def add_frame(self, frame, result):
         self.frames.append(frame)
-    
+        self.results.append(result)
+
     def safe_stop(self):
-        """
-        Safely stop the video processing thread.
-        """
         self._lock.lock()
         self._stop_flag = True
         self._lock.unlock()
         self.wait()
         self._release_resources()
 
-class FrameProcessorThread(QThread):
-    """Thread to run frame processing"""
-    # Signal emitted when a frame is processed
-    frame_processed = Signal(np.ndarray)
-    # Signal emitted to update the processing status
-    status_update = Signal(str)
-
-    def __init__(self, processing_function=None, processing_kwargs=None, buffer_queue=None, parent=None):
-        """
-        Initialize the FrameProcessorThread.
-
-        :param processing_function: Function to process each frame
-        :param parent: Parent object
-        """
-        super().__init__(parent)
-        self._processing_function = processing_function
-        self._processing_kwargs = processing_kwargs if processing_kwargs is not None else {}
-        self.running = False
-        self._lock = QMutex()
-        self.buffer_queue = buffer_queue
-
-    @property
-    def processing_function(self):
-        """
-        Get the processing function.
-
-        :return: Processing function
-        """
-        return self._processing_function
-
-    @processing_function.setter
-    def processing_function(self, value):
-        """
-        Set the processing function.
-
-        :param value: Processing function
-        """
-        self._processing_function = value
+    def _release_resources(self):
+        if self.video_writer is not None:
+            self.video_writer.release()
     
-    @property
-    def processing_kwargs(self):
-        """
-        Get the processing function keyword arguments.
-
-        :return: Processing function keyword arguments
-        """
-        return self._processing_kwargs
-
-    @processing_kwargs.setter
-    def processing_kwargs(self, value):
-        """
-        Set the processing function keyword arguments.
-
-        :param value: Processing function keyword arguments
-        """
-        self._processing_kwargs = value
-
-    def run(self):
-        """
-        Start the frame processing loop.
-        """
-        try:
-            self._lock.lock()
-            self.running = True
-            self._lock.unlock()
-            self.status_update.emit("Frame processor started")
-            while self.is_running:
-                try:
-                    frame = self.buffer_queue.get(timeout=1)
-                    if self._processing_kwargs:
-                        processed_frame = self._processing_function(frame, **self._processing_kwargs)
-                    else:
-                        processed_frame = self._processing_function(frame)
-                    if isinstance(processed_frame, tuple):
-                        self.frame_processed.emit(processed_frame[0])
-                    else:
-                        self.frame_processed.emit(processed_frame)
-                except queue.Empty:
-                    pass
-        except Exception as e:
-            error_info = traceback.format_exc()
-            self.status_update.emit(f"(FrameProcessorThread) Unexpected error: \n{error_info}")
-        finally:
-            self._lock.lock()
-            self.running = False
-            self._lock.unlock()
-
-    @property
-    def is_running(self):
-        """
-        Check if the thread is running.
-
-        :return: True if running, False otherwise
-        """
-        self._lock.lock()
-        is_running = self.running
-        self._lock.unlock()
-        return is_running
-
-    def safe_stop(self):
-        """
-        Safely stop the frame processing thread.
-        """
-        self._lock.lock()
-        self.running = False
-        self._lock.unlock()
-        self.wait()
-
+    def save_result(self, result):
+        save_path = Path(self.save_path)
+        save_path = save_path.parent / (f'frame{self.frame_count}.json')
+        with save_path.open('w') as f:
+            json.dump(result, f, indent=4)
+            
