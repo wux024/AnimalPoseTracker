@@ -44,7 +44,7 @@ ENGINEtoBackend = {
     {
         "Intel CPU": "CPU",
         "Intel GPU": "GPU",
-        "Intel NPU": "MYRIAD",
+        "Intel NPU": "NPU",
     },
     "ONNX": 
     {

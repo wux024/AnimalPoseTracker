@@ -301,8 +301,6 @@ class VideoWriterThread(QThread):
         self._frame_size = frame_size
         self.video_writer = None
         self.frames = []
-        self.results = []
-        self.frame_count = 0
         self._stop_flag = False
         self._lock = QMutex()
 
@@ -337,14 +335,10 @@ class VideoWriterThread(QThread):
             if self.frames:
                 frame = self.frames.pop(0)
                 self.video_writer.write(frame)
-                result = self.results.pop(0)
-                self.save_result(result)
-                self.frame_count += 1
         self.video_writer.release()
 
-    def add_frame(self, frame, result):
+    def add_frame(self, frame):
         self.frames.append(frame)
-        self.results.append(result)
 
     def safe_stop(self):
         self._lock.lock()
@@ -356,10 +350,4 @@ class VideoWriterThread(QThread):
     def _release_resources(self):
         if self.video_writer is not None:
             self.video_writer.release()
-    
-    def save_result(self, result):
-        save_path = Path(self.save_path)
-        save_path = save_path.parent / (f'frame{self.frame_count}.json')
-        with save_path.open('w') as f:
-            json.dump(result, f, indent=4)
             

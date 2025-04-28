@@ -79,6 +79,8 @@ class AnimalPoseInferencePage(QWidget, Ui_AnimalPoseInference):
         self.FPSSetup.valueChanged.connect(self.onFPSSetupChanged)
         
         # Engine and device signals
+        self.EngineSelection.clear()
+        self.DeviceSelection.clear()
         self.EngineSelection.currentIndexChanged.connect(self.onEngineSelectionChanged)
         self.DeviceSelection.currentIndexChanged.connect(self.onDeviceSelectionChanged)
         
@@ -87,7 +89,6 @@ class AnimalPoseInferencePage(QWidget, Ui_AnimalPoseInference):
         self.End.clicked.connect(self.onEndClicked)
         
         # Display option signals
-        self.Save.stateChanged.connect(self.onSaveStateChanged)
         self.IoU.valueChanged.connect(self.onIoUChanged)
         self.Conf.valueChanged.connect(self.onConfChanged)
         self.Backgroud.stateChanged.connect(self.onBackgroudStateChanged)
@@ -638,7 +639,7 @@ class AnimalPoseInferencePage(QWidget, Ui_AnimalPoseInference):
         self.postprocess_thread.start()
         self.visualize_thread.start()
         if self.Save.isChecked():
-            self.video_writer_thread.start()
+            self.videowriter_thread.start()
         self.display_thread.start(1000 // self.fps)
 
     def _stop_inference_threads(self):
@@ -751,12 +752,12 @@ class AnimalPoseInferencePage(QWidget, Ui_AnimalPoseInference):
             self.Start.setEnabled(True)
             return
         
-        frame, result = self.visualization_cache.get(block=False)
+        frame, _ = self.visualization_cache.get(block=False)
 
         if (self.Save.isChecked() and 
             self.videowriter_thread is not None 
             and self.videowriter_thread.isRunning()):
-            self.videowriter_thread.add_frame(frame, result=result)
+            self.videowriter_thread.add_frame(frame)
         
         if self.Show.isChecked():
             RGB = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
@@ -795,6 +796,7 @@ class AnimalPoseInferencePage(QWidget, Ui_AnimalPoseInference):
     def onEngineSelectionChanged(self, index):
         """Handle changes in engine selection"""
         self.engine = self.EngineSelection.itemText(index)
+        self._update_available_devices()
         self._show_info(f"Selected Inference Engine: {self.engine}")
     
     def onDeviceSelectionChanged(self, index):
@@ -827,10 +829,6 @@ class AnimalPoseInferencePage(QWidget, Ui_AnimalPoseInference):
         self._stop_inference_threads()
         self.Start.setText("Start")
         self.Start.setEnabled(True)
-    
-    def onSaveStateChanged(self, state):
-        """Handle changes to the Save output checkbox state"""
-        self.inference.update_config({"save": bool(state)})
     
     def onIoUChanged(self, value):
         """Handle changes to the IOU threshold slider value"""
