@@ -287,12 +287,11 @@ class AnimalPoseTrackerProject:
                 raise FileNotFoundError(f"path not found: {src_path}")
                 
             src_resolved = src_path.resolve()
-            if any(s == str(src_resolved) for s in current_sources):
-                print(f"Source already exists: {src_path}")
-                continue
 
             src_path = self._handle_file_move_or_copy(src_path, move_or_copy)
 
+            if str(src_path) in current_sources:
+                continue
             added_sources.append(str(src_path))
             current_sources.append(src_resolved)
             
@@ -323,6 +322,8 @@ class AnimalPoseTrackerProject:
             else:
                 dst_path = self.project_path / "sources" / "videos" / src_path.name
                 dst_path.parent.mkdir(parents=True, exist_ok=True)
+                if dst_path.exists():
+                    return dst_path
                 self._perform_operation(src_path, dst_path, move_or_copy)
             return dst_path
         except FileNotFoundError:

@@ -497,6 +497,7 @@ class AnimalPoseTrackerPage(QMainWindow, Ui_AnimalPoseTracker):
                         valid.append(str(path_obj))
             
             if valid:
+                print(valid)
                 self.project.add_source_to_project(valid, move_or_copy='copy')
                 self.SelectionVideosImagesLabel.setText(f"{len(valid)} video(s) selected")
             else:
