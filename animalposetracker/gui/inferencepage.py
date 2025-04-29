@@ -306,12 +306,12 @@ class AnimalPoseInferencePage(QWidget, Ui_AnimalPoseInference):
         try:
             import cpuinfo
             info = cpuinfo.get_cpu_info()
-            vendor = info.get('vendor_id_raw')
+            vendor = info.get('vendor_id_raw', '')
             if vendor == 'GenuineIntel':
                 return 'Intel'
             elif vendor == 'AuthenticAMD':
                 return 'AMD'
-            elif 'ARM' in info.get('brand_raw', ''):
+            elif 'ARM' in info.get('arch', ''):
                 return 'ARM'
             else:
                 raise ValueError(f"Unsupported CPU vendor: {vendor}")
@@ -746,7 +746,7 @@ class AnimalPoseInferencePage(QWidget, Ui_AnimalPoseInference):
         ):
             return
         elif (self.visualization_cache.empty() and 
-              not self.videoreader_thread.isRunning()):
+              not self.videoreader_thread.isFinished()):
             self._stop_inference_threads()
             self.Start.setText("Start")
             self.Start.setEnabled(True)

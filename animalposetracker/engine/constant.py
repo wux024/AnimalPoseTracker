@@ -64,7 +64,8 @@ OpenCV_TARGETS = {
     "CPU FP16": cv2.dnn.DNN_TARGET_OPENCL_FP16,
     "NVIDIA GPU": cv2.dnn.DNN_TARGET_CUDA,
     "NVIDIA GPU FP16": cv2.dnn.DNN_TARGET_CUDA_FP16,
-    "Intel GPU": cv2.dnn.DNN_TARGET_MYRIAD,
+    "Intel GPU": cv2.dnn.DNN_TARGET_OPENCL,
+    "Intel GPU FP16": cv2.dnn.DNN_TARGET_OPENCL_FP16,
     "Intel NPU": cv2.dnn.DNN_TARGET_MYRIAD,
     "Ascend NPU": cv2.dnn.DNN_TARGET_NPU,
 }

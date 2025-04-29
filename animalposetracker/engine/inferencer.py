@@ -153,10 +153,20 @@ class InferenceEngine:
             cv2_backend = cv2_backends.get(self.device)
             if self.device == "NVIDIA GPU" and self.model_bits == "FP16":
                 cv2_target = OpenCV_TARGETS.get("NVIDIA GPU FP16")
+            if self.device == "Intel GPU" and self.model_bits == "FP16":
+                cv2_target = OpenCV_TARGETS.get("Intel GPU FP16")
             else:
                 cv2_target = OpenCV_TARGETS.get(self.device)
-            
-        self.model = cv2.dnn.readNetFromONNX(self.weights_path)
+        if Path(self.weights_path).suffix == '.onnx':
+            self.model = cv2.dnn.readNetFromONNX(self.weights_path)
+        elif (Path(self.weights_path).suffix == '.xml' and 
+              Path(self.weights_path).with_suffix('.bin').exists() and 
+              self.device in ["Intel GPU", "Intel NPU"]):
+            xml_path = Path(self.weights_path)
+            bin_path = Path(self.weights_path).with_suffix('.bin')
+            self.model = cv2.dnn.readNet(str(xml_path), str(bin_path))
+        else:
+            raise ValueError("Invalid weights file format. Please provide either an ONNX or an XML+BIN file.")
         self.model.setPreferableBackend(cv2_backend)
         self.model.setPreferableTarget(cv2_target)
 
