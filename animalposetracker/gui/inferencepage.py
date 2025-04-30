@@ -30,6 +30,7 @@ class AnimalPoseInferencePage(QWidget, Ui_AnimalPoseInference):
 
         # constants
         self.camera_list = {}
+        self.supported_engines_and_devices = {}
         self.read_cache = queue.Queue(maxsize=1024)
         self.preprocessed_cache = queue.Queue(maxsize=1024)
         self.inference_cache = queue.Queue(maxsize=1024)
@@ -254,13 +255,13 @@ class AnimalPoseInferencePage(QWidget, Ui_AnimalPoseInference):
         file_ext = file_path.suffix.lower()
         self.weights_path = file_path
 
-        engines = self._get_supported_engines(file_ext)
+        self._get_supported_engines_and_devices(file_ext)
 
-        if not engines:
+        if not self.supported_engines_and_devices:
             self._show_info("Unsupported format for current platform")
             raise ValueError(f"Unsupported format: {file_ext}")
 
-        self._populate_engine_selection(engines)
+        self._populate_engine_selection(list(self.supported_engines_and_devices.keys()))
         self._update_available_devices()
 
         if hasattr(self, 'model_config_path'):
@@ -276,14 +277,14 @@ class AnimalPoseInferencePage(QWidget, Ui_AnimalPoseInference):
         self.EngineSelection.clear()
         self.DeviceSelection.clear()
     
-    def _get_supported_engines(self, file_ext):
+    def _get_supported_engines_and_devices(self, file_ext):
         """Get supported engines based on file extension"""
         if file_ext == '.onnx':
             supported_engines = ["OpenCV", "ONNX", 'OpenVINO']
         elif file_ext == '.xml':
             supported_engines =  ["OpenVINO"]
         elif file_ext == '.om':
-            supported_engines =  ["CANN"]
+            supported_engines =  ["OpenCV", "CANN"]
         elif file_ext == '.engine':
             supported_engines =  ["TensorRT"]
         elif file_ext == '.mlmodel':
@@ -291,8 +292,11 @@ class AnimalPoseInferencePage(QWidget, Ui_AnimalPoseInference):
         else:
             raise ValueError(f"Unsupported format: {file_ext}")
         
-        return supported_engines
-
+        for engine in supported_engines:
+            device_list = self._get_supported_devices(engine)
+            if device_list:
+                self.supported_engines_and_devices[engine] = device_list
+                
     def _populate_engine_selection(self, engines):
         self.EngineSelection.addItems(engines)
         default_engine = engines[0]
@@ -325,7 +329,7 @@ class AnimalPoseInferencePage(QWidget, Ui_AnimalPoseInference):
         self.DeviceSelection.clear()
         available_devices = self._get_supported_devices(current_engine)
         if available_devices:
-            self.DeviceSelection.addItems(available_devices)
+            self.DeviceSelection.addItems(self.supported_engines_and_devices[current_engine])
         else:
             self._show_info(f"{current_engine} engine not available or no supported devices found")
             raise ValueError(f"{current_engine} engine not available or no supported devices found")

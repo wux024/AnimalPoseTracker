@@ -4,6 +4,7 @@ import numpy as np
 from datetime import datetime
 import yaml
 from pathlib import Path
+import os
 
 from .constant import ENGINEtoBackend, OpenCV_TARGETS
 
@@ -143,32 +144,75 @@ class InferenceEngine:
 
     def _init_opencv(self):
         cv2_backends = ENGINEtoBackend["OpenCV"]
-        if "CPU" in self.device:
-            cv2_backend = cv2_backends.get("CPU")
-            if self.model_bits == "FP16":
-                cv2_target = OpenCV_TARGETS.get("CPU FP16")
+        cv2_backend, cv2_target = self._get_backend_and_target(cv2_backends)
+        self.model = self._load_model()
+        self.model.setPreferableBackend(cv2_backend)
+        self.model.setPreferableTarget(cv2_target)
+
+    def _get_backend_and_target(self, cv2_backends):
+        """
+        Get the appropriate OpenCV backend based on the device.
+        :param cv2_backends: Mapping of device types to OpenCV backends
+        :return: OpenCV backend
+        """
+        try:
+            if "CPU" in self.device:
+                cv2_backend = cv2_backends.get("CPU")
             else:
-                cv2_target = OpenCV_TARGETS.get("CPU")
+                cv2_backend = cv2_backends.get(self.device)
+        except KeyError:
+            raise ValueError(f"Invalid device {self.device}. Please choose from {cv2_backends.keys()}")
+        
+        if cv2.dnn.getAvailableTargets(cv2_backend) == ():
+            if "Intel GPU" in self.device:
+                print("You could build opencv from source with OpenVINO support to "
+                      "use Intel GPU as device. We will use default OpenCV backend instead.")
+                cv2_backend = cv2.dnn.DNN_BACKEND_OPENCV
+                config_path = Path.cwd() / "OCL4DNN_CONFIG_CACHE"
+                config_path.mkdir(exist_ok=True)
+                os.environ['OPENCV_OCL4DNN_CONFIG_PATH'] = str(config_path)
+                if self.model_bits == "FP16":
+                    cv2_target = cv2.dnn.DNN_TARGET_OPENCL_FP16
+                else:
+                    cv2_target = cv2.dnn.DNN_TARGET_OPENCL
+                return cv2_backend, cv2_target
+            elif "NVIDIA GPU" in self.device:
+                raise ValueError("You could build opencv from source with CUDA support to "
+                                 "use NVIDIA GPU as device.")
+            elif "Intel NPU" in self.device:
+                raise ValueError("You could build opencv from source with OpenVINO support to "
+                                 "use Intel NPU as device.")
+            elif "Ascend NPU" in self.device:
+                raise ValueError("You could build opencv from source with CANN support to "
+                                 "use Ascend NPU as device.")
+            elif "Metal" in self.device:
+                raise ValueError("You could build opencv from source with Metal support to "
+                                 "use Metal as device.")
+
+        if self.model_bits == "FP16":
+            target_key = f"{self.device} FP16"
         else:
-            cv2_backend = cv2_backends.get(self.device)
-            if self.device == "NVIDIA GPU" and self.model_bits == "FP16":
-                cv2_target = OpenCV_TARGETS.get("NVIDIA GPU FP16")
-            if self.device == "Intel GPU" and self.model_bits == "FP16":
-                cv2_target = OpenCV_TARGETS.get("Intel GPU FP16")
-            else:
-                cv2_target = OpenCV_TARGETS.get(self.device)
+            target_key = self.device
+        return cv2_backend, OpenCV_TARGETS.get(target_key)
+
+    def _load_model(self):
+        """
+        Load the model based on the weights file format.
+        :return: Loaded OpenCV model
+        """
         if Path(self.weights_path).suffix == '.onnx':
-            self.model = cv2.dnn.readNetFromONNX(self.weights_path)
-        elif (Path(self.weights_path).suffix == '.xml' and 
-              Path(self.weights_path).with_suffix('.bin').exists() and 
+            return cv2.dnn.readNetFromONNX(self.weights_path)
+        elif (Path(self.weights_path).suffix == '.xml' and
+              Path(self.weights_path).with_suffix('.bin').exists() and
               self.device in ["Intel GPU", "Intel NPU"]):
             xml_path = Path(self.weights_path)
             bin_path = Path(self.weights_path).with_suffix('.bin')
-            self.model = cv2.dnn.readNet(str(xml_path), str(bin_path))
+            return cv2.dnn.readNet(str(xml_path), str(bin_path))
+        elif Path(self.weights_path).suffix == '.om':
+            return cv2.dnn.readNet(self.weights_path)
         else:
-            raise ValueError("Invalid weights file format. Please provide either an ONNX or an XML+BIN file.")
-        self.model.setPreferableBackend(cv2_backend)
-        self.model.setPreferableTarget(cv2_target)
+            raise ValueError("Invalid weights file format. "
+                             "Please provide either an ONNX or an XML+BIN file.")
 
     def _init_onnx(self):
         try:

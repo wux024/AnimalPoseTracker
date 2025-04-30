@@ -35,6 +35,7 @@ ENGINEtoBackend = {
     "OpenCV": 
     {
         "CPU": cv2.dnn.DNN_BACKEND_OPENCV,
+        "Metal": cv2.dnn.DNN_BACKEND_OPENCV,
         "NVIDIA GPU": cv2.dnn.DNN_BACKEND_CUDA,
         "Intel GPU": cv2.dnn.DNN_BACKEND_INFERENCE_ENGINE,
         "Intel NPU": cv2.dnn.DNN_BACKEND_INFERENCE_ENGINE,
@@ -61,11 +62,13 @@ ENGINEtoBackend = {
 
 OpenCV_TARGETS = {
     "CPU": cv2.dnn.DNN_TARGET_CPU,
-    "CPU FP16": cv2.dnn.DNN_TARGET_OPENCL_FP16,
+    "CPU FP16": cv2.dnn.DNN_TARGET_CPU_FP16,
     "NVIDIA GPU": cv2.dnn.DNN_TARGET_CUDA,
     "NVIDIA GPU FP16": cv2.dnn.DNN_TARGET_CUDA_FP16,
     "Intel GPU": cv2.dnn.DNN_TARGET_OPENCL,
     "Intel GPU FP16": cv2.dnn.DNN_TARGET_OPENCL_FP16,
-    "Intel NPU": cv2.dnn.DNN_TARGET_MYRIAD,
+    "Intel NPU": cv2.dnn.DNN_TARGET_NPU,
     "Ascend NPU": cv2.dnn.DNN_TARGET_NPU,
+    "Metal": cv2.dnn.DNN_TARGET_OPENCL,
+    "Metal FP16": cv2.dnn.DNN_TARGET_OPENCL_FP16,
 }
