@@ -1037,11 +1037,12 @@ class SplashScreen(QSplashScreen):
 
 def main():
     app = QApplication(sys.argv)
-    
+    app.setStyle("Fusion")
+
     # Initialize splash screen with guaranteed display
     splash = SplashScreen(WELCOME_PATH)
     splash.show()
-    
+
     # Setup loading simulation
     progress = 0
     def simulate_loading():
