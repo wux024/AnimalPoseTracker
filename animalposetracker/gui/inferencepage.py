@@ -751,7 +751,7 @@ class AnimalPoseInferencePage(QWidget, Ui_AnimalPoseInference):
         ):
             return
         elif (self.visualization_cache.empty() and 
-              not self.videoreader_thread.isFinished()):
+              not self.videoreader_thread.running):
             self._stop_inference_threads()
             self.Start.setText("Start")
             self.Start.setEnabled(True)
