@@ -341,6 +341,9 @@ class InferenceEngine:
             numpy.ndarray: The input image with detections drawn on it.
         """
         # Transpose and squeeze the output to match the expected shape
+        if self._coreml:
+            pred = list(pred.values())
+
         outputs = np.transpose(np.squeeze(pred[0]))
 
         # Get the number of rows in the outputs array
