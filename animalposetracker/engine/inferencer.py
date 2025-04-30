@@ -42,6 +42,7 @@ class InferenceEngine:
         self._engine = engine
         self._device = device
         self._model_bits = model_bits
+        self._coreml = False
         self.input_width = input_width
         self.input_height = input_height
         self.visualize_config = {
@@ -74,6 +75,10 @@ class InferenceEngine:
 
     @engine.setter
     def engine(self, engine):
+        if engine == "CoreML":
+            self._coreml = True
+        else:
+            self._coreml = False
         self._engine = engine
 
     @property
@@ -261,13 +266,9 @@ class InferenceEngine:
         try: 
             import coremltools as ct
             self.model = ct.models.MLModel(self.weights_path)
+            self.input_name = self.model.get_spec().description.input[0].name
         except ImportError:
-            try:
-                from coremlpython import MLModel
-                self.model = MLModel(self.weights_path)
-            except ImportError:
-                raise ImportError("Please install coremltools or coremlpython " \
-                "to use CoreML engine.")
+            raise ImportError("Please install coremltools to use CoreML engine.")
 
     
     def preprocess(self, input_image):
@@ -304,6 +305,14 @@ class InferenceEngine:
 
         # Convert the image color space from BGR to RGB
         img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
+
+        if self._coreml:
+            try:
+                from PIL import Image
+                img = Image.fromarray(img)
+                return img, IM
+            except ImportError:
+                raise ImportError("Please install Pillow to use CoreML engine.")
 
         # Normalize the image data by dividing it by 255.0
         img = np.array(img) / 255.0
@@ -421,7 +430,7 @@ class InferenceEngine:
         elif self.engine == 'CANN':
             pred = self.model.infer([img])
         elif self.engine == 'CoreML':
-            pred = self.model.predict({'input_name': img})
+            pred = self.model.predict({self.input_name: img})
         
         return pred
 
