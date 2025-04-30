@@ -222,7 +222,7 @@ class AnimalPoseInferencePage(QWidget, Ui_AnimalPoseInference):
         - CANN (.om)
         - ONNX (.onnx)
         - TensorRT (.engine)
-        - CoreML (.mlmodel)
+        - CoreML (.mlmodel and .mlpackage)
 
         The function will:
         1. Detect file format and hardware availability
@@ -801,11 +801,16 @@ class AnimalPoseInferencePage(QWidget, Ui_AnimalPoseInference):
     def onEngineSelectionChanged(self, index):
         """Handle changes in engine selection"""
         self.engine = self.EngineSelection.itemText(index)
+        if self.engine == "":
+            self.device = ""
+            return
         self._update_available_devices()
         self._show_info(f"Selected Inference Engine: {self.engine}")
     
     def onDeviceSelectionChanged(self, index):
         """Handle changes in device selection"""
+        if self.device == "":
+            return
         self.device = self.DeviceSelection.itemText(index)
         self._show_info(f"Selected Inference Device: {self.device}")
     
