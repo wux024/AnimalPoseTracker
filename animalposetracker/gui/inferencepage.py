@@ -234,7 +234,7 @@ class AnimalPoseInferencePage(QWidget, Ui_AnimalPoseInference):
             self,
             "Select Model Weights",
             "",
-            "All Supported Formats (*.xml *.onnx *.om *.engine);;"
+            "All Supported Formats (*.xml *.onnx *.om *.engine *.mlmodel *.mlpackage);;"
             "ONNX (*.onnx);;"
             "CANN Model (*.om);;"
             "TensorRT (*.engine);;"
@@ -251,9 +251,10 @@ class AnimalPoseInferencePage(QWidget, Ui_AnimalPoseInference):
         self._enable_widgets()
         self._clear_selections()
 
+        self.weights_path = file_path
         file_path = Path(file_path)
         file_ext = file_path.suffix.lower()
-        self.weights_path = file_path
+        
 
         self._get_supported_engines_and_devices(file_ext)
 
