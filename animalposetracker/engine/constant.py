@@ -12,9 +12,13 @@ ENGINEtoDEVICE = {
     "OpenVINO": 
     {
         "Intel": ["Intel CPU", "Intel GPU", "Intel NPU"],
+        "AMD": [],
+        "ARM": [],
     },
     "CANN":
     {
+        "Intel": [],
+        "AMD": [],
         "ARM": ["Ascend NPU"],
     },
     "ONNX": PLATFORM,
@@ -26,6 +30,8 @@ ENGINEtoDEVICE = {
     },
     "CoreML": 
     {
+        "Intel": [],
+        "AMD": [],
         "ARM": ["Metal"]
     }
 }

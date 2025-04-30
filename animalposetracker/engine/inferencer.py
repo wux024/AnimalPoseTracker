@@ -163,7 +163,7 @@ class InferenceEngine:
         except KeyError:
             raise ValueError(f"Invalid device {self.device}. Please choose from {cv2_backends.keys()}")
         
-        if cv2.dnn.getAvailableTargets(cv2_backend) == ():
+        if len(cv2.dnn.getAvailableTargets(cv2_backend)) == 0:
             if "Intel GPU" in self.device:
                 print("You could build opencv from source with OpenVINO support to "
                       "use Intel GPU as device. We will use default OpenCV backend instead.")
