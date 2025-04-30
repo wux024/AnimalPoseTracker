@@ -12,7 +12,6 @@ class VideoReaderThread(QThread):
     """Thread to run video reading"""
     original_frame = Signal(np.ndarray)
     status_update = Signal(str)
-
     def __init__(self, cap=None, parent=None):
         super().__init__(parent)
         self._cap = cap
@@ -42,6 +41,7 @@ class VideoReaderThread(QThread):
                     self.status_update.emit("Read stopped: No more frames")
                     break
                 time.sleep(1.0 / fps)
+            self.finished.emit()
         except Exception as e:
             error_info = traceback.format_exc()
             self.status_update.emit(f"(VideoReaderThread) Unexpected error: \n{error_info}")

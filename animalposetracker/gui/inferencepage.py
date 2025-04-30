@@ -45,6 +45,7 @@ class AnimalPoseInferencePage(QWidget, Ui_AnimalPoseInference):
         self.visualize_thread = VisualizeThread(buffer_queue=self.postprocessed_cache)
         self.videowriter_thread = VideoWriterThread()
         self.display_thread = QTimer()
+        self.read_frame_finished = False
 
         self.inference = InferenceEngine()
         self.data_config_path = None
@@ -337,27 +338,20 @@ class AnimalPoseInferencePage(QWidget, Ui_AnimalPoseInference):
 
     def _get_supported_devices(self, engine):
         supported_devices = []
+        device_check_results = {
+            "Intel GPU": self._check_intel_gpu(),
+            "Intel NPU": self._check_intel_npu(),
+            "NVIDIA GPU": self._check_nvidia_gpu(),
+            "AMD GPU": self._check_amd_gpu(),
+            "Ascend NPU": self._check_ascend_npu(),
+            "Metal": self._check_metal(),
+        }
         if engine in ENGINEtoDEVICE:
             for device in ENGINEtoDEVICE[engine][self.platform]:
                 if device in ["Intel CPU", "AMD CPU", "ARM CPU"]:
                     supported_devices.append(device)
-                elif device == "Intel GPU" and self._check_intel_gpu():
+                elif device_check_results.get(device, False):
                     supported_devices.append(device)
-                elif device == "Intel NPU" and self._check_intel_npu():
-                    supported_devices.append(device)
-                elif device == "NVIDIA GPU" and self._check_nvidia_gpu():
-                    supported_devices.append(device)
-                elif device == "AMD GPU" and self._check_amd_gpu():
-                    supported_devices.append(device)
-                elif device == "Metal":
-                    try:
-                        import platform
-                        if platform.system() == "Darwin":
-                            supported_devices.append(device)
-                    except ImportError:
-                        raise ImportError("Please install 'platform' module")
-                elif device == "Ascend NPU" and self._check_ascend_npu():
-                        supported_devices.append(device)
         else:
             raise ValueError(f"Unsupported engine: {engine}")
 
@@ -413,6 +407,14 @@ class AnimalPoseInferencePage(QWidget, Ui_AnimalPoseInference):
             from ais_bench.infer.interface import InferSession
             return True
         except ImportError:
+            return False
+    
+    def _check_metal(self):
+        """Check if Metal is available in the system"""
+        try:
+            import platform
+            return platform.system() == "Darwin"
+        except:
             return False
 
     @Slot(bool)
@@ -606,6 +608,7 @@ class AnimalPoseInferencePage(QWidget, Ui_AnimalPoseInference):
         self.videoreader_thread.cap = cv2.VideoCapture(source)
         self.videoreader_thread.original_frame.connect(self.add_original_frame)
         self.videoreader_thread.status_update.connect(self.thread_status)
+        self.videoreader_thread.finished.connect(self.on_read_frame_finished)
 
         # Set up frame preprocessor thread
         self.preprocess_thread.preprocess_function = self.inference.preprocess
@@ -639,6 +642,7 @@ class AnimalPoseInferencePage(QWidget, Ui_AnimalPoseInference):
 
     def _start_inference_threads(self):
         self.videoreader_thread.start()
+        self.read_frame_finished = False
         self.preprocess_thread.start()
         self.inference_thread.start()
         self.postprocess_thread.start()
@@ -648,6 +652,8 @@ class AnimalPoseInferencePage(QWidget, Ui_AnimalPoseInference):
         self.display_thread.start(1000 // self.fps)
 
     def _stop_inference_threads(self):
+        """Stop all inference threads"""
+        self.Display.clear()
         if self.videoreader_thread is not None and self.videoreader_thread.isRunning():
             self.videoreader_thread.safe_stop()
             self.videoreader_thread.original_frame.disconnect()
@@ -677,8 +683,6 @@ class AnimalPoseInferencePage(QWidget, Ui_AnimalPoseInference):
             self.inference_cache.queue.clear()
         with self.visualization_cache.mutex:
             self.visualization_cache.queue.clear()  
-        
-        self.Display.clear()
 
     def _get_source(self):
         if self.CameraORVideos.isChecked():
@@ -703,6 +707,8 @@ class AnimalPoseInferencePage(QWidget, Ui_AnimalPoseInference):
             self.read_cache.put(frame, block=False)
         except queue.Full:
             pass
+    def on_read_frame_finished(self):
+        self.read_frame_finished = True
     
     @Slot(str)
     def thread_status(self, message):
@@ -741,23 +747,15 @@ class AnimalPoseInferencePage(QWidget, Ui_AnimalPoseInference):
     def display_inferece_frame(self):
         """Handle new frame from camera/video source"""
 
-        if (self.visualization_cache.empty() and 
-            (self.videoreader_thread.isRunning() or 
-            self.preprocess_thread.isRunning() or
-            self.inference_thread.isRunning() or
-            self.postprocess_thread.isRunning() or
-            self.visualize_thread.isRunning() or
-            self.videowriter_thread.isRunning())
-        ):
+        try:
+            frame, _ = self.visualization_cache.get(block=False)
+        except queue.Empty:
+            if self.read_frame_finished:
+                self.read_frame_finished = False
+                self.Start.setText("Start")
+                self.Start.setEnabled(True)
+                self._stop_inference_threads()
             return
-        elif (self.visualization_cache.empty() and 
-              not self.videoreader_thread.running):
-            self._stop_inference_threads()
-            self.Start.setText("Start")
-            self.Start.setEnabled(True)
-            return
-        
-        frame, _ = self.visualization_cache.get(block=False)
 
         if (self.Save.isChecked() and 
             self.videowriter_thread is not None 
@@ -804,7 +802,8 @@ class AnimalPoseInferencePage(QWidget, Ui_AnimalPoseInference):
         if self.engine == "":
             self.device = ""
             return
-        self._update_available_devices()
+        self.DeviceSelection.clear()
+        self.DeviceSelection.addItems(self.supported_engines_and_devices[self.engine])
         self._show_info(f"Selected Inference Engine: {self.engine}")
     
     def onDeviceSelectionChanged(self, index):
