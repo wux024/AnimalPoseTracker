@@ -809,9 +809,9 @@ class AnimalPoseInferencePage(QWidget, Ui_AnimalPoseInference):
     
     def onDeviceSelectionChanged(self, index):
         """Handle changes in device selection"""
+        self.device = self.DeviceSelection.itemText(index)
         if self.device == "":
             return
-        self.device = self.DeviceSelection.itemText(index)
         self._show_info(f"Selected Inference Device: {self.device}")
     
     def onStartClicked(self):
