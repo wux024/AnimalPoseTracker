@@ -262,7 +262,13 @@ class InferenceEngine:
             import coremltools as ct
             self.model = ct.models.MLModel(self.weights_path)
         except ImportError:
-            raise ImportError("Please install coremltools to use CoreML engine.")
+            try:
+                from coremlpython import MLModel
+                self.model = MLModel(self.weights_path)
+            except ImportError:
+                raise ImportError("Please install coremltools or coremlpython " \
+                "to use CoreML engine.")
+
     
     def preprocess(self, input_image):
         """

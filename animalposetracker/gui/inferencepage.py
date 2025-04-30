@@ -239,7 +239,7 @@ class AnimalPoseInferencePage(QWidget, Ui_AnimalPoseInference):
             "CANN Model (*.om);;"
             "TensorRT (*.engine);;"
             "OpenVINO (select .xml);;"
-            "CoreML (*.mlmodel);;"
+            "CoreML (*.mlmodel *.mlpackage);;"
             "All Files (*)",
             options=options
         )
@@ -287,7 +287,7 @@ class AnimalPoseInferencePage(QWidget, Ui_AnimalPoseInference):
             supported_engines =  ["OpenCV", "CANN"]
         elif file_ext == '.engine':
             supported_engines =  ["TensorRT"]
-        elif file_ext == '.mlmodel':
+        elif file_ext in ['.mlmodel', '.mlpackage']:
             supported_engines =  ["CoreML"]
         else:
             raise ValueError(f"Unsupported format: {file_ext}")
