@@ -588,6 +588,7 @@ class InferenceEngine:
 
             trt_outputs = do_inference(
                 context=self.context,
+                engine=self.model,
                 bindings=self.bindings,
                 inputs=self.inputs,
                 outputs=self.outputs,
