@@ -359,31 +359,9 @@ class InferenceEngine:
         except ImportError:
             raise ImportError("Please install ais_bench to use CANN engine.")
     
-
-import tensorrt as trt
-import pycuda.driver as cuda
-import pycuda.autoinit
-from pathlib import Path
-
-class HostDeviceMem:
-    """Helper class to manage host and device memory for TensorRT bindings."""
-    def __init__(self, host_mem, device_mem):
-        self.host = host_mem
-        self.device = device_mem
-
-    def __str__(self):
-        return f"Host:\n{self.host}\nDevice:\n{self.device}"
-
-    def __repr__(self):
-        return self.__str__()
-
-class TensorRTEngine:
-    def __init__(self, weights_path):
-        self.weights_path = weights_path
-        self._init_tensorrt()
-
     def _init_tensorrt(self):
         try:
+            import tensorrt as trt
             TRT_LOGGER = trt.Logger(trt.Logger.WARNING)
 
             # Step 1: Load or build the TensorRT engine
@@ -407,70 +385,85 @@ class TensorRTEngine:
 
     def _build_engine_from_onnx(self, logger):
         """Build TensorRT engine from ONNX file (TensorRT 10.x API)."""
-        with trt.Builder(logger) as builder, \
-             builder.create_network(1 << int(trt.NetworkDefinitionCreationFlag.EXPLICIT_BATCH)) as network, \
-             trt.OnnxParser(network, logger) as parser, \
-             builder.create_builder_config() as config:
+        try:
+            import tensorrt as trt
+            import pycuda.autoinit
+            with trt.Builder(logger) as builder, \
+                builder.create_network(1 << int(trt.NetworkDefinitionCreationFlag.EXPLICIT_BATCH)) as network, \
+                trt.OnnxParser(network, logger) as parser, \
+                builder.create_builder_config() as config:
 
-            # Basic configuration
-            config.set_flag(trt.BuilderFlag.FP32)
-            config.max_workspace_size = 1 << 30  # 1GB
+                # Basic configuration
+                config.set_flag(trt.BuilderFlag.FP32)
+                config.max_workspace_size = 1 << 30  # 1GB
 
-            # Parse ONNX model
-            with open(self.weights_path, 'rb') as model:
-                if not parser.parse(model.read()):
-                    for error in range(parser.num_errors):
-                        print(parser.get_error(error))
-                    raise RuntimeError("ONNX parsing failed")
+                # Parse ONNX model
+                with open(self.weights_path, 'rb') as model:
+                    if not parser.parse(model.read()):
+                        for error in range(parser.num_errors):
+                            print(parser.get_error(error))
+                        raise RuntimeError("ONNX parsing failed")
 
-            # Optimization profile (supports dynamic shapes)
-            profile = builder.create_optimization_profile()
-            for i in range(network.num_inputs):
-                input_tensor = network.get_input(i)
-                shape = input_tensor.shape
-                # For dynamic inputs, set min/opt/max shapes appropriately
-                profile.set_shape(input_tensor.name, min=shape, opt=shape, max=shape)
-            config.add_optimization_profile(profile)
+                # Optimization profile (supports dynamic shapes)
+                profile = builder.create_optimization_profile()
+                for i in range(network.num_inputs):
+                    input_tensor = network.get_input(i)
+                    shape = input_tensor.shape
+                    # For dynamic inputs, set min/opt/max shapes appropriately
+                    profile.set_shape(input_tensor.name, min=shape, opt=shape, max=shape)
+                config.add_optimization_profile(profile)
 
-            # Build serialized engine
-            serialized_engine = builder.build_serialized_network(network, config)
-            if not serialized_engine:
-                raise RuntimeError("Engine build failed")
+                # Build serialized engine
+                serialized_engine = builder.build_serialized_network(network, config)
+                if not serialized_engine:
+                    raise RuntimeError("Engine build failed")
 
-            # Deserialize engine
-            runtime = trt.Runtime(logger)
-            return runtime.deserialize_cuda_engine(serialized_engine)
+                # Deserialize engine
+                runtime = trt.Runtime(logger)
+                return runtime.deserialize_cuda_engine(serialized_engine)
+        except ImportError:
+            raise ImportError("Please install tensorrt and pycuda to use TensorRT engine.")
 
     def _load_serialized_engine(self, logger):
         """Load pre-built TensorRT engine."""
-        with open(self.weights_path, 'rb') as f, trt.Runtime(logger) as runtime:
-            return runtime.deserialize_cuda_engine(f.read())
+        try:
+            import tensorrt as trt
+            with open(self.weights_path, 'rb') as f, trt.Runtime(logger) as runtime:
+                return runtime.deserialize_cuda_engine(f.read())
+        except ImportError:
+            raise ImportError("Please install tensorrt and pycuda to use TensorRT engine.")
 
     def _initialize_buffers(self):
         """Allocate memory for inputs/outputs."""
-        self.inputs = []
-        self.outputs = []
-        self.bindings = []
-        self.stream = cuda.Stream()
+        try:
+            import tensorrt as trt
+            import pycuda.driver as cuda
+            import pycuda.autoinit
+            self.inputs = []
+            self.outputs = []
+            self.bindings = []
+            self.stream = cuda.Stream()
 
-        for binding in range(self.model.num_bindings):
-            # Get binding shape (handles dynamic shapes)
-            shape = self.model.get_binding_shape(binding)
-            if shape[0] == -1:  # Dynamic batch dimension
-                shape = self.model.get_profile_shape(0, binding)[1]  # Use opt shape
+            for binding in range(self.model.num_bindings):
+                # Get binding shape (handles dynamic shapes)
+                shape = self.model.get_binding_shape(binding)
+                if shape[0] == -1:  # Dynamic batch dimension
+                    shape = self.model.get_profile_shape(0, binding)[1]  # Use opt shape
 
-            size = trt.volume(shape)
-            dtype = trt.nptype(self.model.get_binding_dtype(binding))
+                size = trt.volume(shape)
+                dtype = trt.nptype(self.model.get_binding_dtype(binding))
 
-            # Allocate host and device memory
-            host_mem = cuda.pagelocked_empty(size, dtype)
-            device_mem = cuda.mem_alloc(host_mem.nbytes)
+                # Allocate host and device memory
+                host_mem = cuda.pagelocked_empty(size, dtype)
+                device_mem = cuda.mem_alloc(host_mem.nbytes)
 
-            self.bindings.append(int(device_mem))
-            if self.model.binding_is_input(binding):
-                self.inputs.append(HostDeviceMem(host_mem, device_mem))
-            else:
-                self.outputs.append(HostDeviceMem(host_mem, device_mem))
+                self.bindings.append(int(device_mem))
+                if self.model.binding_is_input(binding):
+                    self.inputs.append(HostDeviceMem(host_mem, device_mem))
+                else:
+                    self.outputs.append(HostDeviceMem(host_mem, device_mem))
+        except ImportError:
+            raise ImportError("Please install tensorrt and pycuda to use TensorRT engine.")
 
     def _create_execution_context(self):
         """Create and configure execution context."""
