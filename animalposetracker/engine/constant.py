@@ -2,13 +2,17 @@ import cv2
 
 
 PLATFORM = {
-    "Intel": ["Intel CPU", "Intel GPU", "Intel NPU", "NVIDIA GPU"],
-    "AMD": ["AMD CPU", "AMD GPU", "NVIDIA GPU"],
-    "ARM": ["ARM CPU", "Metal", "NVIDIA GPU", "Ascend NPU"],
+    "Intel": ["Intel CPU", "Intel GPU", "Intel NPU", "NVIDIA GPU", "NVIDIA GPU TensorRT"],
+    "AMD": ["AMD CPU", "AMD GPU", "NVIDIA GPU", "NVIDIA GPU TensorRT"],
+    "ARM": ["ARM CPU", "Metal", "NVIDIA GPU", "NVIDIA GPU TensorRT", "Ascend NPU"],
 }
 
 ENGINEtoDEVICE = {
-    "OpenCV": PLATFORM,
+    "OpenCV": {
+        "Intel": ["Intel CPU", "Intel GPU", "Intel NPU", "NVIDIA GPU"],
+        "AMD": ["AMD CPU", "AMD GPU", "NVIDIA GPU"],
+        "ARM": ["ARM CPU", "Metal", "NVIDIA GPU", "Ascend NPU"],
+    },
     "OpenVINO": 
     {
         "Intel": ["Intel CPU", "Intel GPU", "Intel NPU"],
@@ -24,9 +28,9 @@ ENGINEtoDEVICE = {
     "ONNX": PLATFORM,
     "TensorRT": 
     {
-        "Intel": ["NVIDIA GPU"],
-        "AMD": ["NVIDIA GPU"],
-        "ARM": ["NVIDIA GPU"],
+        "Intel": ["NVIDIA GPU TensorRT"],
+        "AMD": ["NVIDIA GPU TensorRT"],
+        "ARM": ["NVIDIA GPU TensorRT"],
     },
     "CoreML": 
     {
@@ -67,7 +71,8 @@ ENGINEtoBackend = {
                     'ACLExecutionProvider', 'CPUExecutionProvider'],
         "Metal": ['CoreMLExecutionProvider', 'CPUExecutionProvider'],
         "Ascend NPU": ['CANNExecutionProvider', 'CPUExecutionProvider'],
-        "NVIDIA GPU": ['TensorrtExecutionProvider', 
+        "NVIDIA GPU": ['CUDAExecutionProvider', 'CPUExecutionProvider'],
+        "NVIDIA GPU TensorRT": ['TensorrtExecutionProvider', 
                        'CUDAExecutionProvider', 'CPUExecutionProvider'],
     },
 }

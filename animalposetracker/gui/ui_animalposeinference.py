@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 
 ################################################################################
-## Form generated from reading UI file 'animalposeinferenceWRNoSL.ui'
+## Form generated from reading UI file 'animalposeinferenceiMxJEY.ui'
 ##
 ## Created by: Qt User Interface Compiler version 6.8.2
 ##
@@ -196,13 +196,6 @@ class Ui_AnimalPoseInference(object):
         self.EngineLayout.setObjectName(u"EngineLayout")
         self.EngineLabel = QLabel(self.BaseToolsGroup)
         self.EngineLabel.setObjectName(u"EngineLabel")
-        sizePolicy4 = QSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
-        sizePolicy4.setHorizontalStretch(0)
-        sizePolicy4.setVerticalStretch(0)
-        sizePolicy4.setHeightForWidth(self.EngineLabel.sizePolicy().hasHeightForWidth())
-        self.EngineLabel.setSizePolicy(sizePolicy4)
-        self.EngineLabel.setMinimumSize(QSize(40, 25))
-        self.EngineLabel.setMaximumSize(QSize(40, 25))
 
         self.EngineLayout.addWidget(self.EngineLabel)
 
@@ -298,6 +291,9 @@ class Ui_AnimalPoseInference(object):
         self.SaveIoUConfLayout.setObjectName(u"SaveIoUConfLayout")
         self.Save = QCheckBox(self.ShowToolsGroup)
         self.Save.setObjectName(u"Save")
+        sizePolicy4 = QSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
+        sizePolicy4.setHorizontalStretch(0)
+        sizePolicy4.setVerticalStretch(0)
         sizePolicy4.setHeightForWidth(self.Save.sizePolicy().hasHeightForWidth())
         self.Save.setSizePolicy(sizePolicy4)
         self.Save.setMinimumSize(QSize(120, 25))
@@ -550,7 +546,7 @@ class Ui_AnimalPoseInference(object):
         self.Show.setText(QCoreApplication.translate("AnimalPoseInference", u"Show", None))
         self.Backgroud.setText(QCoreApplication.translate("AnimalPoseInference", u"Original", None))
         self.ShowClasses.setText(QCoreApplication.translate("AnimalPoseInference", u"Show Classes", None))
-        self.Classes.setText(QCoreApplication.translate("AnimalPoseInference", u"There are 50 classes!", None))
+        self.Classes.setText("")
         self.ShowKeypoints.setText(QCoreApplication.translate("AnimalPoseInference", u"Show Keypoints", None))
         self.ShowSkeletons.setText(QCoreApplication.translate("AnimalPoseInference", u"Show Skeletons", None))
         self.ShowBBox.setText(QCoreApplication.translate("AnimalPoseInference", u"Show BBox", None))

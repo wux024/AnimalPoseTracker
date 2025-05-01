@@ -35,6 +35,9 @@ class AnimalPoseTrackerPage(QMainWindow, Ui_AnimalPoseTracker):
 
     def initialize_controls(self):
         """Initialize the controls of the main page"""
+        if sys.platform == "darwin":
+            self.setUnifiedTitleAndToolBarOnMac(True)
+
         self.sub_page = None
         # set work directory
         os.chdir(Path.cwd())
@@ -1036,6 +1039,13 @@ class SplashScreen(QSplashScreen):
         QApplication.processEvents()
 
 def main():
+
+    QApplication.setHighDpiScaleFactorRoundingPolicy(
+        Qt.HighDpiScaleFactorRoundingPolicy.PassThrough
+    )
+    QApplication.setAttribute(Qt.AA_EnableHighDpiScaling)
+    QApplication.setAttribute(Qt.AA_UseHighDpiPixmaps)
+
     app = QApplication(sys.argv)
     app.setStyle("Fusion")
 

@@ -279,7 +279,7 @@ class InferenceEngine:
         
         # Device-specific configurations
         device_id = getattr(self, 'device_id', 0)
-        model_bits = getattr(self, 'model_bits', 'FP32')  # 直接使用model_bits
+        model_bits = getattr(self, 'model_bits', 'FP32')
         
         # Configure provider-specific parameters
         if provider_name == "CUDAExecutionProvider":
