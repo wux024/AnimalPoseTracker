@@ -408,7 +408,7 @@ class InferenceEngine:
             self.bindings = []
             self.stream = cuda.Stream()
 
-            for binding in range(self.model.num_bindings):
+            for binding in range(len(self.model)):
                 # Get the shape information using get_profile_shape
                 min_shape, opt_shape, max_shape = self.model.get_profile_shape(0, binding)
                 # We use the optimal shape here for simplicity
