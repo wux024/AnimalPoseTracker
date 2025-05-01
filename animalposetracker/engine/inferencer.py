@@ -370,33 +370,37 @@ class InferenceEngine:
 
             if Path(self.weights_path).suffix == '.onnx':
                 # If it's an ONNX file, build the TensorRT engine
-                explicit_batch = 1 << (int)(trt.NetworkDefinitionCreationFlag.EXPLICIT_BATCH)
                 with trt.Builder(TRT_LOGGER) as builder, \
-                        builder.create_network(explicit_batch) as network, \
-                        trt.OnnxParser(network, TRT_LOGGER) as parser:
+                        builder.create_network(1 << int(trt.NetworkDefinitionCreationFlag.EXPLICIT_BATCH)) as network, \
+                        trt.OnnxParser(network, TRT_LOGGER) as parser, \
+                        builder.create_builder_config() as config:
+                    # Set the precision mode (e.g., FP32)
+                    config.set_flag(trt.BuilderFlag.FP32)
                     # Set the maximum workspace size for the builder
-                    builder.max_workspace_size = 1 << 30
-                    # Set the maximum batch size for the builder
-                    builder.max_batch_size = 1
+                    config.max_workspace_size = 1 << 30
                     # Parse the ONNX file
                     with open(self.weights_path, 'rb') as model:
                         if not parser.parse(model.read()):
                             for error in range(parser.num_errors):
                                 print(parser.get_error(error))
                             raise RuntimeError("Failed to parse ONNX file.")
+                    # Create an optimization profile
+                    profile = builder.create_optimization_profile()
+                    for i in range(network.num_inputs):
+                        input_tensor = network.get_input(i)
+                        shape = input_tensor.shape
+                        profile.set_shape(input_tensor.name, min=shape, opt=shape, max=shape)
+                    config.add_optimization_profile(profile)
                     # Build the TensorRT engine
-                    self.model = builder.build_cuda_engine(network)
+                    self.model = builder.build_engine(network, config)
                     if self.model is None:
                         raise RuntimeError("Failed to build TensorRT engine from ONNX.")
             else:
                 # If it's a TensorRT engine file, directly load it
                 with open(self.weights_path, 'rb') as f, trt.Runtime(TRT_LOGGER) as runtime:
                     self.model = runtime.deserialize_cuda_engine(f.read())
-            
-            if self.model is not None:
-                print(f"Successfully loaded TensorRT engine from {self.weights_path}")
-            else:
-                raise RuntimeError("Failed to load TensorRT engine.")
+
+            print(f"Successfully loaded TensorRT engine from {self.weights_path}")
 
             # Initialize input, output, bindings and stream
             self.inputs = []
@@ -404,9 +408,12 @@ class InferenceEngine:
             self.bindings = []
             self.stream = cuda.Stream()
 
-            for binding in self.model:
-                # Calculate the size of the binding
-                size = trt.volume(self.model.get_binding_shape(binding)) * self.model.max_batch_size
+            for binding in range(self.model.num_bindings):
+                # Get the shape information using get_profile_shape
+                min_shape, opt_shape, max_shape = self.model.get_profile_shape(0, binding)
+                # We use the optimal shape here for simplicity
+                shape = opt_shape
+                size = trt.volume(shape)
                 # Get the data type of the binding
                 dtype = trt.nptype(self.model.get_binding_dtype(binding))
                 # Allocate host memory
@@ -424,6 +431,8 @@ class InferenceEngine:
 
             # Create an execution context for the engine
             self.context = self.model.create_execution_context()
+            # Set the optimization profile
+            self.context.set_optimization_profile_async(0, self.stream.handle)
             print("Successfully created execution context")
 
         except ImportError:
@@ -613,23 +622,29 @@ class InferenceEngine:
 
         try:
             import pycuda.driver as cuda
-
+            # Assume input_data is already pre - processed and has the correct shape
             self.inputs[0].host = img.flatten()
 
+            # Transfer input data to the GPU
             [cuda.memcpy_htod_async(inp.device, inp.host, self.stream) for inp in self.inputs]
 
+            # Set the input shape in the execution context
+            _, opt_shape, _ = self.model.get_profile_shape(0, 0)
+            self.context.set_binding_shape(0, opt_shape)
+
+            # Run inference
             self.context.execute_async_v2(bindings=self.bindings, stream_handle=self.stream.handle)
 
+            # Transfer predictions back from the GPU
             [cuda.memcpy_dtoh_async(out.host, out.device, self.stream) for out in self.outputs]
 
+            # Synchronize the stream
             self.stream.synchronize()
 
-            pred = [out.host for out in self.outputs]
-
-            return pred
-
-        except ImportError:
-            raise ImportError("Please install pycuda to use TensorRT engine.")
+            # Return only the host outputs
+            return [out.host for out in self.outputs]
+        except Exception as e:
+            raise RuntimeError(f"An error occurred during inference: {str(e)}")
 
 
     def draw_detections(self, img, box, score, class_id, line_width=2, bbox=True, classes=True):
