@@ -282,11 +282,11 @@ class AnimalPoseInferencePage(QWidget, Ui_AnimalPoseInference):
     def _get_supported_engines_and_devices(self, file_ext):
         """Get supported engines based on file extension"""
         if file_ext == '.onnx':
-            supported_engines = ["OpenCV", "ONNX", 'OpenVINO']
+            supported_engines = ["ONNX", "OpenVINO", "OpenCV"]
         elif file_ext == '.xml':
             supported_engines =  ["OpenVINO"]
         elif file_ext == '.om':
-            supported_engines =  ["OpenCV", "CANN"]
+            supported_engines =  ["CANN", "OpenCV"]
         elif file_ext == '.engine':
             supported_engines =  ["TensorRT"]
         elif file_ext in ['.mlmodel', '.mlpackage']:

@@ -6,7 +6,7 @@ import yaml
 from pathlib import Path
 import os
 
-from .constant import ENGINEtoBackend, OpenCV_TARGETS
+from .constant import ENGINEtoBackend, OpenCV_TARGETS, EP_PARAMS
 
 
 def measure_time(func, *args, **kwargs):
@@ -219,19 +219,108 @@ class InferenceEngine:
             raise ValueError("Invalid weights file format. "
                              "Please provide either an ONNX or an XML+BIN file.")
 
-    def _init_onnx(self):
+    def _init_onnx(self, params=False):
+        """Initialize ONNX Runtime session with optimal execution providers and parameters."""
         try:
             import onnxruntime as ort
-            providers_list = ENGINEtoBackend["ONNX"]
-            if "CPU" in self.device:
-                providers = providers_list.get("CPU")
-            else:
-                providers = providers_list.get(self.device)
-            self.model = ort.InferenceSession(self.weights_path, providers=providers)
+            
+            # Get the recommended providers for the current device
+            providers_list = ENGINEtoBackend["ONNX"][self.device]
+            providers_available = ort.get_available_providers()
+            providers_used = []
+            
+
+            # Build the final provider list with parameters
+            for provider in providers_list:
+                if provider in providers_available:
+                    if params:
+                        providers_used.append(self.get_provider_config(provider))
+                    else:
+                        providers_used.append(provider)
+                        
+            print(f"Initializing ONNX with providers: {providers_used}")
+            
+            # Session options for better performance
+            sess_options = ort.SessionOptions()
+            sess_options.graph_optimization_level = ort.GraphOptimizationLevel.ORT_ENABLE_ALL
+            sess_options.execution_mode = ort.ExecutionMode.ORT_SEQUENTIAL
+            
+            # Initialize the inference session
+            self.model = ort.InferenceSession(
+                self.weights_path,
+                sess_options=sess_options,
+                providers=providers_used
+            )
+            
+            # Get input/output names
             self.input_name = self.model.get_inputs()[0].name
             self.output_name = self.model.get_outputs()[0].name
+            
+            # Print active provider for verification
+            print(f"ONNX session successfully initialized with provider: {self.model.get_providers()[0]}")
+            
         except ImportError:
             raise ImportError("Please install onnxruntime to use ONNX engine.")
+        except Exception as e:
+            raise RuntimeError(f"Failed to initialize ONNX Runtime session: {str(e)}")
+    
+    def get_provider_config(self, provider_name):
+        """Get properly configured provider parameters based on model bits and device"""
+        if provider_name not in EP_PARAMS:
+            return provider_name  # No special parameters
+        
+        # Get default parameters for this provider
+        params = {}
+        for param, config in EP_PARAMS[provider_name].items():
+            params[param] = config["default"]
+        
+        # Device-specific configurations
+        device_id = getattr(self, 'device_id', 0)
+        model_bits = getattr(self, 'model_bits', 'FP32')  # 直接使用model_bits
+        
+        # Configure provider-specific parameters
+        if provider_name == "CUDAExecutionProvider":
+            params.update({
+                "device_id": device_id,
+                "cudnn_conv_algo_search": 1 if model_bits == 'FP16' else 0
+            })
+        
+        elif provider_name == "TensorrtExecutionProvider":
+            params.update({
+                "device_id": device_id,
+                "trt_fp16_enable": model_bits == 'FP16',
+                "trt_int8_enable": model_bits == 'INT8',
+                "trt_engine_cache_enable": True
+            })
+        
+        elif provider_name == "OpenVINOExecutionProvider":
+            device_type = "CPU"
+            if "GPU" in self.device:
+                device_type = f"GPU.{device_id}" if device_id > 0 else "GPU"
+            elif "NPU" in self.device:
+                device_type = "NPU"
+            
+            params.update({
+                "device_type": device_type,
+                "num_of_threads": getattr(self, 'num_threads', 8),
+                "precision": model_bits
+            })
+        
+        elif provider_name == "DmlExecutionProvider":
+            params["device_id"] = device_id
+        
+        elif provider_name == "CoreMLExecutionProvider":
+            params["coreml_flags"] = 2 if model_bits == 'FP16' else 0
+        
+        elif provider_name == "CANNExecutionProvider":
+            params.update({
+                "device_id": device_id,
+                "precision_mode": f"force_{model_bits.lower()}"
+            })
+        
+        return (provider_name, params) if params else provider_name
+    
+
 
     def _init_openvino(self):
         try:
