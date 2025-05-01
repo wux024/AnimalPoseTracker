@@ -491,7 +491,7 @@ class InferenceEngine:
             pred = list(pred.values())
             outputs = np.transpose(np.squeeze(pred[0]))
         elif self._tensorrt:
-            outputs = pred[0].reshape(8400, -1)
+            outputs = np.transpose(pred[0].reshape(-1, 8400))
         else:
             outputs = np.transpose(np.squeeze(pred[0]))
 
