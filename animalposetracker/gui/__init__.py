@@ -1,22 +1,17 @@
 # __init__.py
 from PySide6.QtCore import Qt
 from PySide6.QtGui import QColor
+import os
 
-# BASE_DIR = os.path.dirname(__file__)
-# LOGO_PATH_TRANSPARENT = os.path.join(BASE_DIR, "assets", "logo_transparent.png")
-# LOGO_PATH = os.path.join(BASE_DIR, "assets", "logo.png")
-# LOGO_SMALL_PATH = os.path.join(BASE_DIR, "media", "logo.png")
-# WELCOME_PATH = os.path.join(BASE_DIR, "assets", "welcome.png")
+BASE_DIR = os.path.dirname(__file__)
+LOGO_PATH_TRANSPARENT = os.path.join(BASE_DIR, "assets", "logo_transparent.png")
+LOGO_PATH = os.path.join(BASE_DIR, "assets", "logo.png")
+LOGO_SMALL_PATH = os.path.join(BASE_DIR, "media", "logo.png")
+WELCOME_PATH = os.path.join(BASE_DIR, "assets", "welcome.png")
 
-# DARK_THEME_PATH = os.path.join(BASE_DIR, "style", "dark.qss")
-# LIGHT_THEME_PATH = os.path.join(BASE_DIR, "style", "light.qss")
+DARK_THEME_PATH = os.path.join(BASE_DIR, "style", "dark.qss")
+LIGHT_THEME_PATH = os.path.join(BASE_DIR, "style", "light.qss")
 
-LOGO_TRANSPARENT = ":/logo_transparent.png"
-LOGO = ":/logo.png"
-LOGO_SMALL = ":/logo_small.png"
-WELCOME = ":/welcome.png"
-DARK_THEME = ":/dark.qss"
-LIGHT_THEME = ":/light.qss"
 
 class WindowFactory:
     @staticmethod
