@@ -6,15 +6,17 @@ import yaml
 from pathlib import Path
 import os
 
-from .constant import ENGINEtoBackend, OpenCV_TARGETS, EP_PARAMS
 
+class HostDeviceMem(object):
+    def __init__(self, host_mem, device_mem):
+        self.host = host_mem
+        self.device = device_mem
 
-def measure_time(func, *args, **kwargs):
-    start_time = datetime.now()
-    result = func(*args, **kwargs)
-    end_time = datetime.now()
-    total_time = (end_time - start_time).total_seconds()
-    return result, total_time
+    def __str__(self):
+        return "Host:\n" + str(self.host) + "\nDevice:\n" + str(self.device)
+
+    def __repr__(self):
+        return self.__str__()
 
 class InferenceEngine:
     def __init__(self,
@@ -319,6 +321,8 @@ class InferenceEngine:
         
         return (provider_name, params) if params else provider_name
     
+
+
     def _init_openvino(self):
         try:
             from openvino import Core
@@ -347,62 +351,10 @@ class InferenceEngine:
     
     def _init_tensorrt(self):
         try:
-            import tensorrt as trt
-            from .utils import allocate_buffers
-            TRT_LOGGER = trt.Logger(trt.Logger.WARNING)
-            # Step 1: Load or build the TensorRT engine
-            if Path(self.weights_path).suffix == '.onnx':
-                self.model = self._build_engine_from_onnx(TRT_LOGGER)
-            else:
-                self.model = self._build_engine_from_engine(TRT_LOGGER)
-            self.context = self.model.create_execution_context()
-            self.inputs, self.outputs, self.bindings, self.stream = allocate_buffers(self.model)
+            from .tensorrtinferencer import TensorRTInferencerEngine
 
-        except ImportError:
-            raise ImportError("Please install tensorrt and pycuda to use TensorRT engine.")
-        except FileNotFoundError:
-            raise FileNotFoundError(f"Model file {self.weights_path} not found.")
-        except Exception as e:
-            raise RuntimeError(f"TensorRT initialization failed: {str(e)}")
-
-    def _build_engine_from_onnx(self, logger):
-        """Build TensorRT engine from ONNX file (TensorRT 10.x API)."""
-        try:
-            import tensorrt as trt
-            with trt.Builder(logger) as builder, builder.create_network(0) as network, \
-                    builder.create_builder_config() as config, trt.OnnxParser(network, logger) as parser, \
-                    trt.Runtime(logger) as runtime:                
-                # Set the workspace memory limit
-                config.set_memory_pool_limit(trt.MemoryPoolType.WORKSPACE, 1 << 30)  # 1GB
-                with open(self.weights_path, "rb") as model:
-                    print("Beginning ONNX file parsing")
-                    if not parser.parse(model.read()):
-                        print("ERROR: Failed to parse the ONNX file.")
-                        for error in range(parser.num_errors):
-                            print(parser.get_error(error))
-                plan = builder.build_serialized_network(network, config)
-                engine = runtime.deserialize_cuda_engine(plan)
-                return engine
-        except ImportError:
-            raise ImportError("Please install tensorrt and pycuda to use TensorRT engine.")
-        except FileNotFoundError:
-            raise FileNotFoundError(f"Model file {self.weights_path} not found.")
-        except Exception as e:
-            raise RuntimeError(f"TensorRT engine build failed: {str(e)}")
-
-    def _build_engine_from_engine(self, logger):
-        """Load pre-built TensorRT engine."""
-        try:
-            import tensorrt as trt
-            with open(self.weights_path, "rb") as f, trt.Runtime(logger) as runtime:
-                engine = runtime.deserialize_cuda_engine(f.read())
-                return engine
-        except ImportError:
-            raise ImportError("Please install tensorrt and pycuda to use TensorRT engine.")
-        except FileNotFoundError:
-            raise FileNotFoundError(f"Model file {self.weights_path} not found.")
-        except Exception as e:
-            raise RuntimeError(f"TensorRT engine load failed: {str(e)}")
+        except ImportError as e:
+            print(f"Failed to import TensorRTInferencerEngine: {e}")
 
     def _init_coreml(self):
         try: 
@@ -581,21 +533,16 @@ class InferenceEngine:
     
     def inference_tensorrt(self, img):
         try:
-            from .utils import do_inference
+            import pycuda.driver as cuda
 
-            # Copy the input image to the device
-            self.inputs[0].host = img
+            img
 
-            trt_outputs = do_inference(
-                context=self.context,
-                bindings=self.bindings,
-                inputs=self.inputs,
-                outputs=self.outputs,
-                stream=self.stream
-            )
-            return trt_outputs
+
+        
         except ImportError:
-            raise ImportError("Please install tensorrt and pycuda to use TensorRT engine.")
+            raise ImportError("Please install pycuda to use TensorRT engine.")
+
+
 
     def draw_detections(self, img, box, score, class_id, line_width=2, bbox=True, classes=True):
         """
