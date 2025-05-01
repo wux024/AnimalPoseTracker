@@ -359,43 +359,77 @@ class InferenceEngine:
         except ImportError:
             raise ImportError("Please install ais_bench to use CANN engine.")
     
+
     def _init_tensorrt(self):
         try:
             import tensorrt as trt
             import pycuda.driver as cuda
             import pycuda.autoinit
+            # Create a TensorRT logger with warning level
             TRT_LOGGER = trt.Logger(trt.Logger.WARNING)
-            with open(self.weights_path, 'rb') as f, trt.Runtime(TRT_LOGGER) as runtime:
-                self.model = runtime.deserialize_cuda_engine(f.read())
-            print(f"Successfully loaded TensorRT engine from {self.weights_path}")
 
+            if Path(self.weights_path).suffix == '.onnx':
+                # If it's an ONNX file, build the TensorRT engine
+                explicit_batch = 1 << (int)(trt.NetworkDefinitionCreationFlag.EXPLICIT_BATCH)
+                with trt.Builder(TRT_LOGGER) as builder, \
+                        builder.create_network(explicit_batch) as network, \
+                        trt.OnnxParser(network, TRT_LOGGER) as parser:
+                    # Set the maximum workspace size for the builder
+                    builder.max_workspace_size = 1 << 30
+                    # Set the maximum batch size for the builder
+                    builder.max_batch_size = 1
+                    # Parse the ONNX file
+                    with open(self.weights_path, 'rb') as model:
+                        if not parser.parse(model.read()):
+                            for error in range(parser.num_errors):
+                                print(parser.get_error(error))
+                            raise RuntimeError("Failed to parse ONNX file.")
+                    # Build the TensorRT engine
+                    self.model = builder.build_cuda_engine(network)
+                    if self.model is None:
+                        raise RuntimeError("Failed to build TensorRT engine from ONNX.")
+            else:
+                # If it's a TensorRT engine file, directly load it
+                with open(self.weights_path, 'rb') as f, trt.Runtime(TRT_LOGGER) as runtime:
+                    self.model = runtime.deserialize_cuda_engine(f.read())
+            
+            if self.model is not None:
+                print(f"Successfully loaded TensorRT engine from {self.weights_path}")
+            else:
+                raise RuntimeError("Failed to load TensorRT engine.")
+
+            # Initialize input, output, bindings and stream
             self.inputs = []
             self.outputs = []
             self.bindings = []
             self.stream = cuda.Stream()
 
             for binding in self.model:
+                # Calculate the size of the binding
                 size = trt.volume(self.model.get_binding_shape(binding)) * self.model.max_batch_size
+                # Get the data type of the binding
                 dtype = trt.nptype(self.model.get_binding_dtype(binding))
-                # Allocate host and device buffers
+                # Allocate host memory
                 host_mem = cuda.pagelocked_empty(size, dtype)
+                # Allocate device memory
                 device_mem = cuda.mem_alloc(host_mem.nbytes)
-                # Append the device buffer to device bindings
+                # Append the device buffer address to bindings
                 self.bindings.append(int(device_mem))
-                # Append the device buffer to device inputs or outputs
+                # Append the buffer to inputs or outputs
                 if self.model.binding_is_input(binding):
                     self.inputs.append(HostDeviceMem(host_mem, device_mem))
                 else:
                     self.outputs.append(HostDeviceMem(host_mem, device_mem))
             print("Successfully allocated memory for inputs and outputs")
 
+            # Create an execution context for the engine
             self.context = self.model.create_execution_context()
             print("Successfully created execution context")
 
         except ImportError:
             raise ImportError("Please install tensorrt and pycuda to use TensorRT engine.")
         except FileNotFoundError:
-            raise FileNotFoundError(f"TensorRT engine file {self.weights_path} not found.")
+            raise FileNotFoundError(f"Model file {self.weights_path} not found.")
         except Exception as e:
             raise RuntimeError(f"An error occurred during TensorRT initialization: {str(e)}")
 
