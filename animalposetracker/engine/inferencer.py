@@ -42,6 +42,7 @@ class InferenceEngine:
         self._device = device
         self._model_bits = model_bits
         self._coreml = False
+        self._tensorrt = False
         self.input_width = input_width
         self.input_height = input_height
         self.visualize_config = {
@@ -76,8 +77,11 @@ class InferenceEngine:
     def engine(self, engine):
         if engine == "CoreML":
             self._coreml = True
+        elif engine == "TensorRT":
+            self._tensorrt = True
         else:
             self._coreml = False
+            self._tensorrt = False
         self._engine = engine
 
     @property
@@ -485,8 +489,11 @@ class InferenceEngine:
         # Transpose and squeeze the output to match the expected shape
         if self._coreml:
             pred = list(pred.values())
-
-        outputs = np.transpose(np.squeeze(pred[0]))
+            outputs = np.transpose(np.squeeze(pred[0]))
+        elif self._tensorrt:
+            outputs = pred[0].reshape(8400, -1)
+        else:
+            outputs = np.transpose(np.squeeze(pred[0]))
 
         # Get the number of rows in the outputs array
         rows = outputs.shape[0]
