@@ -17,6 +17,17 @@ def measure_time(func, *args, **kwargs):
     return result, total_time
 
 
+class HostDeviceMem(object):
+    def __init__(self, host_mem, device_mem):
+        self.host = host_mem
+        self.device = device_mem
+
+    def __str__(self):
+        return "Host:\n" + str(self.host) + "\nDevice:\n" + str(self.device)
+
+    def __repr__(self):
+        return self.__str__()
+
 class InferenceEngine:
     def __init__(self,
                  config: Union[str, Path, Dict] = None,
@@ -349,7 +360,45 @@ class InferenceEngine:
             raise ImportError("Please install ais_bench to use CANN engine.")
     
     def _init_tensorrt(self):
-        pass
+        try:
+            import tensorrt as trt
+            import pycuda.driver as cuda
+            import pycuda.autoinit
+            TRT_LOGGER = trt.Logger(trt.Logger.WARNING)
+            with open(self.weights_path, 'rb') as f, trt.Runtime(TRT_LOGGER) as runtime:
+                self.model = runtime.deserialize_cuda_engine(f.read())
+            print(f"Successfully loaded TensorRT engine from {self.weights_path}")
+
+            self.inputs = []
+            self.outputs = []
+            self.bindings = []
+            self.stream = cuda.Stream()
+
+            for binding in self.model:
+                size = trt.volume(self.model.get_binding_shape(binding)) * self.model.max_batch_size
+                dtype = trt.nptype(self.model.get_binding_dtype(binding))
+                # Allocate host and device buffers
+                host_mem = cuda.pagelocked_empty(size, dtype)
+                device_mem = cuda.mem_alloc(host_mem.nbytes)
+                # Append the device buffer to device bindings
+                self.bindings.append(int(device_mem))
+                # Append the device buffer to device inputs or outputs
+                if self.model.binding_is_input(binding):
+                    self.inputs.append(HostDeviceMem(host_mem, device_mem))
+                else:
+                    self.outputs.append(HostDeviceMem(host_mem, device_mem))
+            print("Successfully allocated memory for inputs and outputs")
+
+            self.context = self.model.create_execution_context()
+            print("Successfully created execution context")
+
+        except ImportError:
+            raise ImportError("Please install tensorrt and pycuda to use TensorRT engine.")
+        except FileNotFoundError:
+            raise FileNotFoundError(f"TensorRT engine file {self.weights_path} not found.")
+        except Exception as e:
+            raise RuntimeError(f"An error occurred during TensorRT initialization: {str(e)}")
+
 
     def _init_coreml(self):
         try: 
@@ -518,13 +567,36 @@ class InferenceEngine:
         elif self.engine == 'ONNX':
             pred = self.model.run([self.output_name], {self.input_name: img})
         elif self.engine == 'TensorRT':
-            pass
+            pred = self.inference_tensorrt(img)
         elif self.engine == 'CANN':
             pred = self.model.infer([img])
         elif self.engine == 'CoreML':
             pred = self.model.predict({self.input_name: img})
         
         return pred
+    
+    def inference_tensorrt(self, img):
+
+        try:
+            import pycuda.driver as cuda
+
+            self.inputs[0].host = img.flatten()
+
+            [cuda.memcpy_htod_async(inp.device, inp.host, self.stream) for inp in self.inputs]
+
+            self.context.execute_async_v2(bindings=self.bindings, stream_handle=self.stream.handle)
+
+            [cuda.memcpy_dtoh_async(out.host, out.device, self.stream) for out in self.outputs]
+
+            self.stream.synchronize()
+
+            pred = [out.host for out in self.outputs]
+
+            return pred
+
+        except ImportError:
+            raise ImportError("Please install pycuda to use TensorRT engine.")
+
 
     def draw_detections(self, img, box, score, class_id, line_width=2, bbox=True, classes=True):
         """

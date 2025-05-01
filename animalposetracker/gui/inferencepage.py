@@ -251,6 +251,7 @@ class AnimalPoseInferencePage(QWidget, Ui_AnimalPoseInference):
 
         self._enable_widgets()
         self._clear_selections()
+        self.supported_engines_and_devices = {}
 
         self.weights_path = file_path
         file_path = Path(file_path)
