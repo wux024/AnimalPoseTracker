@@ -283,7 +283,7 @@ class AnimalPoseInferencePage(QWidget, Ui_AnimalPoseInference):
     def _get_supported_engines_and_devices(self, file_ext):
         """Get supported engines based on file extension"""
         if file_ext == '.onnx':
-            supported_engines = ["ONNX", "OpenVINO", "TensorRT", "OpenCV", ]
+            supported_engines = ["ONNX", "OpenVINO", "TensorRT", "OpenCV"]
         elif file_ext == '.xml':
             supported_engines =  ["OpenVINO"]
         elif file_ext == '.om':
@@ -343,6 +343,7 @@ class AnimalPoseInferencePage(QWidget, Ui_AnimalPoseInference):
             "Intel GPU": self._check_intel_gpu(),
             "Intel NPU": self._check_intel_npu(),
             "NVIDIA GPU": self._check_nvidia_gpu(),
+            "NVIDIA GPU TensorRT": self._check_nvidia_gpu_tensorrt(),
             "AMD GPU": self._check_amd_gpu(),
             "Ascend NPU": self._check_ascend_npu(),
             "Metal": self._check_metal(),
@@ -401,6 +402,14 @@ class AnimalPoseInferencePage(QWidget, Ui_AnimalPoseInference):
                 return cv2.cuda.getCudaEnabledDeviceCount() > 0
             except:
                 return False
+    
+    def _check_nvidia_gpu_tensorrt(self):
+        """Check if NVIDIA GPU with TensorRT is available in the system"""
+        try:
+            import tensorrt as trt
+            return trt.__version__ is not None
+        except ImportError:
+            return False
 
     def _check_ascend_npu(self):
         """Check if CANN environment is available for Ascend NPU"""
