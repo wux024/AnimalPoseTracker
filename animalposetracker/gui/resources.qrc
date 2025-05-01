@@ -1,0 +1,10 @@
+<!DOCTYPE RCC><RCC version="1.0">
+<qresource>
+    <file alias="logo_transparent.png">assets/logo_transparent.png</file>
+    <file alias="logo.png">assets/logo.png</file>
+    <file alias="logo_small.png">media/logo.png</file>
+    <file alias="welcome.png">assets/welcome.png</file>
+    <file alias="dark.qss">style/dark.qss</file>
+    <file alias="light.qss">style/light.qss</file>
+</qresource>
+</RCC>
