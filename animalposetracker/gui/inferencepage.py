@@ -53,6 +53,7 @@ class AnimalPoseInferencePage(QWidget, Ui_AnimalPoseInference):
         self.weights_path = None
 
         self.platform = self._detect_platform()
+        self.device_check_results = self._detect_device_availability()
 
         self.tools_disabled()
         self.SelectConfigure.setEnabled(True)
@@ -325,7 +326,19 @@ class AnimalPoseInferencePage(QWidget, Ui_AnimalPoseInference):
         except ImportError:
             raise ImportError("Please install 'py-cpuinfo' module")
     
-
+    def _detect_device_availability(self):
+        """Check if devices are available for each engine and platform"""
+        device_check_results = {
+            "Intel GPU": self._check_intel_gpu() if self.platform == 'Intel' else False,
+            "Intel NPU": self._check_intel_npu() if self.platform == 'Intel' else False,
+            "NVIDIA GPU": self._check_nvidia_gpu(),
+            "NVIDIA GPU TensorRT": self._check_nvidia_gpu_tensorrt(),
+            "AMD GPU": self._check_amd_gpu() if self.platform == 'AMD' else False,
+            "Ascend NPU": self._check_ascend_npu() if self.platform == 'ARM' else False,
+            "Metal": self._check_metal() if self.platform == 'ARM' else False,
+        }
+        return device_check_results
+    
     def _update_available_devices(self):
         """Update device selection based on chosen engine"""
         current_engine = self.EngineSelection.currentText()
@@ -339,20 +352,11 @@ class AnimalPoseInferencePage(QWidget, Ui_AnimalPoseInference):
 
     def _get_supported_devices(self, engine):
         supported_devices = []
-        device_check_results = {
-            "Intel GPU": self._check_intel_gpu() if self.platform == 'Intel' else False,
-            "Intel NPU": self._check_intel_npu() if self.platform == 'Intel' else False,
-            "NVIDIA GPU": self._check_nvidia_gpu(),
-            "NVIDIA GPU TensorRT": self._check_nvidia_gpu_tensorrt(),
-            "AMD GPU": self._check_amd_gpu() if self.platform == 'AMD' else False,
-            "Ascend NPU": self._check_ascend_npu() if self.platform == 'ARM' else False,
-            "Metal": self._check_metal() if self.platform == 'ARM' else False,
-        }
         if engine in ENGINEtoDEVICE:
             for device in ENGINEtoDEVICE[engine][self.platform]:
                 if device in ["Intel CPU", "AMD CPU", "ARM CPU"]:
                     supported_devices.append(device)
-                elif device_check_results.get(device, False):
+                elif self.device_check_results.get(device, False):
                     supported_devices.append(device)
         else:
             raise ValueError(f"Unsupported engine: {engine}")
