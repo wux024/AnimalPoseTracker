@@ -666,7 +666,6 @@ class AnimalPoseInferencePage(QWidget, Ui_AnimalPoseInference):
 
     def _stop_inference_threads(self):
         """Stop all inference threads"""
-        self.Display.clear()
         if self.videoreader_thread is not None and self.videoreader_thread.isRunning():
             self.videoreader_thread.safe_stop()
             self.videoreader_thread.original_frame.disconnect()
@@ -695,7 +694,9 @@ class AnimalPoseInferencePage(QWidget, Ui_AnimalPoseInference):
         with self.inference_cache.mutex:
             self.inference_cache.queue.clear()
         with self.visualization_cache.mutex:
-            self.visualization_cache.queue.clear()  
+            self.visualization_cache.queue.clear()
+
+        self.Display.clear()  
 
     def _get_source(self):
         if self.CameraORVideos.isChecked():
