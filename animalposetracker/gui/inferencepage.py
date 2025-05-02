@@ -340,13 +340,13 @@ class AnimalPoseInferencePage(QWidget, Ui_AnimalPoseInference):
     def _get_supported_devices(self, engine):
         supported_devices = []
         device_check_results = {
-            "Intel GPU": self._check_intel_gpu(),
-            "Intel NPU": self._check_intel_npu(),
+            "Intel GPU": self._check_intel_gpu() if self.platform == 'Intel' else False,
+            "Intel NPU": self._check_intel_npu() if self.platform == 'Intel' else False,
             "NVIDIA GPU": self._check_nvidia_gpu(),
             "NVIDIA GPU TensorRT": self._check_nvidia_gpu_tensorrt(),
-            "AMD GPU": self._check_amd_gpu(),
-            "Ascend NPU": self._check_ascend_npu(),
-            "Metal": self._check_metal(),
+            "AMD GPU": self._check_amd_gpu() if self.platform == 'AMD' else False,
+            "Ascend NPU": self._check_ascend_npu() if self.platform == 'ARM' else False,
+            "Metal": self._check_metal() if self.platform == 'ARM' else False,
         }
         if engine in ENGINEtoDEVICE:
             for device in ENGINEtoDEVICE[engine][self.platform]:
@@ -365,7 +365,9 @@ class AnimalPoseInferencePage(QWidget, Ui_AnimalPoseInference):
             from openvino import Core
             core = Core()
             return 'GPU' in core.available_devices
-        except:
+        except ImportError:
+            print("Please install 'openvino' and 'openvino-dev' module! "
+            "if Intel GPU is available in the system")
             return False
         
     def _check_intel_npu(self):
@@ -374,34 +376,28 @@ class AnimalPoseInferencePage(QWidget, Ui_AnimalPoseInference):
             from openvino import Core
             core = Core()
             return 'NPU' in core.available_devices
-        except:
+        except ImportError:
+            print("Please install 'openvino' and 'openvino-dev' module! "
+            "if Intel NPU is available through OpenVINO")
             return False
     
     def _check_amd_gpu(self):
         """Check if AMD GPU is available in the system"""
         try:
-            import pyopencl as cl
-            platforms = cl.get_platforms()
-            for platform in platforms:
-                devices = platform.get_devices()
-                for device in devices:
-                    if device.type == cl.device_type.GPU:
-                        return True
-            return False
-        except:
-            raise ImportError("Please install 'pyopencl' module")
+            from pyamdgpuinfo import drm_open, drm_close
+            fd = drm_open()
+            fd = True if fd >= 0 else False
+            drm_close(fd)
+            return fd
+        except ImportError:
+            raise ImportError("Please install 'pyamdgpuinfo' module!" 
+                              "if AMD GPU is available in the system!")
 
     def _check_nvidia_gpu(self):
         """Check if NVIDIA GPU is available in the system"""
-        try:
-            import torch
-            return torch.cuda.is_available()
-        except ImportError:
-            try:
-                import cv2
-                return cv2.cuda.getCudaEnabledDeviceCount() > 0
-            except:
-                return False
+        import subprocess
+        result = subprocess.run(['nvidia-smi'], stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+        return result.returncode == 0
     
     def _check_nvidia_gpu_tensorrt(self):
         """Check if NVIDIA GPU with TensorRT is available in the system"""
@@ -409,6 +405,8 @@ class AnimalPoseInferencePage(QWidget, Ui_AnimalPoseInference):
             import tensorrt as trt
             return trt.__version__ is not None
         except ImportError:
+            print("Please install 'tensorrt' module! "
+                  "if NVIDIA GPU with TensorRT is available in the system!")
             return False
 
     def _check_ascend_npu(self):
@@ -417,6 +415,7 @@ class AnimalPoseInferencePage(QWidget, Ui_AnimalPoseInference):
             from ais_bench.infer.interface import InferSession
             return True
         except ImportError:
+            print("Please install 'ais_bench' module! if CANN environment is available for Ascend NPU")
             return False
     
     def _check_metal(self):
