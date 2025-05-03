@@ -58,7 +58,6 @@ class BaseThread(QThread):
         return is_running
 
     def safe_stop(self):
-        self.status_update.emit(f"({self.__class__.__name__}) Stopping...")
         self._lock.lock()
         self.running = False
         self._lock.unlock()

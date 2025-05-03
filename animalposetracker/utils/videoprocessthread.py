@@ -48,16 +48,12 @@ class VideoReaderThread(BaseThread):
                     ret, frame = self.cap.read()
                     if not ret:
                         self.status_update.emit("Read finished")
-                        if not self._preview:
-                            # Send end signal
-                            end_frame = FrameInfo(end=True)
-                            self.output_queue.put(end_frame, block=False)
+                        self.finished.emit()
                         break
                     if self._preview:
                         self.preview_frame.emit(frame)
                     else:
-                        frame_info = FrameInfo(original_frame=frame.copy())
-                        self.output_queue.put(frame_info, block=False)
+                        self.output_queue.put(frame, block=False)
                     time.sleep(1/fps)
                 except queue.Full:
                     pass
@@ -102,16 +98,11 @@ class PreprocessThread(BaseThread):
             self._lock.unlock()
             while self.is_running:
                 try:
-                    frame_info = self.input_queue.get(timeout=1, block=False)
-                    if frame_info.end:
-                        break
+                    frame = self.input_queue.get(timeout=1, block=False)
                     start_time = time.time()
-                    img, IM = self._preprocess_function(frame_info.original_frame)
+                    img, IM = self._preprocess_function(frame)
                     pre_time = time.time() - start_time
-                    frame_info.preprocess_frame = img
-                    frame_info.IM = IM
-                    frame_info.results.update({'preprocess_time': pre_time})
-                    self.output_queue.put(frame_info, block=False)
+                    self.output_queue.put((frame, img, IM, pre_time), block=False)
                 except queue.Empty:
                     pass
                 except queue.Full:
@@ -150,15 +141,11 @@ class InferenceThread(BaseThread):
             self._lock.unlock()
             while self.is_running:
                 try:
-                    frame_info = self.input_queue.get(timeout=1, block=True)
-                    if frame_info.end:
-                        break
+                    frame, img, IM, pre_time = self.input_queue.get(timeout=1, block=True)
                     start_time = time.time()
-                    pred = self._inference_function(frame_info.preprocess_frame)
+                    pred = self._inference_function(img)
                     infer_time = time.time() - start_time
-                    frame_info.results.update({'pred': pred})
-                    frame_info.results.update({'inference_time': infer_time})
-                    self.output_queue.put(frame_info, block=False)
+                    self.output_queue.put((frame, pred, IM, pre_time, infer_time), block=False)
                 except queue.Empty:
                     pass
                 except queue.Full:
@@ -197,21 +184,17 @@ class PostprocessThread(BaseThread):
             self._lock.unlock()
             while self.is_running:
                 try:
-                    frame_info = self.input_queue.get(timeout=1, block=True)
-                    if frame_info.end:
-                        break
+                    frame, pred, IM, pre_time, infer_time = self.input_queue.get(timeout=1, block=True)
                     start_time = time.time()
-                    results = self._postprocess_function(frame_info.results['pred'], frame_info.IM)
+                    results = self._postprocess_function(pred, IM)
                     post_time = time.time() - start_time
-                    fps = 1.0 / (frame_info.results['preprocess_time'] + frame_info.results['inference_time'] + post_time + 1e-7)
-                    frame_info.results.update(
-                        {'boxes': results['boxes'],
-                         'keypoints_list': results['keypoints_list'],
-                         'class_ids': results['class_ids'],
-                         'scores': results['scores'],
+                    fps = 1.0 / (pre_time + infer_time + post_time + 1e-7)
+                    results.update(
+                        {'preprocess_time': pre_time,
+                         'inference_time': infer_time,
                          'postprocess_time': post_time,
                          'fps': fps})
-                    self.output_queue.put(frame_info, block=False)
+                    self.output_queue.put((frame, results), block=False)
                 except queue.Empty:
                     pass
                 except queue.Full:
@@ -225,9 +208,8 @@ class PostprocessThread(BaseThread):
 
 class VisualizeThread(BaseThread):
     """Thread to run visualization"""
-    #visualized_frame = Signal(np.ndarray, dict)
     visualized_frame = Signal(np.ndarray)
-
+    finished_checked = Signal()
     def __init__(self, parent=None,
                  visualize_function=None,
                  input_queue=None):
@@ -250,17 +232,12 @@ class VisualizeThread(BaseThread):
             self._lock.unlock()
             while self.is_running:
                 try:
-                    frame_info = self.input_queue.get(timeout=1, block=True)
-                    if frame_info.end:
-                        self.finished.emit()
-                        break
-                    visualized_frame = self._visualize_function(frame_info.original_frame, 
-                                                                frame_info.results)
-                    # self.visualized_frame.emit(visualized_frame.copy(), 
-                    #                            frame_info.results.copy())
-                    self.visualized_frame.emit(visualized_frame.copy())
+                    frame, results = self.input_queue.get(timeout=1, block=True)
+                    visualized_frame = self._visualize_function(frame, 
+                                                                results)
+                    self.visualized_frame.emit(visualized_frame)
                 except queue.Empty:
-                    pass
+                    self.finished_checked.emit()
                 except queue.Full:
                     pass
         except Exception as e:

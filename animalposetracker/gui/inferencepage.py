@@ -49,6 +49,7 @@ class AnimalPoseInferencePage(QWidget, Ui_AnimalPoseInference):
                                                     output_queue=self.cache_queues['postprocessed'])
         self.visualize_thread = VisualizeThread(input_queue=self.cache_queues['postprocessed'])
         self.videowriter_thread = VideoWriterThread()
+        self.read_frame_end = False
 
         self.inference = InferenceEngine()
         self.data_config_path = None
@@ -656,6 +657,7 @@ class AnimalPoseInferencePage(QWidget, Ui_AnimalPoseInference):
         self.videoreader_thread.cap = cv2.VideoCapture(source)
         self.videoreader_thread.preview = False
         self.videoreader_thread.status_update.connect(self.thread_status)
+        self.videoreader_thread.finished.connect(self.read_end)
 
         # Set up frame preprocessor thread
         self.preprocess_thread.preprocess_function = self.inference.preprocess
@@ -672,7 +674,7 @@ class AnimalPoseInferencePage(QWidget, Ui_AnimalPoseInference):
         # Set up visualization thread
         self.visualize_thread.visualize_function = self.inference.visualize
         self.visualize_thread.visualized_frame.connect(self.display_inferece_frame)
-        self.visualize_thread.finished.connect(self.visualize_finished)
+        self.visualize_thread.finished_checked.connect(self.visualize_finished_checked)
         self.visualize_thread.status_update.connect(self.thread_status)
 
         # set up video writer thread
@@ -730,6 +732,10 @@ class AnimalPoseInferencePage(QWidget, Ui_AnimalPoseInference):
     def thread_status(self, message):
         print(message)
     
+    def read_end(self):
+        """Handle when video reader thread has finished"""
+        self.read_frame_end = True
+    
     def display_inferece_frame(self, frame):
         """Handle new frame from camera/video source"""
 
@@ -757,9 +763,11 @@ class AnimalPoseInferencePage(QWidget, Ui_AnimalPoseInference):
         else:
             self.Display.clear()
     
-    def visualize_finished(self):
+    def visualize_finished_checked(self):
         """Handle when all threads have finished"""
-        self._stop_all_threads()
+        if self.read_frame_end:
+            self.read_frame_end = False
+            self._stop_all_threads()
 
     def onWidthSetupChanged(self, value):
         """Handle changes to the Width slider value"""
