@@ -32,21 +32,6 @@ class AnimalPoseInferencePage(QWidget, Ui_AnimalPoseInference):
         self.camera_list = {}
         self.supported_engines_and_devices = {}
         self.max_cache_size = 1024
-        self.read_cache = queue.Queue(maxsize=self.max_cache_size)
-        self.preprocess_cache = queue.Queue(maxsize=self.max_cache_size)
-        self.inference_cache = queue.Queue(maxsize=self.max_cache_size)
-        self.postprocess_cache = queue.Queue(maxsize=self.max_cache_size)
-        self.visualize_cache = queue.Queue(maxsize=self.max_cache_size)
-
-        self.videoreader_thread = VideoReaderThread()
-        self.videowriter_thread = VideoWriterThread()
-        self.preprocess_thread = PreprocessThread(input_queue=self.read_cache)
-        self.inference_thread = InferenceThread(input_queue=self.preprocess_cache) 
-        self.postprocess_thread = PostprocessThread(input_queue=self.inference_cache)
-        self.visualize_thread = VisualizeThread(input_queue=self.postprocess_cache)
-        self.videowriter_thread = VideoWriterThread()
-        self.display_thread = QTimer()
-        self.read_frame_end = False
 
         self.inference = InferenceEngine()
         self.data_config_path = None
@@ -607,6 +592,8 @@ class AnimalPoseInferencePage(QWidget, Ui_AnimalPoseInference):
         source = self._get_source()
         if source is None:
             return
+
+        self.videoreader_thread = VideoReaderThread()
         self.videoreader_thread.cap = cv2.VideoCapture(source)
         self.videoreader_thread.data_ready.connect(self.display_preview_frame)
         self.videoreader_thread.finished.connect(self._stop_preview)
@@ -647,9 +634,24 @@ class AnimalPoseInferencePage(QWidget, Ui_AnimalPoseInference):
         source = self._get_source()
         if source is None:
             return
+        
+        self.read_cache = queue.Queue(maxsize=self.max_cache_size)
+        self.preprocess_cache = queue.Queue(maxsize=self.max_cache_size)
+        self.inference_cache = queue.Queue(maxsize=self.max_cache_size)
+        self.postprocess_cache = queue.Queue(maxsize=self.max_cache_size)
+        self.visualize_cache = queue.Queue(maxsize=self.max_cache_size)
+
+        self.videoreader_thread = VideoReaderThread()
+        self.videowriter_thread = VideoWriterThread()
+        self.preprocess_thread = PreprocessThread(input_queue=self.read_cache)
+        self.inference_thread = InferenceThread(input_queue=self.preprocess_cache) 
+        self.postprocess_thread = PostprocessThread(input_queue=self.inference_cache)
+        self.visualize_thread = VisualizeThread(input_queue=self.postprocess_cache)
+        self.videowriter_thread = VideoWriterThread()
+        self.display_thread = QTimer()
+        self.read_frame_end = False
 
         # Set up video reader thread
-        self.read_frame_end = False
         self.videoreader_thread.cap = cv2.VideoCapture(source)
         self.videoreader_thread.status_update.connect(self.thread_status)
         self.videoreader_thread.data_ready.connect(self.put_read_data)
@@ -865,6 +867,7 @@ class AnimalPoseInferencePage(QWidget, Ui_AnimalPoseInference):
             if source is None:
                 QMessageBox.warning(self, "Warning", "Please select a source")
             # inference config
+            self.inference = InferenceEngine()
             self.inference.weights_path = self.weights_path
             self.inference.data_config = self.data_config_path
             self.inference.engine = self.engine
@@ -950,7 +953,7 @@ class AnimalPoseInferencePage(QWidget, Ui_AnimalPoseInference):
     
     def closeEvent(self, event):
         """Handle window close event"""
-        self._stop_inference_threads()
+        self._stop_all_threads()
         event.accept()
 
 def main():
