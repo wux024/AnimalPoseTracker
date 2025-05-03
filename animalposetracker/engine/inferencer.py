@@ -31,14 +31,14 @@ class InferenceEngine:
                  bbox_line_width: int = 2
                  ):
         self.model = None
-        self.weights_path = weights_path
+        self._weights_path = weights_path
         self._engine = engine
         self._device = device
         self._model_bits = model_bits
         self._coreml = False
         self._tensorrt = False
-        self.input_width = input_width
-        self.input_height = input_height
+        self._input_width = input_width
+        self._input_height = input_height
         self.visualize_config = {
             'conf': conf,
             'iou': iou,
@@ -69,13 +69,6 @@ class InferenceEngine:
 
     @engine.setter
     def engine(self, engine):
-        if engine == "CoreML":
-            self._coreml = True
-        elif engine == "TensorRT":
-            self._tensorrt = True
-        else:
-            self._coreml = False
-            self._tensorrt = False
         self._engine = engine
 
     @property
@@ -94,12 +87,36 @@ class InferenceEngine:
     def model_bits(self, model_bits):
         self._model_bits = model_bits
     
+    @property
+    def input_width(self):
+        return self._input_width
+
+    @input_width.setter
+    def input_width(self, input_width):
+        self._input_width = input_width
+
+    @property
+    def input_height(self):
+        return self._input_height
+
+    @input_height.setter
+    def input_height(self, input_height):
+        self._input_height = input_height
+
+    @property
+    def weights_path(self):
+        return self._weights_path
+
+    @weights_path.setter
+    def weights_path(self, weights_path):
+        self._weights_path = weights_path
+
     def print_config(self):
-        print(f"Engine: {self.engine}")
-        print(f"Device: {self.device}")
-        print(f"Model Bits: {self.model_bits}")
-        print(f"Input Width: {self.input_width}")
-        print(f"Input Height: {self.input_height}")
+        print(f"Engine: {self._engine}")
+        print(f"Device: {self._device}")
+        print(f"Model Bits: {self._model_bits}")
+        print(f"Input Width: {self._input_width}")
+        print(f"Input Height: {self._input_height}")
         for key, value in self.visualize_config.items():
             print(f"{key}: {value}")
 
@@ -142,8 +159,15 @@ class InferenceEngine:
             'CANN': self._init_cann,
 
         }
+        if self._engine == "CoreML":
+            self._coreml = True
+        elif self._engine == "TensorRT":
+            self._tensorrt = True
+        else:
+            self._coreml = False
+            self._tensorrt = False
         self.print_config()
-        engine_init_method[self.engine]()
+        engine_init_method[self._engine]()
 
     def _init_opencv(self):
         cv2_backends = ENGINEtoBackend["OpenCV"]
@@ -158,44 +182,43 @@ class InferenceEngine:
         :param cv2_backends: Mapping of device types to OpenCV backends
         :return: OpenCV backend
         """
-        try:
-            if "CPU" in self.device:
+        try:    
+            if "CPU" in self._device:
                 cv2_backend = cv2_backends.get("CPU")
             else:
-                cv2_backend = cv2_backends.get(self.device)
+                cv2_backend = cv2_backends.get(self._device)
         except KeyError:
-            raise ValueError(f"Invalid device {self.device}. Please choose from {cv2_backends.keys()}")
+            raise ValueError(f"Invalid device {self._device}. Please choose from {cv2_backends.keys()}")
         
         if len(cv2.dnn.getAvailableTargets(cv2_backend)) == 0:
-            if "Intel GPU" in self.device:
+            if "Intel GPU" in self._device:
                 print("You could build opencv from source with OpenVINO support to "
                       "use Intel GPU as device. We will use default OpenCV backend instead.")
                 cv2_backend = cv2.dnn.DNN_BACKEND_OPENCV
                 config_path = Path.cwd() / "OCL4DNN_CONFIG_CACHE"
                 config_path.mkdir(exist_ok=True)
                 os.environ['OPENCV_OCL4DNN_CONFIG_PATH'] = str(config_path)
-                if self.model_bits == "FP16":
+                if self._model_bits == "FP16":
                     cv2_target = cv2.dnn.DNN_TARGET_OPENCL_FP16
                 else:
                     cv2_target = cv2.dnn.DNN_TARGET_OPENCL
                 return cv2_backend, cv2_target
-            elif "NVIDIA GPU" in self.device:
+            elif "NVIDIA GPU" in self._device:
                 raise ValueError("You could build opencv from source with CUDA support to "
                                  "use NVIDIA GPU as device.")
-            elif "Intel NPU" in self.device:
+            elif "Intel NPU" in self._device:
                 raise ValueError("You could build opencv from source with OpenVINO support to "
                                  "use Intel NPU as device.")
-            elif "Ascend NPU" in self.device:
+            elif "Ascend NPU" in self._device:
                 raise ValueError("You could build opencv from source with CANN support to "
                                  "use Ascend NPU as device.")
-            elif "Metal" in self.device:
+            elif "Metal" in self._device:
                 raise ValueError("You could build opencv from source with Metal support to "
                                  "use Metal as device.")
 
-        if self.model_bits == "FP16":
-            target_key = f"{self.device} FP16"
+            target_key = f"{self._device} FP16"
         else:
-            target_key = self.device
+            target_key = self._device
         return cv2_backend, OpenCV_TARGETS.get(target_key)
 
     def _load_model(self):
@@ -203,16 +226,16 @@ class InferenceEngine:
         Load the model based on the weights file format.
         :return: Loaded OpenCV model
         """
-        if Path(self.weights_path).suffix == '.onnx':
-            return cv2.dnn.readNetFromONNX(self.weights_path)
-        elif (Path(self.weights_path).suffix == '.xml' and
-              Path(self.weights_path).with_suffix('.bin').exists() and
-              self.device in ["Intel GPU", "Intel NPU"]):
-            xml_path = Path(self.weights_path)
-            bin_path = Path(self.weights_path).with_suffix('.bin')
+        if Path(self._weights_path).suffix == '.onnx':
+            return cv2.dnn.readNetFromONNX(self._weights_path)
+        elif (Path(self._weights_path).suffix == '.xml' and
+              Path(self._weights_path).with_suffix('.bin').exists() and
+              self._device in ["Intel GPU", "Intel NPU"]):
+            xml_path = Path(self._weights_path)
+            bin_path = Path(self._weights_path).with_suffix('.bin')
             return cv2.dnn.readNet(str(xml_path), str(bin_path))
-        elif Path(self.weights_path).suffix == '.om':
-            return cv2.dnn.readNet(self.weights_path)
+        elif Path(self._weights_path).suffix == '.om':
+            return cv2.dnn.readNet(self._weights_path)
         else:
             raise ValueError("Invalid weights file format. "
                              "Please provide either an ONNX or an XML+BIN file.")
@@ -223,7 +246,7 @@ class InferenceEngine:
             import onnxruntime as ort
             
             # Get the recommended providers for the current device
-            providers_list = ENGINEtoBackend["ONNX"][self.device]
+            providers_list = ENGINEtoBackend["ONNX"][self._device]
             providers_available = ort.get_available_providers()
             providers_used = []
             
@@ -245,7 +268,7 @@ class InferenceEngine:
             
             # Initialize the inference session
             self.model = ort.InferenceSession(
-                self.weights_path,
+                self._weights_path,
                 sess_options=sess_options,
                 providers=providers_used
             )
@@ -293,9 +316,9 @@ class InferenceEngine:
         
         elif provider_name == "OpenVINOExecutionProvider":
             device_type = "CPU"
-            if "GPU" in self.device:
+            if "GPU" in self._device:
                 device_type = f"GPU.{device_id}" if device_id > 0 else "GPU"
-            elif "NPU" in self.device:
+            elif "NPU" in self._device:
                 device_type = "NPU"
             
             params.update({
@@ -322,17 +345,17 @@ class InferenceEngine:
         try:
             from openvino import Core
             core = Core()
-            device = ENGINEtoBackend[self.engine]
-            if Path(self.weights_path).suffix == '.onnx':
-                model = core.read_model(self.weights_path)
-            elif Path(self.weights_path).suffix == '.xml' and Path(self.weights_path).with_suffix('.bin').exists():
-                xml_path = Path(self.weights_path)
-                bin_path = Path(self.weights_path).with_suffix('.bin')
+            device = ENGINEtoBackend[self._engine]
+            if Path(self._weights_path).suffix == '.onnx':
+                model = core.read_model(self._weights_path)
+            elif Path(self._weights_path).suffix == '.xml' and Path(self._weights_path).with_suffix('.bin').exists():
+                xml_path = Path(self._weights_path)
+                bin_path = Path(self._weights_path).with_suffix('.bin')
                 model = core.read_model(model=str(xml_path), weights=str(bin_path))
             else:
                 raise ValueError("Invalid weights file format. Please provide either an ONNX or an XML+BIN file.")
             devices = ENGINEtoBackend["OpenVINO"]
-            device = devices.get(self.device)
+            device = devices.get(self._device)
             self.model = core.compile_model(model=model, device_name=device)
         except ImportError:
             raise ImportError("Please install openvino to use OpenVINO engine.")
@@ -340,7 +363,7 @@ class InferenceEngine:
     def _init_cann(self):
         try:
             from ais_bench.infer.interface import InferSession
-            self.model = InferSession(0, self.weights_path)
+            self.model = InferSession(0, self._weights_path)
         except ImportError:
             raise ImportError("Please install ais_bench to use CANN engine.")
     
@@ -350,7 +373,7 @@ class InferenceEngine:
             from .utils import allocate_buffers
             TRT_LOGGER = trt.Logger(trt.Logger.WARNING)
             # Step 1: Load or build the TensorRT engine
-            if Path(self.weights_path).suffix == '.onnx':
+            if Path(self._weights_path).suffix == '.onnx':
                 self.model = self._build_engine_from_onnx(TRT_LOGGER)
             else:
                 self.model = self._build_engine_from_engine(TRT_LOGGER)
@@ -360,7 +383,7 @@ class InferenceEngine:
         except ImportError:
             raise ImportError("Please install tensorrt and pycuda to use TensorRT engine.")
         except FileNotFoundError:
-            raise FileNotFoundError(f"Model file {self.weights_path} not found.")
+            raise FileNotFoundError(f"Model file {self._weights_path} not found.")
         except Exception as e:
             raise RuntimeError(f"TensorRT initialization failed: {str(e)}")
 
@@ -373,7 +396,7 @@ class InferenceEngine:
                     trt.Runtime(logger) as runtime:                
                 # Set the workspace memory limit
                 config.set_memory_pool_limit(trt.MemoryPoolType.WORKSPACE, 1 << 30)  # 1GB
-                with open(self.weights_path, "rb") as model:
+                with open(self._weights_path, "rb") as model:
                     print("Beginning ONNX file parsing")
                     if not parser.parse(model.read()):
                         print("ERROR: Failed to parse the ONNX file.")
@@ -385,7 +408,7 @@ class InferenceEngine:
         except ImportError:
             raise ImportError("Please install tensorrt and pycuda to use TensorRT engine.")
         except FileNotFoundError:
-            raise FileNotFoundError(f"Model file {self.weights_path} not found.")
+            raise FileNotFoundError(f"Model file {self._weights_path} not found.")
         except Exception as e:
             raise RuntimeError(f"TensorRT engine build failed: {str(e)}")
 
@@ -393,20 +416,20 @@ class InferenceEngine:
         """Load pre-built TensorRT engine."""
         try:
             import tensorrt as trt
-            with open(self.weights_path, "rb") as f, trt.Runtime(logger) as runtime:
+            with open(self._weights_path, "rb") as f, trt.Runtime(logger) as runtime:
                 engine = runtime.deserialize_cuda_engine(f.read())
                 return engine
         except ImportError:
             raise ImportError("Please install tensorrt and pycuda to use TensorRT engine.")
         except FileNotFoundError:
-            raise FileNotFoundError(f"Model file {self.weights_path} not found.")
+            raise FileNotFoundError(f"Model file {self._weights_path} not found.")
         except Exception as e:
             raise RuntimeError(f"TensorRT engine load failed: {str(e)}")
 
     def _init_coreml(self):
         try: 
             import coremltools as ct
-            self.model = ct.models.MLModel(self.weights_path)
+            self.model = ct.models.MLModel(self._weights_path)
             self.input_name = self.model.get_spec().description.input[0].name
         except ImportError:
             raise ImportError("Please install coremltools to use CoreML engine.")
@@ -425,10 +448,10 @@ class InferenceEngine:
         # Get the height and width of the input image
         img_height, img_width = img.shape[:2]
 
-        scale = min(self.input_width / img_width, self.input_height / img_height)
+        scale = min(self._input_width / img_width, self._input_height / img_height)
 
-        ox = self.input_width - scale * img_width
-        oy = self.input_height - scale * img_height
+        ox = self._input_width - scale * img_width
+        oy = self._input_height - scale * img_height
 
         M = np.array([
             [scale, 0, ox],
@@ -437,7 +460,7 @@ class InferenceEngine:
         )
 
         img = cv2.warpAffine(img, M,
-                             (self.input_width, self.input_height),
+                             (self._input_width, self._input_height),
                              flags=cv2.INTER_LINEAR,
                              borderMode=cv2.BORDER_CONSTANT,
                              borderValue=(114, 114, 114))
@@ -565,18 +588,18 @@ class InferenceEngine:
     
     def inference(self, img):
         # Run inference using the preprocessed image data
-        if self.engine == 'OpenCV':
+        if self._engine == 'OpenCV':
             self.model.setInput(img)
             pred = self.model.forward()
-        elif self.engine == 'OpenVINO':
+        elif self._engine == 'OpenVINO':
             pred = self.model([img])
-        elif self.engine == 'ONNX':
+        elif self._engine == 'ONNX':
             pred = self.model.run([self.output_name], {self.input_name: img})
-        elif self.engine == 'TensorRT':
+        elif self._engine == 'TensorRT':
             pred = self.inference_tensorrt(img)
-        elif self.engine == 'CANN':
+        elif self._engine == 'CANN':
             pred = self.model.infer([img])
-        elif self.engine == 'CoreML':
+        elif self._engine == 'CoreML':
             pred = self.model.predict({self.input_name: img})
         
         return pred
