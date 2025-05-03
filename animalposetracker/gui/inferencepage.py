@@ -862,7 +862,6 @@ class AnimalPoseInferencePage(QWidget, Ui_AnimalPoseInference):
             self.inference.engine = self.EngineSelection.currentText()
             self.inference.device = self.DeviceSelection.currentText()
             self.inference.model_bits = self.ModelBits.currentText()
-            self.inference.print_config()
             self.inference.model_init()
             # init threads
             self._init_inference_threads()
