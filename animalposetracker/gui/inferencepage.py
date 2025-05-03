@@ -7,6 +7,7 @@ import cv2
 import sys
 from pathlib import Path
 import queue
+import time
 
 from .ui_animalposeinference import Ui_AnimalPoseInference
 from animalposetracker.utils import (VideoReaderThread, VideoWriterThread, 
@@ -704,8 +705,6 @@ class AnimalPoseInferencePage(QWidget, Ui_AnimalPoseInference):
         if self.postprocess_thread is not None and self.postprocess_thread.isRunning():
             self.postprocess_thread.safe_stop()
         
-        self.Display.clear()
-
         for key, value in self.cache_queues.items():
             with value.mutex:
                 value.queue.clear()
@@ -759,9 +758,7 @@ class AnimalPoseInferencePage(QWidget, Ui_AnimalPoseInference):
     
     def visualize_finished(self):
         """Handle when all threads have finished"""
-        self._stop_inference_threads()
-        self.Start.setText("Start")
-        self.Start.setEnabled(True)
+        self._stop_all_threads()
 
     def onWidthSetupChanged(self, value):
         """Handle changes to the Width slider value"""
@@ -817,9 +814,25 @@ class AnimalPoseInferencePage(QWidget, Ui_AnimalPoseInference):
     
     def onEndClicked(self):
         """Handle when the End button is clicked to stop processing"""
-        self._stop_inference_threads()
-        self.Start.setText("Start")
-        self.Start.setEnabled(True)
+        self._stop_all_threads()
+    
+    def _stop_all_threads(self):
+        """Stop all threads"""
+        if not hasattr(self, '_stopping'):
+            self._stopping = True
+            self._stop_inference_threads()
+            QTimer.singleShot(33, self._finalize_cleanup)
+    
+    def _finalize_cleanup(self):
+        """Clean up after all threads have stopped"""
+        try:
+            self.Display.clear()
+            self.Start.setText("Start")
+            self.Start.setEnabled(True)
+        finally:
+            if hasattr(self, '_stopping'):
+                del self._stopping
+
     
     def onIoUChanged(self, value):
         """Handle changes to the IOU threshold slider value"""
@@ -872,18 +885,7 @@ class AnimalPoseInferencePage(QWidget, Ui_AnimalPoseInference):
     
     def closeEvent(self, event):
         """Handle window close event"""
-        if self.videoreader_thread is not None and self.videoreader_thread.isRunning():
-            self.videoreader_thread.safe_stop()
-        if self.videowriter_thread is not None and self.videowriter_thread.isRunning():
-            self.videowriter_thread.safe_stop()
-        if self.inference_thread is not None and self.inference_thread.isRunning():
-            self.inference_thread.safe_stop()
-        if self.postprocess_thread is not None and self.postprocess_thread.isRunning():
-            self.postprocess_thread.safe_stop()
-        if self.preprocess_thread is not None and self.preprocess_thread.isRunning():
-            self.preprocess_thread.safe_stop()
-        if self.visualize_thread is not None and self.visualize_thread.isRunning():
-            self.visualize_thread.safe_stop()
+        self._stop_inference_threads()
         event.accept()
 
 def main():
