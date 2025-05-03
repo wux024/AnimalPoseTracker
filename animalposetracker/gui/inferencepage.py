@@ -32,22 +32,17 @@ class AnimalPoseInferencePage(QWidget, Ui_AnimalPoseInference):
         self.camera_list = {}
         self.supported_engines_and_devices = {}
         self.max_cache_size = 1024
-        self.cache_queues = {
-            'read': queue.Queue(maxsize=self.max_cache_size),
-            'preprocessed': queue.Queue(maxsize=self.max_cache_size),
-            'inference': queue.Queue(maxsize=self.max_cache_size),
-            'postprocessed': queue.Queue(maxsize=self.max_cache_size),
-        }
+        self.read_cache = queue.Queue(maxsize=self.max_cache_size)
+        self.preprocess_cache = queue.Queue(maxsize=self.max_cache_size)
+        self.inference_cache = queue.Queue(maxsize=self.max_cache_size)
+        self.postprocess_cache = queue.Queue(maxsize=self.max_cache_size)
 
-        self.videoreader_thread = VideoReaderThread(output_queue=self.cache_queues['read'])
+        self.videoreader_thread = VideoReaderThread()
         self.videowriter_thread = VideoWriterThread()
-        self.preprocess_thread = PreprocessThread(input_queue=self.cache_queues['read'], 
-                                                  output_queue=self.cache_queues['preprocessed'])
-        self.inference_thread = InferenceThread(input_queue=self.cache_queues['preprocessed'], 
-                                                 output_queue=self.cache_queues['inference']) 
-        self.postprocess_thread = PostprocessThread(input_queue=self.cache_queues['inference'], 
-                                                    output_queue=self.cache_queues['postprocessed'])
-        self.visualize_thread = VisualizeThread(input_queue=self.cache_queues['postprocessed'])
+        self.preprocess_thread = PreprocessThread(input_queue=self.read_cache)
+        self.inference_thread = InferenceThread(input_queue=self.preprocess_cache) 
+        self.postprocess_thread = PostprocessThread(input_queue=self.inference_cache)
+        self.visualize_thread = VisualizeThread(input_queue=self.postprocess_cache)
         self.videowriter_thread = VideoWriterThread()
         self.read_frame_end = False
 
@@ -612,9 +607,8 @@ class AnimalPoseInferencePage(QWidget, Ui_AnimalPoseInference):
         source = self._get_source()
         if source is None:
             return
-        self.videoreader_thread.preview = True
         self.videoreader_thread.cap = cv2.VideoCapture(source)
-        self.videoreader_thread.preview_frame.connect(self.display_preview_frame)
+        self.videoreader_thread.data_ready.connect(self.display_preview_frame)
         self.videoreader_thread.finished.connect(self._stop_preview)
         self.videoreader_thread.start()
         mode = "Camera" if self.CameraORVideos.isChecked() else "Video"
@@ -622,8 +616,9 @@ class AnimalPoseInferencePage(QWidget, Ui_AnimalPoseInference):
     
     def _stop_preview(self):
         """Stop camera/video preview"""
-        self.videoreader_thread.preview = False
         self.videoreader_thread.safe_stop()
+        self.videoreader_thread.data_ready.disconnect()
+        self.videoreader_thread.finished.disconnect()
         self.Display.clear()
         mode = "Camera" if self.CameraORVideos.isChecked() else "Video"
         self.CheckCameraVideosConnect.setText(f"Preview {mode}")
@@ -655,25 +650,28 @@ class AnimalPoseInferencePage(QWidget, Ui_AnimalPoseInference):
 
         # Set up video reader thread
         self.videoreader_thread.cap = cv2.VideoCapture(source)
-        self.videoreader_thread.preview = False
         self.videoreader_thread.status_update.connect(self.thread_status)
+        self.videoreader_thread.data_ready.connect(self.put_read_data)
         self.videoreader_thread.finished.connect(self.read_end)
 
         # Set up frame preprocessor thread
         self.preprocess_thread.preprocess_function = self.inference.preprocess
         self.preprocess_thread.status_update.connect(self.thread_status)
+        self.preprocess_thread.data_ready.connect(self.put_preprocessed_data)
 
         # Set up inference thread
         self.inference_thread.inference_function = self.inference.inference
         self.inference_thread.status_update.connect(self.thread_status)
+        self.inference_thread.data_ready.connect(self.put_inference_data)
 
         # Set up frame postprocessor thread
         self.postprocess_thread.postprocess_function = self.inference.postprocess
         self.postprocess_thread.status_update.connect(self.thread_status)
+        self.postprocess_thread.data_ready.connect(self.put_postprocessed_data)
 
         # Set up visualization thread
         self.visualize_thread.visualize_function = self.inference.visualize
-        self.visualize_thread.visualized_frame.connect(self.display_inferece_frame)
+        self.visualize_thread.data_ready.connect(self.display_inferece_frame)
         self.visualize_thread.finished_checked.connect(self.visualize_finished_checked)
         self.visualize_thread.status_update.connect(self.thread_status)
 
@@ -694,23 +692,32 @@ class AnimalPoseInferencePage(QWidget, Ui_AnimalPoseInference):
             self.videowriter_thread.start()
 
     def _stop_inference_threads(self):
-        """Stop all inference threads"""
-        if self.visualize_thread is not None and self.visualize_thread.isRunning():
-            self.visualize_thread.safe_stop()
-            self.visualize_thread.visualized_frame.disconnect()
-            self.visualize_thread.finished.disconnect()
-        if self.videoreader_thread is not None and self.videoreader_thread.isRunning():
-            self.videoreader_thread.safe_stop()
-        if self.preprocess_thread is not None and self.preprocess_thread.isRunning():
-            self.preprocess_thread.safe_stop()
-        if self.inference_thread is not None and self.inference_thread.isRunning():
-            self.inference_thread.safe_stop()
-        if self.postprocess_thread is not None and self.postprocess_thread.isRunning():
-            self.postprocess_thread.safe_stop()
-        
-        for key, value in self.cache_queues.items():
-            with value.mutex:
-                value.queue.clear()
+        """Stop all inference threads and clean up resources"""
+        # Define all threads with their associated signals to disconnect
+        threads = [
+            (self.videoreader_thread, ['status_update', 'data_ready']),
+            (self.preprocess_thread, ['status_update', 'data_ready']),
+            (self.inference_thread, ['status_update', 'data_ready']),
+            (self.postprocess_thread, ['status_update', 'data_ready']),
+            (self.visualize_thread, ['status_update', 'finished_checked', 'data_ready']),
+            (self.videowriter_thread, []),
+        ]
+
+        # Stop all threads and disconnect their signals
+        for thread, signals in threads:
+            if thread is not None and thread.isRunning():
+                thread.safe_stop()  # Request thread termination
+                for signal in signals:
+                    try:
+                        getattr(thread, signal).disconnect()  # Safely disconnect all signals
+                    except (TypeError, RuntimeError):
+                        pass  # Silently ignore if signal wasn't connected
+
+        # Clear all cache queues
+        self.read_cache.queue.clear()
+        self.preprocess_cache.queue.clear()
+        self.inference_cache.queue.clear()
+        self.postprocess_cache.queue.clear()
 
         
 
@@ -736,13 +743,41 @@ class AnimalPoseInferencePage(QWidget, Ui_AnimalPoseInference):
         """Handle when video reader thread has finished"""
         self.read_frame_end = True
     
-    def display_inferece_frame(self, frame):
+    def put_read_data(self, frame):
+        """Put new frame from video reader thread to preprocess thread"""
+        try:
+            self.read_cache.put(frame)
+        except queue.Full:
+            pass
+    
+    def put_preprocessed_data(self, frame, img, IM, pred_time):
+        """Put new frame from preprocess thread to inference thread"""
+        try:
+            self.preprocess_cache.put((frame, img, IM, pred_time))
+        except queue.Full:
+            pass
+    
+    def put_inference_data(self, frame, pred, IM, pred_time, infer_time):
+        """Put new frame from inference thread to postprocess thread"""
+        try:
+            self.inference_cache.put((frame, pred, IM, pred_time, infer_time))
+        except queue.Full:
+            pass
+    
+    def put_postprocessed_data(self, frame, results):
+        """Put new frame from postprocess thread to visualization thread"""
+        try:
+            self.postprocess_cache.put((frame, results))
+        except queue.Full:  
+            pass
+
+    def display_inferece_frame(self, frame, results):
         """Handle new frame from camera/video source"""
 
         if (self.Save.isChecked() and 
             self.videowriter_thread is not None 
             and self.videowriter_thread.isRunning()):
-            self.videowriter_thread.add_frame(frame)
+            self.videowriter_thread.add_frame(frame, results)
         
         if self.Show.isChecked():
             RGB = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)

@@ -4,21 +4,19 @@ import numpy as np
 from PySide6.QtCore import Signal
 import queue
 import traceback
+import json
+from pathlib import Path
 
-from .base import BaseThread, FrameInfo
+from .base import BaseThread, measure_time
 
 class VideoReaderThread(BaseThread):
     """Thread to run video reading"""
-    preview_frame = Signal(np.ndarray)
+    # frame
+    data_ready = Signal(np.ndarray)
 
-    def __init__(self, parent=None, 
-                 cap=None, 
-                 output_queue=None,
-                 preview=False):
+    def __init__(self, parent=None, cap=None):
         super().__init__(parent)
         self._cap = cap
-        self._preview = preview
-        self.output_queue = output_queue
 
     @property
     def cap(self):
@@ -27,14 +25,6 @@ class VideoReaderThread(BaseThread):
     @cap.setter
     def cap(self, value):
         self._cap = value
-    
-    @property
-    def preview(self):
-        return self._preview
-
-    @preview.setter
-    def preview(self, value):
-        self._preview = value
 
     def run(self):
         try:
@@ -45,15 +35,12 @@ class VideoReaderThread(BaseThread):
             self.status_update.emit("Read started")
             while self.is_running:
                 try:
-                    ret, frame = self.cap.read()
+                    ret, frame = self._cap.read()
                     if not ret:
                         self.status_update.emit("Read finished")
                         self.finished.emit()
                         break
-                    if self._preview:
-                        self.preview_frame.emit(frame)
-                    else:
-                        self.output_queue.put(frame, block=False)
+                    self.data_ready.emit(frame.copy())
                     time.sleep(1/fps)
                 except queue.Full:
                     pass
@@ -72,16 +59,16 @@ class VideoReaderThread(BaseThread):
 
 class PreprocessThread(BaseThread):
     """Thread to run preprocess"""
+    # frame, img, IM, pre_time
+    data_ready = Signal(np.ndarray, np.ndarray, np.ndarray, float)
 
     def __init__(self, parent=None, 
                  preprocess_function=None, 
-                 input_queue=None, 
-                 output_queue=None
+                 input_queue=None
                  ):
         super().__init__(parent)
         self._preprocess_function = preprocess_function
         self.input_queue = input_queue
-        self.output_queue = output_queue
 
     @property
     def preprocess_function(self):
@@ -99,10 +86,8 @@ class PreprocessThread(BaseThread):
             while self.is_running:
                 try:
                     frame = self.input_queue.get(timeout=1, block=False)
-                    start_time = time.time()
-                    img, IM = self._preprocess_function(frame)
-                    pre_time = time.time() - start_time
-                    self.output_queue.put((frame, img, IM, pre_time), block=False)
+                    [img, IM], pre_time = measure_time(self._preprocess_function, frame)
+                    self.data_ready.emit(frame, img, IM, pre_time)
                 except queue.Empty:
                     pass
                 except queue.Full:
@@ -116,15 +101,14 @@ class PreprocessThread(BaseThread):
 
 class InferenceThread(BaseThread):
     """Thread to run inference"""
-
+    # frame, pred, IM, pre_time, infer_time
+    data_ready = Signal(np.ndarray, np.ndarray, np.ndarray, float, float)
     def __init__(self, parent=None,
                  inference_function=None,
-                 input_queue=None,
-                 output_queue=None):
+                 input_queue=None):
         super().__init__(parent)
         self._inference_function = inference_function
         self.input_queue = input_queue
-        self.output_queue = output_queue
 
     @property
     def inference_function(self):
@@ -142,10 +126,8 @@ class InferenceThread(BaseThread):
             while self.is_running:
                 try:
                     frame, img, IM, pre_time = self.input_queue.get(timeout=1, block=True)
-                    start_time = time.time()
-                    pred = self._inference_function(img)
-                    infer_time = time.time() - start_time
-                    self.output_queue.put((frame, pred, IM, pre_time, infer_time), block=False)
+                    pred, infer_time = measure_time(self._inference_function, img)
+                    self.data_ready.emit(frame, pred, IM, pre_time, infer_time)
                 except queue.Empty:
                     pass
                 except queue.Full:
@@ -159,15 +141,14 @@ class InferenceThread(BaseThread):
 
 class PostprocessThread(BaseThread):
     """Thread to run postprocessing"""
-
+    # frame, results
+    data_ready = Signal(np.ndarray, dict)
     def __init__(self, parent=None,
                  postprocess_function=None,
-                 input_queue=None,
-                 output_queue=None):
+                 input_queue=None):
         super().__init__(parent)
         self._postprocess_function = postprocess_function
         self.input_queue = input_queue
-        self.output_queue = output_queue
 
     @property
     def postprocess_function(self):
@@ -185,16 +166,14 @@ class PostprocessThread(BaseThread):
             while self.is_running:
                 try:
                     frame, pred, IM, pre_time, infer_time = self.input_queue.get(timeout=1, block=True)
-                    start_time = time.time()
-                    results = self._postprocess_function(pred, IM)
-                    post_time = time.time() - start_time
+                    results, post_time = measure_time(self._postprocess_function, pred, IM)
                     fps = 1.0 / (pre_time + infer_time + post_time + 1e-7)
                     results.update(
                         {'preprocess_time': pre_time,
                          'inference_time': infer_time,
                          'postprocess_time': post_time,
                          'fps': fps})
-                    self.output_queue.put((frame, results), block=False)
+                    self.data_ready.emit(frame, results)
                 except queue.Empty:
                     pass
                 except queue.Full:
@@ -208,7 +187,8 @@ class PostprocessThread(BaseThread):
 
 class VisualizeThread(BaseThread):
     """Thread to run visualization"""
-    visualized_frame = Signal(np.ndarray)
+    # frame, results
+    data_ready = Signal(np.ndarray, dict)
     finished_checked = Signal()
     def __init__(self, parent=None,
                  visualize_function=None,
@@ -235,7 +215,7 @@ class VisualizeThread(BaseThread):
                     frame, results = self.input_queue.get(timeout=1, block=True)
                     visualized_frame = self._visualize_function(frame, 
                                                                 results)
-                    self.visualized_frame.emit(visualized_frame)
+                    self.data_ready.emit(visualized_frame, results)
                 except queue.Empty:
                     self.finished_checked.emit()
                 except queue.Full:
@@ -256,7 +236,9 @@ class VideoWriterThread(BaseThread):
         self._frame_size = frame_size
         self.video_writer = None
         self.frames = []
+        self.results = []
         self._stop_flag = False
+        self.frame_count = 0
 
     @property
     def save_path(self):
@@ -289,13 +271,23 @@ class VideoWriterThread(BaseThread):
             if self.frames:
                 frame = self.frames.pop(0)
                 self.video_writer.write(frame)
+                results = self.results.pop(0)
+                self.save_results(results)
+                self.frame_count += 1
         self.video_writer.release()
 
-    def add_frame(self, frame):
+    def add_frame(self, frame, results):
         self.frames.append(frame)
+        self.results.append(results)
+    
+    def save_results(self, results):
+        save_dir = Path(self.save_path).parent / f"frame_{self.frame_count}.json"
+        with open(save_dir, 'w') as f:
+            json.dump(results, f, indent=4)
 
     def safe_stop(self):
         super().safe_stop()
+        self.frame_count = 0
         self._release_resources()
 
     def _release_resources(self):

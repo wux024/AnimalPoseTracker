@@ -1,20 +1,14 @@
 from typing import Dict, Union
 import cv2
 import numpy as np
-from datetime import datetime
 import yaml
 from pathlib import Path
 import os
 
 from .constant import ENGINEtoBackend, OpenCV_TARGETS, EP_PARAMS
+from animalposetracker.utils.base import measure_time
 
 
-def measure_time(func, *args, **kwargs):
-    start_time = datetime.now()
-    result = func(*args, **kwargs)
-    end_time = datetime.now()
-    total_time = (end_time - start_time).total_seconds()
-    return result, total_time
 
 class InferenceEngine:
     def __init__(self,
