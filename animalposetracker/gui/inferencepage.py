@@ -421,10 +421,14 @@ class AnimalPoseInferencePage(QWidget, Ui_AnimalPoseInference):
     def _check_ascend_npu(self):
         """Check if CANN environment is available for Ascend NPU"""
         try:
-            from ais_bench.infer.interface import InferSession
-            return True
-        except ImportError:
-            print("Please install 'ais_bench' module! if CANN environment is available for Ascend NPU")
+            import subprocess
+            result = subprocess.run(
+                ['npu-smi', 'info'],
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL
+            )
+            return result.returncode == 0
+        except FileNotFoundError:
             return False
     
     def _check_metal(self):
