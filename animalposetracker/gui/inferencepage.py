@@ -706,13 +706,20 @@ class AnimalPoseInferencePage(QWidget, Ui_AnimalPoseInference):
             self.inference_thread,
             self.postprocess_thread,
             self.visualize_thread,
-            self.videowriter_thread,
         ]
 
         # Stop all threads and disconnect their signals
         for thread in threads:
             if thread is not None and thread.isRunning():
                 thread.safe_stop()  # Request thread termination
+                thread.status_update.disconnect()
+                thread.data_ready.disconnect()
+        
+        if (self.Save.isChecked() and 
+            self.videowriter_thread is not None and 
+            self.videowriter_thread.isRunning()):
+            self.videowriter_thread.safe_stop()
+
         self.display_thread.stop()
         # Clear all cache queues
         with self.read_cache.mutex:

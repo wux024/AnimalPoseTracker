@@ -143,8 +143,6 @@ class InferenceEngine:
 
         }
         self.print_config()
-        print("CoreML: ", self._coreml)
-        print("TensorRT: ", self._tensorrt)
         engine_init_method[self.engine]()
 
     def _init_opencv(self):
