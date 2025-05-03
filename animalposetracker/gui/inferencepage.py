@@ -736,10 +736,6 @@ class AnimalPoseInferencePage(QWidget, Ui_AnimalPoseInference):
             except Exception as e:
                 queues[name] = queue.Queue(maxsize=self.max_queue_size)
             
-        
-
-        
-
     def _get_source(self):
         if self.CameraORVideos.isChecked():
             try:
