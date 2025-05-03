@@ -403,14 +403,10 @@ class AnimalPoseInferencePage(QWidget, Ui_AnimalPoseInference):
         """Check if NVIDIA GPU is available in the system"""
         try:
             import subprocess
-            result = subprocess.run(['nvidia-smi'], stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-            if result.returncode == 0:
-                print("NVIDIA GPU detected:")
-                print(result.stdout.decode('utf-8'))
-            else:
-                print("No NVIDIA GPU detected or nvidia-smi not found.")
-        except FileNotFoundError:
-            print("nvidia-smi command not found (NVIDIA drivers may not be installed).")
+            subprocess.run(['nvidia-smi'], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+            return True 
+        except (FileNotFoundError, subprocess.CalledProcessError):
+            return False
     
     def _check_nvidia_gpu_tensorrt(self):
         """Check if NVIDIA GPU with TensorRT is available in the system"""
