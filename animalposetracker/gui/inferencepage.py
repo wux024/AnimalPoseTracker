@@ -720,16 +720,23 @@ class AnimalPoseInferencePage(QWidget, Ui_AnimalPoseInference):
 
         self.display_thread.stop()
         # Clear all cache queues
-        with self.read_cache.mutex:
-            self.read_cache.queue.clear()
-        with self.preprocess_cache.mutex:
-            self.preprocess_cache.queue.clear()
-        with self.inference_cache.mutex:
-            self.inference_cache.queue.clear()
-        with self.postprocess_cache.mutex:
-            self.postprocess_cache.queue.clear()
-        with self.visualize_cache.mutex:
-            self.visualize_cache.queue.clear()
+        queues = {
+            'read': self.read_cache,
+            'preprocess': self.preprocess_cache,
+            'inference': self.inference_cache,
+            'postprocess': self.postprocess_cache,
+            'visualize': self.visualize_cache
+        }
+        for name, cache in queues.items():
+            try:
+                with cache.mutex:
+                    cache.queue.clear()
+                    cache.unfinished_tasks = 0
+                    cache.all_tasks_done.notify_all()
+            except Exception as e:
+                queues[name] = queue.Queue(maxsize=self.max_queue_size)
+            
+        
 
         
 
