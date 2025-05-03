@@ -1,11 +1,9 @@
 import cv2
 import time
 import numpy as np
-from PySide6.QtCore import QThread, Signal, QMutex
+from PySide6.QtCore import Signal
 import queue
 import traceback
-from pathlib import Path
-import json
 
 from .base import BaseThread, FrameInfo
 
@@ -254,6 +252,7 @@ class VisualizeThread(BaseThread):
                 try:
                     frame_info = self.input_queue.get(timeout=1, block=True)
                     if frame_info.end:
+                        self.finished.emit()
                         break
                     visualized_frame = self._visualize_function(frame_info.original_frame, 
                                                                 frame_info.results)

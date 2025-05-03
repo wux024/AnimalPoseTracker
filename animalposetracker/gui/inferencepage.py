@@ -4,7 +4,6 @@ from PySide6.QtWidgets import  QApplication, QFileDialog, QWidget, QMessageBox
 import os
 import yaml
 import cv2
-import numpy as np
 import sys
 from pathlib import Path
 import queue
@@ -337,7 +336,7 @@ class AnimalPoseInferencePage(QWidget, Ui_AnimalPoseInference):
             "NVIDIA GPU TensorRT": False if sys.platform == 'darwin' else self._check_nvidia_gpu_tensorrt(),
             "AMD GPU": self._check_amd_gpu() if self.platform == 'AMD' else False,
             "Ascend NPU": False if sys.platform in ['darwin', 'win32'] else self._check_ascend_npu(),
-            "Metal": self._check_metal() if sys.platform == 'darwin' else False,
+            "Metal": True if sys.platform == 'darwin' else False,
         }
         return device_check_results
     
@@ -368,42 +367,71 @@ class AnimalPoseInferencePage(QWidget, Ui_AnimalPoseInference):
     def _check_intel_gpu(self):
         """Check if Intel GPU is available in the system"""
         try:
-            from openvino import Core
-            core = Core()
-            return 'GPU' in core.available_devices
-        except ImportError:
-            print("Please install 'openvino' and 'openvino-dev' module! "
-            "if Intel GPU is available in the system")
+            import subprocess
+            if os.name == 'nt': 
+                cmd = 'wmic path win32_VideoController get name'
+                result = subprocess.run(cmd, shell=True, 
+                                        stdout=subprocess.PIPE, 
+                                        stderr=subprocess.DEVNULL,
+                                        text=True, encoding='utf-8')
+                return "Intel" in result.stdout
+            else: 
+                cmd = "lspci | grep -i 'VGA.*Intel'"
+                result = subprocess.run(cmd, shell=True,
+                                        stdout=subprocess.PIPE,
+                                        stderr=subprocess.DEVNULL)
+                return result.returncode == 0
+        except:
             return False
         
     def _check_intel_npu(self):
         """Check if Intel NPU is available through OpenVINO"""
         try:
-            from openvino import Core
-            core = Core()
-            return 'NPU' in core.available_devices
-        except ImportError:
-            print("Please install 'openvino' and 'openvino-dev' module! "
-            "if Intel NPU is available through OpenVINO")
+            import subprocess
+            if os.name == 'nt':  
+                cmd = 'wmic path Win32_PnPEntity get name | findstr /i "NPU"'
+                result = subprocess.run(cmd, shell=True, 
+                                    stdout=subprocess.PIPE,
+                                    stderr=subprocess.DEVNULL,
+                                    text=True)
+                return "NPU" in result.stdout
+            
+            else:
+                return os.path.exists("/dev/accel/accel0") or \
+                    os.path.exists("/sys/class/accel/accel0")
+        except:
             return False
     
     def _check_amd_gpu(self):
-        """Check if AMD GPU is available in the system"""
+        """Check if AMD GPU is available in the system (Windows/Linux)"""
         try:
-            from pyamdgpuinfo import drm_open, drm_close
-            fd = drm_open()
-            fd = True if fd >= 0 else False
-            drm_close(fd)
-            return fd
-        except ImportError:
-            raise ImportError("Please install 'pyamdgpuinfo' module!" 
-                              "if AMD GPU is available in the system!")
+            import subprocess
+            if os.name == 'nt': 
+                cmd = 'wmic path win32_VideoController get name'
+                result = subprocess.run(cmd, shell=True,
+                                    stdout=subprocess.PIPE,
+                                    stderr=subprocess.DEVNULL,
+                                    text=True,
+                                    encoding='utf-8')
+                return "AMD" in result.stdout or "Radeon" in result.stdout
+                
+            else:
+                cmd = "lspci | grep -i 'VGA.*AMD'"
+                result = subprocess.run(cmd, shell=True,
+                                    stdout=subprocess.PIPE,
+                                    stderr=subprocess.DEVNULL,
+                                    text=True)
+                return result.returncode == 0 and len(result.stdout) > 0
+        except:
+            return False
 
     def _check_nvidia_gpu(self):
         """Check if NVIDIA GPU is available in the system"""
         try:
             import subprocess
-            subprocess.run(['nvidia-smi'], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+            subprocess.run(['nvidia-smi'], 
+                           stdout=subprocess.DEVNULL, 
+                           stderr=subprocess.DEVNULL)
             return True 
         except (FileNotFoundError, subprocess.CalledProcessError):
             return False
@@ -411,6 +439,8 @@ class AnimalPoseInferencePage(QWidget, Ui_AnimalPoseInference):
     def _check_nvidia_gpu_tensorrt(self):
         """Check if NVIDIA GPU with TensorRT is available in the system"""
         try:
+            if not self._check_nvidia_gpu():
+                return False
             import tensorrt as trt
             return trt.__version__ is not None
         except ImportError:
@@ -429,14 +459,6 @@ class AnimalPoseInferencePage(QWidget, Ui_AnimalPoseInference):
             )
             return result.returncode == 0
         except FileNotFoundError:
-            return False
-    
-    def _check_metal(self):
-        """Check if Metal is available in the system"""
-        try:
-            import platform
-            return platform.system() == "Darwin"
-        except:
             return False
 
     @Slot(bool)
@@ -648,6 +670,7 @@ class AnimalPoseInferencePage(QWidget, Ui_AnimalPoseInference):
         # Set up visualization thread
         self.visualize_thread.visualize_function = self.inference.visualize
         self.visualize_thread.visualized_frame.connect(self.display_inferece_frame)
+        self.visualize_thread.finished.connect(self.visualize_finished)
         self.visualize_thread.status_update.connect(self.thread_status)
 
         # set up video writer thread
@@ -659,7 +682,6 @@ class AnimalPoseInferencePage(QWidget, Ui_AnimalPoseInference):
 
     def _start_inference_threads(self):
         self.videoreader_thread.start()
-        self.read_frame_finished = False
         self.preprocess_thread.start()
         self.inference_thread.start()
         self.postprocess_thread.start()
@@ -669,6 +691,10 @@ class AnimalPoseInferencePage(QWidget, Ui_AnimalPoseInference):
 
     def _stop_inference_threads(self):
         """Stop all inference threads"""
+        if self.visualize_thread is not None and self.visualize_thread.isRunning():
+            self.visualize_thread.safe_stop()
+            self.visualize_thread.visualized_frame.disconnect()
+            self.visualize_thread.finished.disconnect()
         if self.videoreader_thread is not None and self.videoreader_thread.isRunning():
             self.videoreader_thread.safe_stop()
         if self.preprocess_thread is not None and self.preprocess_thread.isRunning():
@@ -677,15 +703,14 @@ class AnimalPoseInferencePage(QWidget, Ui_AnimalPoseInference):
             self.inference_thread.safe_stop()
         if self.postprocess_thread is not None and self.postprocess_thread.isRunning():
             self.postprocess_thread.safe_stop()
-        if self.visualize_thread is not None and self.visualize_thread.isRunning():
-            self.visualize_thread.safe_stop()
-            self.visualize_thread.visualized_frame.disconnect()
         
+        self.Display.clear()
+
         for key, value in self.cache_queues.items():
             with value.mutex:
                 value.queue.clear()
 
-        self.Display.clear()  
+        
 
     def _get_source(self):
         if self.CameraORVideos.isChecked():
@@ -702,9 +727,7 @@ class AnimalPoseInferencePage(QWidget, Ui_AnimalPoseInference):
             self._show_info("No video file selected")
             return None
     
-    
     def thread_status(self, message):
-        self._show_info(message)
         print(message)
     
     def display_inferece_frame(self, frame):
@@ -733,6 +756,12 @@ class AnimalPoseInferencePage(QWidget, Ui_AnimalPoseInference):
             )
         else:
             self.Display.clear()
+    
+    def visualize_finished(self):
+        """Handle when all threads have finished"""
+        self._stop_inference_threads()
+        self.Start.setText("Start")
+        self.Start.setEnabled(True)
 
     def onWidthSetupChanged(self, value):
         """Handle changes to the Width slider value"""
