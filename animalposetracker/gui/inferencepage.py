@@ -31,11 +31,12 @@ class AnimalPoseInferencePage(QWidget, Ui_AnimalPoseInference):
         # constants
         self.camera_list = {}
         self.supported_engines_and_devices = {}
+        self.max_cache_size = 1024
         self.cache_queues = {
-            'read': queue.Queue(maxsize=128),
-            'preprocessed': queue.Queue(maxsize=128),
-            'inference': queue.Queue(maxsize=128),
-            'postprocessed': queue.Queue(maxsize=128),
+            'read': queue.Queue(maxsize=self.max_cache_size),
+            'preprocessed': queue.Queue(maxsize=self.max_cache_size),
+            'inference': queue.Queue(maxsize=self.max_cache_size),
+            'postprocessed': queue.Queue(maxsize=self.max_cache_size),
         }
 
         self.videoreader_thread = VideoReaderThread(output_queue=self.cache_queues['read'])
