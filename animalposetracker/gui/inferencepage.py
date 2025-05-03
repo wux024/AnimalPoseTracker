@@ -715,11 +715,16 @@ class AnimalPoseInferencePage(QWidget, Ui_AnimalPoseInference):
                 thread.safe_stop()  # Request thread termination
         self.display_thread.stop()
         # Clear all cache queues
-        self.read_cache.queue.clear()
-        self.preprocess_cache.queue.clear()
-        self.inference_cache.queue.clear()
-        self.postprocess_cache.queue.clear()
-        self.visualize_cache.queue.clear()
+        with self.read_cache.mutex:
+            self.read_cache.queue.clear()
+        with self.preprocess_cache.mutex:
+            self.preprocess_cache.queue.clear()
+        with self.inference_cache.mutex:
+            self.inference_cache.queue.clear()
+        with self.postprocess_cache.mutex:
+            self.postprocess_cache.queue.clear()
+        with self.visualize_cache.mutex:
+            self.visualize_cache.queue.clear()
 
         
 
