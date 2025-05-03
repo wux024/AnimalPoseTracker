@@ -36,6 +36,7 @@ class AnimalPoseInferencePage(QWidget, Ui_AnimalPoseInference):
         self.preprocess_cache = queue.Queue(maxsize=self.max_cache_size)
         self.inference_cache = queue.Queue(maxsize=self.max_cache_size)
         self.postprocess_cache = queue.Queue(maxsize=self.max_cache_size)
+        self.visualize_cache = queue.Queue(maxsize=self.max_cache_size)
 
         self.videoreader_thread = VideoReaderThread()
         self.videowriter_thread = VideoWriterThread()
@@ -44,6 +45,7 @@ class AnimalPoseInferencePage(QWidget, Ui_AnimalPoseInference):
         self.postprocess_thread = PostprocessThread(input_queue=self.inference_cache)
         self.visualize_thread = VisualizeThread(input_queue=self.postprocess_cache)
         self.videowriter_thread = VideoWriterThread()
+        self.display_thread = QTimer()
         self.read_frame_end = False
 
         self.inference = InferenceEngine()
@@ -649,6 +651,7 @@ class AnimalPoseInferencePage(QWidget, Ui_AnimalPoseInference):
             return
 
         # Set up video reader thread
+        self.read_frame_end = False
         self.videoreader_thread.cap = cv2.VideoCapture(source)
         self.videoreader_thread.status_update.connect(self.thread_status)
         self.videoreader_thread.data_ready.connect(self.put_read_data)
@@ -671,9 +674,11 @@ class AnimalPoseInferencePage(QWidget, Ui_AnimalPoseInference):
 
         # Set up visualization thread
         self.visualize_thread.visualize_function = self.inference.visualize
-        self.visualize_thread.data_ready.connect(self.display_inferece_frame)
-        self.visualize_thread.finished_checked.connect(self.visualize_finished_checked)
+        self.visualize_thread.data_ready.connect(self.put_visualize_data)
         self.visualize_thread.status_update.connect(self.thread_status)
+
+        # Set up display thread
+        self.display_thread.timeout.connect(self.display_inferece_frame)
 
         # set up video writer thread
         if self.Save.isChecked():
@@ -688,6 +693,7 @@ class AnimalPoseInferencePage(QWidget, Ui_AnimalPoseInference):
         self.inference_thread.start()
         self.postprocess_thread.start()
         self.visualize_thread.start()
+        self.display_thread.start(1000 // self.fps)
         if self.Save.isChecked():
             self.videowriter_thread.start()
 
@@ -695,29 +701,25 @@ class AnimalPoseInferencePage(QWidget, Ui_AnimalPoseInference):
         """Stop all inference threads and clean up resources"""
         # Define all threads with their associated signals to disconnect
         threads = [
-            (self.videoreader_thread, ['status_update', 'data_ready']),
-            (self.preprocess_thread, ['status_update', 'data_ready']),
-            (self.inference_thread, ['status_update', 'data_ready']),
-            (self.postprocess_thread, ['status_update', 'data_ready']),
-            (self.visualize_thread, ['status_update', 'finished_checked', 'data_ready']),
-            (self.videowriter_thread, []),
+            self.videoreader_thread,
+            self.preprocess_thread,
+            self.inference_thread,
+            self.postprocess_thread,
+            self.visualize_thread,
+            self.videowriter_thread,
         ]
 
         # Stop all threads and disconnect their signals
-        for thread, signals in threads:
+        for thread in threads:
             if thread is not None and thread.isRunning():
                 thread.safe_stop()  # Request thread termination
-                for signal in signals:
-                    try:
-                        getattr(thread, signal).disconnect()  # Safely disconnect all signals
-                    except (TypeError, RuntimeError):
-                        pass  # Silently ignore if signal wasn't connected
-
+        self.display_thread.stop()
         # Clear all cache queues
         self.read_cache.queue.clear()
         self.preprocess_cache.queue.clear()
         self.inference_cache.queue.clear()
         self.postprocess_cache.queue.clear()
+        self.visualize_cache.queue.clear()
 
         
 
@@ -770,9 +772,23 @@ class AnimalPoseInferencePage(QWidget, Ui_AnimalPoseInference):
             self.postprocess_cache.put((frame, results))
         except queue.Full:  
             pass
+    
+    def put_visualize_data(self, frame, results):
+        """Put new frame from visualization thread to display"""
+        try:
+            self.visualize_cache.put((frame, results))
+        except queue.Full:
+            pass
 
-    def display_inferece_frame(self, frame, results):
+    def display_inferece_frame(self):
         """Handle new frame from camera/video source"""
+        if self.visualize_cache.empty() and not self.read_frame_end:
+            return
+        elif self.visualize_cache.empty() and self.read_frame_end:
+            self._stop_all_threads()
+            return
+        
+        frame, results = self.visualize_cache.get()
 
         if (self.Save.isChecked() and 
             self.videowriter_thread is not None 
@@ -797,12 +813,6 @@ class AnimalPoseInferencePage(QWidget, Ui_AnimalPoseInference):
             )
         else:
             self.Display.clear()
-    
-    def visualize_finished_checked(self):
-        """Handle when all threads have finished"""
-        if self.read_frame_end:
-            self.read_frame_end = False
-            self._stop_all_threads()
 
     def onWidthSetupChanged(self, value):
         """Handle changes to the Width slider value"""
