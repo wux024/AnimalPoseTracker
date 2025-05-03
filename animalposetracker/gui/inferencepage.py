@@ -372,7 +372,7 @@ class AnimalPoseInferencePage(QWidget, Ui_AnimalPoseInference):
         try:
             import subprocess
             if os.name == 'nt':  
-                cmd = 'wmic path Win32_PnPEntity get name | findstr /i "NPU"'
+                cmd = 'wmic path Win32_PnPEntity get name | findstr /i "AI Boost"'
                 result = subprocess.run(cmd, shell=True, 
                                     stdout=subprocess.PIPE,
                                     stderr=subprocess.DEVNULL,
