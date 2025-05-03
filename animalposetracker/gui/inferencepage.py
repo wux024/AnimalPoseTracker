@@ -85,8 +85,8 @@ class AnimalPoseInferencePage(QWidget, Ui_AnimalPoseInference):
         # Engine and device signals
         self.EngineSelection.clear()
         self.DeviceSelection.clear()
-        self.EngineSelection.currentIndexChanged.connect(self.onEngineSelectionChanged)
-        self.DeviceSelection.currentIndexChanged.connect(self.onDeviceSelectionChanged)
+        self.EngineSelection.currentTextChanged.connect(self.onEngineSelectionChanged)
+        self.DeviceSelection.currentTextChanged.connect(self.onDeviceSelectionChanged)
         
         # Start/Stop control signals
         self.Start.clicked.connect(self.onStartClicked)
@@ -834,19 +834,18 @@ class AnimalPoseInferencePage(QWidget, Ui_AnimalPoseInference):
         self.fps = value
         self._show_info(f"Set Camera output FPS: {self.fps}")
     
-    def onEngineSelectionChanged(self, index):
+    def onEngineSelectionChanged(self):
         """Handle changes in engine selection"""
-        self.engine = self.EngineSelection.itemText(index)
+        self.engine = self.EngineSelection.currentText()
         if self.engine == "":
-            self.device = ""
             return
         self.DeviceSelection.clear()
         self.DeviceSelection.addItems(self.supported_engines_and_devices[self.engine])
         self._show_info(f"Selected Inference Engine: {self.engine}")
     
-    def onDeviceSelectionChanged(self, index):
+    def onDeviceSelectionChanged(self):
         """Handle changes in device selection"""
-        self.device = self.DeviceSelection.itemText(index)
+        self.device = self.DeviceSelection.currentText()
         if self.device == "":
             return
         self._show_info(f"Selected Inference Device: {self.device}")
@@ -860,8 +859,8 @@ class AnimalPoseInferencePage(QWidget, Ui_AnimalPoseInference):
             # inference config
             self.inference.weights_path = self.weights_path
             self.inference.data_config = self.data_config_path
-            self.inference.engine = self.engine
-            self.inference.device = self.device
+            self.inference.engine = self.EngineSelection.currentText()
+            self.inference.device = self.DeviceSelection.currentText()
             self.inference.model_bits = self.ModelBits.currentText()
             self.inference.print_config()
             self.inference.model_init()
