@@ -344,12 +344,10 @@ class AnimalPoseInferencePage(QWidget, Ui_AnimalPoseInference):
         """Update device selection based on chosen engine"""
         current_engine = self.EngineSelection.currentText()
         self.DeviceSelection.clear()
-        available_devices = self._get_supported_devices(current_engine)
-        if available_devices:
-            self.DeviceSelection.addItems(self.supported_engines_and_devices[current_engine])
-        else:
-            self._show_info(f"{current_engine} engine not available or no supported devices found")
-            raise ValueError(f"{current_engine} engine not available or no supported devices found")
+        available_devices = self.supported_engines_and_devices.get(current_engine)
+        self.DeviceSelection.addItems(available_devices)
+        self.DeviceSelection.setCurrentText(available_devices[0])
+        
 
     def _get_supported_devices(self, engine):
         supported_devices = []
@@ -866,8 +864,8 @@ class AnimalPoseInferencePage(QWidget, Ui_AnimalPoseInference):
             # inference config
             self.inference.weights_path = self.weights_path
             self.inference.data_config = self.data_config_path
-            self.inference.engine = self.EngineSelection.currentText()
-            self.inference.device = self.DeviceSelection.currentText()
+            self.inference.engine = self.engine
+            self.inference.device = self.device
             self.inference.model_bits = self.ModelBits.currentText()
             self.inference.model_init()
             # init threads
