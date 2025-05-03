@@ -7,16 +7,20 @@ import traceback
 from pathlib import Path
 import json
 
+from .base import BaseThread, FrameInfo
 
-class VideoReaderThread(QThread):
+class VideoReaderThread(BaseThread):
     """Thread to run video reading"""
-    original_frame = Signal(np.ndarray)
-    status_update = Signal(str)
-    def __init__(self, cap=None, parent=None):
+    preview_frame = Signal(np.ndarray)
+
+    def __init__(self, parent=None, 
+                 cap=None, 
+                 output_queue=None,
+                 preview=False):
         super().__init__(parent)
         self._cap = cap
-        self.running = False
-        self._lock = QMutex()
+        self._preview = preview
+        self.output_queue = output_queue
 
     @property
     def cap(self):
@@ -25,6 +29,14 @@ class VideoReaderThread(QThread):
     @cap.setter
     def cap(self, value):
         self._cap = value
+    
+    @property
+    def preview(self):
+        return self._preview
+
+    @preview.setter
+    def preview(self, value):
+        self._preview = value
 
     def run(self):
         try:
@@ -34,33 +46,29 @@ class VideoReaderThread(QThread):
             fps = self.cap.get(cv2.CAP_PROP_FPS)
             self.status_update.emit("Read started")
             while self.is_running:
-                ret, frame = self.cap.read()
-                if ret:
-                    self.original_frame.emit(frame.copy())
-                else:
-                    self.status_update.emit("Read stopped: No more frames")
-                    break
-                time.sleep(1.0 / fps)
-            self.finished.emit()
+                try:
+                    ret, frame = self.cap.read()
+                    if not ret:
+                        self.status_update.emit("Read finished")
+                        if not self._preview:
+                            # Send end signal
+                            end_frame = FrameInfo(end=True)
+                            self.output_queue.put(end_frame, block=False)
+                        break
+                    if self._preview:
+                        self.preview_frame.emit(frame)
+                    else:
+                        frame_info = FrameInfo(original_frame=frame.copy())
+                        self.output_queue.put(frame_info, block=False)
+                    time.sleep(1/fps)
+                except queue.Full:
+                    pass
         except Exception as e:
             error_info = traceback.format_exc()
             self.status_update.emit(f"(VideoReaderThread) Unexpected error: \n{error_info}")
         finally:
             self.safe_stop()
-
-    @property
-    def is_running(self):
-        self._lock.lock()
-        is_running = self.running
-        self._lock.unlock()
-        return is_running
-
-    def safe_stop(self):
-        self._lock.lock()
-        self.running = False
-        self._lock.unlock()
-        self.wait()
-        self._release_resources()
+            self._release_resources()
 
     def _release_resources(self):
         if self.cap is not None and self.cap.isOpened():
@@ -68,18 +76,18 @@ class VideoReaderThread(QThread):
             self.status_update.emit("Video capture resources released")
 
 
-class PreprocessThread(QThread):
+class PreprocessThread(BaseThread):
     """Thread to run preprocess"""
-    # preprocessed_frame: original frame, preprocessed image, affine matrix, preprocess time
-    preprocessed_frame = Signal(np.ndarray, np.ndarray, np.ndarray, float)
-    status_update = Signal(str)
 
-    def __init__(self, preprocess_function=None, buffer_queue=None, parent=None):
+    def __init__(self, parent=None, 
+                 preprocess_function=None, 
+                 input_queue=None, 
+                 output_queue=None
+                 ):
         super().__init__(parent)
         self._preprocess_function = preprocess_function
-        self.running = False
-        self._lock = QMutex()
-        self.buffer_queue = buffer_queue
+        self.input_queue = input_queue
+        self.output_queue = output_queue
 
     @property
     def preprocess_function(self):
@@ -96,12 +104,19 @@ class PreprocessThread(QThread):
             self._lock.unlock()
             while self.is_running:
                 try:
-                    frame = self.buffer_queue.get(timeout=1)
+                    frame_info = self.input_queue.get(timeout=1, block=False)
+                    if frame_info.end:
+                        break
                     start_time = time.time()
-                    img, IM = self._preprocess_function(frame)
+                    img, IM = self._preprocess_function(frame_info.original_frame)
                     pre_time = time.time() - start_time
-                    self.preprocessed_frame.emit(frame, img, IM, pre_time)
+                    frame_info.preprocess_frame = img
+                    frame_info.IM = IM
+                    frame_info.results.update({'preprocess_time': pre_time})
+                    self.output_queue.put(frame_info, block=False)
                 except queue.Empty:
+                    pass
+                except queue.Full:
                     pass
         except Exception as e:
             error_info = traceback.format_exc()
@@ -109,33 +124,18 @@ class PreprocessThread(QThread):
         finally:
             self.safe_stop()
 
-    @property
-    def is_running(self):
-        self._lock.lock()
-        is_running = self.running
-        self._lock.unlock()
-        return is_running
 
-    def safe_stop(self):
-        self._lock.lock()
-        self.running = False
-        self._lock.unlock()
-        self.wait()
-
-
-class InferenceThread(QThread):
+class InferenceThread(BaseThread):
     """Thread to run inference"""
-    # inference_done: original frame, predicted results, affine matrix, 
-    # preprocess time, inference time
-    inference_done = Signal(np.ndarray, np.ndarray, np.ndarray, float, float)
-    status_update = Signal(str)
 
-    def __init__(self, inference_function=None, buffer_queue=None, parent=None):
+    def __init__(self, parent=None,
+                 inference_function=None,
+                 input_queue=None,
+                 output_queue=None):
         super().__init__(parent)
-        self.running = False
-        self._lock = QMutex()
-        self.buffer_queue = buffer_queue
         self._inference_function = inference_function
+        self.input_queue = input_queue
+        self.output_queue = output_queue
 
     @property
     def inference_function(self):
@@ -152,12 +152,18 @@ class InferenceThread(QThread):
             self._lock.unlock()
             while self.is_running:
                 try:
-                    frame, img, IM, pre_time = self.buffer_queue.get(timeout=1)
+                    frame_info = self.input_queue.get(timeout=1, block=True)
+                    if frame_info.end:
+                        break
                     start_time = time.time()
-                    pred = self._inference_function(img)
+                    pred = self._inference_function(frame_info.preprocess_frame)
                     infer_time = time.time() - start_time
-                    self.inference_done.emit(frame, pred, IM, pre_time, infer_time)
+                    frame_info.results.update({'pred': pred})
+                    frame_info.results.update({'inference_time': infer_time})
+                    self.output_queue.put(frame_info, block=False)
                 except queue.Empty:
+                    pass
+                except queue.Full:
                     pass
         except Exception as e:
             error_info = traceback.format_exc()
@@ -165,32 +171,18 @@ class InferenceThread(QThread):
         finally:
             self.safe_stop()
 
-    @property
-    def is_running(self):
-        self._lock.lock()
-        is_running = self.running
-        self._lock.unlock()
-        return is_running
 
-    def safe_stop(self):
-        self._lock.lock()
-        self.running = False
-        self._lock.unlock()
-        self.wait()
-
-
-class PostprocessThread(QThread):
+class PostprocessThread(BaseThread):
     """Thread to run postprocessing"""
-    # postprocessed_frame: original frame, predicted results
-    postprocessed_frame = Signal(np.ndarray, dict)
-    status_update = Signal(str)
 
-    def __init__(self, postprocess_function=None, buffer_queue=None, parent=None):
+    def __init__(self, parent=None,
+                 postprocess_function=None,
+                 input_queue=None,
+                 output_queue=None):
         super().__init__(parent)
         self._postprocess_function = postprocess_function
-        self.running = False
-        self._lock = QMutex()
-        self.buffer_queue = buffer_queue
+        self.input_queue = input_queue
+        self.output_queue = output_queue
 
     @property
     def postprocess_function(self):
@@ -207,17 +199,24 @@ class PostprocessThread(QThread):
             self._lock.unlock()
             while self.is_running:
                 try:
-                    frame, pred, IM, pre_time, infer_time = self.buffer_queue.get(timeout=1)
+                    frame_info = self.input_queue.get(timeout=1, block=True)
+                    if frame_info.end:
+                        break
                     start_time = time.time()
-                    results = self._postprocess_function(pred, IM)
+                    results = self._postprocess_function(frame_info.results['pred'], frame_info.IM)
                     post_time = time.time() - start_time
-                    results.update(
-                        {'preprocess_time': pre_time, 
-                         'inference_time': infer_time, 
-                         'postprecess_time': post_time,
-                         'fps': 1.0 / (pre_time + infer_time + post_time + 1e-7)})
-                    self.postprocessed_frame.emit(frame, results)
+                    fps = 1.0 / (frame_info.results['preprocess_time'] + frame_info.results['inference_time'] + post_time + 1e-7)
+                    frame_info.results.update(
+                        {'boxes': results['boxes'],
+                         'keypoints_list': results['keypoints_list'],
+                         'class_ids': results['class_ids'],
+                         'scores': results['scores'],
+                         'postprocess_time': post_time,
+                         'fps': fps})
+                    self.output_queue.put(frame_info, block=False)
                 except queue.Empty:
+                    pass
+                except queue.Full:
                     pass
         except Exception as e:
             error_info = traceback.format_exc()
@@ -225,32 +224,18 @@ class PostprocessThread(QThread):
         finally:
             self.safe_stop()
 
-    @property
-    def is_running(self):
-        self._lock.lock()
-        is_running = self.running
-        self._lock.unlock()
-        return is_running
 
-    def safe_stop(self):
-        self._lock.lock()
-        self.running = False
-        self._lock.unlock()
-        self.wait()
-
-
-class VisualizeThread(QThread):
+class VisualizeThread(BaseThread):
     """Thread to run visualization"""
-    # visualized_frame: visualized frame, predicted results
-    visualized_frame = Signal(np.ndarray, dict)
-    status_update = Signal(str)
+    #visualized_frame = Signal(np.ndarray, dict)
+    visualized_frame = Signal(np.ndarray)
 
-    def __init__(self, visualize_function=None, buffer_queue=None, parent=None):
+    def __init__(self, parent=None,
+                 visualize_function=None,
+                 input_queue=None):
         super().__init__(parent)
         self._visualize_function = visualize_function
-        self.running = False
-        self._lock = QMutex()
-        self.buffer_queue = buffer_queue
+        self.input_queue = input_queue
 
     @property
     def visualize_function(self):
@@ -267,10 +252,17 @@ class VisualizeThread(QThread):
             self._lock.unlock()
             while self.is_running:
                 try:
-                    frame, results = self.buffer_queue.get(timeout=1)
-                    visualized_frame = self._visualize_function(frame, results)
-                    self.visualized_frame.emit(visualized_frame, results)
+                    frame_info = self.input_queue.get(timeout=1, block=True)
+                    if frame_info.end:
+                        break
+                    visualized_frame = self._visualize_function(frame_info.original_frame, 
+                                                                frame_info.results)
+                    # self.visualized_frame.emit(visualized_frame.copy(), 
+                    #                            frame_info.results.copy())
+                    self.visualized_frame.emit(visualized_frame.copy())
                 except queue.Empty:
+                    pass
+                except queue.Full:
                     pass
         except Exception as e:
             error_info = traceback.format_exc()
@@ -278,21 +270,8 @@ class VisualizeThread(QThread):
         finally:
             self.safe_stop()
 
-    @property
-    def is_running(self):
-        self._lock.lock()
-        is_running = self.running
-        self._lock.unlock()
-        return is_running
 
-    def safe_stop(self):
-        self._lock.lock()
-        self.running = False
-        self._lock.unlock()
-        self.wait()
-
-
-class VideoWriterThread(QThread):
+class VideoWriterThread(BaseThread):
     """Thread to run video writing"""
     def __init__(self, save_path=None, fps=30, frame_size=(640, 480)):
         super().__init__()
@@ -302,7 +281,6 @@ class VideoWriterThread(QThread):
         self.video_writer = None
         self.frames = []
         self._stop_flag = False
-        self._lock = QMutex()
 
     @property
     def save_path(self):
@@ -341,13 +319,9 @@ class VideoWriterThread(QThread):
         self.frames.append(frame)
 
     def safe_stop(self):
-        self._lock.lock()
-        self._stop_flag = True
-        self._lock.unlock()
-        self.wait()
+        super().safe_stop()
         self._release_resources()
 
     def _release_resources(self):
         if self.video_writer is not None:
             self.video_writer.release()
-            

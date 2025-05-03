@@ -31,21 +31,23 @@ class AnimalPoseInferencePage(QWidget, Ui_AnimalPoseInference):
         # constants
         self.camera_list = {}
         self.supported_engines_and_devices = {}
-        self.read_cache = queue.Queue(maxsize=1024)
-        self.preprocessed_cache = queue.Queue(maxsize=1024)
-        self.inference_cache = queue.Queue(maxsize=1024)
-        self.postprocessed_cache = queue.Queue(maxsize=1024)
-        self.visualization_cache = queue.Queue(maxsize=1024)
+        self.cache_queues = {
+            'read': queue.Queue(maxsize=128),
+            'preprocessed': queue.Queue(maxsize=128),
+            'inference': queue.Queue(maxsize=128),
+            'postprocessed': queue.Queue(maxsize=128),
+        }
 
-        self.videoreader_thread = VideoReaderThread()
+        self.videoreader_thread = VideoReaderThread(output_queue=self.cache_queues['read'])
         self.videowriter_thread = VideoWriterThread()
-        self.preprocess_thread = PreprocessThread(buffer_queue=self.read_cache)
-        self.inference_thread = InferenceThread(buffer_queue=self.preprocessed_cache) 
-        self.postprocess_thread = PostprocessThread(buffer_queue=self.inference_cache)
-        self.visualize_thread = VisualizeThread(buffer_queue=self.postprocessed_cache)
+        self.preprocess_thread = PreprocessThread(input_queue=self.cache_queues['read'], 
+                                                  output_queue=self.cache_queues['preprocessed'])
+        self.inference_thread = InferenceThread(input_queue=self.cache_queues['preprocessed'], 
+                                                 output_queue=self.cache_queues['inference']) 
+        self.postprocess_thread = PostprocessThread(input_queue=self.cache_queues['inference'], 
+                                                    output_queue=self.cache_queues['postprocessed'])
+        self.visualize_thread = VisualizeThread(input_queue=self.cache_queues['postprocessed'])
         self.videowriter_thread = VideoWriterThread()
-        self.display_thread = QTimer()
-        self.read_frame_finished = False
 
         self.inference = InferenceEngine()
         self.data_config_path = None
@@ -331,11 +333,11 @@ class AnimalPoseInferencePage(QWidget, Ui_AnimalPoseInference):
         device_check_results = {
             "Intel GPU": self._check_intel_gpu() if self.platform == 'Intel' else False,
             "Intel NPU": self._check_intel_npu() if self.platform == 'Intel' else False,
-            "NVIDIA GPU": self._check_nvidia_gpu(),
-            "NVIDIA GPU TensorRT": self._check_nvidia_gpu_tensorrt(),
+            "NVIDIA GPU": False if sys.platform == 'darwin' else self._check_nvidia_gpu(),
+            "NVIDIA GPU TensorRT": False if sys.platform == 'darwin' else self._check_nvidia_gpu_tensorrt(),
             "AMD GPU": self._check_amd_gpu() if self.platform == 'AMD' else False,
-            "Ascend NPU": self._check_ascend_npu() if self.platform == 'ARM' else False,
-            "Metal": self._check_metal() if self.platform == 'ARM' else False,
+            "Ascend NPU": False if sys.platform in ['darwin', 'win32'] else self._check_ascend_npu(),
+            "Metal": self._check_metal() if sys.platform == 'darwin' else False,
         }
         return device_check_results
     
@@ -399,9 +401,37 @@ class AnimalPoseInferencePage(QWidget, Ui_AnimalPoseInference):
 
     def _check_nvidia_gpu(self):
         """Check if NVIDIA GPU is available in the system"""
-        import subprocess
-        result = subprocess.run(['nvidia-smi'], stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
-        return result.returncode == 0
+        try:
+            # First try with CUDA Python (official NVIDIA package)
+            import cuda
+            
+            # Initialize CUDA driver API
+            cuda.driver.init()
+            
+            # Get number of devices
+            device_count = cuda.driver.Device.count()
+            
+            # Check if any CUDA-capable devices found
+            if device_count > 0:
+                return True
+                
+        except ImportError:
+            # Fallback to original nvidia-smi check if CUDA Python not available
+            try:
+                import subprocess
+                result = subprocess.run(['nvidia-smi'], 
+                                    stdout=subprocess.PIPE, 
+                                    stderr=subprocess.PIPE, 
+                                    text=True)
+                return result.returncode == 0
+            except (FileNotFoundError, subprocess.SubprocessError):
+                pass
+                
+        except cuda.driver.CUDAError:
+            # Handle CUDA initialization errors
+            pass
+            
+        return False
     
     def _check_nvidia_gpu_tensorrt(self):
         """Check if NVIDIA GPU with TensorRT is available in the system"""
@@ -578,23 +608,25 @@ class AnimalPoseInferencePage(QWidget, Ui_AnimalPoseInference):
         source = self._get_source()
         if source is None:
             return
-        self.videoreader_thread.original_frame.connect(self.display_preview_frame)
-        self.videoreader_thread.finished.connect(self._stop_preview)
+        self.videoreader_thread.preview = True
         self.videoreader_thread.cap = cv2.VideoCapture(source)
+        self.videoreader_thread.preview_frame.connect(self.display_preview_frame)
+        self.videoreader_thread.finished.connect(self._stop_preview)
         self.videoreader_thread.start()
         mode = "Camera" if self.CameraORVideos.isChecked() else "Video"
         self.CheckCameraVideosConnect.setText(f"Close {mode}")
     
     def _stop_preview(self):
         """Stop camera/video preview"""
+        self.videoreader_thread.preview = False
         self.videoreader_thread.safe_stop()
-        self.videoreader_thread.original_frame.disconnect()
         self.Display.clear()
         mode = "Camera" if self.CameraORVideos.isChecked() else "Video"
         self.CheckCameraVideosConnect.setText(f"Preview {mode}")
     
     def display_preview_frame(self, frame):
         """Handle new frame from camera/video source"""
+
         RGB = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
         height, width, _ = RGB.shape
         QImg = QImage(RGB.data, width, height, QImage.Format_RGB888)
@@ -619,28 +651,24 @@ class AnimalPoseInferencePage(QWidget, Ui_AnimalPoseInference):
 
         # Set up video reader thread
         self.videoreader_thread.cap = cv2.VideoCapture(source)
-        self.videoreader_thread.original_frame.connect(self.add_original_frame)
+        self.videoreader_thread.preview = False
         self.videoreader_thread.status_update.connect(self.thread_status)
-        self.videoreader_thread.finished.connect(self.on_read_frame_finished)
 
         # Set up frame preprocessor thread
         self.preprocess_thread.preprocess_function = self.inference.preprocess
-        self.preprocess_thread.preprocessed_frame.connect(self.add_preprocessed_frame)
         self.preprocess_thread.status_update.connect(self.thread_status)
 
         # Set up inference thread
         self.inference_thread.inference_function = self.inference.inference
-        self.inference_thread.inference_done.connect(self.add_inference_result)
         self.inference_thread.status_update.connect(self.thread_status)
 
         # Set up frame postprocessor thread
         self.postprocess_thread.postprocess_function = self.inference.postprocess
-        self.postprocess_thread.postprocessed_frame.connect(self.add_postprocessed_frame)
         self.postprocess_thread.status_update.connect(self.thread_status)
 
         # Set up visualization thread
         self.visualize_thread.visualize_function = self.inference.visualize
-        self.visualize_thread.visualized_frame.connect(self.add_visualization_result)
+        self.visualize_thread.visualized_frame.connect(self.display_inferece_frame)
         self.visualize_thread.status_update.connect(self.thread_status)
 
         # set up video writer thread
@@ -649,9 +677,6 @@ class AnimalPoseInferencePage(QWidget, Ui_AnimalPoseInference):
             self.videowriter_thread.fps = self.fps
             self.videowriter_thread.frame_size = (self.width, self.height)
 
-        # Set up display qtimer thread
-        self.display_thread.timeout.connect(self.display_inferece_frame)
-    
 
     def _start_inference_threads(self):
         self.videoreader_thread.start()
@@ -662,39 +687,24 @@ class AnimalPoseInferencePage(QWidget, Ui_AnimalPoseInference):
         self.visualize_thread.start()
         if self.Save.isChecked():
             self.videowriter_thread.start()
-        self.display_thread.start(1000 // self.fps)
 
     def _stop_inference_threads(self):
         """Stop all inference threads"""
         if self.videoreader_thread is not None and self.videoreader_thread.isRunning():
             self.videoreader_thread.safe_stop()
-            self.videoreader_thread.original_frame.disconnect()
         if self.preprocess_thread is not None and self.preprocess_thread.isRunning():
             self.preprocess_thread.safe_stop()
-            self.preprocess_thread.preprocessed_frame.disconnect()
         if self.inference_thread is not None and self.inference_thread.isRunning():
             self.inference_thread.safe_stop()
-            self.inference_thread.inference_done.disconnect()
         if self.postprocess_thread is not None and self.postprocess_thread.isRunning():
             self.postprocess_thread.safe_stop()
-            self.postprocess_thread.postprocessed_frame.disconnect()
         if self.visualize_thread is not None and self.visualize_thread.isRunning():
             self.visualize_thread.safe_stop()
             self.visualize_thread.visualized_frame.disconnect()
-        if self.display_thread is not None and self.display_thread.isActive():
-            self.display_thread.stop()
-            self.display_thread.timeout.disconnect()
         
-        with self.read_cache.mutex:
-            self.read_cache.queue.clear()
-        with self.preprocessed_cache.mutex:
-            self.preprocessed_cache.queue.clear()
-        with self.postprocessed_cache.mutex:
-            self.postprocessed_cache.queue.clear()
-        with self.inference_cache.mutex:
-            self.inference_cache.queue.clear()
-        with self.visualization_cache.mutex:
-            self.visualization_cache.queue.clear()
+        for key, value in self.cache_queues.items():
+            with value.mutex:
+                value.queue.clear()
 
         self.Display.clear()  
 
@@ -713,63 +723,13 @@ class AnimalPoseInferencePage(QWidget, Ui_AnimalPoseInference):
             self._show_info("No video file selected")
             return None
     
-
-    @Slot(np.ndarray)
-    def add_original_frame(self, frame):
-        """Handle original frame from camera/video source"""
-        try:
-            self.read_cache.put(frame, block=False)
-        except queue.Full:
-            pass
-    def on_read_frame_finished(self):
-        self.read_frame_finished = True
     
-    @Slot(str)
     def thread_status(self, message):
-        #QMessageBox.information(self, "Status", message)
         self._show_info(message)
         print(message)
     
-    def add_preprocessed_frame(self, frame, img, IM, preprocess_time):
-        """Handle preprocessed frame from camera/video source"""
-        try:
-            self.preprocessed_cache.put((frame, img, IM, preprocess_time), block=False)
-        except queue.Full:
-            pass
-    
-    def add_inference_result(self, frame, pred, IM, preprocess_time, inference_time):
-        """Handle inference result from camera/video source"""
-        try:
-            self.inference_cache.put((frame, pred, IM, preprocess_time, inference_time), block=False)
-        except queue.Full:
-            pass
-    
-    def add_postprocessed_frame(self, frame, result):
-        """Handle postprocessed frame from camera/video source"""
-        try:
-            self.postprocessed_cache.put((frame, result), block=False)
-        except queue.Full:
-            pass
-    
-    def add_visualization_result(self, frame, result):
-        """Handle visualization result from camera/video source"""
-        try:
-            self.visualization_cache.put((frame, result), block=False)
-        except queue.Full:
-            pass
-
-    def display_inferece_frame(self):
+    def display_inferece_frame(self, frame):
         """Handle new frame from camera/video source"""
-
-        try:
-            frame, _ = self.visualization_cache.get(block=False)
-        except queue.Empty:
-            if self.read_frame_finished:
-                self.read_frame_finished = False
-                self.Start.setText("Start")
-                self.Start.setEnabled(True)
-                self._stop_inference_threads()
-            return
 
         if (self.Save.isChecked() and 
             self.videowriter_thread is not None 
@@ -908,8 +868,6 @@ class AnimalPoseInferencePage(QWidget, Ui_AnimalPoseInference):
             self.videoreader_thread.safe_stop()
         if self.videowriter_thread is not None and self.videowriter_thread.isRunning():
             self.videowriter_thread.safe_stop()
-        if self.display_thread is not None and self.display_thread.isActive():
-            self.display_thread.stop()
         if self.inference_thread is not None and self.inference_thread.isRunning():
             self.inference_thread.safe_stop()
         if self.postprocess_thread is not None and self.postprocess_thread.isRunning():

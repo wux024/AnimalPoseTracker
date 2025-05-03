@@ -740,7 +740,7 @@ class InferenceEngine:
         times = {
             'preprocess_time': 'preprocess: {:.3f} ms'.format(results['preprocess_time'] * 1000.0),
             'inference_time': 'inference: {:.3f} ms'.format(results['inference_time'] * 1000.0),
-            'postprocess_time': 'postprocess: {:.3f} ms'.format(results['postprecess_time'] * 1000.0),
+            'postprocess_time': 'postprocess: {:.3f} ms'.format(results['postprocess_time'] * 1000.0),
             'fps': 'FPS: {:.1f} FPS'.format(results['fps'])
         }
 
