@@ -402,36 +402,15 @@ class AnimalPoseInferencePage(QWidget, Ui_AnimalPoseInference):
     def _check_nvidia_gpu(self):
         """Check if NVIDIA GPU is available in the system"""
         try:
-            # First try with CUDA Python (official NVIDIA package)
-            import cuda
-            
-            # Initialize CUDA driver API
-            cuda.driver.init()
-            
-            # Get number of devices
-            device_count = cuda.driver.Device.count()
-            
-            # Check if any CUDA-capable devices found
-            if device_count > 0:
-                return True
-                
-        except ImportError:
-            # Fallback to original nvidia-smi check if CUDA Python not available
-            try:
-                import subprocess
-                result = subprocess.run(['nvidia-smi'], 
-                                    stdout=subprocess.PIPE, 
-                                    stderr=subprocess.PIPE, 
-                                    text=True)
-                return result.returncode == 0
-            except (FileNotFoundError, subprocess.SubprocessError):
-                pass
-                
-        except cuda.driver.CUDAError:
-            # Handle CUDA initialization errors
-            pass
-            
-        return False
+            import subprocess
+            result = subprocess.run(['nvidia-smi'], stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+            if result.returncode == 0:
+                print("NVIDIA GPU detected:")
+                print(result.stdout.decode('utf-8'))
+            else:
+                print("No NVIDIA GPU detected or nvidia-smi not found.")
+        except FileNotFoundError:
+            print("nvidia-smi command not found (NVIDIA drivers may not be installed).")
     
     def _check_nvidia_gpu_tensorrt(self):
         """Check if NVIDIA GPU with TensorRT is available in the system"""
