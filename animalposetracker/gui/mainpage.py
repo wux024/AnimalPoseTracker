@@ -25,6 +25,8 @@ from animalposetracker.utils import (convert_labels_to_coco,
 from animalposetracker.gui import (DARK_THEME_PATH, LIGHT_THEME_PATH, 
                                    LOGO_PATH_TRANSPARENT, LOGO_PATH, WELCOME_PATH)
 
+from animalposetracker.cfg import WEIGHT_URLS
+
 class AnimalPoseTrackerPage(QMainWindow, Ui_AnimalPoseTracker):
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -836,6 +838,7 @@ class AnimalPoseTrackerPage(QMainWindow, Ui_AnimalPoseTracker):
 
     def onStartTrain(self):
         """Slot for starting training"""
+        self._detect_pretrained()
         cmd = [
             "yolo",
             "pose",
@@ -846,6 +849,50 @@ class AnimalPoseTrackerPage(QMainWindow, Ui_AnimalPoseTracker):
         self.process.start(cmd[0], cmd[1:])
         self.StartTrain.setEnabled(False)
         self.EndTrain.setEnabled(True)
+    
+    def _detect_pretrained(self):
+        """
+        Detects if a pre-trained model is available for the current project.
+        If so, it updates the "pretrain" parameter in the "other" config.
+        """
+        pretrain = self.project.other_config.get("pretrain")
+        if not pretrain:
+            return
+        
+        pretrain_path = self.project.project_path / "pretrained"
+        model_name = self.project.project_config.get("model_name")
+        model_scale = self.project.project_config.get("model_scale")
+
+        if model_name in ["AnimalRTPose", "AnimalViTPose", "AnimalRTPose-P6"]:
+            weights_name = f"{model_name}-{model_scale}.pt"
+        elif model_name in ["YOLOv8-Pose", "YOLO11-Pose"]:
+            weights_name = f"{model_name}{model_scale}-pose.pt"
+        elif model_name in ["YOLOv8-Pose-P6"]:
+            weights_name = f"{model_name}{model_scale}-pose.pt"
+        elif model_name in ["YOLOv12-Pose"]:
+            weights_name = f"yolov12{model_scale}.pt"
+        else:
+            raise ValueError(f"Invalid model name {model_name}")
+        
+        weights_name = weights_name.lower()
+        weights_path = pretrain_path / weights_name
+        if not weights_path.exists():
+            import urllib.request
+            url = WEIGHT_URLS.get(model_name, {}).get(model_scale)
+            if url is None:
+                self.project.update_config("other", {"pretrain": False})
+                self.project.save_configs("other")
+                return
+            try:
+                pretrain_path.mkdir(exist_ok=True, exit_ok=True)
+                urllib.request.urlretrieve(url, weights_path)
+            except:
+                self.project.update_config("other", {"pretrain": False})
+                self.project.save_configs("other")
+                return
+            
+        self.project.update_config("other", {"pretrain": str(weights_path)})
+        self.project.save_configs("other")
 
     def onEndTrain(self):
         """Slot for ending training"""

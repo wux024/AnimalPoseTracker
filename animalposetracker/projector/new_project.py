@@ -248,6 +248,7 @@ class AnimalPoseTrackerProject:
     def _update_configs_from_dataset(self) -> None:
         """Update configurations based on dataset settings."""
         self.update_config("project", self.dataset_config)
+        self.update_config("project", {"project_path": str(self._project_path)})
         self.update_config("dataset", {'path': str(self.project_path / "datasets")})
         self.update_config("model", self.dataset_config)
         self.save_configs()
@@ -256,8 +257,8 @@ class AnimalPoseTrackerProject:
         """Load a project configuration from file."""
         self._load_config_from_file("project", config_path)
         self.local_path = Path(config_path).parent.parent
-        self._update_configs_from_dataset()
         self.load_config_file()
+        self._update_configs_from_dataset()
     
     def _load_config_from_file(self, config_type: str, file_path: Union[str, Path]) -> None:
         """Load configuration from a YAML file."""

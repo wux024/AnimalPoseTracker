@@ -45,3 +45,54 @@ DATA_YAML_PATHS = {
     'TopViewMouse': DATA_DIR / 'topviewmouse.yaml',
     'Zebra': DATA_DIR / 'zebra.yaml',
 }
+
+WEIGHT_URLS = {
+    'AnimalRTPose':
+    {
+        'N': 'https://drive.google.com/file/d/1wBrx_Aijh543GEvCF2_p0utmQ0CuWNmx/view?usp=drive_link',
+        'S': 'https://drive.google.com/file/d/1P2NP5IZT3rMHMAPAekhkg3hCYOpD5uKb/view?usp=drive_link',
+        'M': 'https://drive.google.com/file/d/1eoo3MW4teovN6iJ4lQgMMS1cpZkXac5f/view?usp=drive_link',
+        'L': 'https://drive.google.com/file/d/1H8928gh3tkjG06f5qJ7J9Pk_1QbyDtCz/view?usp=drive_link',
+        'X': 'https://drive.google.com/file/d/1Yb4oV3iXicHmEGSlOYL4WqLq1c2_DQOJ/view?usp=drive_link',
+    },
+    'AnimalRTPose-P6':
+    {
+        'N': None,
+        'S': None,
+        'M': None,
+        'L': None,
+        'X': None,
+    },
+    'YOLOv8-Pose':
+    {
+        'N': 'https://github.com/ultralytics/assets/releases/download/v8.3.0/yolov8n-pose.pt',
+        'S': 'https://github.com/ultralytics/assets/releases/download/v8.3.0/yolov8s-pose.pt',
+        'M': 'https://github.com/ultralytics/assets/releases/download/v8.3.0/yolov8m-pose.pt',
+        'L': 'https://github.com/ultralytics/assets/releases/download/v8.3.0/yolov8l-pose.pt',
+        'X': 'https://github.com/ultralytics/assets/releases/download/v8.3.0/yolov8x-pose.pt',
+    },
+    'YOLOv8-Pose-P6':
+    {
+        'N': None,
+        'S': None,
+        'M': None,
+        'L': None,
+        'X': 'https://github.com/ultralytics/assets/releases/download/v8.3.0/yolov8x-pose-p6.pt',
+    },
+    'YOLO11-Pose':
+    {
+        'N': 'https://github.com/ultralytics/assets/releases/download/v8.3.0/yolo11n-pose.pt',
+        'S': 'https://github.com/ultralytics/assets/releases/download/v8.3.0/yolo11s-pose.pt',
+        'M': 'https://github.com/ultralytics/assets/releases/download/v8.3.0/yolo11m-pose.pt',
+        'L': 'https://github.com/ultralytics/assets/releases/download/v8.3.0/yolo11l-pose.pt',
+        'X': 'https://github.com/ultralytics/assets/releases/download/v8.3.0/yolo11x-pose.pt',
+    },
+    'YOLOv12-Pose':
+    {
+        'N': 'https://github.com/ultralytics/assets/releases/download/v8.3.0/yolo12n.pt',
+        'S': 'https://github.com/ultralytics/assets/releases/download/v8.3.0/yolo12s.pt',
+        'M': 'https://github.com/ultralytics/assets/releases/download/v8.3.0/yolov12m.pt',
+        'L': 'https://github.com/ultralytics/assets/releases/download/v8.3.0/yolov12l.pt',
+        'X': 'https://github.com/ultralytics/assets/releases/download/v8.3.0/yolov12x.pt',
+    }
+}
