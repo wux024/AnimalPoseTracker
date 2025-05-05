@@ -1,4 +1,4 @@
-from PySide6.QtCore import  Qt, QSettings, QProcess, QFile, QTextStream, QTimer
+from PySide6.QtCore import  Qt, QSettings, QFile, QTextStream, QTimer
 from PySide6.QtWidgets import  (QMenu, QApplication, QFileDialog, QMainWindow,
                                  QMessageBox, QTreeWidget, QTreeWidgetItem, QLabel, 
                                  QTreeWidgetItemIterator, QSplashScreen, QProgressBar,
@@ -48,8 +48,6 @@ class AnimalPoseTrackerPage(QMainWindow, Ui_AnimalPoseTracker):
         self.extractor = KeyframeExtractor(Path.home())
         self.config_data = {}
         self.config_type = "project"
-        self.process = QProcess()
-        self.process.finished.connect(self.onProcessFinished)
 
         # set recent projects
         self.maxRecentProjects = 5
@@ -737,14 +735,7 @@ class AnimalPoseTrackerPage(QMainWindow, Ui_AnimalPoseTracker):
         self.ResumeTrain.setEnabled(False)
         self.StartTrain.setEnabled(False)
         self.EndTrain.setEnabled(True)
-        cmd = [
-            "yolo",
-            "train",
-            "resume",
-            f"model={resume_path}"
-        ]
-        self.process.setProcessChannelMode(QProcess.ForwardedChannels)
-        self.process.start(cmd[0], cmd[1:])
+        self.project.resume(resume_path)
 
     def onEditOtherParameters(self):
         """Slot for editing other parameters"""
@@ -798,22 +789,22 @@ class AnimalPoseTrackerPage(QMainWindow, Ui_AnimalPoseTracker):
             >>> convert_value("123") → 123
             >>> convert_value("3.14") → 3.14 
             >>> convert_value("true") → True
-            >>> convert_value("null") → None
+            >>> convert_value("Null") → None
             >>> convert_value(123) → 123 (non-strings returned as-is)
         """
         # Return non-strings immediately
         if not isinstance(value, str):
             return value
             
-        value = value.strip().lower()  # Normalize input
+        value = value.strip()  # Normalize input
         
         # Handle empty/None cases
-        if not value or value in ("none", "null"):
+        if not value or value in ("None", "Null", "null", "none"):
             return None
             
         # Handle booleans
-        if value in ("true", "false"):
-            return value == "true"
+        if value in ("True", "False", "true", "false"):
+            return value == "True" or value == "true"
             
         # Numeric conversion attempts
         try:
@@ -838,134 +829,92 @@ class AnimalPoseTrackerPage(QMainWindow, Ui_AnimalPoseTracker):
 
     def onStartTrain(self):
         """Slot for starting training"""
-        self._detect_pretrained()
-        cmd = [
-            "yolo",
-            "pose",
-            "train",
-            "cfg=configs/other.yaml"
-        ]
-        self.process.setProcessChannelMode(QProcess.ForwardedChannels)
-        self.process.start(cmd[0], cmd[1:])
         self.StartTrain.setEnabled(False)
         self.EndTrain.setEnabled(True)
+        self.project.train()
     
     def _detect_pretrained(self):
         """
         Detects if a pre-trained model is available for the current project.
         If so, it updates the "pretrain" parameter in the "other" config.
         """
-        pretrain = self.project.other_config.get("pretrain")
-        if not pretrain:
+        pretrained = self.project.other_config.get("pretrained")
+        if not pretrained:
             return
         
         pretrain_path = self.project.project_path / "pretrained"
-        model_name = self.project.project_config.get("model_name")
+        model_type = self.project.project_config.get("model_type")
         model_scale = self.project.project_config.get("model_scale")
 
-        if model_name in ["AnimalRTPose", "AnimalViTPose", "AnimalRTPose-P6"]:
-            weights_name = f"{model_name}-{model_scale}.pt"
-        elif model_name in ["YOLOv8-Pose", "YOLO11-Pose"]:
-            weights_name = f"{model_name}{model_scale}-pose.pt"
-        elif model_name in ["YOLOv8-Pose-P6"]:
-            weights_name = f"{model_name}{model_scale}-pose.pt"
-        elif model_name in ["YOLOv12-Pose"]:
+        if model_type in ["AnimalRTPose", "AnimalViTPose", "AnimalRTPose-P6"]:
+            weights_name = f"{model_type}-{model_scale}.pt"
+        elif model_type in ["YOLOv8-Pose", "YOLO11-Pose"]:
+            weights_name = f"{model_type}{model_scale}-pose.pt"
+        elif model_type in ["YOLOv8-Pose-P6"]:
+            weights_name = f"{model_type}{model_scale}-pose.pt"
+        elif model_type in ["YOLOv12-Pose"]:
             weights_name = f"yolov12{model_scale}.pt"
         else:
-            raise ValueError(f"Invalid model name {model_name}")
+            raise ValueError(f"Invalid model name {model_type}")
         
         weights_name = weights_name.lower()
         weights_path = pretrain_path / weights_name
         if not weights_path.exists():
-            import urllib.request
-            url = WEIGHT_URLS.get(model_name, {}).get(model_scale)
+            import requests
+            url = WEIGHT_URLS.get(model_type, {}).get(model_scale)
             if url is None:
-                self.project.update_config("other", {"pretrain": False})
+                self.project.update_config("other", {"pretrained": False})
                 self.project.save_configs("other")
                 return
             try:
-                pretrain_path.mkdir(exist_ok=True, exit_ok=True)
-                urllib.request.urlretrieve(url, weights_path)
+                response = requests.get(url, stream=True, timeout=10)
+                with open(weights_path, 'wb') as f:
+                    for chunk in response.iter_content(chunk_size=1024):
+                        if chunk:
+                            f.write(chunk)
+                print(f"Downloaded pre-trained weights to {weights_path}")
             except:
-                self.project.update_config("other", {"pretrain": False})
+                print(f"Failed to download pre-trained weights from {url}")
+                self.project.update_config("other", {"pretrained": False})
                 self.project.save_configs("other")
                 return
             
-        self.project.update_config("other", {"pretrain": str(weights_path)})
+        self.project.update_config("other", {"pretrained": str(weights_path)})
         self.project.save_configs("other")
+    
 
     def onEndTrain(self):
         """Slot for ending training"""
-        if self.process.state() == QProcess.Running:
-            self.process.terminate()
-            if not self.process.waitForFinished(3000):
-                self.process.kill()
         self.StartTrain.setEnabled(True)
         self.EndTrain.setEnabled(False)
+        self.project.stop()
 
     def onStartEvaluate(self):
         """Slot for starting evaluation"""
-        old_model = self.project.other_config.get("model", None)
-        self.project.update_config("other", {"model": "runs/train/best.pt"})
-        self.project.update_config("other", {"name": "val"})
-        self.project.save_configs("other")
-        cmd = [
-            "yolo",
-            "pose",
-            "val",
-            "cfg=configs/other.yaml"
-        ]
-        self.process.setProcessChannelMode(QProcess.ForwardedChannels)
-        self.process.start(cmd[0], cmd[1:])
         self.StartEvaluate.setEnabled(False)
         self.EndEvaluate.setEnabled(True)
-        self.project.update_config("other", {"model": old_model})
-        self.project.save_configs("other")
+        self.project.evaluate()
 
 
     def onEndEvaluate(self):
         """Slot for ending evaluation"""
-        if self.process.state() == QProcess.Running:
-            self.process.terminate()
-            if not self.process.waitForFinished(3000):
-                self.process.kill()
         self.StartEvaluate.setEnabled(True)
         self.EndEvaluate.setEnabled(False)
+        self.project.stop()
 
 
     def onStartInference(self):
         """Slot for starting inference"""
-        self.process.setProcessChannelMode(QProcess.ForwardedChannels)
-        old_model = self.project.other_config.get("model", None)
-        self.project.update_config("other", {"model": "runs/train/best.pt"})
-        self.project.update_config("other", {"name": "predict"})
-        self.project.save_configs("other")
-        if self.inference_source is None:
-            self.inference_source = Path(self.project.project_config["path"]) / self.project.dataset_config["test"]
-            self.inference_source = str(self.inference_source)
-        cmd = [
-            "yolo",
-            "pose",
-            "predict",
-            f"source={self.inference_source}"
-            "cfg=configs/other.yaml",
-        ]
-        self.process.setProcessChannelMode(QProcess.ForwardedChannels)
-        self.process.start(cmd[0], cmd[1:])
         self.StartInference.setEnabled(False)
         self.EndInference.setEnabled(True)
-        self.project.update_config("other", {"model": old_model})
-        self.project.save_configs("other")
+        self.project.predict(inference_source=self.inference_source)
 
 
     def onEndInference(self):
         """Slot for ending inference"""
-        if self.process.state() == QProcess.Running:
-            self.process.terminate()
-            if not self.process.waitForFinished(3000):
-                self.process.kill()
         self.StartInference.setEnabled(True)
         self.EndInference.setEnabled(False)
+        self.project.stop()
         
     def onSelectSource(self):
         # Create context menu
@@ -1014,24 +963,8 @@ class AnimalPoseTrackerPage(QMainWindow, Ui_AnimalPoseTracker):
 
     def onStartExport(self):
         """Slot for starting export"""
-        old_model = self.project.other_config.get("model", None)
-        self.project.update_config("other", {"model": "runs/train/best.pt"})
-        self.project.update_config("other", {"name": "export"})
-        self.project.save_configs("other")
-        cmd = [
-            "yolo",
-            "pose",
-            "export",
-            "cfg=configs/other.yaml"
-        ]
-        self.process.setProcessChannelMode(QProcess.ForwardedChannels)
-        self.process.start(cmd[0], cmd[1:])
-        self.project.update_config("other", {"model": old_model})
-        self.project.save_configs("other")
+        self.project.export()
     
-    def onProcessFinished(self, exit_code, exit_status):
-        """Slot for handling process finished signal"""
-        pass
 
 class SplashScreen(QSplashScreen):
     """Custom splash screen with guaranteed initialization sequence"""

@@ -49,11 +49,11 @@ DATA_YAML_PATHS = {
 WEIGHT_URLS = {
     'AnimalRTPose':
     {
-        'N': 'https://drive.google.com/file/d/1wBrx_Aijh543GEvCF2_p0utmQ0CuWNmx/view?usp=drive_link',
-        'S': 'https://drive.google.com/file/d/1P2NP5IZT3rMHMAPAekhkg3hCYOpD5uKb/view?usp=drive_link',
-        'M': 'https://drive.google.com/file/d/1eoo3MW4teovN6iJ4lQgMMS1cpZkXac5f/view?usp=drive_link',
-        'L': 'https://drive.google.com/file/d/1H8928gh3tkjG06f5qJ7J9Pk_1QbyDtCz/view?usp=drive_link',
-        'X': 'https://drive.google.com/file/d/1Yb4oV3iXicHmEGSlOYL4WqLq1c2_DQOJ/view?usp=drive_link',
+        'N': 'https://docs.google.com/uc?export=download&id=1wBrx_Aijh543GEvCF2_p0utmQ0CuWNmx',
+        'S': 'https://docs.google.com/uc?export=download&id=1P2NP5IZT3rMHMAPAekhkg3hCYOpD5uKb',
+        'M': 'https://docs.google.com/uc?export=download&id=1eoo3MW4teovN6iJ4lQgMMS1cpZkXac5f',
+        'L': 'https://docs.google.com/uc?export=download&id=1H8928gh3tkjG06f5qJ7J9Pk_1QbyDtCz',
+        'X': 'https://docs.google.com/uc?export=download&id=1Yb4oV3iXicHmEGSlOYL4WqLq1c2_DQOJ',
     },
     'AnimalRTPose-P6':
     {

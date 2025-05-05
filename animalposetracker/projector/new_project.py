@@ -2,8 +2,14 @@ import yaml
 from datetime import datetime
 from pathlib import Path
 from typing import Optional, List, Dict, Any, Union
-from animalposetracker.cfg import DATA_YAML_PATHS, MODEL_YAML_PATHS, DEFAULT_CFG_PATH
 import shutil
+
+import subprocess
+
+from animalposetracker.cfg import (DATA_YAML_PATHS, MODEL_YAML_PATHS, 
+                                   DEFAULT_CFG_PATH, WEIGHT_URLS)
+
+
 
 class AnimalPoseTrackerProject:
     """Manage animal pose tracking projects including configurations and directory structure."""
@@ -133,7 +139,10 @@ class AnimalPoseTrackerProject:
         
         # Generate project path and initialize configurations
         self.local_path = Path(local_path) if local_path else Path.cwd()
-        self.project_config['project_path'] = str(self.project_path)
+        self.project_config['project_path'] = str(self._project_path)
+
+        # process
+        self.process = None
     
     def _validate_keypoints_params(
         self,
@@ -154,7 +163,7 @@ class AnimalPoseTrackerProject:
                         f"Skeleton contains invalid keypoint index (max {keypoints-1})"
                     )
     
-    def _init_config(self, config_type: str, default: Dict[str, Any]) -> Dict[str, Any]:
+    def _init_config(self, default: Dict[str, Any]) -> Dict[str, Any]:
         return default.copy()
 
     @property
@@ -212,10 +221,10 @@ class AnimalPoseTrackerProject:
     def load_config_file(self) -> None:
         """Load the project configuration from file."""
         config_files = {
-            "project": self.project_path / "project.yaml",
-            "dataset": self.project_path / "configs" / "dataset.yaml",
-            "model": self.project_path / "configs" / "model.yaml",
-            "other": self.project_path / "configs" / "other.yaml",
+            "project": self._project_path / "project.yaml",
+            "dataset": self._project_path / "configs" / "dataset.yaml",
+            "model": self._project_path / "configs" / "model.yaml",
+            "other": self._project_path / "configs" / "other.yaml",
         }
         
         for config_type, config_file in config_files.items():
@@ -249,7 +258,7 @@ class AnimalPoseTrackerProject:
         """Update configurations based on dataset settings."""
         self.update_config("project", self.dataset_config)
         self.update_config("project", {"project_path": str(self._project_path)})
-        self.update_config("dataset", {'path': str(self.project_path / "datasets")})
+        self.update_config("dataset", {'path': str(self._project_path / "datasets")})
         self.update_config("model", self.dataset_config)
         self.save_configs()
     
@@ -320,13 +329,13 @@ class AnimalPoseTrackerProject:
 
         try:
             if src_path.is_dir():
-                dst_path = self.project_path / "sources" / "images"
+                dst_path = self._project_path / "sources" / "images"
                 dst_path.mkdir(parents=True, exist_ok=True)
                 for item in src_path.rglob('*'):
                     if item.is_file():
                         self._perform_operation(item, dst_path / item.name, move_or_copy)
             else:
-                dst_path = self.project_path / "sources" / "videos" / src_path.name
+                dst_path = self._project_path / "sources" / "videos" / src_path.name
                 dst_path.parent.mkdir(parents=True, exist_ok=True)
                 if dst_path.exists():
                     return dst_path
@@ -370,9 +379,9 @@ class AnimalPoseTrackerProject:
         """Save a single configuration to file."""
         config = getattr(self, f"{config_type}_config")
         config_path = (
-            self.project_path / f"{config_type}.yaml" 
+            self._project_path / f"{config_type}.yaml" 
             if config_type == "project" 
-            else self.project_path / "configs" / f"{config_type}.yaml"
+            else self._project_path / "configs" / f"{config_type}.yaml"
         )
         
         try:
@@ -391,7 +400,7 @@ class AnimalPoseTrackerProject:
     def create_project_dirs(self) -> None:
         """Create the standard directory structure for the project."""
         for rel_dir in self.DEFAULT_DIRS:
-            (self.project_path / rel_dir).mkdir(parents=True, exist_ok=True)
+            (self._project_path / rel_dir).mkdir(parents=True, exist_ok=True)
     
     def create_project_config(self) -> None:
         """Create and save the project configuration."""
@@ -399,7 +408,7 @@ class AnimalPoseTrackerProject:
     
     def create_dataset_config(self) -> None:
         """Create and save the dataset configuration."""
-        self.dataset_config['path'] = str(self.project_path / "datasets")
+        self.dataset_config['path'] = str(self._project_path / "datasets")
         self._save_config("dataset")
 
     def create_model_config(self) -> None:
@@ -429,8 +438,136 @@ class AnimalPoseTrackerProject:
         
         model_scale = self.project_config['model_scale'].lower()
         self.other_config.update({
-            'model': str(self.project_path / "configs" / f"model-{model_scale}.yaml"),
-            'data': str(self.project_path / "configs" / "dataset.yaml")
+            'model': str(self._project_path / "configs" / f"model-{model_scale}.yaml"),
+            'data': str(self._project_path / "configs" / "dataset.yaml")
         })
         
         self._save_config("other")
+    
+    def _detect_pretrained(self):
+        """
+        Detects if a pre-trained model is available for the current project.
+        If so, it updates the "pretrain" parameter in the "other" config.
+        """
+        pretrained = self.other_config.get("pretrained")
+        if not pretrained:
+            return
+        
+        pretrain_path = self._project_path / "pretrained"
+        model_type = self.project_config.get("model_type")
+        model_scale = self.project_config.get("model_scale")
+
+        if model_type in ["AnimalRTPose", "AnimalViTPose", "AnimalRTPose-P6"]:
+            weights_name = f"{model_type}-{model_scale}.pt"
+        elif model_type in ["YOLOv8-Pose", "YOLO11-Pose"]:
+            weights_name = f"{model_type}{model_scale}-pose.pt"
+        elif model_type in ["YOLOv8-Pose-P6"]:
+            weights_name = f"{model_type}{model_scale}-pose.pt"
+        elif model_type in ["YOLOv12-Pose"]:
+            weights_name = f"yolov12{model_scale}.pt"
+        else:
+            raise ValueError(f"Invalid model name {model_type}")
+        
+        weights_name = weights_name.lower()
+        weights_path = pretrain_path / weights_name
+        if not weights_path.exists():
+            import requests
+            url = WEIGHT_URLS.get(model_type, {}).get(model_scale)
+            if url is None:
+                self.update_config("other", {"pretrained": False})
+                self.save_configs("other")
+                return
+            try:
+                response = requests.get(url, stream=True, timeout=10)
+                with open(weights_path, 'wb') as f:
+                    for chunk in response.iter_content(chunk_size=1024):
+                        if chunk:
+                            f.write(chunk)
+                print(f"Downloaded pre-trained weights to {weights_path}")
+            except:
+                print(f"Failed to download pre-trained weights from {url}")
+                self.update_config("other", {"pretrained": False})
+                self.save_configs("other")
+                return
+            
+        self.update_config("other", {"pretrained": str(weights_path)})
+        self.save_configs("other")
+
+    
+    def train(self) -> None:
+        """Train the model."""
+        self._detect_pretrained()
+        cmd = [
+            "yolo",
+            "pose",
+            "train",
+            "cfg=configs/other.yaml"
+        ]
+        self.process = subprocess.Popen(cmd, cwd=self._project_path)
+    
+    def stop(self) -> None:
+        """Stop the current process."""
+        if self.process is not None:
+            self.process.kill()
+            self.process = None
+
+    def evaluate(self) -> None:
+        """Evaluate the model."""
+        old_model = self.other_config.get("model", None)
+        self.update_config("other", {"model": "runs/train/best.pt"})
+        self.update_config("other", {"name": "val"})
+        self.save_configs("other")
+        cmd = [
+            "yolo",
+            "pose",
+            "val",
+            "cfg=configs/other.yaml"
+        ]
+        self.process = subprocess.Popen(cmd, cwd=self._project_path)
+        self.update_config("other", {"model": old_model})
+        self.save_configs("other")
+
+    def predict(self, inference_source: Union[str, Path] = None) -> None:
+        """Predict on new data."""
+        old_model = self.other_config.get("model", None)
+        self.update_config("other", {"model": "runs/train/best.pt"})
+        self.update_config("other", {"name": "predict"})
+        self.save_configs("other")
+        if inference_source is None:
+            inference_source = Path(self.project_config["path"]) / self.dataset_config["test"]
+            inference_source = str(self.inference_source)
+        cmd = [
+            "yolo",
+            "pose",
+            "predict",
+            f"source={inference_source}"
+            "cfg=configs/other.yaml",
+        ]
+        self.process = subprocess.Popen(cmd, cwd=self._project_path)
+        self.update_config("other", {"model": old_model})
+        self.save_configs("other")
+
+    def resume(self, resume_path: str) -> None:
+        """Resume training or prediction."""
+        cmd = [
+            "yolo",
+            "train",
+            "resume",
+            f"model={resume_path}"
+        ]
+        self.process = subprocess.Popen(cmd, cwd=self._project_path)
+    
+    def export(self) -> None:
+        old_model = self.other_config.get("model", None)
+        self.update_config("other", {"model": "runs/train/best.pt"})
+        self.update_config("other", {"name": "export"})
+        self.save_configs("other")
+        cmd = [
+            "yolo",
+            "pose",
+            "export",
+            "cfg=configs/other.yaml"
+        ]
+        self.process = subprocess.Popen(cmd, cwd=self._project_path)
+        self.update_config("other", {"model": old_model})
+        self.save_configs("other")
