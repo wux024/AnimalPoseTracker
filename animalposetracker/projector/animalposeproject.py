@@ -483,7 +483,7 @@ class AnimalPoseTrackerProject:
             url = WEIGHT_URLS.get(model_type, {}).get(model_scale)
             if url is None:
                 self.update_config("other", {"pretrained": False})
-                self.save_configs("other")
+                self._save_config("other")
                 return
             try:
                 response = requests.get(url, stream=True, timeout=10)
@@ -495,21 +495,25 @@ class AnimalPoseTrackerProject:
             except:
                 print(f"Failed to download pre-trained weights from {url}")
                 self.update_config("other", {"pretrained": False})
-                self.save_configs("other")
+                self._save_config("other")
                 return
             
         self.update_config("other", {"pretrained": str(weights_path)})
-        self.save_configs("other")
+        self._save_config("other")
 
-    def _update_and_save_config(self, mode, name, model=None):
+    def _update_and_save_config(self, mode, name, model=False):
         """Update and save configuration."""
-        old_model = self.other_config.get("model", None)
         self.update_config("other", {"mode": mode})
-        if model:
-            self.update_config("other", {"model": model})
+        if not model:
+            model_scale = self.project_config.get("model_scale").lower()
+            self.other_config.update({
+            'model': str(self._project_path / "configs" / f"model-{model_scale}.yaml")
+            })
+        new_model = self.project_path / "runs" / "train" / "weights" / "best.pt"
         self.update_config("other", {"name": name})
-        self.save_configs("other")
-        return old_model
+        self.update_config("other", {"model": str(new_model)})
+        self.update_config("other", {"pretrained": False})
+        self._save_config("other")
 
     def _execute_command(self, cmd):
         """Execute a command using subprocess."""
@@ -518,12 +522,10 @@ class AnimalPoseTrackerProject:
 
     def train(self) -> None:
         """Train the model."""
-        self._detect_pretrained()
         self._update_and_save_config("train", "train")
+        self._detect_pretrained()
         cmd = [
             "yolo",
-            "pose",
-            "train",
             "cfg=configs/other.yaml"
         ]
         self._execute_command(cmd)
@@ -536,44 +538,30 @@ class AnimalPoseTrackerProject:
 
     def evaluate(self) -> None:
         """Evaluate the model."""
-        new_model = self.project_path / "runs" / "train" / "weights" / "best.pt"
-        old_model = self._update_and_save_config("val", 
-                                                 "val", 
-                                                 str(new_model))
+        self._update_and_save_config("val", "val", model=True)
         cmd = [
             "yolo",
-            "pose",
-            "val",
-            f"model={new_model}"
             "cfg=configs/other.yaml"
         ]
         self._execute_command(cmd)
-        self.update_config("other", {"model": old_model})
-        self.save_configs("other")
 
     def predict(self, inference_source: Union[str, Path] = None) -> None:
-        """Predict on new data."""
-        new_model = self.project_path / "runs" / "train" / "weights" / "best.pt"
-        old_model = self._update_and_save_config("predict", 
-                                                 "predict", 
-                                                 str(new_model))
+        self._update_and_save_config("predict", "predict", model=True)
         if inference_source is None:
-            inference_source = Path(self.project_config["path"]) / self.dataset_config["test"]
+            inference_source = Path(self.dataset_config["path"]) / self.dataset_config["test"]
             inference_source = str(inference_source)
+        self.update_config("other", {"source": inference_source})
+        self.save_configs("other")
         cmd = [
             "yolo",
-            "pose",
-            "predict",
-            f"model={new_model}",
-            f"source={inference_source}",
             "cfg=configs/other.yaml",
         ]
         self._execute_command(cmd)
-        self.update_config("other", {"model": old_model})
-        self.save_configs("other")
 
     def resume(self, resume_path: str) -> None:
         """Resume training or prediction."""
+        if not resume_path:
+            resume_path = self.project_path / "runs" / "train" / "weights" / "last.pt"
         cmd = [
             "yolo",
             "train",
@@ -584,17 +572,9 @@ class AnimalPoseTrackerProject:
 
     def export(self) -> None:
         """Export the model."""
-        new_model = self.project_path / "runs" / "train" / "weights" / "best.pt"
-        old_model = self._update_and_save_config("export", 
-                                                 "export", 
-                                                 str(new_model))
+        self._update_and_save_config("export", "export", model=True)
         cmd = [
             "yolo",
-            "pose",
-            "export",
-            f"model={new_model}",
             "cfg=configs/other.yaml"
         ]
         self._execute_command(cmd)
-        self.update_config("other", {"model": old_model})
-        self.save_configs("other")

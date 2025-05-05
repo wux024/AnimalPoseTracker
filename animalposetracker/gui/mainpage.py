@@ -47,6 +47,7 @@ class AnimalPoseTrackerPage(QMainWindow, Ui_AnimalPoseTracker):
         self.config_data = {}
         self.config_type = "project"
         self.current_mode = None
+        self.inference_source = None
 
         # set recent projects
         self.maxRecentProjects = 5
