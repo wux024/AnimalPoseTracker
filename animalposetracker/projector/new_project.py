@@ -259,7 +259,7 @@ class AnimalPoseTrackerProject:
         self.update_config("project", self.dataset_config)
         self.update_config("project", {"project_path": str(self._project_path)})
         self.update_config("dataset", {'path': str(self._project_path / "datasets")})
-        self.update_update("model", {
+        self.update_config("model", {
             'nc': self.project_config["classes"],
             'kpt_shape': self.dataset_config['kpt_shape']
         })
