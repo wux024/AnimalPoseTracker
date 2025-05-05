@@ -527,7 +527,7 @@ class AnimalPoseTrackerProject:
         cmd = [
             "yolo",
             "pose",
-            "val"
+            "val",
             "cfg=configs/other.yaml"
         ]
         self.process = subprocess.Popen(cmd, cwd=self._project_path)
