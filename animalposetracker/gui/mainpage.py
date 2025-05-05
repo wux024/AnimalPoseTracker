@@ -832,61 +832,43 @@ class AnimalPoseTrackerPage(QMainWindow, Ui_AnimalPoseTracker):
         self.StartTrain.setEnabled(False)
         self.EndTrain.setEnabled(True)
         self.project.train()
+        self._create_check_thread()
     
-    def _detect_pretrained(self):
-        """
-        Detects if a pre-trained model is available for the current project.
-        If so, it updates the "pretrain" parameter in the "other" config.
-        """
-        pretrained = self.project.other_config.get("pretrained")
-        if not pretrained:
-            return
-        
-        pretrain_path = self.project.project_path / "pretrained"
-        model_type = self.project.project_config.get("model_type")
-        model_scale = self.project.project_config.get("model_scale")
-
-        if model_type in ["AnimalRTPose", "AnimalViTPose", "AnimalRTPose-P6"]:
-            weights_name = f"{model_type}-{model_scale}.pt"
-        elif model_type in ["YOLOv8-Pose", "YOLO11-Pose"]:
-            weights_name = f"{model_type}{model_scale}-pose.pt"
-        elif model_type in ["YOLOv8-Pose-P6"]:
-            weights_name = f"{model_type}{model_scale}-pose.pt"
-        elif model_type in ["YOLOv12-Pose"]:
-            weights_name = f"yolov12{model_scale}.pt"
-        else:
-            raise ValueError(f"Invalid model name {model_type}")
-        
-        weights_name = weights_name.lower()
-        weights_path = pretrain_path / weights_name
-        if not weights_path.exists():
-            import requests
-            url = WEIGHT_URLS.get(model_type, {}).get(model_scale)
-            if url is None:
-                self.project.update_config("other", {"pretrained": False})
-                self.project.save_configs("other")
-                return
-            try:
-                response = requests.get(url, stream=True, timeout=10)
-                with open(weights_path, 'wb') as f:
-                    for chunk in response.iter_content(chunk_size=1024):
-                        if chunk:
-                            f.write(chunk)
-                print(f"Downloaded pre-trained weights to {weights_path}")
-            except:
-                print(f"Failed to download pre-trained weights from {url}")
-                self.project.update_config("other", {"pretrained": False})
-                self.project.save_configs("other")
-                return
-            
-        self.project.update_config("other", {"pretrained": str(weights_path)})
-        self.project.save_configs("other")
+    def _create_check_thread(self):
+        """Create a QTimer thread for checking training process"""
+        self.check_thread = QTimer()
+        self.check_thread.setInterval(1000)  # 1s interval for checking thread
+        self.check_thread.timeout.connect(self._check_process)
+        self.check_thread.start()
     
-
+    def _remove_check_thread(self):
+        """Remove the QTimer thread for checking training process"""
+        if self.check_thread is not None:
+            self.check_thread.stop()
+            self.check_thread.disconnect()
+            self.check_thread.deleteLater()
+            self.check_thread = None
+    
+    def _check_process(self):
+        """
+        Check if training process is still running.
+        If not, enable "End Training" button and start evaluation.
+        """
+        if self.project.process.poll() is not None:
+            self.StartTrain.setEnabled(True)
+            self.EndTrain.setEnabled(False)
+            self.StartEvaluate.setEnabled(True)
+            self.EndEvaluate.setEnabled(False)
+            self.StartInference.setEnabled(True)
+            self.EndInference.setEnabled(False)
+            self.project.stop()
+            self._remove_check_thread()
+    
     def onEndTrain(self):
         """Slot for ending training"""
         self.StartTrain.setEnabled(True)
         self.EndTrain.setEnabled(False)
+        self._remove_check_thread()
         self.project.stop()
 
     def onStartEvaluate(self):
@@ -894,6 +876,7 @@ class AnimalPoseTrackerPage(QMainWindow, Ui_AnimalPoseTracker):
         self.StartEvaluate.setEnabled(False)
         self.EndEvaluate.setEnabled(True)
         self.project.evaluate()
+        self._create_check_thread()
 
 
     def onEndEvaluate(self):
@@ -901,6 +884,7 @@ class AnimalPoseTrackerPage(QMainWindow, Ui_AnimalPoseTracker):
         self.StartEvaluate.setEnabled(True)
         self.EndEvaluate.setEnabled(False)
         self.project.stop()
+        self._remove_check_thread()
 
 
     def onStartInference(self):
@@ -908,13 +892,14 @@ class AnimalPoseTrackerPage(QMainWindow, Ui_AnimalPoseTracker):
         self.StartInference.setEnabled(False)
         self.EndInference.setEnabled(True)
         self.project.predict(inference_source=self.inference_source)
-
+        self._create_check_thread()
 
     def onEndInference(self):
         """Slot for ending inference"""
         self.StartInference.setEnabled(True)
         self.EndInference.setEnabled(False)
         self.project.stop()
+        self._remove_check_thread()
         
     def onSelectSource(self):
         # Create context menu

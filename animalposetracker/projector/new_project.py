@@ -501,19 +501,33 @@ class AnimalPoseTrackerProject:
         self.update_config("other", {"pretrained": str(weights_path)})
         self.save_configs("other")
 
-    
+    def _update_and_save_config(self, mode, name, model=None):
+        """Update and save configuration."""
+        old_model = self.other_config.get("model", None)
+        self.update_config("other", {"mode": mode})
+        if model:
+            self.update_config("other", {"model": model})
+        self.update_config("other", {"name": name})
+        self.save_configs("other")
+        return old_model
+
+    def _execute_command(self, cmd):
+        """Execute a command using subprocess."""
+        self.process = subprocess.Popen(cmd, cwd=self._project_path)
+        return self.process
+
     def train(self) -> None:
         """Train the model."""
         self._detect_pretrained()
-        self.update_config("other", {"mode": "train"})
+        self._update_and_save_config("train", "train")
         cmd = [
             "yolo",
             "pose",
             "train",
             "cfg=configs/other.yaml"
         ]
-        self.process = subprocess.Popen(cmd, cwd=self._project_path)
-    
+        self._execute_command(cmd)
+
     def stop(self) -> None:
         """Stop the current process."""
         if self.process is not None:
@@ -522,39 +536,31 @@ class AnimalPoseTrackerProject:
 
     def evaluate(self) -> None:
         """Evaluate the model."""
-        old_model = self.other_config.get("model", None)
-        self.update_config("other", {"mode": "val"})
-        self.update_config("other", {"model": "runs/train/best.pt"})
-        self.update_config("other", {"name": "val"})
-        self.save_configs("other")
+        old_model = self._update_and_save_config("val", "val", "runs/train/best.pt")
         cmd = [
             "yolo",
             "pose",
             "val",
             "cfg=configs/other.yaml"
         ]
-        self.process = subprocess.Popen(cmd, cwd=self._project_path)
+        self._execute_command(cmd)
         self.update_config("other", {"model": old_model})
         self.save_configs("other")
 
     def predict(self, inference_source: Union[str, Path] = None) -> None:
         """Predict on new data."""
-        old_model = self.other_config.get("model", None)
-        self.update_config("other", {"mode": "predict"})
-        self.update_config("other", {"model": "runs/train/best.pt"})
-        self.update_config("other", {"name": "predict"})
-        self.save_configs("other")
+        old_model = self._update_and_save_config("predict", "predict", "runs/train/best.pt")
         if inference_source is None:
             inference_source = Path(self.project_config["path"]) / self.dataset_config["test"]
-            inference_source = str(self.inference_source)
+            inference_source = str(inference_source)
         cmd = [
             "yolo",
             "pose",
             "predict",
-            f"source={inference_source}"
+            f"source={inference_source}",
             "cfg=configs/other.yaml",
         ]
-        self.process = subprocess.Popen(cmd, cwd=self._project_path)
+        self._execute_command(cmd)
         self.update_config("other", {"model": old_model})
         self.save_configs("other")
 
@@ -566,20 +572,17 @@ class AnimalPoseTrackerProject:
             "resume",
             f"model={resume_path}"
         ]
-        self.process = subprocess.Popen(cmd, cwd=self._project_path)
-    
+        self._execute_command(cmd)
+
     def export(self) -> None:
-        old_model = self.other_config.get("model", None)
-        self.update_config("other", {"mode": "export"})
-        self.update_config("other", {"model": "runs/train/best.pt"})
-        self.update_config("other", {"name": "export"})
-        self.save_configs("other")
+        """Export the model."""
+        old_model = self._update_and_save_config("export", "export", "runs/train/best.pt")
         cmd = [
             "yolo",
             "pose",
             "export",
             "cfg=configs/other.yaml"
         ]
-        self.process = subprocess.Popen(cmd, cwd=self._project_path)
+        self._execute_command(cmd)
         self.update_config("other", {"model": old_model})
         self.save_configs("other")
