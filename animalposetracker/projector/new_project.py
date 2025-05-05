@@ -260,6 +260,10 @@ class AnimalPoseTrackerProject:
         self.update_config("project", {"project_path": str(self._project_path)})
         self.update_config("dataset", {'path': str(self._project_path / "datasets")})
         self.update_config("model", self.dataset_config)
+        self.other_config.update({
+            'model': str(self._project_path / "configs" / f"model-{self.project_config['scale'].lower()}.yaml"),
+            'data': str(self._project_path / "configs" / "dataset.yaml")
+        })
         self.save_configs()
     
     def load_project_config(self, config_path: Union[str, Path]) -> None:
