@@ -25,8 +25,6 @@ from animalposetracker.utils import (convert_labels_to_coco,
 from animalposetracker.gui import (DARK_THEME_PATH, LIGHT_THEME_PATH, 
                                    LOGO_PATH_TRANSPARENT, LOGO_PATH, WELCOME_PATH)
 
-from animalposetracker.cfg import WEIGHT_URLS
-
 class AnimalPoseTrackerPage(QMainWindow, Ui_AnimalPoseTracker):
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -48,6 +46,7 @@ class AnimalPoseTrackerPage(QMainWindow, Ui_AnimalPoseTracker):
         self.extractor = KeyframeExtractor(Path.home())
         self.config_data = {}
         self.config_type = "project"
+        self.current_mode = None
 
         # set recent projects
         self.maxRecentProjects = 5
@@ -826,80 +825,91 @@ class AnimalPoseTrackerPage(QMainWindow, Ui_AnimalPoseTracker):
             else:
                 raise ValueError(f"Invalid key {key} in other config")
 
-
     def onStartTrain(self):
         """Slot for starting training"""
-        self.StartTrain.setEnabled(False)
-        self.EndTrain.setEnabled(True)
+        self.current_mode = "train"
+        self._toggle_buttons("train", start=False)
         self.project.train()
-        self._create_check_thread()
-    
-    def _create_check_thread(self):
+        self._start_check_thread()
+
+    def _start_check_thread(self):
         """Create a QTimer thread for checking training process"""
         self.check_thread = QTimer()
-        self.check_thread.setInterval(1000)  # 1s interval for checking thread
+        self.check_thread.setInterval(1000)
         self.check_thread.timeout.connect(self._check_process)
         self.check_thread.start()
-    
-    def _remove_check_thread(self):
+
+    def _stop_check_thread(self):
         """Remove the QTimer thread for checking training process"""
         if self.check_thread is not None:
             self.check_thread.stop()
             self.check_thread.disconnect()
             self.check_thread.deleteLater()
             self.check_thread = None
-    
+
     def _check_process(self):
         """
-        Check if training process is still running.
-        If not, enable "End Training" button and start evaluation.
+        Check if the current process is still running.
+        If not, perform corresponding actions based on the current mode.
         """
         if self.project.process.poll() is not None:
-            self.StartTrain.setEnabled(True)
-            self.EndTrain.setEnabled(False)
-            self.StartEvaluate.setEnabled(True)
-            self.EndEvaluate.setEnabled(False)
-            self.StartInference.setEnabled(True)
-            self.EndInference.setEnabled(False)
+            if self.current_mode == "train":
+                self._toggle_buttons("train", start=True)
+            elif self.current_mode == "evaluate":
+                self._toggle_buttons("evaluate", start=True)
+            elif self.current_mode == "inference":
+                self._toggle_buttons("inference", start=True)
             self.project.stop()
-            self._remove_check_thread()
-    
+            self._stop_check_thread()
+
     def onEndTrain(self):
         """Slot for ending training"""
-        self.StartTrain.setEnabled(True)
-        self.EndTrain.setEnabled(False)
-        self._remove_check_thread()
+        self._toggle_buttons("train", start=True)
+        self._stop_check_thread()
         self.project.stop()
 
     def onStartEvaluate(self):
         """Slot for starting evaluation"""
-        self.StartEvaluate.setEnabled(False)
-        self.EndEvaluate.setEnabled(True)
+        self.current_mode = "evaluate"
+        self._toggle_buttons("evaluate", start=False)
         self.project.evaluate()
-        self._create_check_thread()
-
+        self._start_check_thread()
 
     def onEndEvaluate(self):
         """Slot for ending evaluation"""
-        self.StartEvaluate.setEnabled(True)
-        self.EndEvaluate.setEnabled(False)
+        self._toggle_buttons("evaluate", start=True)
         self.project.stop()
-        self._remove_check_thread()
-
+        self._stop_check_thread()
 
     def onStartInference(self):
         """Slot for starting inference"""
-        self.StartInference.setEnabled(False)
-        self.EndInference.setEnabled(True)
+        self.current_mode = "inference"
+        self._toggle_buttons("inference", start=False)
         self.project.predict(inference_source=self.inference_source)
-        self._create_check_thread()
+        self._start_check_thread()
 
     def onEndInference(self):
         """Slot for ending inference"""
-        self.StartInference.setEnabled(True)
-        self.EndInference.setEnabled(False)
+        self._toggle_buttons("inference", start=True)
         self.project.stop()
-        self._remove_check_thread()
+        self._stop_check_thread()
+
+    def _toggle_buttons(self, mode, start=True):
+        """
+        Toggle the enable state of start and end buttons based on mode.
+        :param mode: 'train', 'evaluate', or 'inference'
+        :param start: True to enable start button and disable end button, False otherwise
+        """
+        if mode == "train":
+            self.StartTrain.setEnabled(start)
+            self.EndTrain.setEnabled(not start)
+        elif mode == "evaluate":
+            self.StartEvaluate.setEnabled(start)
+            self.EndEvaluate.setEnabled(not start)
+        elif mode == "inference":
+            self.StartInference.setEnabled(start)
+            self.EndInference.setEnabled(not start)
+
         
     def onSelectSource(self):
         # Create context menu
