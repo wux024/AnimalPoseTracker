@@ -7,7 +7,6 @@ import cv2
 import sys
 from pathlib import Path
 import queue
-import time
 
 from .ui_animalposeinference import Ui_AnimalPoseInference
 from animalposetracker.utils import (VideoReaderThread, VideoWriterThread, 

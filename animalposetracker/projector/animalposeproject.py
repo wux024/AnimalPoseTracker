@@ -544,6 +544,7 @@ class AnimalPoseTrackerProject:
             "yolo",
             "pose",
             "val",
+            f"model={new_model}"
             "cfg=configs/other.yaml"
         ]
         self._execute_command(cmd)
@@ -563,6 +564,7 @@ class AnimalPoseTrackerProject:
             "yolo",
             "pose",
             "predict",
+            f"model={new_model}",
             f"source={inference_source}",
             "cfg=configs/other.yaml",
         ]
@@ -590,6 +592,7 @@ class AnimalPoseTrackerProject:
             "yolo",
             "pose",
             "export",
+            f"model={new_model}",
             "cfg=configs/other.yaml"
         ]
         self._execute_command(cmd)

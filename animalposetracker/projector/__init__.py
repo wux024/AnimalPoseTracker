@@ -1,4 +1,4 @@
-from .new_project import AnimalPoseTrackerProject
+from .animalposeproject import AnimalPoseTrackerProject
 
 
 __all__ = ['AnimalPoseTrackerProject']
