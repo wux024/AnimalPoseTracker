@@ -260,8 +260,9 @@ class AnimalPoseTrackerProject:
         self.update_config("project", {"project_path": str(self._project_path)})
         self.update_config("dataset", {'path': str(self._project_path / "datasets")})
         self.update_config("model", self.dataset_config)
+        model_scale = self.project_config['model_scale'].lower()
         self.other_config.update({
-            'model': str(self._project_path / "configs" / f"model-{self.project_config['scale'].lower()}.yaml"),
+            'model': str(self._project_path / "configs" / f"model-{model_scale}.yaml"),
             'data': str(self._project_path / "configs" / "dataset.yaml")
         })
         self.save_configs()
