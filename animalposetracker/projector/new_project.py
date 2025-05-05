@@ -502,6 +502,7 @@ class AnimalPoseTrackerProject:
     def train(self) -> None:
         """Train the model."""
         self._detect_pretrained()
+        self.update_config("other", {"mode": "train"})
         cmd = [
             "yolo",
             "pose",
@@ -519,13 +520,14 @@ class AnimalPoseTrackerProject:
     def evaluate(self) -> None:
         """Evaluate the model."""
         old_model = self.other_config.get("model", None)
+        self.update_config("other", {"mode": "val"})
         self.update_config("other", {"model": "runs/train/best.pt"})
         self.update_config("other", {"name": "val"})
         self.save_configs("other")
         cmd = [
             "yolo",
             "pose",
-            "val",
+            "val"
             "cfg=configs/other.yaml"
         ]
         self.process = subprocess.Popen(cmd, cwd=self._project_path)
@@ -535,6 +537,7 @@ class AnimalPoseTrackerProject:
     def predict(self, inference_source: Union[str, Path] = None) -> None:
         """Predict on new data."""
         old_model = self.other_config.get("model", None)
+        self.update_config("other", {"mode": "predict"})
         self.update_config("other", {"model": "runs/train/best.pt"})
         self.update_config("other", {"name": "predict"})
         self.save_configs("other")
@@ -564,6 +567,7 @@ class AnimalPoseTrackerProject:
     
     def export(self) -> None:
         old_model = self.other_config.get("model", None)
+        self.update_config("other", {"mode": "export"})
         self.update_config("other", {"model": "runs/train/best.pt"})
         self.update_config("other", {"name": "export"})
         self.save_configs("other")
