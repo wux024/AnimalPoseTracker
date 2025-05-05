@@ -536,7 +536,9 @@ class AnimalPoseTrackerProject:
 
     def evaluate(self) -> None:
         """Evaluate the model."""
-        old_model = self._update_and_save_config("val", "val", "runs/train/best.pt")
+        old_model = self._update_and_save_config("val", 
+                                                 "val", 
+                                                 "runs/train/weights/best.pt")
         cmd = [
             "yolo",
             "pose",
@@ -549,7 +551,9 @@ class AnimalPoseTrackerProject:
 
     def predict(self, inference_source: Union[str, Path] = None) -> None:
         """Predict on new data."""
-        old_model = self._update_and_save_config("predict", "predict", "runs/train/best.pt")
+        old_model = self._update_and_save_config("predict", 
+                                                 "predict", 
+                                                 "runs/train/weights/best.pt")
         if inference_source is None:
             inference_source = Path(self.project_config["path"]) / self.dataset_config["test"]
             inference_source = str(inference_source)
@@ -576,7 +580,9 @@ class AnimalPoseTrackerProject:
 
     def export(self) -> None:
         """Export the model."""
-        old_model = self._update_and_save_config("export", "export", "runs/train/best.pt")
+        old_model = self._update_and_save_config("export", 
+                                                 "export", 
+                                                 "runs/train/weights/best.pt")
         cmd = [
             "yolo",
             "pose",
