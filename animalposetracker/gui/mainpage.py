@@ -288,6 +288,8 @@ class AnimalPoseTrackerPage(QMainWindow, Ui_AnimalPoseTracker):
         """Slot for exiting the application"""
         if self.sub_page is not None:
             self.sub_page.close()
+        if self.project is not None:
+            self.project.save_configs()
         self.close()
 
     def onOpenAnnotator(self):

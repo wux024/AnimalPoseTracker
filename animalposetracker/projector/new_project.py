@@ -236,6 +236,9 @@ class AnimalPoseTrackerProject:
             "classes": len(self.dataset_config['names'].keys()),
             "classes_name": list(self.dataset_config['names'].values()),
             "keypoints": self.dataset_config['kpt_shape'][0],
+            "keypoints_name": [f"kpt_{i}" for i in range(self.dataset_config['kpt_shape'][0])],
+            "skeleton": self.dataset_config['skeleton'],
+            "oks_sigmas": self.dataset_config.get('oks_sigmas', [1.0 / self.project_config['keypoints']] * self.project_config['keypoints']),
             "visible": self.dataset_config['kpt_shape'][1] == 3
         })
         
@@ -247,11 +250,13 @@ class AnimalPoseTrackerProject:
         self.update_config("project", self.dataset_config)
         self.update_config("dataset", {'path': str(self.project_path / "datasets")})
         self.update_config("model", self.dataset_config)
+        self.save_configs()
     
     def load_project_config(self, config_path: Union[str, Path]) -> None:
         """Load a project configuration from file."""
         self._load_config_from_file("project", config_path)
         self.local_path = Path(config_path).parent.parent
+        self._update_configs_from_dataset()
         self.load_config_file()
     
     def _load_config_from_file(self, config_type: str, file_path: Union[str, Path]) -> None:
