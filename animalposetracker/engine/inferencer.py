@@ -25,7 +25,7 @@ class InferenceEngine:
                  show_classes: bool = False,
                  show_keypoints: bool = True,
                  show_skeletons: bool = False,
-                 show_bbox: bool = True,
+                 show_bbox: bool = False,
                  radius: int = 5,
                  skeleton_line_width: int = 2,
                  bbox_line_width: int = 2
