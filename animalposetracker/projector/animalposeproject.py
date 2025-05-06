@@ -501,18 +501,18 @@ class AnimalPoseTrackerProject:
         self.update_config("other", {"pretrained": str(weights_path)})
         self._save_config("other")
 
-    def _update_and_save_config(self, mode, name, model=False):
+    def _update_and_save_config(self, mode, name, model=False, pretrained=False):
         """Update and save configuration."""
-        self.update_config("other", {"mode": mode})
         if not model:
             model_scale = self.project_config.get("model_scale").lower()
-            self.other_config.update({
-            'model': str(self._project_path / "configs" / f"model-{model_scale}.yaml")
-            })
-        new_model = self.project_path / "runs" / "train" / "weights" / "best.pt"
+            new_model = str(self._project_path / "configs" / f"model-{model_scale}.yaml")
+            self.update_config("other", {"pretrained": pretrained})
+        else:
+            new_model = self.project_path / "runs" / "train" / "weights" / "best.pt"
+            self.update_config("other", {"pretrained": False})
+        self.update_config("other", {"mode": mode})
         self.update_config("other", {"name": name})
         self.update_config("other", {"model": str(new_model)})
-        self.update_config("other", {"pretrained": False})
         self._save_config("other")
 
     def _execute_command(self, cmd):
@@ -522,7 +522,8 @@ class AnimalPoseTrackerProject:
 
     def train(self) -> None:
         """Train the model."""
-        self._update_and_save_config("train", "train")
+        pretrained = self.other_config.get("pretrained")
+        self._update_and_save_config("train", "train", pretrained=pretrained)
         self._detect_pretrained()
         cmd = [
             "yolo",
