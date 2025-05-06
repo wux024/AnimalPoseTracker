@@ -720,7 +720,6 @@ class AnimalPoseInferencePage(QWidget, Ui_AnimalPoseInference):
             self.videowriter_thread.safe_stop()
 
         self.display_thread.stop()
-        self.display_thread.timeout.disconnect()
         # Clear all cache queues
         queues = {
             'read': self.read_cache,

@@ -843,7 +843,6 @@ class AnimalPoseTrackerPage(QMainWindow, Ui_AnimalPoseTracker):
         """Remove the QTimer thread for checking training process"""
         if self.check_thread is not None:
             self.check_thread.stop()
-            self.check_thread.timeout.disconnect()
             self.check_thread.deleteLater()
             self.check_thread = None
 
