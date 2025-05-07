@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 
 ################################################################################
-## Form generated from reading UI file 'animalposeinferenceiMxJEY.ui'
+## Form generated from reading UI file 'inferencerCgKLWy.ui'
 ##
 ## Created by: Qt User Interface Compiler version 6.8.2
 ##
@@ -22,25 +22,25 @@ from PySide6.QtWidgets import (QApplication, QCheckBox, QComboBox, QDoubleSpinBo
 
 from animalposetracker.gui import LOGO_SMALL_PATH
 
-class Ui_AnimalPoseInference(object):
-    def setupUi(self, AnimalPoseInference):
-        if not AnimalPoseInference.objectName():
-            AnimalPoseInference.setObjectName(u"AnimalPoseInference")
-        AnimalPoseInference.resize(1321, 845)
+class Ui_Inferencer(object):
+    def setupUi(self, Inferencer):
+        if not Inferencer.objectName():
+            Inferencer.setObjectName(u"Inferencer")
+        Inferencer.resize(1321, 845)
         sizePolicy = QSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
         sizePolicy.setHorizontalStretch(0)
         sizePolicy.setVerticalStretch(0)
-        sizePolicy.setHeightForWidth(AnimalPoseInference.sizePolicy().hasHeightForWidth())
-        AnimalPoseInference.setSizePolicy(sizePolicy)
-        AnimalPoseInference.setAcceptDrops(False)
+        sizePolicy.setHeightForWidth(Inferencer.sizePolicy().hasHeightForWidth())
+        Inferencer.setSizePolicy(sizePolicy)
+        Inferencer.setAcceptDrops(False)
         icon = QIcon()
         icon.addFile(LOGO_SMALL_PATH, QSize(), QIcon.Mode.Normal, QIcon.State.Off)
-        AnimalPoseInference.setWindowIcon(icon)
-        self.verticalLayout = QVBoxLayout(AnimalPoseInference)
-        self.verticalLayout.setObjectName(u"verticalLayout")
+        Inferencer.setWindowIcon(icon)
+        self.InferencerLayout = QVBoxLayout(Inferencer)
+        self.InferencerLayout.setObjectName(u"InferencerLayout")
         self.BaseConfigure = QHBoxLayout()
         self.BaseConfigure.setObjectName(u"BaseConfigure")
-        self.BaseToolsGroup = QGroupBox(AnimalPoseInference)
+        self.BaseToolsGroup = QGroupBox(Inferencer)
         self.BaseToolsGroup.setObjectName(u"BaseToolsGroup")
         sizePolicy1 = QSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Preferred)
         sizePolicy1.setHorizontalStretch(0)
@@ -281,7 +281,7 @@ class Ui_AnimalPoseInference(object):
 
         self.BaseConfigure.addWidget(self.BaseToolsGroup)
 
-        self.ShowToolsGroup = QGroupBox(AnimalPoseInference)
+        self.ShowToolsGroup = QGroupBox(Inferencer)
         self.ShowToolsGroup.setObjectName(u"ShowToolsGroup")
         sizePolicy1.setHeightForWidth(self.ShowToolsGroup.sizePolicy().hasHeightForWidth())
         self.ShowToolsGroup.setSizePolicy(sizePolicy1)
@@ -470,9 +470,9 @@ class Ui_AnimalPoseInference(object):
         self.BaseConfigure.addWidget(self.ShowToolsGroup)
 
 
-        self.verticalLayout.addLayout(self.BaseConfigure)
+        self.InferencerLayout.addLayout(self.BaseConfigure)
 
-        self.DisplayGroup = QGroupBox(AnimalPoseInference)
+        self.DisplayGroup = QGroupBox(Inferencer)
         self.DisplayGroup.setObjectName(u"DisplayGroup")
         sizePolicy.setHeightForWidth(self.DisplayGroup.sizePolicy().hasHeightForWidth())
         self.DisplayGroup.setSizePolicy(sizePolicy)
@@ -492,64 +492,64 @@ class Ui_AnimalPoseInference(object):
         self.DisplayGroupHLayout.addWidget(self.Display)
 
 
-        self.verticalLayout.addWidget(self.DisplayGroup)
+        self.InferencerLayout.addWidget(self.DisplayGroup)
 
 
-        self.retranslateUi(AnimalPoseInference)
+        self.retranslateUi(Inferencer)
 
-        QMetaObject.connectSlotsByName(AnimalPoseInference)
+        QMetaObject.connectSlotsByName(Inferencer)
     # setupUi
 
-    def retranslateUi(self, AnimalPoseInference):
-        AnimalPoseInference.setWindowTitle(QCoreApplication.translate("AnimalPoseInference", u"AnimalPoseInference", None))
+    def retranslateUi(self, Inferencer):
+        Inferencer.setWindowTitle(QCoreApplication.translate("Inferencer", u"AnimalPoseInference", None))
         self.BaseToolsGroup.setTitle("")
-        self.SelectConfigure.setText(QCoreApplication.translate("AnimalPoseInference", u"Select Configure", None))
-        self.SelectWeights.setText(QCoreApplication.translate("AnimalPoseInference", u"Select Weights", None))
-        self.CameraORVideos.setText(QCoreApplication.translate("AnimalPoseInference", u"Use Video", None))
-        self.CameraVideosSelection.setItemText(0, QCoreApplication.translate("AnimalPoseInference", u"...", None))
-        self.CameraVideosSelection.setItemText(1, QCoreApplication.translate("AnimalPoseInference", u"Select video file...", None))
+        self.SelectConfigure.setText(QCoreApplication.translate("Inferencer", u"Select Configure", None))
+        self.SelectWeights.setText(QCoreApplication.translate("Inferencer", u"Select Weights", None))
+        self.CameraORVideos.setText(QCoreApplication.translate("Inferencer", u"Use Video", None))
+        self.CameraVideosSelection.setItemText(0, QCoreApplication.translate("Inferencer", u"...", None))
+        self.CameraVideosSelection.setItemText(1, QCoreApplication.translate("Inferencer", u"Select video file...", None))
 
-        self.CheckCameraVideosConnect.setText(QCoreApplication.translate("AnimalPoseInference", u"Preview Video", None))
-        self.WidthLabel.setText(QCoreApplication.translate("AnimalPoseInference", u"Width", None))
-        self.HeightLabel.setText(QCoreApplication.translate("AnimalPoseInference", u"Height", None))
-        self.FPSLabel.setText(QCoreApplication.translate("AnimalPoseInference", u"FPS", None))
-        self.ModelBitsLabel.setText(QCoreApplication.translate("AnimalPoseInference", u"Model Bits", None))
-        self.ModelBits.setItemText(0, QCoreApplication.translate("AnimalPoseInference", u"FP32", None))
-        self.ModelBits.setItemText(1, QCoreApplication.translate("AnimalPoseInference", u"FP16", None))
-        self.ModelBits.setItemText(2, QCoreApplication.translate("AnimalPoseInference", u"INT8", None))
+        self.CheckCameraVideosConnect.setText(QCoreApplication.translate("Inferencer", u"Preview Video", None))
+        self.WidthLabel.setText(QCoreApplication.translate("Inferencer", u"Width", None))
+        self.HeightLabel.setText(QCoreApplication.translate("Inferencer", u"Height", None))
+        self.FPSLabel.setText(QCoreApplication.translate("Inferencer", u"FPS", None))
+        self.ModelBitsLabel.setText(QCoreApplication.translate("Inferencer", u"Model Bits", None))
+        self.ModelBits.setItemText(0, QCoreApplication.translate("Inferencer", u"FP32", None))
+        self.ModelBits.setItemText(1, QCoreApplication.translate("Inferencer", u"FP16", None))
+        self.ModelBits.setItemText(2, QCoreApplication.translate("Inferencer", u"INT8", None))
 
-        self.EngineLabel.setText(QCoreApplication.translate("AnimalPoseInference", u"Engine", None))
-        self.EngineSelection.setItemText(0, QCoreApplication.translate("AnimalPoseInference", u"OpenCV", None))
-        self.EngineSelection.setItemText(1, QCoreApplication.translate("AnimalPoseInference", u"ONNX", None))
-        self.EngineSelection.setItemText(2, QCoreApplication.translate("AnimalPoseInference", u"OpenVINO", None))
-        self.EngineSelection.setItemText(3, QCoreApplication.translate("AnimalPoseInference", u"TensorRT", None))
-        self.EngineSelection.setItemText(4, QCoreApplication.translate("AnimalPoseInference", u"CoreML", None))
-        self.EngineSelection.setItemText(5, QCoreApplication.translate("AnimalPoseInference", u"CANN", None))
+        self.EngineLabel.setText(QCoreApplication.translate("Inferencer", u"Engine", None))
+        self.EngineSelection.setItemText(0, QCoreApplication.translate("Inferencer", u"OpenCV", None))
+        self.EngineSelection.setItemText(1, QCoreApplication.translate("Inferencer", u"ONNX", None))
+        self.EngineSelection.setItemText(2, QCoreApplication.translate("Inferencer", u"OpenVINO", None))
+        self.EngineSelection.setItemText(3, QCoreApplication.translate("Inferencer", u"TensorRT", None))
+        self.EngineSelection.setItemText(4, QCoreApplication.translate("Inferencer", u"CoreML", None))
+        self.EngineSelection.setItemText(5, QCoreApplication.translate("Inferencer", u"CANN", None))
 
-        self.DeviceLabel.setText(QCoreApplication.translate("AnimalPoseInference", u"Inference Device", None))
-        self.DeviceSelection.setItemText(0, QCoreApplication.translate("AnimalPoseInference", u"Intel CPU", None))
-        self.DeviceSelection.setItemText(1, QCoreApplication.translate("AnimalPoseInference", u"Intel GPU", None))
-        self.DeviceSelection.setItemText(2, QCoreApplication.translate("AnimalPoseInference", u"Intel NPU", None))
-        self.DeviceSelection.setItemText(3, QCoreApplication.translate("AnimalPoseInference", u"NVIDIA GPU", None))
-        self.DeviceSelection.setItemText(4, QCoreApplication.translate("AnimalPoseInference", u"AMD CPU", None))
-        self.DeviceSelection.setItemText(5, QCoreApplication.translate("AnimalPoseInference", u"AMD GPU", None))
-        self.DeviceSelection.setItemText(6, QCoreApplication.translate("AnimalPoseInference", u"ARM CPU", None))
-        self.DeviceSelection.setItemText(7, QCoreApplication.translate("AnimalPoseInference", u"Ascend NPU", None))
+        self.DeviceLabel.setText(QCoreApplication.translate("Inferencer", u"Inference Device", None))
+        self.DeviceSelection.setItemText(0, QCoreApplication.translate("Inferencer", u"Intel CPU", None))
+        self.DeviceSelection.setItemText(1, QCoreApplication.translate("Inferencer", u"Intel GPU", None))
+        self.DeviceSelection.setItemText(2, QCoreApplication.translate("Inferencer", u"Intel NPU", None))
+        self.DeviceSelection.setItemText(3, QCoreApplication.translate("Inferencer", u"NVIDIA GPU", None))
+        self.DeviceSelection.setItemText(4, QCoreApplication.translate("Inferencer", u"AMD CPU", None))
+        self.DeviceSelection.setItemText(5, QCoreApplication.translate("Inferencer", u"AMD GPU", None))
+        self.DeviceSelection.setItemText(6, QCoreApplication.translate("Inferencer", u"ARM CPU", None))
+        self.DeviceSelection.setItemText(7, QCoreApplication.translate("Inferencer", u"Ascend NPU", None))
 
-        self.Start.setText(QCoreApplication.translate("AnimalPoseInference", u"Start", None))
-        self.End.setText(QCoreApplication.translate("AnimalPoseInference", u"End", None))
-        self.PrintInformation.setText(QCoreApplication.translate("AnimalPoseInference", u"Some print information", None))
+        self.Start.setText(QCoreApplication.translate("Inferencer", u"Start", None))
+        self.End.setText(QCoreApplication.translate("Inferencer", u"End", None))
+        self.PrintInformation.setText(QCoreApplication.translate("Inferencer", u"Some print information", None))
         self.ShowToolsGroup.setTitle("")
-        self.Save.setText(QCoreApplication.translate("AnimalPoseInference", u"Save", None))
-        self.IoULabel.setText(QCoreApplication.translate("AnimalPoseInference", u"IoU", None))
-        self.ConfLabel.setText(QCoreApplication.translate("AnimalPoseInference", u"Conf", None))
-        self.Show.setText(QCoreApplication.translate("AnimalPoseInference", u"Show", None))
-        self.Backgroud.setText(QCoreApplication.translate("AnimalPoseInference", u"Original", None))
-        self.ShowClasses.setText(QCoreApplication.translate("AnimalPoseInference", u"Show Classes", None))
+        self.Save.setText(QCoreApplication.translate("Inferencer", u"Save", None))
+        self.IoULabel.setText(QCoreApplication.translate("Inferencer", u"IoU", None))
+        self.ConfLabel.setText(QCoreApplication.translate("Inferencer", u"Conf", None))
+        self.Show.setText(QCoreApplication.translate("Inferencer", u"Show", None))
+        self.Backgroud.setText(QCoreApplication.translate("Inferencer", u"Original", None))
+        self.ShowClasses.setText(QCoreApplication.translate("Inferencer", u"Show Classes", None))
         self.Classes.setText("")
-        self.ShowKeypoints.setText(QCoreApplication.translate("AnimalPoseInference", u"Show Keypoints", None))
-        self.ShowSkeletons.setText(QCoreApplication.translate("AnimalPoseInference", u"Show Skeletons", None))
-        self.ShowBBox.setText(QCoreApplication.translate("AnimalPoseInference", u"Show BBox", None))
+        self.ShowKeypoints.setText(QCoreApplication.translate("Inferencer", u"Show Keypoints", None))
+        self.ShowSkeletons.setText(QCoreApplication.translate("Inferencer", u"Show Skeletons", None))
+        self.ShowBBox.setText(QCoreApplication.translate("Inferencer", u"Show BBox", None))
         self.DisplayGroup.setTitle("")
         self.Display.setText("")
     # retranslateUi

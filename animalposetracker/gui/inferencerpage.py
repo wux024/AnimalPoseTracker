@@ -8,13 +8,13 @@ import sys
 from pathlib import Path
 import queue
 
-from .ui_animalposeinference import Ui_AnimalPoseInference
+from .ui_inferencer import Ui_Inferencer
 from animalposetracker.utils import (VideoReaderThread, VideoWriterThread, 
                                      PreprocessThread, InferenceThread, 
                                      PostprocessThread, VisualizeThread)
 from animalposetracker.engine import InferenceEngine
 from animalposetracker.engine import ENGINEtoDEVICE
-class AnimalPoseInferencePage(QWidget, Ui_AnimalPoseInference):
+class InferencerPage(QWidget, Ui_Inferencer):
     def __init__(self, parent=None):
         super().__init__(parent)
 

@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <ui version="4.0">
- <class>AnimalPoseAnnotator</class>
- <widget class="QMainWindow" name="AnimalPoseAnnotator">
+ <class>Annotator</class>
+ <widget class="QMainWindow" name="Annotator">
   <property name="geometry">
    <rect>
     <x>0</x>
@@ -17,8 +17,8 @@
    <iconset>
     <normaloff>../media/logo.png</normaloff>../media/logo.png</iconset>
   </property>
-  <widget class="QWidget" name="AnimalPoseAnnotatorLayout">
-   <layout class="QHBoxLayout" name="AnimalPoseAnnotatorHLayout">
+  <widget class="QWidget" name="AnnotatorLayout">
+   <layout class="QHBoxLayout" name="AnnotatorHLayout">
     <item>
      <layout class="QVBoxLayout" name="ToolsLayout">
       <item>

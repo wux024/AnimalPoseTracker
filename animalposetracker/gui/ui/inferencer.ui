@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <ui version="4.0">
- <class>AnimalPoseInference</class>
- <widget class="QWidget" name="AnimalPoseInference">
+ <class>Inferencer</class>
+ <widget class="QWidget" name="Inferencer">
   <property name="geometry">
    <rect>
     <x>0</x>
@@ -26,7 +26,7 @@
    <iconset>
     <normaloff>media/logo.png</normaloff>media/logo.png</iconset>
   </property>
-  <layout class="QVBoxLayout" name="verticalLayout">
+  <layout class="QVBoxLayout" name="InferencerLayout">
    <item>
     <layout class="QHBoxLayout" name="BaseConfigure">
      <item>

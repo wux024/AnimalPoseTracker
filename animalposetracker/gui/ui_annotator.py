@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 
 ################################################################################
-## Form generated from reading UI file 'animalposeannotatorkiJwxC.ui'
+## Form generated from reading UI file 'annotatorHAccGv.ui'
 ##
 ## Created by: Qt User Interface Compiler version 6.8.2
 ##
@@ -25,89 +25,89 @@ from PySide6.QtWidgets import (QApplication, QCheckBox, QComboBox, QGraphicsView
 
 from animalposetracker.gui import LOGO_SMALL_PATH
 
-class Ui_AnimalPoseAnnotator(object):
-    def setupUi(self, AnimalPoseAnnotator):
-        if not AnimalPoseAnnotator.objectName():
-            AnimalPoseAnnotator.setObjectName(u"AnimalPoseAnnotator")
-        AnimalPoseAnnotator.resize(1120, 642)
+class Ui_Annotator(object):
+    def setupUi(self, Annotator):
+        if not Annotator.objectName():
+            Annotator.setObjectName(u"Annotator")
+        Annotator.resize(1120, 642)
         icon = QIcon()
         icon.addFile(LOGO_SMALL_PATH, QSize(), QIcon.Mode.Normal, QIcon.State.Off)
-        AnimalPoseAnnotator.setWindowIcon(icon)
-        self.actionOpenConfigureFile = QAction(AnimalPoseAnnotator)
+        Annotator.setWindowIcon(icon)
+        self.actionOpenConfigureFile = QAction(Annotator)
         self.actionOpenConfigureFile.setObjectName(u"actionOpenConfigureFile")
         icon1 = QIcon(QIcon.fromTheme(u"document-open"))
         self.actionOpenConfigureFile.setIcon(icon1)
-        self.actionOpenFileFolder = QAction(AnimalPoseAnnotator)
+        self.actionOpenFileFolder = QAction(Annotator)
         self.actionOpenFileFolder.setObjectName(u"actionOpenFileFolder")
         icon2 = QIcon(QIcon.fromTheme(u"folder-open"))
         self.actionOpenFileFolder.setIcon(icon2)
-        self.actionNextFrame = QAction(AnimalPoseAnnotator)
+        self.actionNextFrame = QAction(Annotator)
         self.actionNextFrame.setObjectName(u"actionNextFrame")
         icon3 = QIcon(QIcon.fromTheme(u"go-next"))
         self.actionNextFrame.setIcon(icon3)
         self.actionNextFrame.setMenuRole(QAction.MenuRole.NoRole)
-        self.actionPreviousFrame = QAction(AnimalPoseAnnotator)
+        self.actionPreviousFrame = QAction(Annotator)
         self.actionPreviousFrame.setObjectName(u"actionPreviousFrame")
         icon4 = QIcon(QIcon.fromTheme(u"go-previous"))
         self.actionPreviousFrame.setIcon(icon4)
         self.actionPreviousFrame.setMenuRole(QAction.MenuRole.NoRole)
-        self.actionSaveLabel = QAction(AnimalPoseAnnotator)
+        self.actionSaveLabel = QAction(Annotator)
         self.actionSaveLabel.setObjectName(u"actionSaveLabel")
         icon5 = QIcon(QIcon.fromTheme(u"document-save"))
         self.actionSaveLabel.setIcon(icon5)
         self.actionSaveLabel.setMenuRole(QAction.MenuRole.NoRole)
-        self.actionDeleteLabel = QAction(AnimalPoseAnnotator)
+        self.actionDeleteLabel = QAction(Annotator)
         self.actionDeleteLabel.setObjectName(u"actionDeleteLabel")
         icon6 = QIcon(QIcon.fromTheme(u"edit-delete"))
         self.actionDeleteLabel.setIcon(icon6)
         self.actionDeleteLabel.setMenuRole(QAction.MenuRole.NoRole)
-        self.actionDrawBBox = QAction(AnimalPoseAnnotator)
+        self.actionDrawBBox = QAction(Annotator)
         self.actionDrawBBox.setObjectName(u"actionDrawBBox")
         icon7 = QIcon(QIcon.fromTheme(u"media-playback-stop"))
         self.actionDrawBBox.setIcon(icon7)
         self.actionDrawBBox.setMenuRole(QAction.MenuRole.NoRole)
-        self.actionDrawPoint = QAction(AnimalPoseAnnotator)
+        self.actionDrawPoint = QAction(Annotator)
         self.actionDrawPoint.setObjectName(u"actionDrawPoint")
         icon8 = QIcon(QIcon.fromTheme(u"media-optical"))
         self.actionDrawPoint.setIcon(icon8)
         self.actionDrawPoint.setMenuRole(QAction.MenuRole.NoRole)
-        self.actionDrawLine = QAction(AnimalPoseAnnotator)
+        self.actionDrawLine = QAction(Annotator)
         self.actionDrawLine.setObjectName(u"actionDrawLine")
         icon9 = QIcon(QIcon.fromTheme(u"format-text-italic"))
         self.actionDrawLine.setIcon(icon9)
         self.actionDrawLine.setMenuRole(QAction.MenuRole.NoRole)
-        self.actionNoLabel = QAction(AnimalPoseAnnotator)
+        self.actionNoLabel = QAction(Annotator)
         self.actionNoLabel.setObjectName(u"actionNoLabel")
         icon10 = QIcon(QIcon.fromTheme(u"zoom-original"))
         self.actionNoLabel.setIcon(icon10)
         self.actionNoLabel.setMenuRole(QAction.MenuRole.NoRole)
-        self.actionHelp = QAction(AnimalPoseAnnotator)
+        self.actionHelp = QAction(Annotator)
         self.actionHelp.setObjectName(u"actionHelp")
         icon11 = QIcon(QIcon.fromTheme(u"help-browser"))
         self.actionHelp.setIcon(icon11)
-        self.actionDark = QAction(AnimalPoseAnnotator)
+        self.actionDark = QAction(Annotator)
         self.actionDark.setObjectName(u"actionDark")
-        self.actionLight = QAction(AnimalPoseAnnotator)
+        self.actionLight = QAction(Annotator)
         self.actionLight.setObjectName(u"actionLight")
-        self.actionBuildSkeleton = QAction(AnimalPoseAnnotator)
+        self.actionBuildSkeleton = QAction(Annotator)
         self.actionBuildSkeleton.setObjectName(u"actionBuildSkeleton")
         icon12 = QIcon(QIcon.fromTheme(u"format-text-strikethrough"))
         self.actionBuildSkeleton.setIcon(icon12)
         self.actionBuildSkeleton.setMenuRole(QAction.MenuRole.NoRole)
-        self.actionExportYOLOFormat = QAction(AnimalPoseAnnotator)
+        self.actionExportYOLOFormat = QAction(Annotator)
         self.actionExportYOLOFormat.setObjectName(u"actionExportYOLOFormat")
-        self.actionExportCOCOFormat = QAction(AnimalPoseAnnotator)
+        self.actionExportCOCOFormat = QAction(Annotator)
         self.actionExportCOCOFormat.setObjectName(u"actionExportCOCOFormat")
-        self.AnimalPoseAnnotatorLayout = QWidget(AnimalPoseAnnotator)
-        self.AnimalPoseAnnotatorLayout.setObjectName(u"AnimalPoseAnnotatorLayout")
-        self.AnimalPoseAnnotatorHLayout = QHBoxLayout(self.AnimalPoseAnnotatorLayout)
-        self.AnimalPoseAnnotatorHLayout.setObjectName(u"AnimalPoseAnnotatorHLayout")
+        self.AnnotatorLayout = QWidget(Annotator)
+        self.AnnotatorLayout.setObjectName(u"AnnotatorLayout")
+        self.AnnotatorHLayout = QHBoxLayout(self.AnnotatorLayout)
+        self.AnnotatorHLayout.setObjectName(u"AnnotatorHLayout")
         self.ToolsLayout = QVBoxLayout()
         self.ToolsLayout.setObjectName(u"ToolsLayout")
         self.SubToolsLayout = QHBoxLayout()
         self.SubToolsLayout.setSpacing(5)
         self.SubToolsLayout.setObjectName(u"SubToolsLayout")
-        self.KeypointsSeletion = QComboBox(self.AnimalPoseAnnotatorLayout)
+        self.KeypointsSeletion = QComboBox(self.AnnotatorLayout)
         self.KeypointsSeletion.setObjectName(u"KeypointsSeletion")
         sizePolicy = QSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
         sizePolicy.setHorizontalStretch(0)
@@ -119,7 +119,7 @@ class Ui_AnimalPoseAnnotator(object):
 
         self.SubToolsLayout.addWidget(self.KeypointsSeletion)
 
-        self.ClassesSelection = QComboBox(self.AnimalPoseAnnotatorLayout)
+        self.ClassesSelection = QComboBox(self.AnnotatorLayout)
         self.ClassesSelection.setObjectName(u"ClassesSelection")
         sizePolicy.setHeightForWidth(self.ClassesSelection.sizePolicy().hasHeightForWidth())
         self.ClassesSelection.setSizePolicy(sizePolicy)
@@ -128,7 +128,7 @@ class Ui_AnimalPoseAnnotator(object):
 
         self.SubToolsLayout.addWidget(self.ClassesSelection)
 
-        self.Visible = QComboBox(self.AnimalPoseAnnotatorLayout)
+        self.Visible = QComboBox(self.AnnotatorLayout)
         self.Visible.setObjectName(u"Visible")
         sizePolicy.setHeightForWidth(self.Visible.sizePolicy().hasHeightForWidth())
         self.Visible.setSizePolicy(sizePolicy)
@@ -140,7 +140,7 @@ class Ui_AnimalPoseAnnotator(object):
 
         self.ToolsLayout.addLayout(self.SubToolsLayout)
 
-        self.SkeletonSelection = QComboBox(self.AnimalPoseAnnotatorLayout)
+        self.SkeletonSelection = QComboBox(self.AnnotatorLayout)
         self.SkeletonSelection.setObjectName(u"SkeletonSelection")
         sizePolicy.setHeightForWidth(self.SkeletonSelection.sizePolicy().hasHeightForWidth())
         self.SkeletonSelection.setSizePolicy(sizePolicy)
@@ -152,7 +152,7 @@ class Ui_AnimalPoseAnnotator(object):
         self.EditLayout = QHBoxLayout()
         self.EditLayout.setSpacing(5)
         self.EditLayout.setObjectName(u"EditLayout")
-        self.EditClasses = QPushButton(self.AnimalPoseAnnotatorLayout)
+        self.EditClasses = QPushButton(self.AnnotatorLayout)
         self.EditClasses.setObjectName(u"EditClasses")
         sizePolicy.setHeightForWidth(self.EditClasses.sizePolicy().hasHeightForWidth())
         self.EditClasses.setSizePolicy(sizePolicy)
@@ -161,7 +161,7 @@ class Ui_AnimalPoseAnnotator(object):
 
         self.EditLayout.addWidget(self.EditClasses)
 
-        self.EditKeypoints = QPushButton(self.AnimalPoseAnnotatorLayout)
+        self.EditKeypoints = QPushButton(self.AnnotatorLayout)
         self.EditKeypoints.setObjectName(u"EditKeypoints")
         sizePolicy.setHeightForWidth(self.EditKeypoints.sizePolicy().hasHeightForWidth())
         self.EditKeypoints.setSizePolicy(sizePolicy)
@@ -170,7 +170,7 @@ class Ui_AnimalPoseAnnotator(object):
 
         self.EditLayout.addWidget(self.EditKeypoints)
 
-        self.EditSkeleton = QPushButton(self.AnimalPoseAnnotatorLayout)
+        self.EditSkeleton = QPushButton(self.AnnotatorLayout)
         self.EditSkeleton.setObjectName(u"EditSkeleton")
         sizePolicy.setHeightForWidth(self.EditSkeleton.sizePolicy().hasHeightForWidth())
         self.EditSkeleton.setSizePolicy(sizePolicy)
@@ -182,7 +182,7 @@ class Ui_AnimalPoseAnnotator(object):
 
         self.ToolsLayout.addLayout(self.EditLayout)
 
-        self.ConfigureDisplay = QTreeWidget(self.AnimalPoseAnnotatorLayout)
+        self.ConfigureDisplay = QTreeWidget(self.AnnotatorLayout)
         self.ConfigureDisplay.setObjectName(u"ConfigureDisplay")
         sizePolicy1 = QSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Expanding)
         sizePolicy1.setHorizontalStretch(0)
@@ -194,14 +194,14 @@ class Ui_AnimalPoseAnnotator(object):
 
         self.ToolsLayout.addWidget(self.ConfigureDisplay)
 
-        self.LabelInformationViewLabel = QLabel(self.AnimalPoseAnnotatorLayout)
+        self.LabelInformationViewLabel = QLabel(self.AnnotatorLayout)
         self.LabelInformationViewLabel.setObjectName(u"LabelInformationViewLabel")
         self.LabelInformationViewLabel.setMinimumSize(QSize(370, 25))
         self.LabelInformationViewLabel.setMaximumSize(QSize(370, 25))
 
         self.ToolsLayout.addWidget(self.LabelInformationViewLabel)
 
-        self.LabelInformationView = QTreeView(self.AnimalPoseAnnotatorLayout)
+        self.LabelInformationView = QTreeView(self.AnnotatorLayout)
         self.LabelInformationView.setObjectName(u"LabelInformationView")
         sizePolicy1.setHeightForWidth(self.LabelInformationView.sizePolicy().hasHeightForWidth())
         self.LabelInformationView.setSizePolicy(sizePolicy1)
@@ -211,7 +211,7 @@ class Ui_AnimalPoseAnnotator(object):
         self.ToolsLayout.addWidget(self.LabelInformationView)
 
 
-        self.AnimalPoseAnnotatorHLayout.addLayout(self.ToolsLayout)
+        self.AnnotatorHLayout.addLayout(self.ToolsLayout)
 
         self.LabelAreaLayout = QVBoxLayout()
         self.LabelAreaLayout.setObjectName(u"LabelAreaLayout")
@@ -219,12 +219,12 @@ class Ui_AnimalPoseAnnotator(object):
         self.LabelToolsLayout.setObjectName(u"LabelToolsLayout")
         self.LineWidthLayout = QHBoxLayout()
         self.LineWidthLayout.setObjectName(u"LineWidthLayout")
-        self.LineWidthLabel = QLabel(self.AnimalPoseAnnotatorLayout)
+        self.LineWidthLabel = QLabel(self.AnnotatorLayout)
         self.LineWidthLabel.setObjectName(u"LineWidthLabel")
 
         self.LineWidthLayout.addWidget(self.LineWidthLabel)
 
-        self.LineWidth = QSlider(self.AnimalPoseAnnotatorLayout)
+        self.LineWidth = QSlider(self.AnnotatorLayout)
         self.LineWidth.setObjectName(u"LineWidth")
         self.LineWidth.setMinimum(1)
         self.LineWidth.setMaximum(10)
@@ -238,12 +238,12 @@ class Ui_AnimalPoseAnnotator(object):
 
         self.RadiusLayout = QHBoxLayout()
         self.RadiusLayout.setObjectName(u"RadiusLayout")
-        self.RadiusLabel = QLabel(self.AnimalPoseAnnotatorLayout)
+        self.RadiusLabel = QLabel(self.AnnotatorLayout)
         self.RadiusLabel.setObjectName(u"RadiusLabel")
 
         self.RadiusLayout.addWidget(self.RadiusLabel)
 
-        self.Radius = QSlider(self.AnimalPoseAnnotatorLayout)
+        self.Radius = QSlider(self.AnnotatorLayout)
         self.Radius.setObjectName(u"Radius")
         self.Radius.setMinimum(1)
         self.Radius.setMaximum(10)
@@ -255,7 +255,7 @@ class Ui_AnimalPoseAnnotator(object):
 
         self.LabelToolsLayout.addLayout(self.RadiusLayout)
 
-        self.IsCrowd = QCheckBox(self.AnimalPoseAnnotatorLayout)
+        self.IsCrowd = QCheckBox(self.AnnotatorLayout)
         self.IsCrowd.setObjectName(u"IsCrowd")
 
         self.LabelToolsLayout.addWidget(self.IsCrowd)
@@ -263,7 +263,7 @@ class Ui_AnimalPoseAnnotator(object):
 
         self.LabelAreaLayout.addLayout(self.LabelToolsLayout)
 
-        self.FrameDisplayGroup = QGroupBox(self.AnimalPoseAnnotatorLayout)
+        self.FrameDisplayGroup = QGroupBox(self.AnnotatorLayout)
         self.FrameDisplayGroup.setObjectName(u"FrameDisplayGroup")
         self.FrameDisplayGroupLayout = QVBoxLayout(self.FrameDisplayGroup)
         self.FrameDisplayGroupLayout.setObjectName(u"FrameDisplayGroupLayout")
@@ -276,10 +276,10 @@ class Ui_AnimalPoseAnnotator(object):
         self.LabelAreaLayout.addWidget(self.FrameDisplayGroup)
 
 
-        self.AnimalPoseAnnotatorHLayout.addLayout(self.LabelAreaLayout)
+        self.AnnotatorHLayout.addLayout(self.LabelAreaLayout)
 
-        AnimalPoseAnnotator.setCentralWidget(self.AnimalPoseAnnotatorLayout)
-        self.menubar = QMenuBar(AnimalPoseAnnotator)
+        Annotator.setCentralWidget(self.AnnotatorLayout)
+        self.menubar = QMenuBar(Annotator)
         self.menubar.setObjectName(u"menubar")
         self.menubar.setGeometry(QRect(0, 0, 1120, 33))
         self.menuFile = QMenu(self.menubar)
@@ -292,13 +292,13 @@ class Ui_AnimalPoseAnnotator(object):
         self.menuHelp.setObjectName(u"menuHelp")
         self.menuExport = QMenu(self.menubar)
         self.menuExport.setObjectName(u"menuExport")
-        AnimalPoseAnnotator.setMenuBar(self.menubar)
-        self.statusbar = QStatusBar(AnimalPoseAnnotator)
+        Annotator.setMenuBar(self.menubar)
+        self.statusbar = QStatusBar(Annotator)
         self.statusbar.setObjectName(u"statusbar")
-        AnimalPoseAnnotator.setStatusBar(self.statusbar)
-        self.toolBar = QToolBar(AnimalPoseAnnotator)
+        Annotator.setStatusBar(self.statusbar)
+        self.toolBar = QToolBar(Annotator)
         self.toolBar.setObjectName(u"toolBar")
-        AnimalPoseAnnotator.addToolBar(Qt.ToolBarArea.LeftToolBarArea, self.toolBar)
+        Annotator.addToolBar(Qt.ToolBarArea.LeftToolBarArea, self.toolBar)
 
         self.menubar.addAction(self.menuFile.menuAction())
         self.menubar.addAction(self.menuView.menuAction())
@@ -324,45 +324,45 @@ class Ui_AnimalPoseAnnotator(object):
         self.toolBar.addAction(self.actionDrawLine)
         self.toolBar.addAction(self.actionBuildSkeleton)
 
-        self.retranslateUi(AnimalPoseAnnotator)
+        self.retranslateUi(Annotator)
 
-        QMetaObject.connectSlotsByName(AnimalPoseAnnotator)
+        QMetaObject.connectSlotsByName(Annotator)
     # setupUi
 
-    def retranslateUi(self, AnimalPoseAnnotator):
-        AnimalPoseAnnotator.setWindowTitle(QCoreApplication.translate("AnimalPoseAnnotator", u"AnimalPoseAnnotator", None))
-        self.actionOpenConfigureFile.setText(QCoreApplication.translate("AnimalPoseAnnotator", u"Open Configure File", None))
-        self.actionOpenFileFolder.setText(QCoreApplication.translate("AnimalPoseAnnotator", u"Open File Folder", None))
-        self.actionNextFrame.setText(QCoreApplication.translate("AnimalPoseAnnotator", u"NextFrame", None))
-        self.actionPreviousFrame.setText(QCoreApplication.translate("AnimalPoseAnnotator", u"PreviousFrame", None))
-        self.actionSaveLabel.setText(QCoreApplication.translate("AnimalPoseAnnotator", u"SaveLabel", None))
-        self.actionDeleteLabel.setText(QCoreApplication.translate("AnimalPoseAnnotator", u"DeleteLabel", None))
-        self.actionDrawBBox.setText(QCoreApplication.translate("AnimalPoseAnnotator", u"DrawBBox", None))
-        self.actionDrawPoint.setText(QCoreApplication.translate("AnimalPoseAnnotator", u"DrawPoint", None))
-        self.actionDrawLine.setText(QCoreApplication.translate("AnimalPoseAnnotator", u"DrawLine", None))
-        self.actionNoLabel.setText(QCoreApplication.translate("AnimalPoseAnnotator", u"NoLabel", None))
-        self.actionHelp.setText(QCoreApplication.translate("AnimalPoseAnnotator", u"Help", None))
-        self.actionDark.setText(QCoreApplication.translate("AnimalPoseAnnotator", u"Dark", None))
-        self.actionLight.setText(QCoreApplication.translate("AnimalPoseAnnotator", u"Light", None))
-        self.actionBuildSkeleton.setText(QCoreApplication.translate("AnimalPoseAnnotator", u"BuildSkeleton", None))
-        self.actionExportYOLOFormat.setText(QCoreApplication.translate("AnimalPoseAnnotator", u"Export YOLO Format", None))
-        self.actionExportCOCOFormat.setText(QCoreApplication.translate("AnimalPoseAnnotator", u"Export COCO Format", None))
-        self.EditClasses.setText(QCoreApplication.translate("AnimalPoseAnnotator", u"Edit Classes", None))
-        self.EditKeypoints.setText(QCoreApplication.translate("AnimalPoseAnnotator", u"Edit Keypoints", None))
-        self.EditSkeleton.setText(QCoreApplication.translate("AnimalPoseAnnotator", u"Edit Sekelton", None))
+    def retranslateUi(self, Annotator):
+        Annotator.setWindowTitle(QCoreApplication.translate("Annotator", u"AnimalPoseAnnotator", None))
+        self.actionOpenConfigureFile.setText(QCoreApplication.translate("Annotator", u"Open Configure File", None))
+        self.actionOpenFileFolder.setText(QCoreApplication.translate("Annotator", u"Open File Folder", None))
+        self.actionNextFrame.setText(QCoreApplication.translate("Annotator", u"NextFrame", None))
+        self.actionPreviousFrame.setText(QCoreApplication.translate("Annotator", u"PreviousFrame", None))
+        self.actionSaveLabel.setText(QCoreApplication.translate("Annotator", u"SaveLabel", None))
+        self.actionDeleteLabel.setText(QCoreApplication.translate("Annotator", u"DeleteLabel", None))
+        self.actionDrawBBox.setText(QCoreApplication.translate("Annotator", u"DrawBBox", None))
+        self.actionDrawPoint.setText(QCoreApplication.translate("Annotator", u"DrawPoint", None))
+        self.actionDrawLine.setText(QCoreApplication.translate("Annotator", u"DrawLine", None))
+        self.actionNoLabel.setText(QCoreApplication.translate("Annotator", u"NoLabel", None))
+        self.actionHelp.setText(QCoreApplication.translate("Annotator", u"Help", None))
+        self.actionDark.setText(QCoreApplication.translate("Annotator", u"Dark", None))
+        self.actionLight.setText(QCoreApplication.translate("Annotator", u"Light", None))
+        self.actionBuildSkeleton.setText(QCoreApplication.translate("Annotator", u"BuildSkeleton", None))
+        self.actionExportYOLOFormat.setText(QCoreApplication.translate("Annotator", u"Export YOLO Format", None))
+        self.actionExportCOCOFormat.setText(QCoreApplication.translate("Annotator", u"Export COCO Format", None))
+        self.EditClasses.setText(QCoreApplication.translate("Annotator", u"Edit Classes", None))
+        self.EditKeypoints.setText(QCoreApplication.translate("Annotator", u"Edit Keypoints", None))
+        self.EditSkeleton.setText(QCoreApplication.translate("Annotator", u"Edit Sekelton", None))
         ___qtreewidgetitem = self.ConfigureDisplay.headerItem()
-        ___qtreewidgetitem.setText(1, QCoreApplication.translate("AnimalPoseAnnotator", u"Keypoint Name", None));
-        ___qtreewidgetitem.setText(0, QCoreApplication.translate("AnimalPoseAnnotator", u"Keypoint Number", None));
-        self.LabelInformationViewLabel.setText(QCoreApplication.translate("AnimalPoseAnnotator", u"Label Information View", None))
-        self.LineWidthLabel.setText(QCoreApplication.translate("AnimalPoseAnnotator", u"Line Width", None))
-        self.RadiusLabel.setText(QCoreApplication.translate("AnimalPoseAnnotator", u"Radius", None))
-        self.IsCrowd.setText(QCoreApplication.translate("AnimalPoseAnnotator", u"iscrowd", None))
+        ___qtreewidgetitem.setText(1, QCoreApplication.translate("Annotator", u"Keypoint Name", None));
+        ___qtreewidgetitem.setText(0, QCoreApplication.translate("Annotator", u"Keypoint Number", None));
+        self.LabelInformationViewLabel.setText(QCoreApplication.translate("Annotator", u"Label Information View", None))
+        self.LineWidthLabel.setText(QCoreApplication.translate("Annotator", u"Line Width", None))
+        self.RadiusLabel.setText(QCoreApplication.translate("Annotator", u"Radius", None))
+        self.IsCrowd.setText(QCoreApplication.translate("Annotator", u"iscrowd", None))
         self.FrameDisplayGroup.setTitle("")
-        self.menuFile.setTitle(QCoreApplication.translate("AnimalPoseAnnotator", u"File", None))
-        self.menuView.setTitle(QCoreApplication.translate("AnimalPoseAnnotator", u"View", None))
-        self.menuTheme.setTitle(QCoreApplication.translate("AnimalPoseAnnotator", u"Theme", None))
-        self.menuHelp.setTitle(QCoreApplication.translate("AnimalPoseAnnotator", u"Help", None))
-        self.menuExport.setTitle(QCoreApplication.translate("AnimalPoseAnnotator", u"Export", None))
-        self.toolBar.setWindowTitle(QCoreApplication.translate("AnimalPoseAnnotator", u"toolBar", None))
+        self.menuFile.setTitle(QCoreApplication.translate("Annotator", u"File", None))
+        self.menuView.setTitle(QCoreApplication.translate("Annotator", u"View", None))
+        self.menuTheme.setTitle(QCoreApplication.translate("Annotator", u"Theme", None))
+        self.menuHelp.setTitle(QCoreApplication.translate("Annotator", u"Help", None))
+        self.menuExport.setTitle(QCoreApplication.translate("Annotator", u"Export", None))
+        self.toolBar.setWindowTitle(QCoreApplication.translate("Annotator", u"toolBar", None))
     # retranslateUi
 

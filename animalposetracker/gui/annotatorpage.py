@@ -10,14 +10,13 @@ from pathlib import Path
 import yaml
 import json
 
-from animalposetracker.gui import (DARK_THEME_PATH, LIGHT_THEME_PATH,
-                                  LOGO_PATH_TRANSPARENT, COLORS)
+from animalposetracker.gui import (DARK_THEME_PATH, LIGHT_THEME_PATH, COLORS)
 from animalposetracker.utils.dataset import convert_labels_to_coco, convert_labels_to_yolo
 
-from .ui_animalposeannotator import Ui_AnimalPoseAnnotator
+from .ui_annotator import Ui_Annotator
 from .utils import ZoomableGraphicsView, DrawingBoard, AnnotationTarget
 
-class AnimalPoseAnnotatorPage(QMainWindow, Ui_AnimalPoseAnnotator):
+class AnnotatorPage(QMainWindow, Ui_Annotator):
     """Main application window for animal pose annotation"""
     
     def __init__(self, parent=None):

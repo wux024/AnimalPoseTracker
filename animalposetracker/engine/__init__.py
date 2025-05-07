@@ -20,10 +20,10 @@ Revision History:
     - [2024/9/6] wux024: Initial file creation
 """
 
-from .model import ModelEngine
 from .inferencer import InferenceEngine
 from .tracker import TrackerEngine
 from .constant import PLATFORM, ENGINEtoDEVICE, ENGINEtoBackend, OpenCV_TARGETS
 
-__all__ = ['ModelEngine', 'InferenceEngine', 'TrackerEngine',
-           'PLATFORM', 'ENGINEtoDEVICE', 'ENGINEtoBackend', 'OpenCV_TARGETS']
+__all__ = ['InferenceEngine', 'TrackerEngine',
+           'PLATFORM', 'ENGINEtoDEVICE', 
+           'ENGINEtoBackend', 'OpenCV_TARGETS']

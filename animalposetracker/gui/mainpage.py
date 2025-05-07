@@ -10,10 +10,10 @@ from pathlib import Path
 from collections import deque
 
 from .ui_animalposetracker import Ui_AnimalPoseTracker
-from .inferencepage import AnimalPoseInferencePage
 from .createnewprojectpage import CreateNewProjectPage
 from .publicdatasetsprojectpage import PublicDatasetProjectPage
-from .annotatorpage import AnimalPoseAnnotatorPage
+from .annotatorpage import AnnotatorPage
+from .inferencerpage import InferencerPage
 from .utils import (DatasetSplitDialog, split_dataset_sklearn, 
                     create_dataset_structure, copy_split_files,
                     create_coco_annotations)
@@ -296,18 +296,18 @@ class AnimalPoseTrackerPage(QMainWindow, Ui_AnimalPoseTracker):
         """Slot for opening the annotator tool"""
         if hasattr(self, 'sub_page') and self.sub_page is not None:
             self.sub_page.close()
-            self.sub_page = WindowFactory.run(AnimalPoseAnnotatorPage)
+            self.sub_page = WindowFactory.run(AnnotatorPage)
             self.sub_page.deleteLater()
-        self.sub_page = WindowFactory.run(AnimalPoseAnnotatorPage)
+        self.sub_page = WindowFactory.run(AnnotatorPage)
 
     def onOpenInferencer(self):
         """Slot for opening the inferencer tool"""
         # Add your implementation here
         if hasattr(self, 'sub_page') and self.sub_page is not None:
             self.sub_page.close()
-            self.sub_page = WindowFactory.run(AnimalPoseInferencePage)
+            self.sub_page = WindowFactory.run(InferencerPage)
             self.sub_page.deleteLater()
-        self.sub_page = WindowFactory.run(AnimalPoseInferencePage)
+        self.sub_page = WindowFactory.run(InferencerPage)
     
     def onOpenTracker(self):
         """Slot for opening the tracker tool"""
