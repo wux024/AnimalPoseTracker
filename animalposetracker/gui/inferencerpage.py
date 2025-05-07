@@ -957,7 +957,7 @@ class InferencerPage(QWidget, Ui_Inferencer):
 
 def main():
     app = QApplication(sys.argv)
-    window = AnimalPoseInferencePage()
+    window = InferencerPage()
     window.show()
     sys.exit(app.exec_())
 

@@ -24,7 +24,7 @@ class Ui_AnimalPoseTracker(object):
         if not AnimalPoseTracker.objectName():
             AnimalPoseTracker.setObjectName(u"AnimalPoseTracker")
         AnimalPoseTracker.setWindowModality(Qt.WindowModality.NonModal)
-        AnimalPoseTracker.resize(714, 491)
+        AnimalPoseTracker.resize(800, 600)
         sizePolicy = QSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
         sizePolicy.setHorizontalStretch(0)
         sizePolicy.setVerticalStretch(0)

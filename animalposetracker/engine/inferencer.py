@@ -173,6 +173,11 @@ class InferenceEngine:
         cv2_backends = ENGINEtoBackend["OpenCV"]
         cv2_backend, cv2_target = self._get_backend_and_target(cv2_backends)
         self.model = self._load_model()
+        input_layer_name = self.model.getLayerNames()[0]
+        input_layer = self.model.getLayer(self.model.getLayerId(input_layer_name))
+        input_shape = input_layer.outputShapes[0]
+        self._input_width = input_shape[2]
+        self._input_height = input_shape[3]
         self.model.setPreferableBackend(cv2_backend)
         self.model.setPreferableTarget(cv2_target)
 
@@ -233,7 +238,7 @@ class InferenceEngine:
               self._device in ["Intel GPU", "Intel NPU"]):
             xml_path = Path(self._weights_path)
             bin_path = Path(self._weights_path).with_suffix('.bin')
-            return cv2.dnn.readNet(str(xml_path), str(bin_path))
+            return cv2.dnn.readNetFromModelOptimizer(str(xml_path), str(bin_path))
         elif Path(self._weights_path).suffix == '.om':
             return cv2.dnn.readNet(self._weights_path)
         else:
@@ -276,6 +281,12 @@ class InferenceEngine:
             # Get input/output names
             self.input_name = self.model.get_inputs()[0].name
             self.output_name = self.model.get_outputs()[0].name
+
+            input_shape = self.model.get_inputs()[0].shape
+
+            if isinstance(input_shape[2], int) and isinstance(input_shape[3], int):
+                self._input_width = input_shape[2]
+                self._input_height = input_shape[3]
             
             # Print active provider for verification
             print(f"ONNX session successfully initialized with provider: {self.model.get_providers()[0]}")
@@ -357,6 +368,12 @@ class InferenceEngine:
             devices = ENGINEtoBackend["OpenVINO"]
             device = devices.get(self._device)
             self.model = core.compile_model(model=model, device_name=device)
+            inputs = self.model.inputs
+            for input_layer in inputs:
+                input_shape = input_layer.shape
+                if len(input_shape) >= 4 and isinstance(input_shape[2], int) and isinstance(input_shape[3], int):
+                    self._input_width = input_shape[2]
+                    self._input_height = input_shape[3]
         except ImportError:
             raise ImportError("Please install openvino to use OpenVINO engine.")
 
@@ -380,6 +397,12 @@ class InferenceEngine:
             self.context = self.model.create_execution_context()
             self.inputs, self.outputs, self.bindings, self.stream = allocate_buffers(self.model)
 
+            num_inputs = self.model.num_inputs
+            for i in range(num_inputs):
+                input_shape = self.model.get_input_shape(i)
+                if len(input_shape) >= 4 and isinstance(input_shape[2], int) and isinstance(input_shape[3], int):
+                    self._input_width = input_shape[2]
+                    self._input_height = input_shape[3]
         except ImportError:
             raise ImportError("Please install tensorrt and pycuda to use TensorRT engine.")
         except FileNotFoundError:
@@ -430,7 +453,14 @@ class InferenceEngine:
         try: 
             import coremltools as ct
             self.model = ct.models.MLModel(self._weights_path)
-            self.input_name = self.model.get_spec().description.input[0].name
+            input_description = self.model.get_spec().description.input[0]
+            self.input_name = input_description.name
+            input_type = input_description.type
+            if hasattr(input_type, 'multiArrayType'):
+                shape = input_type.multiArrayType.shape
+                if len(shape) >= 4 and isinstance(shape[2], int) and isinstance(shape[3], int):
+                    self._input_width = shape[2]
+                    self._input_height = shape[3]
         except ImportError:
             raise ImportError("Please install coremltools to use CoreML engine.")
 

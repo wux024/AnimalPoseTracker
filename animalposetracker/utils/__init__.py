@@ -23,9 +23,11 @@ from .dataset import convert_labels_to_coco, convert_labels_to_yolo
 from .extract_frame import KeyframeExtractor
 from .videoprocessthread import (VideoReaderThread, VideoWriterThread, 
                                  PreprocessThread, InferenceThread, 
-                                 PostprocessThread, VisualizeThread)
+                                 PostprocessThread, VisualizeThread,
+                                 TrackThread)
 
 
 __all__ = ['convert_labels_to_coco', 'convert_labels_to_yolo', 
            'KeyframeExtractor', 'VideoReaderThread', 'VideoWriterThread',
-           'PreprocessThread', 'InferenceThread', 'PostprocessThread', 'VisualizeThread']
+           'PreprocessThread', 'InferenceThread', 'PostprocessThread', 
+           'VisualizeThread', 'TrackThread']

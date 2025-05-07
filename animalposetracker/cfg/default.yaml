@@ -1,8 +1,3 @@
-# Ultralytics 🚀 AGPL-3.0 License - https://ultralytics.com/license
-
-# Global configuration YAML with settings and hyperparameters for YOLO training, validation, prediction and export
-# For documentation see https://docs.ultralytics.com/usage/cfg/
-
 task: pose # (str) YOLO task, i.e. detect, segment, classify, pose, obb
 mode: train # (str) YOLO mode, i.e. train, val, predict, export, track, benchmark
 
@@ -124,6 +119,3 @@ crop_fraction: 1.0 # (float) image crop fraction for classification (0.1-1), 1.0
 
 # Custom config.yaml ---------------------------------------------------------------------------------------------------
 cfg: # (str, optional) for overriding defaults.yaml
-
-# Tracker settings ------------------------------------------------------------------------------------------------------
-tracker: botsort.yaml # (str) tracker type, choices=[botsort.yaml, bytetrack.yaml]

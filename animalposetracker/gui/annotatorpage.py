@@ -885,7 +885,7 @@ class AnnotatorPage(QMainWindow, Ui_Annotator):
 
 def main():
     app = QApplication(sys.argv)
-    window = AnimalPoseAnnotatorPage()
+    window = AnnotatorPage()
     window.show()
     sys.exit(app.exec_())
 

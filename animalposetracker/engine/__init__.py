@@ -21,9 +21,7 @@ Revision History:
 """
 
 from .inferencer import InferenceEngine
-from .tracker import TrackerEngine
 from .constant import PLATFORM, ENGINEtoDEVICE, ENGINEtoBackend, OpenCV_TARGETS
 
-__all__ = ['InferenceEngine', 'TrackerEngine',
-           'PLATFORM', 'ENGINEtoDEVICE', 
+__all__ = ['InferenceEngine','PLATFORM', 'ENGINEtoDEVICE', 
            'ENGINEtoBackend', 'OpenCV_TARGETS']

@@ -168,3 +168,4 @@ def do_inference(context, engine, bindings, inputs, outputs, stream):
     for i in range(num_io):
         context.set_tensor_address(engine.get_tensor_name(i), bindings[i])
     return _do_inference_base(inputs, outputs, stream, execute_async_func)
+

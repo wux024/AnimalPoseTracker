@@ -29,7 +29,6 @@ class AnimalPoseTrackerPage(QMainWindow, Ui_AnimalPoseTracker):
     def __init__(self, parent=None):
         super().__init__(parent)
         self.setupUi(self)
-        self.showMaximized()
         self.initialize_controls()
         
 
