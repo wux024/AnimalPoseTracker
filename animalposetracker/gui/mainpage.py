@@ -81,7 +81,6 @@ class AnimalPoseTrackerPage(QMainWindow, Ui_AnimalPoseTracker):
         # Tools menu actions
         self.actionAnnotator.triggered.connect(self.onOpenAnnotator)
         self.actionInferencer.triggered.connect(self.onOpenInferencer)
-        self.actionTracker.triggered.connect(self.onOpenTracker)
         
         # Help menu actions
         self.actionDoc.triggered.connect(self.onOpenDocumentation)
@@ -307,11 +306,6 @@ class AnimalPoseTrackerPage(QMainWindow, Ui_AnimalPoseTracker):
             self.sub_page = WindowFactory.run(InferencerPage)
             self.sub_page.deleteLater()
         self.sub_page = WindowFactory.run(InferencerPage)
-    
-    def onOpenTracker(self):
-        """Slot for opening the tracker tool"""
-        self.statusBar().showMessage("Tracker clicked")
-        # Add your implementation here
 
     def onOpenDocumentation(self):
         """Slot for opening documentation"""

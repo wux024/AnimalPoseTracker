@@ -9,8 +9,8 @@
    <rect>
     <x>0</x>
     <y>0</y>
-    <width>714</width>
-    <height>491</height>
+    <width>800</width>
+    <height>600</height>
    </rect>
   </property>
   <property name="sizePolicy">
@@ -2198,7 +2198,7 @@
     <rect>
      <x>0</x>
      <y>0</y>
-     <width>714</width>
+     <width>800</width>
      <height>33</height>
     </rect>
    </property>
@@ -2230,7 +2230,6 @@
     </property>
     <addaction name="actionAnnotator"/>
     <addaction name="actionInferencer"/>
-    <addaction name="actionTracker"/>
    </widget>
    <widget class="QMenu" name="menuHelp">
     <property name="sizePolicy">
@@ -2372,11 +2371,6 @@
    </property>
    <property name="text">
     <string>New Project Ctrl+N</string>
-   </property>
-  </action>
-  <action name="actionTracker">
-   <property name="text">
-    <string>Tracker</string>
    </property>
   </action>
  </widget>

@@ -1,18 +1,24 @@
 # -*- coding: utf-8 -*-
 
 ################################################################################
-## Form generated from reading UI file 'animalposetrackerSYPFrN.ui'
+## Form generated from reading UI file 'animalposetrackeroroliq.ui'
 ##
 ## Created by: Qt User Interface Compiler version 6.8.2
 ##
 ## WARNING! All changes made in this file will be lost when recompiling UI file!
 ################################################################################
 
-from PySide6.QtCore import QCoreApplication, QMetaObject, QRect, QSize, Qt
-from PySide6.QtGui import QAction, QFont, QIcon, QPixmap
-from PySide6.QtWidgets import (QCheckBox, QComboBox, QFrame,
-    QGroupBox, QHBoxLayout, QLabel,
-    QLayout, QLineEdit, QMenu,
+from PySide6.QtCore import (QCoreApplication, QDate, QDateTime, QLocale,
+    QMetaObject, QObject, QPoint, QRect,
+    QSize, QTime, QUrl, Qt)
+from PySide6.QtGui import (QAction, QBrush, QColor, QConicalGradient,
+    QCursor, QFont, QFontDatabase, QGradient,
+    QIcon, QImage, QKeySequence, QLinearGradient,
+    QPainter, QPalette, QPixmap, QRadialGradient,
+    QTransform)
+from PySide6.QtWidgets import (QApplication, QCheckBox, QComboBox, QFrame,
+    QGroupBox, QHBoxLayout, QHeaderView, QLabel,
+    QLayout, QLineEdit, QMainWindow, QMenu,
     QMenuBar, QPushButton, QSizePolicy, QSpacerItem,
     QSpinBox, QStackedWidget, QTabWidget, QToolBar,
     QTreeWidget, QTreeWidgetItem, QVBoxLayout, QWidget)
@@ -80,8 +86,6 @@ class Ui_AnimalPoseTracker(object):
         self.actionCreateNewProject.setObjectName(u"actionCreateNewProject")
         icon8 = QIcon(QIcon.fromTheme(u"document-new"))
         self.actionCreateNewProject.setIcon(icon8)
-        self.actionTracker = QAction(AnimalPoseTracker)
-        self.actionTracker.setObjectName(u"actionTracker")
         self.AnimalPoseTrackerLayout = QWidget(AnimalPoseTracker)
         self.AnimalPoseTrackerLayout.setObjectName(u"AnimalPoseTrackerLayout")
         sizePolicy1 = QSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
@@ -935,7 +939,7 @@ class Ui_AnimalPoseTracker(object):
         AnimalPoseTracker.setCentralWidget(self.AnimalPoseTrackerLayout)
         self.menubar = QMenuBar(AnimalPoseTracker)
         self.menubar.setObjectName(u"menubar")
-        self.menubar.setGeometry(QRect(0, 0, 714, 33))
+        self.menubar.setGeometry(QRect(0, 0, 800, 33))
         self.menuAnimalPoseTracker = QMenu(self.menubar)
         self.menuAnimalPoseTracker.setObjectName(u"menuAnimalPoseTracker")
         sizePolicy1.setHeightForWidth(self.menuAnimalPoseTracker.sizePolicy().hasHeightForWidth())
@@ -970,7 +974,6 @@ class Ui_AnimalPoseTracker(object):
         self.menuAnimalPoseTracker.addAction(self.actionExit)
         self.menuTools.addAction(self.actionAnnotator)
         self.menuTools.addAction(self.actionInferencer)
-        self.menuTools.addAction(self.actionTracker)
         self.menuHelp.addAction(self.actionDoc)
         self.menuHelp.addAction(self.actionCheckUpdated)
         self.menuHelp.addAction(self.actionHelp)
@@ -1006,7 +1009,6 @@ class Ui_AnimalPoseTracker(object):
         self.actionDark.setText(QCoreApplication.translate("AnimalPoseTracker", u"Dark", None))
         self.actionLight.setText(QCoreApplication.translate("AnimalPoseTracker", u"Light", None))
         self.actionCreateNewProject.setText(QCoreApplication.translate("AnimalPoseTracker", u"New Project Ctrl+N", None))
-        self.actionTracker.setText(QCoreApplication.translate("AnimalPoseTracker", u"Tracker", None))
         self.WelcomeLabel.setText(QCoreApplication.translate("AnimalPoseTracker", u"Welcome to the AnimalPoseTracker!", None))
         self.Logo.setText("")
         self.Introdution.setText(QCoreApplication.translate("AnimalPoseTracker", u"AnimalPoseTracker is an open source tool for animal pose estimation with deep learning. Wu X. | https://wux024.github.io", None))
@@ -1099,8 +1101,9 @@ class Ui_AnimalPoseTracker(object):
         self.ExtractionMethodSelection.setItemText(2, QCoreApplication.translate("AnimalPoseTracker", u"all", None))
 
         self.ExtractionAlgorithmLabel.setText(QCoreApplication.translate("AnimalPoseTracker", u"Extraction algorithm", None))
-        self.ExtractionAlgorithmSelection.setItemText(0, QCoreApplication.translate("AnimalPoseTracker", u"kmeans", None))
+        self.ExtractionAlgorithmSelection.setItemText(0, QCoreApplication.translate("AnimalPoseTracker", u"kmeas", None))
         self.ExtractionAlgorithmSelection.setItemText(1, QCoreApplication.translate("AnimalPoseTracker", u"uniform", None))
+        self.ExtractionAlgorithmSelection.setItemText(2, QCoreApplication.translate("AnimalPoseTracker", u"None", None))
 
         self.ClusterStepLabel.setText(QCoreApplication.translate("AnimalPoseTracker", u"Cluster step", None))
         self.SampleIntervalLabel.setText(QCoreApplication.translate("AnimalPoseTracker", u"Sample Interval", None))
