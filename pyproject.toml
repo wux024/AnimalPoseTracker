@@ -91,5 +91,5 @@ animalposetracker = [
 # Entry points (if creating CLI tools)
 [project.scripts]
 "animalposetracker" = "animalposetracker.gui.mainpage:main"
-"animalpose-inferencer" = "animalposetracker.gui.inferencepage:main"
+"animalpose-inferencer" = "animalposetracker.gui.inferencerpage:main"
 "animalpose-annotator" = "animalposetracker.gui.annotatorpage:main"
