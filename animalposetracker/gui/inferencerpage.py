@@ -695,47 +695,55 @@ class InferencerPage(QWidget, Ui_Inferencer):
         self.display_thread.start(1000 // self.fps)
         if self.Save.isChecked():
             self.videowriter_thread.start()
+    
+    def check_threads_existence(self, attribute_name):
+        """Check if the thread with the given attribute name exists"""
+        if hasattr(self, attribute_name):
+            if getattr(self, attribute_name) is not None and getattr(self, attribute_name).isRunning():
+                return True
+        return False
 
     def _stop_inference_threads(self):
         """Stop all inference threads and clean up resources"""
         # Define all threads with their associated signals to disconnect
         threads = [
-            self.videoreader_thread,
-            self.preprocess_thread,
-            self.inference_thread,
-            self.postprocess_thread,
-            self.visualize_thread,
+            "videoreader_thread",
+            "preprocess_thread",
+            "inference_thread",
+            "postprocess_thread",
+            "visualize_thread",
         ]
 
         # Stop all threads and disconnect their signals
         for thread in threads:
-            if thread is not None and thread.isRunning():
-                thread.safe_stop()  # Request thread termination
-                thread.status_update.disconnect()
-                thread.data_ready.disconnect()
-        
+            if self.check_threads_existence(thread):
+                getattr(self, thread).safe_stop()  # Request thread termination
+                getattr(self, thread).status_update.disconnect()
+                getattr(self, thread).data_ready.disconnect()
+            
         if (self.Save.isChecked() and 
-            self.videowriter_thread is not None and 
-            self.videowriter_thread.isRunning()):
-            self.videowriter_thread.safe_stop()
+            hasattr(self, "videowriter_thread") and 
+            getattr(self, "videowriter_thread") is not None and
+            getattr(self, "videowriter_thread").isRunning()):
+            getattr(self, "videowriter_thread").safe_stop()
 
-        self.display_thread.stop()
+        if hasattr(self, "display_thread"):
+            getattr(self, "display_thread").stop()
+
         # Clear all cache queues
-        queues = {
-            'read': self.read_cache,
-            'preprocess': self.preprocess_cache,
-            'inference': self.inference_cache,
-            'postprocess': self.postprocess_cache,
-            'visualize': self.visualize_cache
-        }
-        for name, cache in queues.items():
-            try:
-                with cache.mutex:
-                    cache.queue.clear()
-                    cache.unfinished_tasks = 0
-                    cache.all_tasks_done.notify_all()
-            except Exception as e:
-                queues[name] = queue.Queue(maxsize=self.max_queue_size)
+        queues = [
+            'read_cache',
+            'preprocess_cache',
+            'inference_cache',
+            'postprocess_cache',
+            'visualize_cache'
+        ]
+        for cache in queues:
+            if hasattr(self, cache):
+                with getattr(self, cache).mutex:
+                    getattr(self, cache).queue.clear()
+                    getattr(self, cache).unfinished_tasks = 0
+                    getattr(self, cache).all_tasks_done.notify_all()
             
     def _get_source(self):
         if self.CameraORVideos.isChecked():

@@ -16,7 +16,7 @@ class InferenceEngine:
                  weights_path: Union[str, Path] = None,
                  input_width: int = 640,
                  input_height: int = 640,
-                 engine: str = 'OpenCV',
+                 engine: str = 'ONNX',
                  device: str = 'Intel CPU',
                  model_bits: str = 'FP32',
                  conf: float = 0.25,
@@ -168,16 +168,39 @@ class InferenceEngine:
             self._tensorrt = False
         self.print_config()
         engine_init_method[self._engine]()
-
+    
+    def _init_model_input_shape(self):
+        weights_path = Path(self._weights_path)
+        if weights_path.suffix == '.onnx':
+            try:
+                import onnxruntime as ort
+                model = ort.InferenceSession(self._weights_path)
+                input_shape = model.get_inputs()[0].shape
+                if isinstance(input_shape[2], int) and isinstance(input_shape[3], int):
+                    self._input_width = input_shape[2]
+                    self._input_height = input_shape[3]
+            except ImportError:
+                raise ImportError("Please install onnxruntime to use ONNX engine.")
+        elif (weights_path.suffix == '.xml' and
+              weights_path.with_suffix('.bin').exists() and
+              self._device in ["Intel GPU", "Intel NPU"]):
+            inputs = self.model.inputs
+            for input_layer in inputs:
+                input_shape = input_layer.shape
+                if len(input_shape) >= 4 and isinstance(input_shape[2], int) and isinstance(input_shape[3], int):
+                    self._input_width = input_shape[2]
+                    self._input_height = input_shape[3]
+        elif weights_path.suffix == '.om':
+            pass
+        else:
+            raise ValueError("Invalid weights file format. "
+                             "Please provide either an ONNX or an XML+BIN file.")
+            
     def _init_opencv(self):
         cv2_backends = ENGINEtoBackend["OpenCV"]
         cv2_backend, cv2_target = self._get_backend_and_target(cv2_backends)
         self.model = self._load_model()
-        input_layer_name = self.model.getLayerNames()[0]
-        input_layer = self.model.getLayer(self.model.getLayerId(input_layer_name))
-        input_shape = input_layer.outputShapes[0]
-        self._input_width = input_shape[2]
-        self._input_height = input_shape[3]
+        self._init_model_input_shape()
         self.model.setPreferableBackend(cv2_backend)
         self.model.setPreferableTarget(cv2_target)
 
@@ -396,13 +419,14 @@ class InferenceEngine:
                 self.model = self._build_engine_from_engine(TRT_LOGGER)
             self.context = self.model.create_execution_context()
             self.inputs, self.outputs, self.bindings, self.stream = allocate_buffers(self.model)
+            
+            input_layer_name = self.model.get_tensor_name(0)
+            input_layer_shape = self.model.get_tensor_shape(input_layer_name)
+            self._input_width = input_layer_shape[2]
+            self._input_height = input_layer_shape[3]
 
-            num_inputs = self.model.num_inputs
-            for i in range(num_inputs):
-                input_shape = self.model.get_input_shape(i)
-                if len(input_shape) >= 4 and isinstance(input_shape[2], int) and isinstance(input_shape[3], int):
-                    self._input_width = input_shape[2]
-                    self._input_height = input_shape[3]
+
+            
         except ImportError:
             raise ImportError("Please install tensorrt and pycuda to use TensorRT engine.")
         except FileNotFoundError:
@@ -539,7 +563,8 @@ class InferenceEngine:
             pred = list(pred.values())
             outputs = np.transpose(np.squeeze(pred[0]))
         elif self._tensorrt:
-            outputs = np.transpose(pred[0].reshape(-1, 8400))
+            dim = 4 + len(self.classes) + len(self.keypoints) * 3
+            outputs = np.transpose(pred[0].reshape(dim, -1))
         else:
             outputs = np.transpose(np.squeeze(pred[0]))
 
@@ -792,18 +817,34 @@ class InferenceEngine:
             'fps': 'FPS: {:.1f} FPS'.format(results['fps'])
         }
 
-        cv2.putText(frame, times['fps'], (5, 20),
-                    cv2.FONT_HERSHEY_SIMPLEX,
-                    0.5, (0, 255, 0), 1, cv2.LINE_AA)
-        cv2.putText(frame, times['preprocess_time'], (5, 40),
-                    cv2.FONT_HERSHEY_SIMPLEX,
-                    0.5, (0, 255, 0), 1, cv2.LINE_AA)
-        cv2.putText(frame, times['inference_time'], (5, 60),
-                    cv2.FONT_HERSHEY_SIMPLEX,
-                    0.5, (0, 255, 0), 1, cv2.LINE_AA)
-        cv2.putText(frame, times['postprocess_time'], (5, 80),
-                    cv2.FONT_HERSHEY_SIMPLEX,
-                    0.5, (0, 255, 0), 1, cv2.LINE_AA)
+        font_scale = self._input_height /  960.0
+        thickness = max(1, int(font_scale))
+        
+        line_height = int(self._input_height * 0.04)
+        x, y = int(self._input_width * 0.02), int(self._input_height * 0.05)
+
+        font_color=(0, 255, 0)
+        
+        cv2.putText(frame, 
+                    f"FPS: {times['fps']}", 
+                    (x, y), 
+                    cv2.FONT_HERSHEY_SIMPLEX, 
+                    font_scale, 
+                    font_color, 
+                    thickness, 
+                    cv2.LINE_AA)
+        y += line_height
+        
+        cv2.putText(frame, f"Preprocess: {times['preprocess_time']}ms", (x, y), 
+                    cv2.FONT_HERSHEY_SIMPLEX, font_scale, font_color, thickness, cv2.LINE_AA)
+        y += line_height
+        
+        cv2.putText(frame, f"Inference: {times['inference_time']}ms", (x, y), 
+                    cv2.FONT_HERSHEY_SIMPLEX, font_scale, font_color, thickness, cv2.LINE_AA)
+        y += line_height
+        
+        cv2.putText(frame, f"Postprocess: {times['postprocess_time']}ms", (x, y), 
+                    cv2.FONT_HERSHEY_SIMPLEX, font_scale, font_color, thickness, cv2.LINE_AA)
         
         return frame
     
