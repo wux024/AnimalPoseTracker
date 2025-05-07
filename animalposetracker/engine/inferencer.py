@@ -480,11 +480,10 @@ class InferenceEngine:
             input_description = self.model.get_spec().description.input[0]
             self.input_name = input_description.name
             input_type = input_description.type
-            if hasattr(input_type, 'multiArrayType'):
-                shape = input_type.multiArrayType.shape
-                if len(shape) >= 4 and isinstance(shape[2], int) and isinstance(shape[3], int):
-                    self._input_width = shape[2]
-                    self._input_height = shape[3]
+            if hasattr(input_type, 'imageType'):
+                shape = input_type.imageType
+                self._input_width = shape.width
+                self._input_height = shape.height
         except ImportError:
             raise ImportError("Please install coremltools to use CoreML engine.")
 
