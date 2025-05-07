@@ -1,4 +1,4 @@
-from PySide6.QtCore import QMetaObject, Qt, Slot, Q_ARG, QTimer
+from PySide6.QtCore import QMetaObject, Qt, Slot, Q_ARG, QTimer, QSize
 from PySide6.QtGui import QImage, QPixmap
 from PySide6.QtWidgets import  QApplication, QFileDialog, QWidget, QMessageBox
 import os
@@ -825,7 +825,9 @@ class InferencerPage(QWidget, Ui_Inferencer):
                 self.Display.size(),
                 Qt.KeepAspectRatio,
                 Qt.SmoothTransformation
-            )
+                )
+            
+            self.Display.setPixmap(pixmap)
 
             QMetaObject.invokeMethod(
                 self.Display,

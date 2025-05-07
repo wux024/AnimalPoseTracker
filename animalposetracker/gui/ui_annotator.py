@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 
 ################################################################################
-## Form generated from reading UI file 'annotatorHAccGv.ui'
+## Form generated from reading UI file 'annotatorQnpgCF.ui'
 ##
 ## Created by: Qt User Interface Compiler version 6.8.2
 ##
@@ -29,7 +29,7 @@ class Ui_Annotator(object):
     def setupUi(self, Annotator):
         if not Annotator.objectName():
             Annotator.setObjectName(u"Annotator")
-        Annotator.resize(1120, 642)
+        Annotator.resize(1200, 800)
         icon = QIcon()
         icon.addFile(LOGO_SMALL_PATH, QSize(), QIcon.Mode.Normal, QIcon.State.Off)
         Annotator.setWindowIcon(icon)
@@ -281,7 +281,7 @@ class Ui_Annotator(object):
         Annotator.setCentralWidget(self.AnnotatorLayout)
         self.menubar = QMenuBar(Annotator)
         self.menubar.setObjectName(u"menubar")
-        self.menubar.setGeometry(QRect(0, 0, 1120, 33))
+        self.menubar.setGeometry(QRect(0, 0, 1200, 33))
         self.menuFile = QMenu(self.menubar)
         self.menuFile.setObjectName(u"menuFile")
         self.menuView = QMenu(self.menubar)

@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 
 ################################################################################
-## Form generated from reading UI file 'inferencerCgKLWy.ui'
+## Form generated from reading UI file 'inferencerGrDNut.ui'
 ##
 ## Created by: Qt User Interface Compiler version 6.8.2
 ##
@@ -26,7 +26,7 @@ class Ui_Inferencer(object):
     def setupUi(self, Inferencer):
         if not Inferencer.objectName():
             Inferencer.setObjectName(u"Inferencer")
-        Inferencer.resize(1321, 845)
+        Inferencer.resize(1200, 800)
         sizePolicy = QSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
         sizePolicy.setHorizontalStretch(0)
         sizePolicy.setVerticalStretch(0)
@@ -478,15 +478,16 @@ class Ui_Inferencer(object):
         self.DisplayGroup.setSizePolicy(sizePolicy)
         self.DisplayGroup.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self.DisplayGroupHLayout = QHBoxLayout(self.DisplayGroup)
+        self.DisplayGroupHLayout.setSpacing(0)
         self.DisplayGroupHLayout.setObjectName(u"DisplayGroupHLayout")
+        self.DisplayGroupHLayout.setContentsMargins(5, 5, 5, 5)
         self.Display = QLabel(self.DisplayGroup)
         self.Display.setObjectName(u"Display")
         sizePolicy.setHeightForWidth(self.Display.sizePolicy().hasHeightForWidth())
         self.Display.setSizePolicy(sizePolicy)
         self.Display.setMinimumSize(QSize(100, 100))
-        self.Display.setMaximumSize(QSize(1000, 1000))
         self.Display.setToolTipDuration(0)
-        self.Display.setScaledContents(True)
+        self.Display.setScaledContents(False)
         self.Display.setAlignment(Qt.AlignmentFlag.AlignCenter)
 
         self.DisplayGroupHLayout.addWidget(self.Display)
