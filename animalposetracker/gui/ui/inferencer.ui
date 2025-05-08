@@ -6,7 +6,7 @@
    <rect>
     <x>0</x>
     <y>0</y>
-    <width>1200</width>
+    <width>1206</width>
     <height>800</height>
    </rect>
   </property>
@@ -24,11 +24,11 @@
   </property>
   <property name="windowIcon">
    <iconset>
-    <normaloff>media/logo.png</normaloff>media/logo.png</iconset>
+    <normaloff>C:/Users/wux024/.designer/backup/media/logo.png</normaloff>C:/Users/wux024/.designer/backup/media/logo.png</iconset>
   </property>
   <layout class="QVBoxLayout" name="InferencerLayout">
    <item>
-    <layout class="QHBoxLayout" name="BaseConfigure">
+    <layout class="QHBoxLayout" name="ConfigureLayout">
      <item>
       <widget class="QGroupBox" name="BaseToolsGroup">
        <property name="sizePolicy">
@@ -105,6 +105,19 @@
               </property>
               <property name="text">
                <string>Use Video</string>
+              </property>
+             </widget>
+            </item>
+            <item>
+             <widget class="QRadioButton" name="Tracker">
+              <property name="sizePolicy">
+               <sizepolicy hsizetype="Preferred" vsizetype="Fixed">
+                <horstretch>0</horstretch>
+                <verstretch>0</verstretch>
+               </sizepolicy>
+              </property>
+              <property name="text">
+               <string>Tracker</string>
               </property>
              </widget>
             </item>
@@ -319,12 +332,12 @@
                 </property>
                 <item>
                  <property name="text">
-                  <string>OpenCV</string>
+                  <string>ONNX</string>
                  </property>
                 </item>
                 <item>
                  <property name="text">
-                  <string>ONNX</string>
+                  <string>OpenCV</string>
                  </property>
                 </item>
                 <item>
@@ -424,6 +437,49 @@
               </item>
              </layout>
             </item>
+            <item>
+             <layout class="QHBoxLayout" name="TrackerLayout">
+              <item>
+               <widget class="QLabel" name="TrackerLabel">
+                <property name="text">
+                 <string>Tracker Engine</string>
+                </property>
+               </widget>
+              </item>
+              <item>
+               <widget class="QComboBox" name="TrackerSelection">
+                <property name="sizePolicy">
+                 <sizepolicy hsizetype="Expanding" vsizetype="Fixed">
+                  <horstretch>0</horstretch>
+                  <verstretch>0</verstretch>
+                 </sizepolicy>
+                </property>
+                <property name="minimumSize">
+                 <size>
+                  <width>0</width>
+                  <height>25</height>
+                 </size>
+                </property>
+                <property name="maximumSize">
+                 <size>
+                  <width>16777215</width>
+                  <height>25</height>
+                 </size>
+                </property>
+                <item>
+                 <property name="text">
+                  <string>ByteTrack</string>
+                 </property>
+                </item>
+                <item>
+                 <property name="text">
+                  <string>BoTSort</string>
+                 </property>
+                </item>
+               </widget>
+              </item>
+             </layout>
+            </item>
            </layout>
           </item>
           <item>
@@ -469,31 +525,6 @@
            </layout>
           </item>
          </layout>
-        </item>
-        <item>
-         <widget class="QLabel" name="PrintInformation">
-          <property name="sizePolicy">
-           <sizepolicy hsizetype="Preferred" vsizetype="Fixed">
-            <horstretch>0</horstretch>
-            <verstretch>0</verstretch>
-           </sizepolicy>
-          </property>
-          <property name="minimumSize">
-           <size>
-            <width>0</width>
-            <height>25</height>
-           </size>
-          </property>
-          <property name="maximumSize">
-           <size>
-            <width>16777215</width>
-            <height>25</height>
-           </size>
-          </property>
-          <property name="text">
-           <string>Some print information</string>
-          </property>
-         </widget>
         </item>
        </layout>
       </widget>
@@ -600,32 +631,14 @@
          </layout>
         </item>
         <item>
-         <layout class="QHBoxLayout" name="ShowLayout">
-          <property name="spacing">
-           <number>0</number>
-          </property>
-          <property name="sizeConstraint">
-           <enum>QLayout::SizeConstraint::SetDefaultConstraint</enum>
-          </property>
+         <layout class="QHBoxLayout" name="MainShowLayout">
           <item>
            <widget class="QCheckBox" name="Show">
             <property name="sizePolicy">
-             <sizepolicy hsizetype="Fixed" vsizetype="Fixed">
+             <sizepolicy hsizetype="Preferred" vsizetype="Fixed">
               <horstretch>0</horstretch>
               <verstretch>0</verstretch>
              </sizepolicy>
-            </property>
-            <property name="minimumSize">
-             <size>
-              <width>120</width>
-              <height>25</height>
-             </size>
-            </property>
-            <property name="maximumSize">
-             <size>
-              <width>120</width>
-              <height>25</height>
-             </size>
             </property>
             <property name="text">
              <string>Show</string>
@@ -643,12 +656,6 @@
               <verstretch>0</verstretch>
              </sizepolicy>
             </property>
-            <property name="minimumSize">
-             <size>
-              <width>120</width>
-              <height>25</height>
-             </size>
-            </property>
             <property name="text">
              <string>Original</string>
             </property>
@@ -657,29 +664,13 @@
             </property>
            </widget>
           </item>
-         </layout>
-        </item>
-        <item>
-         <layout class="QHBoxLayout" name="ShowClassesLayout">
           <item>
            <widget class="QCheckBox" name="ShowClasses">
             <property name="sizePolicy">
-             <sizepolicy hsizetype="Fixed" vsizetype="Fixed">
+             <sizepolicy hsizetype="Preferred" vsizetype="Fixed">
               <horstretch>0</horstretch>
               <verstretch>0</verstretch>
              </sizepolicy>
-            </property>
-            <property name="minimumSize">
-             <size>
-              <width>120</width>
-              <height>25</height>
-             </size>
-            </property>
-            <property name="maximumSize">
-             <size>
-              <width>120</width>
-              <height>25</height>
-             </size>
             </property>
             <property name="text">
              <string>Show Classes</string>
@@ -687,21 +678,77 @@
            </widget>
           </item>
           <item>
-           <widget class="QLabel" name="Classes">
-            <property name="minimumSize">
-             <size>
-              <width>0</width>
-              <height>25</height>
-             </size>
-            </property>
-            <property name="maximumSize">
-             <size>
-              <width>16777215</width>
-              <height>25</height>
-             </size>
+           <widget class="QCheckBox" name="ShowTrackerID">
+            <property name="sizePolicy">
+             <sizepolicy hsizetype="Preferred" vsizetype="Fixed">
+              <horstretch>0</horstretch>
+              <verstretch>0</verstretch>
+             </sizepolicy>
             </property>
             <property name="text">
-             <string/>
+             <string>Show Track ID</string>
+            </property>
+           </widget>
+          </item>
+         </layout>
+        </item>
+        <item>
+         <layout class="QHBoxLayout" name="ShowInfoLayput">
+          <item>
+           <widget class="QCheckBox" name="FPSShow">
+            <property name="sizePolicy">
+             <sizepolicy hsizetype="Preferred" vsizetype="Fixed">
+              <horstretch>0</horstretch>
+              <verstretch>0</verstretch>
+             </sizepolicy>
+            </property>
+            <property name="text">
+             <string>FPS</string>
+            </property>
+           </widget>
+          </item>
+          <item>
+           <widget class="QCheckBox" name="PreprocessTime">
+            <property name="enabled">
+             <bool>true</bool>
+            </property>
+            <property name="sizePolicy">
+             <sizepolicy hsizetype="Preferred" vsizetype="Fixed">
+              <horstretch>0</horstretch>
+              <verstretch>0</verstretch>
+             </sizepolicy>
+            </property>
+            <property name="text">
+             <string>Preprocess Time</string>
+            </property>
+            <property name="tristate">
+             <bool>true</bool>
+            </property>
+           </widget>
+          </item>
+          <item>
+           <widget class="QCheckBox" name="InferenceTime">
+            <property name="sizePolicy">
+             <sizepolicy hsizetype="Preferred" vsizetype="Fixed">
+              <horstretch>0</horstretch>
+              <verstretch>0</verstretch>
+             </sizepolicy>
+            </property>
+            <property name="text">
+             <string>Inference Time</string>
+            </property>
+           </widget>
+          </item>
+          <item>
+           <widget class="QCheckBox" name="PostprocessTime">
+            <property name="sizePolicy">
+             <sizepolicy hsizetype="Preferred" vsizetype="Fixed">
+              <horstretch>0</horstretch>
+              <verstretch>0</verstretch>
+             </sizepolicy>
+            </property>
+            <property name="text">
+             <string>Postprecoess Time</string>
             </property>
            </widget>
           </item>

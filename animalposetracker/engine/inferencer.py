@@ -7,6 +7,7 @@ import os
 
 from .constant import ENGINEtoBackend, OpenCV_TARGETS, EP_PARAMS
 from animalposetracker.utils.base import measure_time
+from animalposetracker.cfg import TRACKER_TYPES
 
 
 
@@ -23,14 +24,22 @@ class InferenceEngine:
                  iou: float = 0.45,
                  background: bool = 'Original',
                  show_classes: bool = False,
+                 show_tracker_id: bool = False,
                  show_keypoints: bool = True,
                  show_skeletons: bool = False,
                  show_bbox: bool = False,
                  radius: int = 5,
                  skeleton_line_width: int = 2,
-                 bbox_line_width: int = 2
+                 bbox_line_width: int = 2,
+                 show_fps: bool = True,
+                 show_preprocess_time: bool = True,
+                 show_inference_time: bool = True,
+                 show_postprocess_time: bool = True,
+                 tracker_enabled: bool = False,
+                 tracker_type: str = 'bytetrack',
                  ):
         self.model = None
+        self.tracker = None
         self._weights_path = weights_path
         self._engine = engine
         self._device = device
@@ -43,14 +52,22 @@ class InferenceEngine:
             'conf': conf,
             'iou': iou,
            'show_classes': show_classes,
+           'show_tracker_id': show_tracker_id,           
            'show_keypoints': show_keypoints,
            'show_skeletons': show_skeletons,
            'show_bbox': show_bbox,
             'radius': radius,
            'skeleton_line_width': skeleton_line_width,
             'bbox_line_width': bbox_line_width,
-            'background': background
+            'background': background,
+            'show_fps': show_fps,
+            'show_preprocess_time': show_preprocess_time,
+            'show_inference_time': show_inference_time,
+            'show_postprocess_time': show_postprocess_time,
         }
+        self._tracker_enabled = tracker_enabled
+        self._tracker_config = None
+        self._tracker_type = tracker_type
         self._data_config = None
         self._load_config(config)
 
@@ -59,9 +76,15 @@ class InferenceEngine:
         return self._data_config
 
     @data_config.setter
-    def data_config(self, config):
+    def data_config(self, config: Union[str, Path]):
         self._data_config = config
-        self._update_config_vars()
+        if isinstance(config, str):
+            self._update_config_vars()
+        elif isinstance(config, Path):
+            self._data_config = str(config)
+            self._update_config_vars()
+        else:
+            raise ValueError("Invalid data config type. Please provide either a string or a Path object.")
     
     @property
     def engine(self):
@@ -110,6 +133,36 @@ class InferenceEngine:
     @weights_path.setter
     def weights_path(self, weights_path):
         self._weights_path = weights_path
+    
+    @property
+    def tracker_enabled(self):
+        return self._tracker_enabled
+
+    @tracker_enabled.setter
+    def tracker_enabled(self, tracker_enabled):
+        self._tracker_enabled = tracker_enabled
+        if self._tracker_enabled:
+            self._update_tracker_config()
+    
+    @property
+    def tracker_config(self):
+        return self._tracker_config
+
+    @tracker_config.setter
+    def tracker_config(self, config: Dict):
+        self._tracker_config = config
+        if self._tracker_enabled:
+            self._update_tracker_config()
+    
+    @property
+    def tracker_type(self):
+        return self._tracker_type
+
+    @tracker_type.setter
+    def tracker_type(self, tracker_type):
+        self._tracker_type = tracker_type
+        if self._tracker_enabled:
+            self._update_tracker_config()
 
     def print_config(self):
         print(f"Engine: {self._engine}")
@@ -117,16 +170,19 @@ class InferenceEngine:
         print(f"Model Bits: {self._model_bits}")
         print(f"Input Width: {self._input_width}")
         print(f"Input Height: {self._input_height}")
+        print(f"Weights Path: {self._weights_path}")
+        if self._tracker_enabled:
+            print(f"Tracker Type: {self._tracker_type}")
         for key, value in self.visualize_config.items():
             print(f"{key}: {value}")
 
 
     def _update_config_vars(self):
-        if self.data_config is None:
+        if self._data_config is None:
             return
 
         # Load the data config file
-        with open(self.data_config, 'r') as f:
+        with open(self._data_config, 'r') as f:
             config = yaml.load(f, Loader=yaml.FullLoader)
 
         self.classes = config.get('classes_name', [])
@@ -144,6 +200,9 @@ class InferenceEngine:
                 self.visualize_config[key] = value
             else:
                 raise ValueError(f"Invalid key {key} in config. Please choose from {self.visualize_config.keys()}")
+    
+    def update_tracker_config(self, config: Dict):
+        self.tracker_config = config
 
     def _load_config(self, config: Union[str, Path] = None):
         self.data_config = config
@@ -168,6 +227,8 @@ class InferenceEngine:
             self._tensorrt = False
         self.print_config()
         engine_init_method[self._engine]()
+        if self._tracker_enabled:
+            self._init_tracker()
     
     def _init_model_input_shape(self):
         weights_path = Path(self._weights_path)
@@ -425,8 +486,6 @@ class InferenceEngine:
             self._input_width = input_layer_shape[2]
             self._input_height = input_layer_shape[3]
 
-
-            
         except ImportError:
             raise ImportError("Please install tensorrt and pycuda to use TensorRT engine.")
         except FileNotFoundError:
@@ -486,7 +545,23 @@ class InferenceEngine:
                 self._input_height = shape.height
         except ImportError:
             raise ImportError("Please install coremltools to use CoreML engine.")
-
+    
+    def _init_tracker():
+        pass
+    
+    def _update_tracker_config(self):
+        current_tracker_config = Path.home() / "configs" / "tracker.yaml"
+        if not current_tracker_config.exists():
+            with open(TRACKER_TYPES[self._tracker_type], 'r') as f:
+                self._tracker_config = yaml.load(f, Loader=yaml.FullLoader)
+            with open(current_tracker_config, 'w') as f:
+                yaml.dump(self._tracker_config, f, indent=4)
+        else:
+            with open(current_tracker_config, 'r') as f:
+                cfg = yaml.load(f, Loader=yaml.FullLoader)
+            cfg.update(self._tracker_config)
+            with open(current_tracker_config, 'w') as f:
+                yaml.dump(cfg, f, indent=4)
     
     def preprocess(self, input_image):
         """
@@ -628,7 +703,7 @@ class InferenceEngine:
                 'boxes': boxes,
                 'keypoints_list': keypoints_list,
                 'class_ids': class_ids,
-               'scores': scores,
+                'scores': scores,
             }
         else:
             results = {
@@ -675,9 +750,19 @@ class InferenceEngine:
             )
             return trt_outputs
         except ImportError:
-            raise ImportError("Please install tensorrt and pycuda to use TensorRT engine.")
+            raise ImportError("Please install tensorrt and cuda-python to use TensorRT engine.")
+    
+    def track(self, img, results):
+        pass
 
-    def draw_detections(self, img, box, score, class_id, line_width=2, bbox=True, classes=True):
+    def draw_detections(self, 
+                        img, 
+                        box, 
+                        score, 
+                        class_id, 
+                        line_width=2, 
+                        bbox=False, 
+                        classes=False):
         """
         Draws bounding boxes and labels on the input image based on the detected objects.
 
@@ -762,6 +847,31 @@ class InferenceEngine:
                      lineType=cv2.LINE_AA
                      )
     
+    def draw_detections_track(self, 
+                      img, 
+                      track_id, 
+                      box, 
+                      score, 
+                      class_id, 
+                      line_width=2, 
+                      bbox=False, 
+                      classes=False):
+        """
+        Draws bounding boxes and labels on the input image based on the detected objects.
+
+        Args:
+            img: The input image to draw detections on.
+            box: Detected bounding box.
+            score: Corresponding detection score.
+            class_id: Class ID for the detected object.
+
+        Returns:
+            None
+        """
+        pass
+
+
+    
     def visualize(self, frame, results):
         """
         Visualizes the output of the model on a single frame of video.
@@ -823,30 +933,57 @@ class InferenceEngine:
         x, y = int(self._input_width * 0.02), int(self._input_height * 0.05)
 
         font_color=(0, 255, 0)
+
+        if self.visualize_config['show_fps']:
         
-        cv2.putText(frame, 
-                    f"FPS: {times['fps']}", 
-                    (x, y), 
-                    cv2.FONT_HERSHEY_SIMPLEX, 
-                    font_scale, 
-                    font_color, 
-                    thickness, 
-                    cv2.LINE_AA)
+            cv2.putText(frame, 
+                        f"FPS: {times['fps']}", 
+                        (x, y), 
+                        cv2.FONT_HERSHEY_SIMPLEX, 
+                        font_scale, 
+                        font_color, 
+                        thickness, 
+                        cv2.LINE_AA)
+        y += line_height
+
+        if self.visualize_config['show_preprocess_time']:
+            cv2.putText(frame, 
+                        f"Preprocess: {times['preprocess_time']}ms", 
+                        (x, y), 
+                        cv2.FONT_HERSHEY_SIMPLEX, 
+                        font_scale, font_color, thickness, cv2.LINE_AA)
+        y += line_height
+
+        if self.visualize_config['show_inference_time']:
+            cv2.putText(frame, 
+                        f"Inference: {times['inference_time']}ms", 
+                        (x, y), 
+                        cv2.FONT_HERSHEY_SIMPLEX, 
+                        font_scale, font_color, thickness, cv2.LINE_AA)
         y += line_height
         
-        cv2.putText(frame, f"Preprocess: {times['preprocess_time']}ms", (x, y), 
-                    cv2.FONT_HERSHEY_SIMPLEX, font_scale, font_color, thickness, cv2.LINE_AA)
-        y += line_height
-        
-        cv2.putText(frame, f"Inference: {times['inference_time']}ms", (x, y), 
-                    cv2.FONT_HERSHEY_SIMPLEX, font_scale, font_color, thickness, cv2.LINE_AA)
-        y += line_height
-        
-        cv2.putText(frame, f"Postprocess: {times['postprocess_time']}ms", (x, y), 
-                    cv2.FONT_HERSHEY_SIMPLEX, font_scale, font_color, thickness, cv2.LINE_AA)
+        if self.visualize_config['show_postprocess_time']:
+            cv2.putText(frame, 
+                        f"Postprocess: {times['postprocess_time']}ms", 
+                        (x, y), 
+                        cv2.FONT_HERSHEY_SIMPLEX, 
+                        font_scale, font_color, thickness, cv2.LINE_AA)
         
         return frame
     
+
+    def visualize_track(self, frame, results):
+        """
+        Visualizes the output of the model on a single frame of video.
+
+        Args:
+            frame: The input frame to process.
+            results: The output of the model on the input frame.
+
+        Returns:
+            output_img: The output image with drawn detections.
+        """
+        pass
 
     def process_frame(self, frame):
         """
@@ -876,3 +1013,12 @@ class InferenceEngine:
         frame = self.visualize(frame, results)
 
         return frame, results
+    
+    def process_frame_track(self, frame):
+        """
+        Performs inference and returns the output image with drawn detections.
+
+        Returns:
+            output_img: The output image with drawn detections.
+        """
+        pass

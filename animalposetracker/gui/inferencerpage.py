@@ -1,4 +1,4 @@
-from PySide6.QtCore import QMetaObject, Qt, Slot, Q_ARG, QTimer, QSize
+from PySide6.QtCore import QMetaObject, Qt, Q_ARG, QTimer
 from PySide6.QtGui import QImage, QPixmap
 from PySide6.QtWidgets import  QApplication, QFileDialog, QWidget, QMessageBox
 import os
@@ -10,10 +10,11 @@ import queue
 
 from .ui_inferencer import Ui_Inferencer
 from animalposetracker.utils import (VideoReaderThread, VideoWriterThread, 
-                                     PreprocessThread, InferenceThread, 
+                                     PreprocessThread, InferenceThread, TrackerThread, 
                                      PostprocessThread, VisualizeThread)
 from animalposetracker.engine import InferenceEngine
 from animalposetracker.engine import ENGINEtoDEVICE
+from animalposetracker.cfg import TRACKER_TYPES
 class InferencerPage(QWidget, Ui_Inferencer):
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -32,7 +33,21 @@ class InferencerPage(QWidget, Ui_Inferencer):
         self.supported_engines_and_devices = {}
         self.max_cache_size = 1024
 
-        self.inference = InferenceEngine()
+        self.inference = None
+        self.tracker_enabled = False
+        self.tracker_type = None
+        self.device = None
+        self.engine = None
+
+        # threads
+        self.video_reader_thread = None
+        self.video_writer_thread = None
+        self.preprocess_thread = None
+        self.inference_thread = None
+        self.postprocess_thread = None
+        self.tracker_thread = None
+        self.visualize_thread = None
+
         self.data_config_path = None
         self.data_config = dict()
         self.weights_path = None
@@ -44,12 +59,15 @@ class InferencerPage(QWidget, Ui_Inferencer):
         self.SelectConfigure.setEnabled(True)
         self.ShowKeypoints.setCheckState(Qt.CheckState.Checked)
         self.Show.setCheckState(Qt.CheckState.Checked)
-        self._show_info("Please select configuration and weights")
+        self.FPSShow.setCheckState(Qt.CheckState.Checked)
+        self.PreprocessTime.setCheckState(Qt.CheckState.Checked)
+        self.InferenceTime.setCheckState(Qt.CheckState.Checked)
+        self.PostprocessTime.setCheckState(Qt.CheckState.Checked)
+        self.CameraORVideos.setAutoExclusive(False)
+        self.Tracker.setAutoExclusive(False)
 
         # Connect all signals to their respective slots
         self.setupConnections()
-        # Set default visualization configuration
-        self._init_visualization_config()
 
     def setupConnections(self):
         """Connect all UI signals to their corresponding slot functions"""
@@ -58,6 +76,7 @@ class InferencerPage(QWidget, Ui_Inferencer):
         self.SelectConfigure.clicked.connect(self.onSelectConfigureClicked)
         self.SelectWeights.clicked.connect(self.onSelectWeightsClicked)
         self.CameraORVideos.toggled.connect(self.onCameraORVideosToggled)
+        self.Tracker.toggled.connect(self.onTrackerToggled)
         self.CameraVideosSelection.currentIndexChanged.connect(self.onCameraVideosSelectionChanged)
         self.CheckCameraVideosConnect.clicked.connect(self.onCheckCameraVideosConnectClicked)
         
@@ -67,10 +86,14 @@ class InferencerPage(QWidget, Ui_Inferencer):
         self.FPSSetup.valueChanged.connect(self.onFPSSetupChanged)
         
         # Engine and device signals
+        self.ModelBits.clear()
         self.EngineSelection.clear()
         self.DeviceSelection.clear()
+        self.TrackerSelection.clear()
+        self.ModelBits.currentTextChanged.connect(self.onModelBitsChanged)
         self.EngineSelection.currentTextChanged.connect(self.onEngineSelectionChanged)
         self.DeviceSelection.currentTextChanged.connect(self.onDeviceSelectionChanged)
+        self.TrackerSelection.currentTextChanged.connect(self.onTrackerSelectionChanged)
         
         # Start/Stop control signals
         self.Start.clicked.connect(self.onStartClicked)
@@ -81,12 +104,17 @@ class InferencerPage(QWidget, Ui_Inferencer):
         self.Conf.valueChanged.connect(self.onConfChanged)
         self.Backgroud.stateChanged.connect(self.onBackgroudStateChanged)
         self.ShowClasses.stateChanged.connect(self.onShowClassesStateChanged)
+        self.ShowTrackerID.stateChanged.connect(self.onShowTrackerIDStateChanged)
         self.ShowKeypoints.stateChanged.connect(self.onShowKeypointsStateChanged)
         self.ShowKeypointsRadius.valueChanged.connect(self.onShowKeypointsRadiusChanged)
         self.ShowSkeletons.stateChanged.connect(self.onShowSkeletonsStateChanged)
         self.ShowSkeletonsLineWidth.valueChanged.connect(self.onShowSkeletonsLineWidthChanged)
         self.ShowBBox.stateChanged.connect(self.onShowBBoxStateChanged)
         self.ShowBBoxWidth.valueChanged.connect(self.onShowBBoxWidthChanged)
+        self.FPSShow.stateChanged.connect(self.onFPSShowStateChanged)
+        self.PreprocessTime.stateChanged.connect(self.onPreprocessTimeStateChanged)
+        self.InferenceTime.stateChanged.connect(self.onInferenceTimeStateChanged)
+        self.PostprocessTime.stateChanged.connect(self.onPostprocessTimeStateChanged)
 
     def tools_enabled(self):
         self.CheckCameraVideosConnect.setEnabled(True)
@@ -101,15 +129,20 @@ class InferencerPage(QWidget, Ui_Inferencer):
         self.Show.setEnabled(True)
         self.Backgroud.setEnabled(True)
         self.ShowClasses.setEnabled(True)
-        self.Classes.setEnabled(True)
+        self.ShowTrackerID.setEnabled(True)
         self.ShowKeypoints.setEnabled(True)
         self.ShowKeypointsRadius.setEnabled(True)
         self.ShowSkeletons.setEnabled(True)
         self.ShowSkeletonsLineWidth.setEnabled(True)
         self.ShowBBox.setEnabled(True)
         self.ShowBBoxWidth.setEnabled(True)
+        self.FPSShow.setEnabled(True)
+        self.PreprocessTime.setEnabled(True)
+        self.InferenceTime.setEnabled(True)
+        self.PostprocessTime.setEnabled(True)
 
     def tools_disabled(self):
+        self.TrackerSelection.setEnabled(False)
         self.CheckCameraVideosConnect.setEnabled(False)
         self.WidthSetup.setEnabled(False)
         self.HeightSetup.setEnabled(False)
@@ -122,33 +155,17 @@ class InferencerPage(QWidget, Ui_Inferencer):
         self.Show.setEnabled(False)
         self.Backgroud.setEnabled(False)
         self.ShowClasses.setEnabled(False)
-        self.Classes.setEnabled(False)
+        self.ShowTrackerID.setEnabled(False)
         self.ShowKeypoints.setEnabled(False)
         self.ShowKeypointsRadius.setEnabled(False)
         self.ShowSkeletons.setEnabled(False)
         self.ShowSkeletonsLineWidth.setEnabled(False)
         self.ShowBBox.setEnabled(False)
         self.ShowBBoxWidth.setEnabled(False)
-    
-    def _init_visualization_config(self):
-        """Initialize visualization configuration"""
-        self.inference.update_config(
-            {
-            'conf': self.Conf.value(),
-            'iou': self.IoU.value(),
-           'show_classes': self.ShowClasses.isChecked(),
-           'show_keypoints': self.ShowKeypoints.isChecked(),
-           'show_skeletons': self.ShowSkeletons.isChecked(),
-           'show_bbox': self.ShowBBox.isChecked(),
-            'radius': self.ShowKeypointsRadius.value(),
-           'skeleton_line_width': self.ShowSkeletonsLineWidth.value(),
-            'bbox_line_width': self.ShowBBoxWidth.value(),
-            'background': {
-                0: 'Original',
-                1: 'White',
-                2: 'Black',
-            }[self.Backgroud.checkState().value]
-        })
+        self.FPSShow.setEnabled(False)
+        self.PreprocessTime.setEnabled(False)
+        self.InferenceTime.setEnabled(False)    
+        self.PostprocessTime.setEnabled(False)
 
     def onSelectConfigureClicked(self):
         """
@@ -170,34 +187,17 @@ class InferencerPage(QWidget, Ui_Inferencer):
         )
         
         if not file_path:  # User cancelled
-            self._show_info("Configuration selection cancelled")
             return
+        
+        # set home directory
+        os.chdir(Path(file_path).parent)
             
-        try:
-            # Validate YAML structure
-            with open(file_path, 'r') as f:
-                config = yaml.safe_load(f)
-                
-            # Store configuration
-            self.data_config_path = file_path
-            self.data_config = config
-            classes = self.data_config.get('classes', 0)
-            if not isinstance(classes, int):
-                raise ValueError("Invalid 'classes' value in configuration")
-            self.Classes.setText(f"There {'are' if classes > 1 else 'is'} {classes} {'classes' if classes > 1 else 'class'}!")
+        # Store configuration
+        self.data_config_path = file_path
+  
+        # Update UI
+        self.SelectWeights.setEnabled(True)
             
-            # Update UI
-            filename = os.path.basename(file_path)
-            self._show_info(f"Configuration loaded: {filename}")
-            self.SelectWeights.setEnabled(True)
-            
-        except yaml.YAMLError as e:
-            self._show_info(f"Invalid YAML: {str(e)}")
-            self.data_config_path = None
-
-        except Exception as e:
-            self._show_info(f"Error: {str(e)}")
-            self.data_config_path = None
 
     def onSelectWeightsClicked(self):
         """Open file dialog to select model weights and 
@@ -232,7 +232,6 @@ class InferencerPage(QWidget, Ui_Inferencer):
         )
 
         if not file_path:
-            self._show_info("Weight selection cancelled")
             return
 
         self._enable_widgets()
@@ -247,11 +246,11 @@ class InferencerPage(QWidget, Ui_Inferencer):
         self._get_supported_engines_and_devices(file_ext)
 
         if not self.supported_engines_and_devices:
-            self._show_info("Unsupported format for current platform")
             raise ValueError(f"Unsupported format: {file_ext}")
 
-        self._populate_engine_selection(list(self.supported_engines_and_devices.keys()))
-        self._update_available_devices()
+        self._init_engine_selection(list(self.supported_engines_and_devices.keys()))
+        self._init_available_devices()
+        self._init_model_bits()
 
         if hasattr(self, 'model_config_path'):
             self.Start.setEnabled(True)
@@ -286,13 +285,10 @@ class InferencerPage(QWidget, Ui_Inferencer):
             if device_list:
                 self.supported_engines_and_devices[engine] = device_list
                 
-    def _populate_engine_selection(self, engines):
+    def _init_engine_selection(self, engines):
         self.EngineSelection.addItems(engines)
         default_engine = engines[0]
         self.EngineSelection.setCurrentText(default_engine)
-
-    def _show_info(self, message):
-        self.PrintInformation.setText(message)
 
     def _detect_platform(self):
         """Detect platform and hardware availability"""
@@ -324,15 +320,20 @@ class InferencerPage(QWidget, Ui_Inferencer):
         }
         return device_check_results
     
-    def _update_available_devices(self):
+    def _init_available_devices(self):
         """Update device selection based on chosen engine"""
         current_engine = self.EngineSelection.currentText()
         self.DeviceSelection.clear()
         available_devices = self.supported_engines_and_devices.get(current_engine)
         self.DeviceSelection.addItems(available_devices)
         self.DeviceSelection.setCurrentText(available_devices[0])
+    
+    def _init_model_bits(self):
+        """Initialize model bit selection based on model file size"""
+        self.ModelBits.clear()
+        self.ModelBits.addItems(['FP32', 'FP16', 'INT8'])
+        self.ModelBits.setCurrentText('FP32')
         
-
     def _get_supported_devices(self, engine):
         supported_devices = []
         if engine in ENGINEtoDEVICE:
@@ -443,13 +444,25 @@ class InferencerPage(QWidget, Ui_Inferencer):
         except FileNotFoundError:
             return False
 
-    @Slot(bool)
     def onCameraORVideosToggled(self, checked):
         """Handle toggling between camera and video source options"""
         if checked:  # Camera mode
             self._setup_camera_ui()
         else:  # File mode
             self._setup_video_ui()
+    
+    def onTrackerToggled(self, checked):
+        """Handle toggling between tracker and detector options"""
+        if checked:  # Tracker mode
+            self.TrackerSelection.setEnabled(True)
+            self.tracker_enabled = True
+            # create tracker config file
+            available_trackers = list(TRACKER_TYPES.keys())
+            self.TrackerSelection.addItems(available_trackers)
+            self.TrackerSelection.setCurrentText(available_trackers[0])
+        else:  # Detector mode
+            self.TrackerSelection.setEnabled(False)
+            self.tracker_enabled = False
 
     def _set_camera_setup(self, cap=None):
         # Set default camera parameters (from design)
@@ -478,7 +491,7 @@ class InferencerPage(QWidget, Ui_Inferencer):
         self.CameraVideosSelection.clear()
         self._detect_available_cameras()
         if not self.camera_list:
-            self._show_info("No camera detected")
+            Warning("No camera detected")
         else:
             self.CameraVideosSelection.addItem("Select camera...")
             self.CameraVideosSelection.addItems(self.camera_list.keys())
@@ -528,14 +541,12 @@ class InferencerPage(QWidget, Ui_Inferencer):
         
         self.tools_enabled()
         
-        self._show_info(f"Selected: {os.path.basename(file_path)}")
-        
         # Store the file path for later use
         self.current_video_path = file_path
 
         cap = cv2.VideoCapture(file_path)
         if not cap.isOpened():
-            self._show_info("Failed to open video file")
+            Warning("Failed to open video file")
             return
         
         # Update UI with actual video parameters
@@ -550,7 +561,7 @@ class InferencerPage(QWidget, Ui_Inferencer):
             cap = cv2.VideoCapture(cam_id)
             
             if not cap.isOpened():
-                self._show_info("Failed to open camera")
+                Warning("Failed to open camera")
                 return
             
             self.tools_enabled()
@@ -591,9 +602,13 @@ class InferencerPage(QWidget, Ui_Inferencer):
         source = self._get_source()
         if source is None:
             return
-
+        cap = cv2.VideoCapture(source)
+        if not cap.isOpened():
+            Warning("Failed to open camera/video source")
+            return
+        self._set_camera_params(cap)
         self.videoreader_thread = VideoReaderThread()
-        self.videoreader_thread.cap = cv2.VideoCapture(source)
+        self.videoreader_thread.cap = cap
         self.videoreader_thread.data_ready.connect(self.display_preview_frame)
         self.videoreader_thread.finished.connect(self._stop_preview)
         self.videoreader_thread.start()
@@ -634,24 +649,38 @@ class InferencerPage(QWidget, Ui_Inferencer):
         if source is None:
             return
         
+        # set up cache queues
         self.read_cache = queue.Queue(maxsize=self.max_cache_size)
         self.preprocess_cache = queue.Queue(maxsize=self.max_cache_size)
         self.inference_cache = queue.Queue(maxsize=self.max_cache_size)
         self.postprocess_cache = queue.Queue(maxsize=self.max_cache_size)
         self.visualize_cache = queue.Queue(maxsize=self.max_cache_size)
+        if self.tracker_enabled:
+            self.tracker_cache = queue.Queue(maxsize=self.max_cache_size)
 
+        # set up threads
         self.videoreader_thread = VideoReaderThread()
         self.videowriter_thread = VideoWriterThread()
         self.preprocess_thread = PreprocessThread(input_queue=self.read_cache)
-        self.inference_thread = InferenceThread(input_queue=self.preprocess_cache) 
+        self.inference_thread = InferenceThread(input_queue=self.preprocess_cache)
         self.postprocess_thread = PostprocessThread(input_queue=self.inference_cache)
-        self.visualize_thread = VisualizeThread(input_queue=self.postprocess_cache)
+        if self.tracker_enabled:
+            self.tracker_thread = TrackerThread(input_queue=self.postprocess_cache)
+            self.visualize_thread = VisualizeThread(input_queue=self.tracker_cache)
+        else:
+            self.visualize_thread = VisualizeThread(input_queue=self.postprocess_cache)
+
         self.videowriter_thread = VideoWriterThread()
         self.display_thread = QTimer()
         self.read_frame_end = False
 
         # Set up video reader thread
-        self.videoreader_thread.cap = cv2.VideoCapture(source)
+        cap = cv2.VideoCapture(source)
+        if not cap.isOpened():
+            Warning("Failed to open camera/video source")
+        if self.CameraORVideos.isChecked():
+            self._set_camera_params(cap)
+        self.videoreader_thread.cap = cap
         self.videoreader_thread.status_update.connect(self.thread_status)
         self.videoreader_thread.data_ready.connect(self.put_read_data)
         self.videoreader_thread.finished.connect(self.read_end)
@@ -666,14 +695,21 @@ class InferencerPage(QWidget, Ui_Inferencer):
         self.inference_thread.status_update.connect(self.thread_status)
         self.inference_thread.data_ready.connect(self.put_inference_data)
 
-        # Set up frame postprocessor thread
+        # Set up postprocessor thread
         self.postprocess_thread.postprocess_function = self.inference.postprocess
         self.postprocess_thread.status_update.connect(self.thread_status)
         self.postprocess_thread.data_ready.connect(self.put_postprocessed_data)
 
-        # Set up visualization thread
-        self.visualize_thread.visualize_function = self.inference.visualize
-        self.visualize_thread.data_ready.connect(self.put_visualize_data)
+        if self.tracker_enabled:
+            # Set up tracker thread
+            self.tracker_thread.tracker_function = self.inference.track
+            self.tracker_thread.status_update.connect(self.thread_status)
+            self.tracker_thread.data_ready.connect(self.put_tracked_data)
+            self.visualize_thread.visualize_function = self.inference.visualize_track
+        else:
+            self.visualize_thread.visualize_function = self.inference.visualize
+            
+        self.visualize_thread.data_ready.connect(self.put_visualized_data)
         self.visualize_thread.status_update.connect(self.thread_status)
 
         # Set up display thread
@@ -681,7 +717,12 @@ class InferencerPage(QWidget, Ui_Inferencer):
 
         # set up video writer thread
         if self.Save.isChecked():
-            self.videowriter_thread.save_path = Path.cwd() / "output.avi"
+            if self.Tracker.isChecked():
+                save_path = Path.home() / "runs" / "track"
+            else:
+                save_path = Path.home() / "runs" / "inference"
+            save_path.mkdir(exist_ok=True, parents=True)
+            self.videowriter_thread.save_path = save_path / "output.avi"
             self.videowriter_thread.fps = self.fps
             self.videowriter_thread.frame_size = (self.width, self.height)
 
@@ -691,6 +732,8 @@ class InferencerPage(QWidget, Ui_Inferencer):
         self.preprocess_thread.start()
         self.inference_thread.start()
         self.postprocess_thread.start()
+        if self.tracker_enabled:
+            self.tracker_thread.start()
         self.visualize_thread.start()
         self.display_thread.start(1000 // self.fps)
         if self.Save.isChecked():
@@ -711,6 +754,7 @@ class InferencerPage(QWidget, Ui_Inferencer):
             "preprocess_thread",
             "inference_thread",
             "postprocess_thread",
+            "tracker_thread",
             "visualize_thread",
         ]
 
@@ -736,6 +780,7 @@ class InferencerPage(QWidget, Ui_Inferencer):
             'preprocess_cache',
             'inference_cache',
             'postprocess_cache',
+            'tracker_cache',
             'visualize_cache'
         ]
         for cache in queues:
@@ -752,12 +797,12 @@ class InferencerPage(QWidget, Ui_Inferencer):
                 cam_index = self.camera_list[current_text]
                 return cam_index
             except:
-                self._show_info("Failed to parse camera index")
+                Warning("Failed to parse camera index")
                 return None
         else:
             if hasattr(self, 'current_video_path'):
                 return self.current_video_path
-            self._show_info("No video file selected")
+            Warning("No video file selected")
             return None
     
     def thread_status(self, message):
@@ -794,8 +839,15 @@ class InferencerPage(QWidget, Ui_Inferencer):
             self.postprocess_cache.put((frame, results))
         except queue.Full:  
             pass
+
+    def put_tracked_data(self, frame, results):
+        """Put new frame from tracker thread to visualization thread"""
+        try:
+            self.tracker_cache.put((frame, results))
+        except queue.Full:
+            pass
     
-    def put_visualize_data(self, frame, results):
+    def put_visualized_data(self, frame, results):
         """Put new frame from visualization thread to display"""
         try:
             self.visualize_cache.put((frame, results))
@@ -841,17 +893,25 @@ class InferencerPage(QWidget, Ui_Inferencer):
     def onWidthSetupChanged(self, value):
         """Handle changes to the Width slider value"""
         self.width = value
-        self._show_info(f"Set Camera output Width: {self.width}")
     
     def onHeightSetupChanged(self, value):
         """Handle changes to the Height slider value"""
         self.height = value
-        self._show_info(f"Set Camera output Height: {self.height}")
 
     def onFPSSetupChanged(self, value):
         """Handle changes to the FPS slider value"""
         self.fps = value
-        self._show_info(f"Set Camera output FPS: {self.fps}")
+    
+    def _set_camera_params(self, cap=None):
+        """Set up camera parameters"""
+        if cap is not None:
+            cap.set(cv2.CAP_PROP_FRAME_WIDTH, self.width)
+            cap.set(cv2.CAP_PROP_FRAME_HEIGHT, self.height)
+            self.fps = cap.get(cv2.CAP_PROP_FPS)
+    
+    def onModelBitsChanged(self):
+        """Handle changes to the Model Bits combo box value"""
+        self.model_bits = self.ModelBits.currentText()
     
     def onEngineSelectionChanged(self):
         """Handle changes in engine selection"""
@@ -860,15 +920,24 @@ class InferencerPage(QWidget, Ui_Inferencer):
             return
         self.DeviceSelection.clear()
         self.DeviceSelection.addItems(self.supported_engines_and_devices[self.engine])
-        self._show_info(f"Selected Inference Engine: {self.engine}")
     
     def onDeviceSelectionChanged(self):
         """Handle changes in device selection"""
         self.device = self.DeviceSelection.currentText()
         if self.device == "":
             return
-        self._show_info(f"Selected Inference Device: {self.device}")
     
+    def onTrackerSelectionChanged(self):
+        """Handle changes in tracker selection"""
+        self.tracker_type = self.TrackerSelection.currentText()
+        default_config_path = TRACKER_TYPES[self.tracker_type]
+        with open(default_config_path, 'r') as f:
+            track_config = yaml.load(f, Loader=yaml.FullLoader)
+        config_path = Path.home() / "configs"
+        Path(config_path).mkdir(exist_ok=True)
+        with open(config_path / 'tracker.yaml', 'w') as f:
+            yaml.dump(track_config, f, indent=4)
+        
     def onStartClicked(self):
         """Handle when the Start button is clicked to begin processing"""
         if self.Start.text() == "Start":
@@ -881,7 +950,10 @@ class InferencerPage(QWidget, Ui_Inferencer):
             self.inference.data_config = self.data_config_path
             self.inference.engine = self.engine
             self.inference.device = self.device
-            self.inference.model_bits = self.ModelBits.currentText()
+            self.inference.tracker_enabled = self.tracker_enabled
+            if self.tracker_enabled:
+                self.inference.tracker_type = self.tracker_type
+            self.inference.model_bits = self.model_bits
             self.inference.model_init()
             # init threads
             self._init_inference_threads()
@@ -934,6 +1006,9 @@ class InferencerPage(QWidget, Ui_Inferencer):
         """Handle changes to the Show Classes checkbox state"""
         self.inference.update_config({"show_classes": bool(state)})
     
+    def onShowTrackerIDStateChanged(self, state):
+        self.inference.update_config({"show_track_id": bool(state)})
+    
     def onShowKeypointsStateChanged(self, state):
         """Handle changes to the Show Keypoints checkbox state"""
         self.inference.update_config({"show_keypoints": bool(state)})
@@ -950,15 +1025,29 @@ class InferencerPage(QWidget, Ui_Inferencer):
         """Handle changes to the skeleton line width slider value"""
         self.inference.update_config({"skeleton_line_width": value})
     
-    @Slot(int)
     def onShowBBoxStateChanged(self, state):
         """Handle changes to the Show Bounding Box checkbox state"""
         self.inference.update_config({"show_bbox": bool(state)})
     
-    @Slot(int)
     def onShowBBoxWidthChanged(self, value):
         """Handle changes to the bounding box width slider value"""
         self.inference.update_config({"bbox_line_width": value})
+
+    def onFPSShowStateChanged(self, state):
+        """Handle changes to the Show FPS checkbox state"""
+        self.inference.update_config({"show_fps": bool(state)})
+    
+    def onPreprocessTimeStateChanged(self, state):
+        """Handle changes to the Show Preprocess Time checkbox state"""
+        self.inference.update_config({"show_preprocess_time": bool(state)})
+    
+    def onInferenceTimeStateChanged(self, state):
+        """Handle changes to the Show Inference Time checkbox state"""
+        self.inference.update_config({"show_inference_time": bool(state)})
+    
+    def onPostprocessTimeStateChanged(self, state):
+        """Handle changes to the Show Postprocess Time checkbox state"""
+        self.inference.update_config({"show_postprocess_time": bool(state)})
     
     def closeEvent(self, event):
         """Handle window close event"""

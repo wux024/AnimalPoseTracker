@@ -5,6 +5,7 @@ CFG_DIR = FILE_DIR.parent
 DATA_DIR = CFG_DIR / 'datasets'
 MODEL_DIR = CFG_DIR /'models'
 DEFAULT_CFG_PATH = CFG_DIR / 'default.yaml'
+TRACKER_DIR = CFG_DIR / 'trackers'
 
 MODEL_YAML_PATHS = {
     'AnimalRTPose': MODEL_DIR / 'animalrtpose.yaml',
@@ -96,3 +97,6 @@ WEIGHT_URLS = {
         'X': 'https://github.com/ultralytics/assets/releases/download/v8.3.0/yolov12x.pt',
     }
 }
+
+TRACKER_TYPES = {"bytetrack": TRACKER_DIR / "bytetrack.yaml", 
+               "botsort": TRACKER_DIR / "botsort.yaml"}

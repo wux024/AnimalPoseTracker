@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 
 ################################################################################
-## Form generated from reading UI file 'inferencerGrDNut.ui'
+## Form generated from reading UI file 'inferencerhzaBKN.ui'
 ##
 ## Created by: Qt User Interface Compiler version 6.8.2
 ##
@@ -16,9 +16,9 @@ from PySide6.QtGui import (QBrush, QColor, QConicalGradient, QCursor,
     QImage, QKeySequence, QLinearGradient, QPainter,
     QPalette, QPixmap, QRadialGradient, QTransform)
 from PySide6.QtWidgets import (QApplication, QCheckBox, QComboBox, QDoubleSpinBox,
-    QGroupBox, QHBoxLayout, QLabel, QLayout,
-    QPushButton, QRadioButton, QSizePolicy, QSlider,
-    QSpinBox, QVBoxLayout, QWidget)
+    QGroupBox, QHBoxLayout, QLabel, QPushButton,
+    QRadioButton, QSizePolicy, QSlider, QSpinBox,
+    QVBoxLayout, QWidget)
 
 from animalposetracker.gui import LOGO_SMALL_PATH
 
@@ -26,7 +26,7 @@ class Ui_Inferencer(object):
     def setupUi(self, Inferencer):
         if not Inferencer.objectName():
             Inferencer.setObjectName(u"Inferencer")
-        Inferencer.resize(1200, 800)
+        Inferencer.resize(1206, 800)
         sizePolicy = QSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
         sizePolicy.setHorizontalStretch(0)
         sizePolicy.setVerticalStretch(0)
@@ -38,8 +38,8 @@ class Ui_Inferencer(object):
         Inferencer.setWindowIcon(icon)
         self.InferencerLayout = QVBoxLayout(Inferencer)
         self.InferencerLayout.setObjectName(u"InferencerLayout")
-        self.BaseConfigure = QHBoxLayout()
-        self.BaseConfigure.setObjectName(u"BaseConfigure")
+        self.ConfigureLayout = QHBoxLayout()
+        self.ConfigureLayout.setObjectName(u"ConfigureLayout")
         self.BaseToolsGroup = QGroupBox(Inferencer)
         self.BaseToolsGroup.setObjectName(u"BaseToolsGroup")
         sizePolicy1 = QSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Preferred)
@@ -80,6 +80,13 @@ class Ui_Inferencer(object):
         self.CameraORVideos.setSizePolicy(sizePolicy2)
 
         self.BaseConfigureLayout.addWidget(self.CameraORVideos)
+
+        self.Tracker = QRadioButton(self.BaseToolsGroup)
+        self.Tracker.setObjectName(u"Tracker")
+        sizePolicy2.setHeightForWidth(self.Tracker.sizePolicy().hasHeightForWidth())
+        self.Tracker.setSizePolicy(sizePolicy2)
+
+        self.BaseConfigureLayout.addWidget(self.Tracker)
 
 
         self.BaseToolsLayout.addLayout(self.BaseConfigureLayout)
@@ -244,6 +251,27 @@ class Ui_Inferencer(object):
 
         self.EngineDeviceLayout.addLayout(self.DeviceLayout)
 
+        self.TrackerLayout = QHBoxLayout()
+        self.TrackerLayout.setObjectName(u"TrackerLayout")
+        self.TrackerLabel = QLabel(self.BaseToolsGroup)
+        self.TrackerLabel.setObjectName(u"TrackerLabel")
+
+        self.TrackerLayout.addWidget(self.TrackerLabel)
+
+        self.TrackerSelection = QComboBox(self.BaseToolsGroup)
+        self.TrackerSelection.addItem("")
+        self.TrackerSelection.addItem("")
+        self.TrackerSelection.setObjectName(u"TrackerSelection")
+        sizePolicy3.setHeightForWidth(self.TrackerSelection.sizePolicy().hasHeightForWidth())
+        self.TrackerSelection.setSizePolicy(sizePolicy3)
+        self.TrackerSelection.setMinimumSize(QSize(0, 25))
+        self.TrackerSelection.setMaximumSize(QSize(16777215, 25))
+
+        self.TrackerLayout.addWidget(self.TrackerSelection)
+
+
+        self.EngineDeviceLayout.addLayout(self.TrackerLayout)
+
 
         self.BaseToolsLayout.addLayout(self.EngineDeviceLayout)
 
@@ -269,17 +297,8 @@ class Ui_Inferencer(object):
 
         self.BaseToolsGroupLayout.addLayout(self.BaseToolsLayout)
 
-        self.PrintInformation = QLabel(self.BaseToolsGroup)
-        self.PrintInformation.setObjectName(u"PrintInformation")
-        sizePolicy2.setHeightForWidth(self.PrintInformation.sizePolicy().hasHeightForWidth())
-        self.PrintInformation.setSizePolicy(sizePolicy2)
-        self.PrintInformation.setMinimumSize(QSize(0, 25))
-        self.PrintInformation.setMaximumSize(QSize(16777215, 25))
 
-        self.BaseToolsGroupLayout.addWidget(self.PrintInformation)
-
-
-        self.BaseConfigure.addWidget(self.BaseToolsGroup)
+        self.ConfigureLayout.addWidget(self.BaseToolsGroup)
 
         self.ShowToolsGroup = QGroupBox(Inferencer)
         self.ShowToolsGroup.setObjectName(u"ShowToolsGroup")
@@ -344,52 +363,75 @@ class Ui_Inferencer(object):
 
         self.ShowToolsGroupVLayout.addLayout(self.SaveIoUConfLayout)
 
-        self.ShowLayout = QHBoxLayout()
-        self.ShowLayout.setSpacing(0)
-        self.ShowLayout.setObjectName(u"ShowLayout")
-        self.ShowLayout.setSizeConstraint(QLayout.SizeConstraint.SetDefaultConstraint)
+        self.MainShowLayout = QHBoxLayout()
+        self.MainShowLayout.setObjectName(u"MainShowLayout")
         self.Show = QCheckBox(self.ShowToolsGroup)
         self.Show.setObjectName(u"Show")
-        sizePolicy4.setHeightForWidth(self.Show.sizePolicy().hasHeightForWidth())
-        self.Show.setSizePolicy(sizePolicy4)
-        self.Show.setMinimumSize(QSize(120, 25))
-        self.Show.setMaximumSize(QSize(120, 25))
+        sizePolicy2.setHeightForWidth(self.Show.sizePolicy().hasHeightForWidth())
+        self.Show.setSizePolicy(sizePolicy2)
 
-        self.ShowLayout.addWidget(self.Show)
+        self.MainShowLayout.addWidget(self.Show)
 
         self.Backgroud = QCheckBox(self.ShowToolsGroup)
         self.Backgroud.setObjectName(u"Backgroud")
         self.Backgroud.setEnabled(True)
         sizePolicy2.setHeightForWidth(self.Backgroud.sizePolicy().hasHeightForWidth())
         self.Backgroud.setSizePolicy(sizePolicy2)
-        self.Backgroud.setMinimumSize(QSize(120, 25))
         self.Backgroud.setTristate(True)
 
-        self.ShowLayout.addWidget(self.Backgroud)
+        self.MainShowLayout.addWidget(self.Backgroud)
 
-
-        self.ShowToolsGroupVLayout.addLayout(self.ShowLayout)
-
-        self.ShowClassesLayout = QHBoxLayout()
-        self.ShowClassesLayout.setObjectName(u"ShowClassesLayout")
         self.ShowClasses = QCheckBox(self.ShowToolsGroup)
         self.ShowClasses.setObjectName(u"ShowClasses")
-        sizePolicy4.setHeightForWidth(self.ShowClasses.sizePolicy().hasHeightForWidth())
-        self.ShowClasses.setSizePolicy(sizePolicy4)
-        self.ShowClasses.setMinimumSize(QSize(120, 25))
-        self.ShowClasses.setMaximumSize(QSize(120, 25))
+        sizePolicy2.setHeightForWidth(self.ShowClasses.sizePolicy().hasHeightForWidth())
+        self.ShowClasses.setSizePolicy(sizePolicy2)
 
-        self.ShowClassesLayout.addWidget(self.ShowClasses)
+        self.MainShowLayout.addWidget(self.ShowClasses)
 
-        self.Classes = QLabel(self.ShowToolsGroup)
-        self.Classes.setObjectName(u"Classes")
-        self.Classes.setMinimumSize(QSize(0, 25))
-        self.Classes.setMaximumSize(QSize(16777215, 25))
+        self.ShowTrackerID = QCheckBox(self.ShowToolsGroup)
+        self.ShowTrackerID.setObjectName(u"ShowTrackerID")
+        sizePolicy2.setHeightForWidth(self.ShowTrackerID.sizePolicy().hasHeightForWidth())
+        self.ShowTrackerID.setSizePolicy(sizePolicy2)
 
-        self.ShowClassesLayout.addWidget(self.Classes)
+        self.MainShowLayout.addWidget(self.ShowTrackerID)
 
 
-        self.ShowToolsGroupVLayout.addLayout(self.ShowClassesLayout)
+        self.ShowToolsGroupVLayout.addLayout(self.MainShowLayout)
+
+        self.ShowInfoLayput = QHBoxLayout()
+        self.ShowInfoLayput.setObjectName(u"ShowInfoLayput")
+        self.FPSShow = QCheckBox(self.ShowToolsGroup)
+        self.FPSShow.setObjectName(u"FPSShow")
+        sizePolicy2.setHeightForWidth(self.FPSShow.sizePolicy().hasHeightForWidth())
+        self.FPSShow.setSizePolicy(sizePolicy2)
+
+        self.ShowInfoLayput.addWidget(self.FPSShow)
+
+        self.PreprocessTime = QCheckBox(self.ShowToolsGroup)
+        self.PreprocessTime.setObjectName(u"PreprocessTime")
+        self.PreprocessTime.setEnabled(True)
+        sizePolicy2.setHeightForWidth(self.PreprocessTime.sizePolicy().hasHeightForWidth())
+        self.PreprocessTime.setSizePolicy(sizePolicy2)
+        self.PreprocessTime.setTristate(True)
+
+        self.ShowInfoLayput.addWidget(self.PreprocessTime)
+
+        self.InferenceTime = QCheckBox(self.ShowToolsGroup)
+        self.InferenceTime.setObjectName(u"InferenceTime")
+        sizePolicy2.setHeightForWidth(self.InferenceTime.sizePolicy().hasHeightForWidth())
+        self.InferenceTime.setSizePolicy(sizePolicy2)
+
+        self.ShowInfoLayput.addWidget(self.InferenceTime)
+
+        self.PostprocessTime = QCheckBox(self.ShowToolsGroup)
+        self.PostprocessTime.setObjectName(u"PostprocessTime")
+        sizePolicy2.setHeightForWidth(self.PostprocessTime.sizePolicy().hasHeightForWidth())
+        self.PostprocessTime.setSizePolicy(sizePolicy2)
+
+        self.ShowInfoLayput.addWidget(self.PostprocessTime)
+
+
+        self.ShowToolsGroupVLayout.addLayout(self.ShowInfoLayput)
 
         self.ShowKeypointsLayout = QHBoxLayout()
         self.ShowKeypointsLayout.setObjectName(u"ShowKeypointsLayout")
@@ -467,10 +509,10 @@ class Ui_Inferencer(object):
         self.ShowToolsGroupVLayout.addLayout(self.ShowBBoxLayout)
 
 
-        self.BaseConfigure.addWidget(self.ShowToolsGroup)
+        self.ConfigureLayout.addWidget(self.ShowToolsGroup)
 
 
-        self.InferencerLayout.addLayout(self.BaseConfigure)
+        self.InferencerLayout.addLayout(self.ConfigureLayout)
 
         self.DisplayGroup = QGroupBox(Inferencer)
         self.DisplayGroup.setObjectName(u"DisplayGroup")
@@ -507,6 +549,7 @@ class Ui_Inferencer(object):
         self.SelectConfigure.setText(QCoreApplication.translate("Inferencer", u"Select Configure", None))
         self.SelectWeights.setText(QCoreApplication.translate("Inferencer", u"Select Weights", None))
         self.CameraORVideos.setText(QCoreApplication.translate("Inferencer", u"Use Video", None))
+        self.Tracker.setText(QCoreApplication.translate("Inferencer", u"Tracker", None))
         self.CameraVideosSelection.setItemText(0, QCoreApplication.translate("Inferencer", u"...", None))
         self.CameraVideosSelection.setItemText(1, QCoreApplication.translate("Inferencer", u"Select video file...", None))
 
@@ -520,8 +563,8 @@ class Ui_Inferencer(object):
         self.ModelBits.setItemText(2, QCoreApplication.translate("Inferencer", u"INT8", None))
 
         self.EngineLabel.setText(QCoreApplication.translate("Inferencer", u"Engine", None))
-        self.EngineSelection.setItemText(0, QCoreApplication.translate("Inferencer", u"OpenCV", None))
-        self.EngineSelection.setItemText(1, QCoreApplication.translate("Inferencer", u"ONNX", None))
+        self.EngineSelection.setItemText(0, QCoreApplication.translate("Inferencer", u"ONNX", None))
+        self.EngineSelection.setItemText(1, QCoreApplication.translate("Inferencer", u"OpenCV", None))
         self.EngineSelection.setItemText(2, QCoreApplication.translate("Inferencer", u"OpenVINO", None))
         self.EngineSelection.setItemText(3, QCoreApplication.translate("Inferencer", u"TensorRT", None))
         self.EngineSelection.setItemText(4, QCoreApplication.translate("Inferencer", u"CoreML", None))
@@ -537,9 +580,12 @@ class Ui_Inferencer(object):
         self.DeviceSelection.setItemText(6, QCoreApplication.translate("Inferencer", u"ARM CPU", None))
         self.DeviceSelection.setItemText(7, QCoreApplication.translate("Inferencer", u"Ascend NPU", None))
 
+        self.TrackerLabel.setText(QCoreApplication.translate("Inferencer", u"Tracker Engine", None))
+        self.TrackerSelection.setItemText(0, QCoreApplication.translate("Inferencer", u"ByteTrack", None))
+        self.TrackerSelection.setItemText(1, QCoreApplication.translate("Inferencer", u"BoTSort", None))
+
         self.Start.setText(QCoreApplication.translate("Inferencer", u"Start", None))
         self.End.setText(QCoreApplication.translate("Inferencer", u"End", None))
-        self.PrintInformation.setText(QCoreApplication.translate("Inferencer", u"Some print information", None))
         self.ShowToolsGroup.setTitle("")
         self.Save.setText(QCoreApplication.translate("Inferencer", u"Save", None))
         self.IoULabel.setText(QCoreApplication.translate("Inferencer", u"IoU", None))
@@ -547,7 +593,11 @@ class Ui_Inferencer(object):
         self.Show.setText(QCoreApplication.translate("Inferencer", u"Show", None))
         self.Backgroud.setText(QCoreApplication.translate("Inferencer", u"Original", None))
         self.ShowClasses.setText(QCoreApplication.translate("Inferencer", u"Show Classes", None))
-        self.Classes.setText("")
+        self.ShowTrackerID.setText(QCoreApplication.translate("Inferencer", u"Show Track ID", None))
+        self.FPSShow.setText(QCoreApplication.translate("Inferencer", u"FPS", None))
+        self.PreprocessTime.setText(QCoreApplication.translate("Inferencer", u"Preprocess Time", None))
+        self.InferenceTime.setText(QCoreApplication.translate("Inferencer", u"Inference Time", None))
+        self.PostprocessTime.setText(QCoreApplication.translate("Inferencer", u"Postprecoess Time", None))
         self.ShowKeypoints.setText(QCoreApplication.translate("Inferencer", u"Show Keypoints", None))
         self.ShowSkeletons.setText(QCoreApplication.translate("Inferencer", u"Show Skeletons", None))
         self.ShowBBox.setText(QCoreApplication.translate("Inferencer", u"Show BBox", None))

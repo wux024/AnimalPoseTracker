@@ -226,6 +226,45 @@ class VisualizeThread(BaseThread):
         finally:
             self.safe_stop()
 
+class TrackerThread(BaseThread):
+    """Thread to run tracking"""
+    # frame, results
+    data_ready = Signal(np.ndarray, dict)
+    def __init__(self, parent=None,
+                 tracker_function=None,
+                 input_queue=None):
+        super().__init__(parent)
+        self._tracker_function = tracker_function
+        self.input_queue = input_queue
+
+    @property
+    def tracker_function(self):
+        return self._tracker_function
+
+    @tracker_function.setter
+    def tracker_function(self, value):
+        self._tracker_function = value
+
+    def run(self):
+        try:
+            self._lock.lock()
+            self.running = True
+            self._lock.unlock()
+            while self.is_running:
+                try:
+                    frame, results = self.input_queue.get(timeout=1, block=True)
+                    tracked_results = self._tracker_function(results)
+                    self.data_ready.emit(frame, tracked_results)
+                except queue.Empty:
+                    pass
+                except queue.Full:
+                    pass
+        except Exception as e:
+            error_info = traceback.format_exc()
+            self.status_update.emit(f"(TrackerThread) Unexpected error: \n{error_info}")
+        finally:
+            self.safe_stop()    
+
 class VideoWriterThread(BaseThread):
     """Thread to run video writing"""
     def __init__(self, save_path=None, fps=30, frame_size=(640, 480)):
