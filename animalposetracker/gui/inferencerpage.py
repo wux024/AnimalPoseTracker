@@ -627,16 +627,14 @@ class InferencerPage(QWidget, Ui_Inferencer):
         self.videoreader_thread.start()
         mode = "Camera" if self.CameraORVideos.isChecked() else "Video"
         self.CheckCameraVideosConnect.setText(f"Close {mode}")
-    
+
     def _stop_preview(self):
         """Stop camera/video preview"""
         self.videoreader_thread.safe_stop()
-        self.videoreader_thread.data_ready.disconnect()
-        self.videoreader_thread.finished.disconnect()
         self.Display.clear()
         mode = "Camera" if self.CameraORVideos.isChecked() else "Video"
         self.CheckCameraVideosConnect.setText(f"Preview {mode}")
-    
+
     def display_preview_frame(self, frame):
         """Handle new frame from camera/video source"""
 
