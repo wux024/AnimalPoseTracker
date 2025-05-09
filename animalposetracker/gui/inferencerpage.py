@@ -45,7 +45,6 @@ class InferencerPage(QWidget, Ui_Inferencer):
         self.visualize_thread = None
 
         self.data_config_path = None
-        self.data_config = dict()
         self.weights_path = None
 
         self.platform = self._detect_platform()
@@ -63,8 +62,6 @@ class InferencerPage(QWidget, Ui_Inferencer):
 
         # Connect all signals to their respective slots
         self.setupConnections()
-        # Set default visualization configuration
-        self._init_visualization_config()
 
     def setupConnections(self):
         """Connect all UI signals to their corresponding slot functions"""
@@ -108,6 +105,7 @@ class InferencerPage(QWidget, Ui_Inferencer):
         self.PreprocessTime.stateChanged.connect(self.onPreprocessTimeStateChanged)
         self.InferenceTime.stateChanged.connect(self.onInferenceTimeStateChanged)
         self.PostprocessTime.stateChanged.connect(self.onPostprocessTimeStateChanged)
+        self.FontScale.valueChanged.connect(self.onFontScaleChanged)
 
     def tools_enabled(self):
         self.CheckCameraVideosConnect.setEnabled(True)
@@ -122,7 +120,6 @@ class InferencerPage(QWidget, Ui_Inferencer):
         self.Show.setEnabled(True)
         self.Backgroud.setEnabled(True)
         self.ShowClasses.setEnabled(True)
-        self.Classes.setEnabled(True)
         self.ShowKeypoints.setEnabled(True)
         self.ShowKeypointsRadius.setEnabled(True)
         self.ShowSkeletons.setEnabled(True)
@@ -147,7 +144,6 @@ class InferencerPage(QWidget, Ui_Inferencer):
         self.Show.setEnabled(False)
         self.Backgroud.setEnabled(False)
         self.ShowClasses.setEnabled(False)
-        self.Classes.setEnabled(False)
         self.ShowKeypoints.setEnabled(False)
         self.ShowKeypointsRadius.setEnabled(False)
         self.ShowSkeletons.setEnabled(False)
@@ -622,6 +618,27 @@ class InferencerPage(QWidget, Ui_Inferencer):
                 Qt.QueuedConnection,
                 Q_ARG(QPixmap, pixmap)
             )
+    
+
+    def _init_visualization_config(self):
+        """Initialize visualization configuration"""
+        return {
+            'conf': self.Conf.value(),
+            'iou': self.IoU.value(),
+           'show_classes': self.ShowClasses.isChecked(),
+           'show_keypoints': self.ShowKeypoints.isChecked(),
+           'show_skeletons': self.ShowSkeletons.isChecked(),
+           'show_bbox': self.ShowBBox.isChecked(),
+            'radius': self.ShowKeypointsRadius.value(),
+           'skeleton_line_width': self.ShowSkeletonsLineWidth.value(),
+            'bbox_line_width': self.ShowBBoxWidth.value(),
+            'background': self.Backgroud.text(),
+            'show_fps': self.FPSShow.isChecked(),
+           'show_preprocess_time': self.PreprocessTime.isChecked(),
+           'show_inference_time': self.InferenceTime.isChecked(),
+           'show_postprocess_time': self.PostprocessTime.isChecked(),
+            'font_scale': self.FontScale.value() / 10.0,
+        }
         
 
     def _init_inference_threads(self):
@@ -674,7 +691,7 @@ class InferencerPage(QWidget, Ui_Inferencer):
 
         # Set up visualization thread
         self.visualize_thread.visualize_function = self.inference.visualize
-        self.visualize_thread.data_ready.connect(self.put_visualize_data)
+        self.visualize_thread.data_ready.connect(self.put_visualized_data)
         self.visualize_thread.status_update.connect(self.thread_status)
 
         # Set up display thread
@@ -892,6 +909,7 @@ class InferencerPage(QWidget, Ui_Inferencer):
             self.inference.engine = self.engine
             self.inference.device = self.device
             self.inference.model_bits = self.model_bits
+            self.inference.update_config(self._init_visualization_config())
             self.inference.model_init()
             # init threads
             self._init_inference_threads()
@@ -983,6 +1001,10 @@ class InferencerPage(QWidget, Ui_Inferencer):
     def onPostprocessTimeStateChanged(self, state):
         """Handle changes to the Show Postprocess Time checkbox state"""
         self.inference.update_config({"show_postprocess_time": bool(state)})
+    
+    def onFontScaleChanged(self, value):
+        """Handle changes to the Font Scale slider value"""
+        self.inference.update_config({"font_scale": value / 10.0})
     
     def closeEvent(self, event):
         """Handle window close event"""

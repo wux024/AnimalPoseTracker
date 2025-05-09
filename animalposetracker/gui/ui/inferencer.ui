@@ -24,11 +24,11 @@
   </property>
   <property name="windowIcon">
    <iconset>
-    <normaloff>media/logo.png</normaloff>media/logo.png</iconset>
+    <normaloff>C:/Users/wux024/.designer/backup/media/logo.png</normaloff>C:/Users/wux024/.designer/backup/media/logo.png</iconset>
   </property>
   <layout class="QVBoxLayout" name="InferencerLayout">
    <item>
-    <layout class="QHBoxLayout" name="BaseConfigure">
+    <layout class="QHBoxLayout" name="ConfigureLayout">
      <item>
       <widget class="QGroupBox" name="BaseToolsGroup">
        <property name="sizePolicy">
@@ -319,12 +319,12 @@
                 </property>
                 <item>
                  <property name="text">
-                  <string>OpenCV</string>
+                  <string>ONNX</string>
                  </property>
                 </item>
                 <item>
                  <property name="text">
-                  <string>ONNX</string>
+                  <string>OpenCV</string>
                  </property>
                 </item>
                 <item>
@@ -424,6 +424,9 @@
               </item>
              </layout>
             </item>
+            <item>
+             <layout class="QHBoxLayout" name="TrackerLayout"/>
+            </item>
            </layout>
           </item>
           <item>
@@ -469,31 +472,6 @@
            </layout>
           </item>
          </layout>
-        </item>
-        <item>
-         <widget class="QLabel" name="PrintInformation">
-          <property name="sizePolicy">
-           <sizepolicy hsizetype="Preferred" vsizetype="Fixed">
-            <horstretch>0</horstretch>
-            <verstretch>0</verstretch>
-           </sizepolicy>
-          </property>
-          <property name="minimumSize">
-           <size>
-            <width>0</width>
-            <height>25</height>
-           </size>
-          </property>
-          <property name="maximumSize">
-           <size>
-            <width>16777215</width>
-            <height>25</height>
-           </size>
-          </property>
-          <property name="text">
-           <string>Some print information</string>
-          </property>
-         </widget>
         </item>
        </layout>
       </widget>
@@ -600,32 +578,14 @@
          </layout>
         </item>
         <item>
-         <layout class="QHBoxLayout" name="ShowLayout">
-          <property name="spacing">
-           <number>0</number>
-          </property>
-          <property name="sizeConstraint">
-           <enum>QLayout::SizeConstraint::SetDefaultConstraint</enum>
-          </property>
+         <layout class="QHBoxLayout" name="MainShowLayout">
           <item>
            <widget class="QCheckBox" name="Show">
             <property name="sizePolicy">
-             <sizepolicy hsizetype="Fixed" vsizetype="Fixed">
+             <sizepolicy hsizetype="Preferred" vsizetype="Fixed">
               <horstretch>0</horstretch>
               <verstretch>0</verstretch>
              </sizepolicy>
-            </property>
-            <property name="minimumSize">
-             <size>
-              <width>120</width>
-              <height>25</height>
-             </size>
-            </property>
-            <property name="maximumSize">
-             <size>
-              <width>120</width>
-              <height>25</height>
-             </size>
             </property>
             <property name="text">
              <string>Show</string>
@@ -643,12 +603,6 @@
               <verstretch>0</verstretch>
              </sizepolicy>
             </property>
-            <property name="minimumSize">
-             <size>
-              <width>120</width>
-              <height>25</height>
-             </size>
-            </property>
             <property name="text">
              <string>Original</string>
             </property>
@@ -657,12 +611,87 @@
             </property>
            </widget>
           </item>
+          <item>
+           <widget class="QCheckBox" name="ShowClasses">
+            <property name="sizePolicy">
+             <sizepolicy hsizetype="Preferred" vsizetype="Fixed">
+              <horstretch>0</horstretch>
+              <verstretch>0</verstretch>
+             </sizepolicy>
+            </property>
+            <property name="text">
+             <string>Show Classes</string>
+            </property>
+           </widget>
+          </item>
          </layout>
         </item>
         <item>
-         <layout class="QHBoxLayout" name="ShowClassesLayout">
+         <layout class="QHBoxLayout" name="ShowInfoLayput">
           <item>
-           <widget class="QCheckBox" name="ShowClasses">
+           <widget class="QCheckBox" name="FPSShow">
+            <property name="sizePolicy">
+             <sizepolicy hsizetype="Preferred" vsizetype="Fixed">
+              <horstretch>0</horstretch>
+              <verstretch>0</verstretch>
+             </sizepolicy>
+            </property>
+            <property name="text">
+             <string>FPS</string>
+            </property>
+           </widget>
+          </item>
+          <item>
+           <widget class="QCheckBox" name="PreprocessTime">
+            <property name="enabled">
+             <bool>true</bool>
+            </property>
+            <property name="sizePolicy">
+             <sizepolicy hsizetype="Preferred" vsizetype="Fixed">
+              <horstretch>0</horstretch>
+              <verstretch>0</verstretch>
+             </sizepolicy>
+            </property>
+            <property name="text">
+             <string>Preprocess Time</string>
+            </property>
+            <property name="tristate">
+             <bool>true</bool>
+            </property>
+           </widget>
+          </item>
+          <item>
+           <widget class="QCheckBox" name="InferenceTime">
+            <property name="sizePolicy">
+             <sizepolicy hsizetype="Preferred" vsizetype="Fixed">
+              <horstretch>0</horstretch>
+              <verstretch>0</verstretch>
+             </sizepolicy>
+            </property>
+            <property name="text">
+             <string>Inference Time</string>
+            </property>
+           </widget>
+          </item>
+          <item>
+           <widget class="QCheckBox" name="PostprocessTime">
+            <property name="sizePolicy">
+             <sizepolicy hsizetype="Preferred" vsizetype="Fixed">
+              <horstretch>0</horstretch>
+              <verstretch>0</verstretch>
+             </sizepolicy>
+            </property>
+            <property name="text">
+             <string>Postprecoess Time</string>
+            </property>
+           </widget>
+          </item>
+         </layout>
+        </item>
+        <item>
+         <layout class="QHBoxLayout" name="FontScaleLayout">
+          <item>
+           <widget class="QLabel" name="FontScaleLabel">
             <property name="sizePolicy">
              <sizepolicy hsizetype="Fixed" vsizetype="Fixed">
               <horstretch>0</horstretch>
@@ -682,26 +711,26 @@
              </size>
             </property>
             <property name="text">
-             <string>Show Classes</string>
+             <string>Font Scale</string>
             </property>
            </widget>
           </item>
           <item>
-           <widget class="QLabel" name="Classes">
-            <property name="minimumSize">
-             <size>
-              <width>0</width>
-              <height>25</height>
-             </size>
+           <widget class="QSlider" name="FontScale">
+            <property name="minimum">
+             <number>1</number>
             </property>
-            <property name="maximumSize">
-             <size>
-              <width>16777215</width>
-              <height>25</height>
-             </size>
+            <property name="maximum">
+             <number>100</number>
             </property>
-            <property name="text">
-             <string/>
+            <property name="pageStep">
+             <number>1</number>
+            </property>
+            <property name="value">
+             <number>10</number>
+            </property>
+            <property name="orientation">
+             <enum>Qt::Orientation::Horizontal</enum>
             </property>
            </widget>
           </item>

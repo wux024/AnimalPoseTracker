@@ -33,6 +33,7 @@ class InferenceEngine:
                  show_preprocess_time: bool = True,
                  show_inference_time: bool = True,
                  show_postprocess_time: bool = True,
+                 font_scale: float = 1.0,
                  ):
         self.model = None
         self._weights_path = weights_path
@@ -58,6 +59,7 @@ class InferenceEngine:
            'show_preprocess_time': show_preprocess_time,
            'show_inference_time': show_inference_time,
            'show_postprocess_time': show_postprocess_time,
+            'font_scale': font_scale,
         }
         self._data_config = None
         self._load_config(config)
@@ -67,15 +69,10 @@ class InferenceEngine:
         return self._data_config
 
     @data_config.setter
-    def data_config(self, config: Union[str, Path]):
+    def data_config(self, config: Union[str, Path, Dict]):
         self._data_config = config
-        if isinstance(config, str):
-            self._update_config_vars()
-        elif isinstance(config, Path):
-            self._data_config = str(config)
-            self._update_config_vars()
-        else:
-            raise ValueError("Invalid data config type. Please provide either a string or a Path object.")
+        self._update_config_vars()
+        
     
     @property
     def engine(self):
@@ -138,10 +135,15 @@ class InferenceEngine:
     def _update_config_vars(self):
         if self._data_config is None:
             return
-
-        # Load the data config file
-        with open(self._data_config, 'r') as f:
-            config = yaml.load(f, Loader=yaml.FullLoader)
+        
+        if isinstance(self._data_config, str or Path):
+            # Load the data config file
+            with open(self._data_config, 'r') as f:
+                config = yaml.load(f, Loader=yaml.FullLoader)
+        elif isinstance(self._data_config, dict):
+            config = self._data_config
+        else:
+            raise ValueError("Invalid data config type. Please provide either a path to a YAML file or a dictionary.")
 
         self.classes = config.get('classes_name', [])
         self.keypoints = config.get('keypoints_name', [])
@@ -159,9 +161,8 @@ class InferenceEngine:
             else:
                 raise ValueError(f"Invalid key {key} in config. Please choose from {self.visualize_config.keys()}")
 
-    def _load_config(self, config: Union[str, Path] = None):
+    def _load_config(self, config: Union[str, Path, Dict] = None):
         self.data_config = config
-        self._update_config_vars()
 
     def model_init(self):
         engine_init_method = {
@@ -746,12 +747,16 @@ class InferenceEngine:
             )
 
             # Draw the label text on the image
+            font_scale = self._input_height /  960.0 * self.visualize_config['font_scale']
+            thickness = max(1, int(font_scale))
+
             cv2.putText(img, label,
                         (label_x, label_y),
                         cv2.FONT_HERSHEY_SIMPLEX,
-                        0.5,
+                        font_scale,
                         (0, 0, 0),
-                        1, cv2.LINE_AA)
+                        thickness, 
+                        cv2.LINE_AA)
 
     def draw_keypoints(self, img, keypoints, radius=5):
         for i, keypoint in enumerate(keypoints):
@@ -835,16 +840,15 @@ class InferenceEngine:
             'fps': 'FPS: {:.1f} FPS'.format(results['fps'])
         }
 
-        font_scale = self._input_height /  960.0
+        font_scale = self._input_height /  960.0 * self.visualize_config['font_scale']
         thickness = max(1, int(font_scale))
         
-        line_height = int(self._input_height * 0.04)
+        line_height = int(self._input_height * 0.04 * self.visualize_config['font_scale'])
         x, y = int(self._input_width * 0.02), int(self._input_height * 0.05)
 
         font_color=(0, 255, 0)
 
         if self.visualize_config['show_fps']:
-        
             cv2.putText(frame, 
                         f"FPS: {times['fps']}", 
                         (x, y), 
@@ -853,7 +857,7 @@ class InferenceEngine:
                         font_color, 
                         thickness, 
                         cv2.LINE_AA)
-        y += line_height
+            y += line_height
 
         if self.visualize_config['show_preprocess_time']:
             cv2.putText(frame, 
@@ -861,7 +865,7 @@ class InferenceEngine:
                         (x, y), 
                         cv2.FONT_HERSHEY_SIMPLEX, 
                         font_scale, font_color, thickness, cv2.LINE_AA)
-        y += line_height
+            y += line_height
 
         if self.visualize_config['show_inference_time']:
             cv2.putText(frame, 
@@ -869,7 +873,7 @@ class InferenceEngine:
                         (x, y), 
                         cv2.FONT_HERSHEY_SIMPLEX, 
                         font_scale, font_color, thickness, cv2.LINE_AA)
-        y += line_height
+            y += line_height
         
         if self.visualize_config['show_postprocess_time']:
             cv2.putText(frame, 
