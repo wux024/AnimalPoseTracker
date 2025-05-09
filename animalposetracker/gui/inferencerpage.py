@@ -487,19 +487,56 @@ class InferencerPage(QWidget, Ui_Inferencer):
         self.CameraVideosSelection.setEnabled(True)
         self.CheckCameraVideosConnect.setText("Preview Video")
 
-    def _detect_available_cameras(self) -> list:
+    def _detect_available_cameras(self):
         """Detects available cameras.   
         Returns:
             list: List of available cameras with their indices as keys.
         """
-        try:
-            from PyCameraList.camera_device import list_video_devices
-            self.camera_list ={
-                device[1]: device[0] for device in list_video_devices()
-            }
-        except:
-            self.camera_list = {}
-
+        system_name = sys.platform
+        if system_name == 'win32':
+            try:
+                from PyCameraList.camera_device import list_video_devices
+                self.camera_list ={
+                    device[1]: device[0] for device in list_video_devices()
+                }
+            except ImportError:
+                raise ImportError("Please install 'PyCameraList' module")
+        elif system_name == 'linux':
+            import subprocess
+            output = subprocess.check_output("ls /dev/video* 2>/dev/null", 
+                                             shell=True, 
+                                             text=True)
+            video_devices = output.strip().split('\n')
+            for device in video_devices:
+                try:
+                    index = int(device.split('/')[-1].replace('video', ''))
+                    cap = cv2.VideoCapture(index)
+                    if cap.isOpened():
+                        name = f"Camera {index}"
+                        self.camera_list.update({
+                            name: index
+                        })
+                        cap.release()
+                except:
+                    continue
+        elif system_name == 'darwin':
+            index = 0
+            while True:
+                try:
+                    cap = cv2.VideoCapture(index)
+                    if not cap.isOpened():
+                        break
+                    name = f"Camera {index}"
+                    self.camera_list.update({
+                        name: index
+                    })
+                    cap.release()
+                    index += 1
+                except:
+                    continue
+        else:
+            raise ValueError(f"Unsupported platform: {system_name}")
+            
     def _select_video_file(self):
         """Handle media file selection"""
         options = QFileDialog.Options()
