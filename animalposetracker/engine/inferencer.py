@@ -28,7 +28,11 @@ class InferenceEngine:
                  show_bbox: bool = False,
                  radius: int = 5,
                  skeleton_line_width: int = 2,
-                 bbox_line_width: int = 2
+                 bbox_line_width: int = 2,
+                 show_fps: bool = True,
+                 show_preprocess_time: bool = True,
+                 show_inference_time: bool = True,
+                 show_postprocess_time: bool = True,
                  ):
         self.model = None
         self._weights_path = weights_path
@@ -49,7 +53,11 @@ class InferenceEngine:
             'radius': radius,
            'skeleton_line_width': skeleton_line_width,
             'bbox_line_width': bbox_line_width,
-            'background': background
+            'background': background,
+            'show_fps': show_fps,
+           'show_preprocess_time': show_preprocess_time,
+           'show_inference_time': show_inference_time,
+           'show_postprocess_time': show_postprocess_time,
         }
         self._data_config = None
         self._load_config(config)
@@ -59,9 +67,15 @@ class InferenceEngine:
         return self._data_config
 
     @data_config.setter
-    def data_config(self, config):
+    def data_config(self, config: Union[str, Path]):
         self._data_config = config
-        self._update_config_vars()
+        if isinstance(config, str):
+            self._update_config_vars()
+        elif isinstance(config, Path):
+            self._data_config = str(config)
+            self._update_config_vars()
+        else:
+            raise ValueError("Invalid data config type. Please provide either a string or a Path object.")
     
     @property
     def engine(self):
@@ -122,11 +136,11 @@ class InferenceEngine:
 
 
     def _update_config_vars(self):
-        if self.data_config is None:
+        if self._data_config is None:
             return
 
         # Load the data config file
-        with open(self.data_config, 'r') as f:
+        with open(self._data_config, 'r') as f:
             config = yaml.load(f, Loader=yaml.FullLoader)
 
         self.classes = config.get('classes_name', [])
@@ -425,8 +439,6 @@ class InferenceEngine:
             self._input_width = input_layer_shape[2]
             self._input_height = input_layer_shape[3]
 
-
-            
         except ImportError:
             raise ImportError("Please install tensorrt and pycuda to use TensorRT engine.")
         except FileNotFoundError:
@@ -628,7 +640,7 @@ class InferenceEngine:
                 'boxes': boxes,
                 'keypoints_list': keypoints_list,
                 'class_ids': class_ids,
-               'scores': scores,
+                'scores': scores,
             }
         else:
             results = {
@@ -677,7 +689,14 @@ class InferenceEngine:
         except ImportError:
             raise ImportError("Please install tensorrt and pycuda to use TensorRT engine.")
 
-    def draw_detections(self, img, box, score, class_id, line_width=2, bbox=True, classes=True):
+    def draw_detections(self, 
+                        img, 
+                        box, 
+                        score, 
+                        class_id, 
+                        line_width=2, 
+                        bbox=False, 
+                        classes=False):
         """
         Draws bounding boxes and labels on the input image based on the detected objects.
 
@@ -823,27 +842,41 @@ class InferenceEngine:
         x, y = int(self._input_width * 0.02), int(self._input_height * 0.05)
 
         font_color=(0, 255, 0)
+
+        if self.visualize_config['show_fps']:
         
-        cv2.putText(frame, 
-                    f"FPS: {times['fps']}", 
-                    (x, y), 
-                    cv2.FONT_HERSHEY_SIMPLEX, 
-                    font_scale, 
-                    font_color, 
-                    thickness, 
-                    cv2.LINE_AA)
+            cv2.putText(frame, 
+                        f"FPS: {times['fps']}", 
+                        (x, y), 
+                        cv2.FONT_HERSHEY_SIMPLEX, 
+                        font_scale, 
+                        font_color, 
+                        thickness, 
+                        cv2.LINE_AA)
+        y += line_height
+
+        if self.visualize_config['show_preprocess_time']:
+            cv2.putText(frame, 
+                        f"Preprocess: {times['preprocess_time']}ms", 
+                        (x, y), 
+                        cv2.FONT_HERSHEY_SIMPLEX, 
+                        font_scale, font_color, thickness, cv2.LINE_AA)
+        y += line_height
+
+        if self.visualize_config['show_inference_time']:
+            cv2.putText(frame, 
+                        f"Inference: {times['inference_time']}ms", 
+                        (x, y), 
+                        cv2.FONT_HERSHEY_SIMPLEX, 
+                        font_scale, font_color, thickness, cv2.LINE_AA)
         y += line_height
         
-        cv2.putText(frame, f"Preprocess: {times['preprocess_time']}ms", (x, y), 
-                    cv2.FONT_HERSHEY_SIMPLEX, font_scale, font_color, thickness, cv2.LINE_AA)
-        y += line_height
-        
-        cv2.putText(frame, f"Inference: {times['inference_time']}ms", (x, y), 
-                    cv2.FONT_HERSHEY_SIMPLEX, font_scale, font_color, thickness, cv2.LINE_AA)
-        y += line_height
-        
-        cv2.putText(frame, f"Postprocess: {times['postprocess_time']}ms", (x, y), 
-                    cv2.FONT_HERSHEY_SIMPLEX, font_scale, font_color, thickness, cv2.LINE_AA)
+        if self.visualize_config['show_postprocess_time']:
+            cv2.putText(frame, 
+                        f"Postprocess: {times['postprocess_time']}ms", 
+                        (x, y), 
+                        cv2.FONT_HERSHEY_SIMPLEX, 
+                        font_scale, font_color, thickness, cv2.LINE_AA)
         
         return frame
     
