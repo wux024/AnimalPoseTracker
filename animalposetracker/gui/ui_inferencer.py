@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 
 ################################################################################
-## Form generated from reading UI file 'inferencerUdTRPP.ui'
+## Form generated from reading UI file 'inferencersrYFOJ.ui'
 ##
 ## Created by: Qt User Interface Compiler version 6.8.2
 ##
@@ -50,6 +50,7 @@ class Ui_Inferencer(object):
         self.BaseToolsGroupLayout = QVBoxLayout(self.BaseToolsGroup)
         self.BaseToolsGroupLayout.setObjectName(u"BaseToolsGroupLayout")
         self.BaseToolsLayout = QVBoxLayout()
+        self.BaseToolsLayout.setSpacing(18)
         self.BaseToolsLayout.setObjectName(u"BaseToolsLayout")
         self.BaseConfigureLayout = QHBoxLayout()
         self.BaseConfigureLayout.setObjectName(u"BaseConfigureLayout")

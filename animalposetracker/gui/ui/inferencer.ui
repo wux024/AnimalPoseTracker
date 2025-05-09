@@ -43,6 +43,9 @@
        <layout class="QVBoxLayout" name="BaseToolsGroupLayout">
         <item>
          <layout class="QVBoxLayout" name="BaseToolsLayout">
+          <property name="spacing">
+           <number>18</number>
+          </property>
           <item>
            <layout class="QHBoxLayout" name="BaseConfigureLayout">
             <item>
