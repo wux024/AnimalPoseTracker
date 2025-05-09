@@ -140,12 +140,6 @@ class STrack(BaseTrack):
         Args:
             new_track (STrack): The new track containing updated information.
             frame_id (int): The ID of the current frame.
-
-        Examples:
-            Update the state of a track with new detection information
-            >>> track = STrack([100, 200, 50, 80, 0.9, 1])
-            >>> new_track = STrack([105, 205, 55, 85, 0.95, 1])
-            >>> track.update(new_track, 2)
         """
         self.frame_id = frame_id
         self.tracklet_len += 1

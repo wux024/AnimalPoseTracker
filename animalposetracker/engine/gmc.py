@@ -5,9 +5,6 @@ import copy
 import cv2
 import numpy as np
 
-from ultralytics.utils import LOGGER
-
-
 class GMC:
     """
     Generalized Motion Compensation (GMC) class for tracking and object detection in video frames.
@@ -30,14 +27,6 @@ class GMC:
         apply_sparseoptflow: Apply the Sparse Optical Flow method to a raw frame.
         reset_params: Reset the internal parameters of the GMC object.
 
-    Examples:
-        Create a GMC object and apply it to a frame
-        >>> gmc = GMC(method="sparseOptFlow", downscale=2)
-        >>> frame = np.array([[1, 2, 3], [4, 5, 6]])
-        >>> processed_frame = gmc.apply(frame)
-        >>> print(processed_frame)
-        array([[1, 2, 3],
-               [4, 5, 6]])
     """
 
     def __init__(self, method: str = "sparseOptFlow", downscale: int = 2) -> None:
@@ -98,13 +87,6 @@ class GMC:
 
         Returns:
             (np.ndarray): Transformation matrix with shape (2, 3).
-
-        Examples:
-            >>> gmc = GMC(method="sparseOptFlow")
-            >>> raw_frame = np.random.rand(480, 640, 3)
-            >>> transformation_matrix = gmc.apply(raw_frame)
-            >>> print(transformation_matrix.shape)
-            (2, 3)
         """
         if self.method in {"orb", "sift"}:
             return self.apply_features(raw_frame, detections)
@@ -125,12 +107,6 @@ class GMC:
         Returns:
             (np.ndarray): Transformation matrix with shape (2, 3).
 
-        Examples:
-            >>> gmc = GMC(method="ecc")
-            >>> processed_frame = gmc.apply_ecc(np.array([[[1, 2, 3], [4, 5, 6]], [[7, 8, 9], [10, 11, 12]]]))
-            >>> print(processed_frame)
-            [[1. 0. 0.]
-             [0. 1. 0.]]
         """
         height, width, _ = raw_frame.shape
         frame = cv2.cvtColor(raw_frame, cv2.COLOR_BGR2GRAY)
@@ -156,7 +132,7 @@ class GMC:
         try:
             (_, H) = cv2.findTransformECC(self.prevFrame, frame, H, self.warp_mode, self.criteria, None, 1)
         except Exception as e:
-            LOGGER.warning(f"find transform failed. Set warp as identity {e}")
+            Warning(f"find transform failed. Set warp as identity {e}")
 
         return H
 
@@ -171,12 +147,6 @@ class GMC:
         Returns:
             (np.ndarray): Transformation matrix with shape (2, 3).
 
-        Examples:
-            >>> gmc = GMC(method="orb")
-            >>> raw_frame = np.random.randint(0, 255, (480, 640, 3), dtype=np.uint8)
-            >>> transformation_matrix = gmc.apply_features(raw_frame)
-            >>> print(transformation_matrix.shape)
-            (2, 3)
         """
         height, width, _ = raw_frame.shape
         frame = cv2.cvtColor(raw_frame, cv2.COLOR_BGR2GRAY)
@@ -264,27 +234,6 @@ class GMC:
         prevPoints = np.array(prevPoints)
         currPoints = np.array(currPoints)
 
-        # Draw the keypoint matches on the output image
-        # if False:
-        #     import matplotlib.pyplot as plt
-        #     matches_img = np.hstack((self.prevFrame, frame))
-        #     matches_img = cv2.cvtColor(matches_img, cv2.COLOR_GRAY2BGR)
-        #     W = self.prevFrame.shape[1]
-        #     for m in goodMatches:
-        #         prev_pt = np.array(self.prevKeyPoints[m.queryIdx].pt, dtype=np.int_)
-        #         curr_pt = np.array(keypoints[m.trainIdx].pt, dtype=np.int_)
-        #         curr_pt[0] += W
-        #         color = np.random.randint(0, 255, 3)
-        #         color = (int(color[0]), int(color[1]), int(color[2]))
-        #
-        #         matches_img = cv2.line(matches_img, prev_pt, curr_pt, tuple(color), 1, cv2.LINE_AA)
-        #         matches_img = cv2.circle(matches_img, prev_pt, 2, tuple(color), -1)
-        #         matches_img = cv2.circle(matches_img, curr_pt, 2, tuple(color), -1)
-        #
-        #     plt.figure()
-        #     plt.imshow(matches_img)
-        #     plt.show()
-
         # Find rigid matrix
         if prevPoints.shape[0] > 4:
             H, inliers = cv2.estimateAffinePartial2D(prevPoints, currPoints, cv2.RANSAC)
@@ -294,7 +243,7 @@ class GMC:
                 H[0, 2] *= self.downscale
                 H[1, 2] *= self.downscale
         else:
-            LOGGER.warning("not enough matching points")
+            Warning("not enough matching points")
 
         # Store to next iteration
         self.prevFrame = frame.copy()
@@ -313,12 +262,6 @@ class GMC:
         Returns:
             (np.ndarray): Transformation matrix with shape (2, 3).
 
-        Examples:
-            >>> gmc = GMC()
-            >>> result = gmc.apply_sparseoptflow(np.array([[[1, 2, 3], [4, 5, 6]], [[7, 8, 9], [10, 11, 12]]]))
-            >>> print(result)
-            [[1. 0. 0.]
-             [0. 1. 0.]]
         """
         height, width, _ = raw_frame.shape
         frame = cv2.cvtColor(raw_frame, cv2.COLOR_BGR2GRAY)
@@ -361,7 +304,7 @@ class GMC:
                 H[0, 2] *= self.downscale
                 H[1, 2] *= self.downscale
         else:
-            LOGGER.warning("not enough matching points")
+            Warning("not enough matching points")
 
         self.prevFrame = frame.copy()
         self.prevKeyPoints = copy.copy(keypoints)
