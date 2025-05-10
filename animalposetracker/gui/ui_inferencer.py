@@ -383,7 +383,6 @@ class Ui_Inferencer(object):
         self.PreprocessTime.setEnabled(True)
         sizePolicy2.setHeightForWidth(self.PreprocessTime.sizePolicy().hasHeightForWidth())
         self.PreprocessTime.setSizePolicy(sizePolicy2)
-        self.PreprocessTime.setTristate(True)
 
         self.ShowInfoLayput.addWidget(self.PreprocessTime)
 
