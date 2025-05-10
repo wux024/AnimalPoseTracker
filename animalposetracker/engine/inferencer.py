@@ -861,7 +861,7 @@ class InferenceEngine:
 
         if self.visualize_config['show_preprocess_time']:
             cv2.putText(frame, 
-                        f"Preprocess: {times['preprocess_time']}ms", 
+                        f"Preprocess: {times['preprocess_time']}", 
                         (x, y), 
                         cv2.FONT_HERSHEY_SIMPLEX, 
                         font_scale, font_color, thickness, cv2.LINE_AA)
@@ -869,7 +869,7 @@ class InferenceEngine:
 
         if self.visualize_config['show_inference_time']:
             cv2.putText(frame, 
-                        f"Inference: {times['inference_time']}ms", 
+                        f"Inference: {times['inference_time']}", 
                         (x, y), 
                         cv2.FONT_HERSHEY_SIMPLEX, 
                         font_scale, font_color, thickness, cv2.LINE_AA)
@@ -877,7 +877,7 @@ class InferenceEngine:
         
         if self.visualize_config['show_postprocess_time']:
             cv2.putText(frame, 
-                        f"Postprocess: {times['postprocess_time']}ms", 
+                        f"Postprocess: {times['postprocess_time']}", 
                         (x, y), 
                         cv2.FONT_HERSHEY_SIMPLEX, 
                         font_scale, font_color, thickness, cv2.LINE_AA)
