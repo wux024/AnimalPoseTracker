@@ -365,7 +365,7 @@ class InferencerPage(QWidget, Ui_Inferencer):
                                     stdout=subprocess.PIPE,
                                     stderr=subprocess.DEVNULL,
                                     text=True)
-                return "NPU" in result.stdout
+                return "AI Boost" in result.stdout
             
             else:
                 return os.path.exists("/dev/accel/accel0") or \
