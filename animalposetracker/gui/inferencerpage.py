@@ -563,6 +563,16 @@ class InferencerPage(QWidget, Ui_Inferencer):
                     continue
         else:
             raise ValueError(f"Unsupported platform: {system_name}")
+    
+    def _detect_oak_cameras(self):
+        """Detects available OAK-D cameras.   
+        Returns:
+            list: List of available OAK-D cameras with their indices as keys.
+        """
+        try:
+            import depthai
+        except ImportError:
+            pass
             
     def _select_video_file(self):
         """Handle media file selection"""
