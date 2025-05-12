@@ -734,8 +734,7 @@ class InferencerPage(QWidget, Ui_Inferencer):
 
         # set up video writer thread
         if self.Save.isChecked():
-            if self.Tracker.isChecked():
-                save_path = Path.home() / "runs" / "inference"
+            save_path = Path.home() / "runs" / "inference"
             save_path.mkdir(exist_ok=True, parents=True)
             self.videowriter_thread.save_path = save_path / "output.avi"
             self.videowriter_thread.fps = self.fps
