@@ -140,6 +140,7 @@ class InferencerPage(QWidget, Ui_Inferencer):
         self.PreprocessTime.setEnabled(True)
         self.InferenceTime.setEnabled(True)
         self.PostprocessTime.setEnabled(True)
+        self.FontScale.setEnabled(True)
 
     def tools_disabled(self):
         self.TrackerSelection.setEnabled(False)
@@ -166,6 +167,7 @@ class InferencerPage(QWidget, Ui_Inferencer):
         self.PreprocessTime.setEnabled(False)
         self.InferenceTime.setEnabled(False)    
         self.PostprocessTime.setEnabled(False)
+        self.FontScale.setEnabled(False)
 
     def onSelectConfigureClicked(self):
         """

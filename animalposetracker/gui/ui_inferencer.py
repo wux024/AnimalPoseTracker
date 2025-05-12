@@ -1,11 +1,7 @@
 # -*- coding: utf-8 -*-
 
 ################################################################################
-<<<<<<< HEAD
-## Form generated from reading UI file 'inferencerhzaBKN.ui'
-=======
-## Form generated from reading UI file 'inferencersrYFOJ.ui'
->>>>>>> main
+## Form generated from reading UI file 'inferencerDNLTdZ.ui'
 ##
 ## Created by: Qt User Interface Compiler version 6.8.2
 ##
@@ -258,7 +254,6 @@ class Ui_Inferencer(object):
 
         self.TrackerLayout = QHBoxLayout()
         self.TrackerLayout.setObjectName(u"TrackerLayout")
-<<<<<<< HEAD
         self.TrackerLabel = QLabel(self.BaseToolsGroup)
         self.TrackerLabel.setObjectName(u"TrackerLabel")
 
@@ -275,8 +270,6 @@ class Ui_Inferencer(object):
 
         self.TrackerLayout.addWidget(self.TrackerSelection)
 
-=======
->>>>>>> main
 
         self.EngineDeviceLayout.addLayout(self.TrackerLayout)
 
@@ -395,7 +388,6 @@ class Ui_Inferencer(object):
         self.ShowClasses.setSizePolicy(sizePolicy2)
 
         self.MainShowLayout.addWidget(self.ShowClasses)
-<<<<<<< HEAD
 
         self.ShowTrackerID = QCheckBox(self.ShowToolsGroup)
         self.ShowTrackerID.setObjectName(u"ShowTrackerID")
@@ -403,8 +395,6 @@ class Ui_Inferencer(object):
         self.ShowTrackerID.setSizePolicy(sizePolicy2)
 
         self.MainShowLayout.addWidget(self.ShowTrackerID)
-=======
->>>>>>> main
 
 
         self.ShowToolsGroupVLayout.addLayout(self.MainShowLayout)
@@ -423,10 +413,7 @@ class Ui_Inferencer(object):
         self.PreprocessTime.setEnabled(True)
         sizePolicy2.setHeightForWidth(self.PreprocessTime.sizePolicy().hasHeightForWidth())
         self.PreprocessTime.setSizePolicy(sizePolicy2)
-<<<<<<< HEAD
-        self.PreprocessTime.setTristate(True)
-=======
->>>>>>> main
+        self.PreprocessTime.setTristate(False)
 
         self.ShowInfoLayput.addWidget(self.PreprocessTime)
 
@@ -446,8 +433,6 @@ class Ui_Inferencer(object):
 
 
         self.ShowToolsGroupVLayout.addLayout(self.ShowInfoLayput)
-<<<<<<< HEAD
-=======
 
         self.FontScaleLayout = QHBoxLayout()
         self.FontScaleLayout.setObjectName(u"FontScaleLayout")
@@ -472,7 +457,6 @@ class Ui_Inferencer(object):
 
 
         self.ShowToolsGroupVLayout.addLayout(self.FontScaleLayout)
->>>>>>> main
 
         self.ShowKeypointsLayout = QHBoxLayout()
         self.ShowKeypointsLayout.setObjectName(u"ShowKeypointsLayout")
@@ -634,18 +618,12 @@ class Ui_Inferencer(object):
         self.Show.setText(QCoreApplication.translate("Inferencer", u"Show", None))
         self.Backgroud.setText(QCoreApplication.translate("Inferencer", u"Original", None))
         self.ShowClasses.setText(QCoreApplication.translate("Inferencer", u"Show Classes", None))
-<<<<<<< HEAD
         self.ShowTrackerID.setText(QCoreApplication.translate("Inferencer", u"Show Track ID", None))
-=======
->>>>>>> main
         self.FPSShow.setText(QCoreApplication.translate("Inferencer", u"FPS", None))
         self.PreprocessTime.setText(QCoreApplication.translate("Inferencer", u"Preprocess Time", None))
         self.InferenceTime.setText(QCoreApplication.translate("Inferencer", u"Inference Time", None))
         self.PostprocessTime.setText(QCoreApplication.translate("Inferencer", u"Postprecoess Time", None))
-<<<<<<< HEAD
-=======
         self.FontScaleLabel.setText(QCoreApplication.translate("Inferencer", u"Font Scale", None))
->>>>>>> main
         self.ShowKeypoints.setText(QCoreApplication.translate("Inferencer", u"Show Keypoints", None))
         self.ShowSkeletons.setText(QCoreApplication.translate("Inferencer", u"Show Skeletons", None))
         self.ShowBBox.setText(QCoreApplication.translate("Inferencer", u"Show BBox", None))
