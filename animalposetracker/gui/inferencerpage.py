@@ -30,6 +30,7 @@ class InferencerPage(QWidget, Ui_Inferencer):
         # constants
         self.camera_list = {}
         self.supported_engines_and_devices = {}
+        self.visualization_config = {}
         self.max_cache_size = 1024
 
         self.inference = None
@@ -43,12 +44,14 @@ class InferencerPage(QWidget, Ui_Inferencer):
         self.inference_thread = None
         self.postprocess_thread = None
         self.visualize_thread = None
+        self.write_frame_end = True
 
         self.data_config_path = None
         self.weights_path = None
 
         self.platform = self._detect_platform()
         self.device_check_results = self._detect_device_availability()
+        self._init_visualization_config()
 
         self.tools_disabled()
         self.SelectConfigure.setEnabled(True)
@@ -657,7 +660,7 @@ class InferencerPage(QWidget, Ui_Inferencer):
 
     def _init_visualization_config(self):
         """Initialize visualization configuration"""
-        return {
+        self.visualization_config = {
             'conf': self.Conf.value(),
             'iou': self.IoU.value(),
            'show_classes': self.ShowClasses.isChecked(),
@@ -732,13 +735,19 @@ class InferencerPage(QWidget, Ui_Inferencer):
         # Set up display thread
         self.display_thread.timeout.connect(self.display_inferece_frame)
 
+        
+
         # set up video writer thread
         if self.Save.isChecked():
-            save_path = Path.home() / "runs" / "inference"
+            save_path = Path.cwd() / "runs" / "inference"
             save_path.mkdir(exist_ok=True, parents=True)
             self.videowriter_thread.save_path = save_path / "output.avi"
             self.videowriter_thread.fps = self.fps
             self.videowriter_thread.frame_size = (self.width, self.height)
+            self.write_frame_end = False
+            self.videowriter_thread.write_finished.connect(self.write_end)
+        else:
+            self.write_frame_end = True
 
 
     def _start_inference_threads(self):
@@ -817,6 +826,10 @@ class InferencerPage(QWidget, Ui_Inferencer):
     
     def thread_status(self, message):
         print(message)
+
+    def write_end(self):
+        """Handle when video writer thread has finished"""
+        self.write_frame_end = True
     
     def read_end(self):
         """Handle when video reader thread has finished"""
@@ -862,7 +875,8 @@ class InferencerPage(QWidget, Ui_Inferencer):
         if self.visualize_cache.empty() and not self.read_frame_end:
             return
         elif self.visualize_cache.empty() and self.read_frame_end:
-            self._stop_all_threads()
+            if self.write_frame_end:
+                self._stop_all_threads()
             return
         
         frame, results = self.visualize_cache.get()
@@ -943,7 +957,7 @@ class InferencerPage(QWidget, Ui_Inferencer):
             self.inference.engine = self.engine
             self.inference.device = self.device
             self.inference.model_bits = self.model_bits
-            self.inference.update_config(self._init_visualization_config())
+            self.inference.update_config(self.visualization_config)
             self.inference.model_init()
             # init threads
             self._init_inference_threads()
@@ -975,11 +989,17 @@ class InferencerPage(QWidget, Ui_Inferencer):
     
     def onIoUChanged(self, value):
         """Handle changes to the IOU threshold slider value"""
-        self.inference.update_config({"iou": value})
+        if hasattr(self, 'inference'):
+            self.inference.update_config({"iou": value})
+        else:
+            self.visualization_config.update({"iou": value})
     
     def onConfChanged(self, value):
         """Handle changes to the Confidence threshold slider value"""
-        self.inference.update_config({"conf": value})
+        if hasattr(self, 'inference'):
+            self.inference.update_config({"conf": value})
+        else:
+            self.visualization_config.update({"conf": value})
 
     def onBackgroudStateChanged(self, state):
         """Handle changes to the Show Backgroud checkbox state"""
@@ -989,56 +1009,94 @@ class InferencerPage(QWidget, Ui_Inferencer):
             background = "White"
         else:
             background = "Black"
-        self.inference.update_config({"background": background})
-        self.Backgroud.setText(f"{background}")
+        if hasattr(self, 'inference'):
+            self.inference.update_config({"background": background})
+        else:
+            self.visualization_config.update({"background": background})
     
     def onShowClassesStateChanged(self, state):
         """Handle changes to the Show Classes checkbox state"""
-        self.inference.update_config({"show_classes": bool(state)})
+        if hasattr(self, 'inference'):
+            self.inference.update_config({"show_classes": bool(state)})
+        else:
+            self.visualization_config.update({"show_classes": bool(state)})
     
     def onShowKeypointsStateChanged(self, state):
         """Handle changes to the Show Keypoints checkbox state"""
-        self.inference.update_config({"show_keypoints": bool(state)})
+        if hasattr(self, 'inference'):
+            self.inference.update_config({"show_keypoints": bool(state)})
+        else:
+            self.visualization_config.update({"show_keypoints": bool(state)})
     
     def onShowKeypointsRadiusChanged(self, value):
         """Handle changes to the keypoint radius slider value"""
-        self.inference.update_config({"radius": value})
+        if hasattr(self, 'inference'):
+            self.inference.update_config({"radius": value})
+        else:
+            self.visualization_config.update({"radius": value})
     
     def onShowSkeletonsStateChanged(self, state):
         """Handle changes to the Show Skeletons checkbox state"""
-        self.inference.update_config({"show_skeletons": bool(state)})
+        if hasattr(self, 'inference'):
+            self.inference.update_config({"show_skeletons": bool(state)})
+        else:
+            self.visualization_config.update({"show_skeletons": bool(state)})
     
     def onShowSkeletonsLineWidthChanged(self, value):
         """Handle changes to the skeleton line width slider value"""
-        self.inference.update_config({"skeleton_line_width": value})
+        if hasattr(self, 'inference'):
+            self.inference.update_config({"skeleton_line_width": value})
+        else:
+            self.visualization_config.update({"skeleton_line_width": value})
     
     def onShowBBoxStateChanged(self, state):
         """Handle changes to the Show Bounding Box checkbox state"""
-        self.inference.update_config({"show_bbox": bool(state)})
+        if hasattr(self, 'inference'):
+            self.inference.update_config({"show_bbox": bool(state)})
+        else:
+            self.visualization_config.update({"show_bbox": bool(state)})
     
     def onShowBBoxWidthChanged(self, value):
         """Handle changes to the bounding box width slider value"""
-        self.inference.update_config({"bbox_line_width": value})
+        if hasattr(self, 'inference'):
+            self.inference.update_config({"bbox_line_width": value})
+        else:
+            self.visualization_config.update({"bbox_line_width": value})
 
     def onFPSShowStateChanged(self, state):
         """Handle changes to the Show FPS checkbox state"""
-        self.inference.update_config({"show_fps": bool(state)})
+        if hasattr(self, 'inference'):
+            self.inference.update_config({"show_fps": bool(state)})
+        else:
+            self.visualization_config.update({"show_fps": bool(state)})
     
     def onPreprocessTimeStateChanged(self, state):
         """Handle changes to the Show Preprocess Time checkbox state"""
-        self.inference.update_config({"show_preprocess_time": bool(state)})
+        if hasattr(self, 'inference'):
+            self.inference.update_config({"show_preprocess_time": bool(state)})
+        else:
+            self.visualization_config.update({"show_preprocess_time": bool(state)})
     
     def onInferenceTimeStateChanged(self, state):
         """Handle changes to the Show Inference Time checkbox state"""
-        self.inference.update_config({"show_inference_time": bool(state)})
+        if hasattr(self, 'inference'):
+            self.inference.update_config({"show_inference_time": bool(state)})
+        else:
+            self.visualization_config.update({"show_inference_time": bool(state)})
     
     def onPostprocessTimeStateChanged(self, state):
         """Handle changes to the Show Postprocess Time checkbox state"""
-        self.inference.update_config({"show_postprocess_time": bool(state)})
+        if hasattr(self, 'inference'):
+            self.inference.update_config({"show_postprocess_time": bool(state)})
+        else:
+            self.visualization_config.update({"show_postprocess_time": bool(state)})
     
     def onFontScaleChanged(self, value):
         """Handle changes to the Font Scale slider value"""
-        self.inference.update_config({"font_scale": value / 10.0})
+        if hasattr(self, 'inference'):
+            self.inference.update_config({"font_scale": value / 10.0})
+        else:
+            self.visualization_config.update({"font_scale": value / 10.0})
     
     def closeEvent(self, event):
         """Handle window close event"""

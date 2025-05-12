@@ -228,6 +228,7 @@ class VisualizeThread(BaseThread):
 
 class VideoWriterThread(BaseThread):
     """Thread to run video writing"""
+    write_finished = Signal()
     def __init__(self, save_path=None, fps=30, frame_size=(640, 480)):
         super().__init__()
         self._save_path = save_path
@@ -274,15 +275,17 @@ class VideoWriterThread(BaseThread):
                 self.save_results(results)
                 self.frame_count += 1
         self.video_writer.release()
+        self.write_finished.emit()
 
     def add_frame(self, frame, results):
         self.frames.append(frame)
         self.results.append(results)
     
     def save_results(self, results):
-        save_dir = Path(self.save_path).parent / f"frame_{self.frame_count}.json"
-        with open(save_dir, 'w') as f:
-            json.dump(results, f, indent=4)
+        # save_dir = Path(self.save_path).parent / f"frame_{self.frame_count}.json"
+        # with open(save_dir, 'w') as f:
+        #     json.dump(results, f, indent=4)
+        pass
 
     def safe_stop(self):
         super().safe_stop()
