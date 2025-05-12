@@ -989,14 +989,14 @@ class InferencerPage(QWidget, Ui_Inferencer):
     
     def onIoUChanged(self, value):
         """Handle changes to the IOU threshold slider value"""
-        if hasattr(self, 'inference'):
+        if hasattr(self, 'inference') and self.inference is not None:
             self.inference.update_config({"iou": value})
         else:
             self.visualization_config.update({"iou": value})
     
     def onConfChanged(self, value):
         """Handle changes to the Confidence threshold slider value"""
-        if hasattr(self, 'inference'):
+        if hasattr(self, 'inference') and self.inference is not None:
             self.inference.update_config({"conf": value})
         else:
             self.visualization_config.update({"conf": value})
@@ -1009,91 +1009,91 @@ class InferencerPage(QWidget, Ui_Inferencer):
             background = "White"
         else:
             background = "Black"
-        if hasattr(self, 'inference'):
+        if hasattr(self, 'inference') and self.inference is not None:
             self.inference.update_config({"background": background})
         else:
             self.visualization_config.update({"background": background})
     
     def onShowClassesStateChanged(self, state):
         """Handle changes to the Show Classes checkbox state"""
-        if hasattr(self, 'inference'):
+        if hasattr(self, 'inference') and self.inference is not None:
             self.inference.update_config({"show_classes": bool(state)})
         else:
             self.visualization_config.update({"show_classes": bool(state)})
     
     def onShowKeypointsStateChanged(self, state):
         """Handle changes to the Show Keypoints checkbox state"""
-        if hasattr(self, 'inference'):
+        if hasattr(self, 'inference') and self.inference is not None:
             self.inference.update_config({"show_keypoints": bool(state)})
         else:
             self.visualization_config.update({"show_keypoints": bool(state)})
     
     def onShowKeypointsRadiusChanged(self, value):
         """Handle changes to the keypoint radius slider value"""
-        if hasattr(self, 'inference'):
+        if hasattr(self, 'inference') and self.inference is not None:
             self.inference.update_config({"radius": value})
         else:
             self.visualization_config.update({"radius": value})
     
     def onShowSkeletonsStateChanged(self, state):
         """Handle changes to the Show Skeletons checkbox state"""
-        if hasattr(self, 'inference'):
+        if hasattr(self, 'inference') and self.inference is not None:
             self.inference.update_config({"show_skeletons": bool(state)})
         else:
             self.visualization_config.update({"show_skeletons": bool(state)})
     
     def onShowSkeletonsLineWidthChanged(self, value):
         """Handle changes to the skeleton line width slider value"""
-        if hasattr(self, 'inference'):
+        if hasattr(self, 'inference') and self.inference is not None:
             self.inference.update_config({"skeleton_line_width": value})
         else:
             self.visualization_config.update({"skeleton_line_width": value})
     
     def onShowBBoxStateChanged(self, state):
         """Handle changes to the Show Bounding Box checkbox state"""
-        if hasattr(self, 'inference'):
+        if hasattr(self, 'inference') and self.inference is not None:
             self.inference.update_config({"show_bbox": bool(state)})
         else:
             self.visualization_config.update({"show_bbox": bool(state)})
     
     def onShowBBoxWidthChanged(self, value):
         """Handle changes to the bounding box width slider value"""
-        if hasattr(self, 'inference'):
+        if hasattr(self, 'inference') and self.inference is not None:
             self.inference.update_config({"bbox_line_width": value})
         else:
             self.visualization_config.update({"bbox_line_width": value})
 
     def onFPSShowStateChanged(self, state):
         """Handle changes to the Show FPS checkbox state"""
-        if hasattr(self, 'inference'):
+        if hasattr(self, 'inference') and self.inference is not None:
             self.inference.update_config({"show_fps": bool(state)})
         else:
             self.visualization_config.update({"show_fps": bool(state)})
     
     def onPreprocessTimeStateChanged(self, state):
         """Handle changes to the Show Preprocess Time checkbox state"""
-        if hasattr(self, 'inference'):
+        if hasattr(self, 'inference') and self.inference is not None:
             self.inference.update_config({"show_preprocess_time": bool(state)})
         else:
             self.visualization_config.update({"show_preprocess_time": bool(state)})
     
     def onInferenceTimeStateChanged(self, state):
         """Handle changes to the Show Inference Time checkbox state"""
-        if hasattr(self, 'inference'):
+        if hasattr(self, 'inference') and self.inference is not None:
             self.inference.update_config({"show_inference_time": bool(state)})
         else:
             self.visualization_config.update({"show_inference_time": bool(state)})
     
     def onPostprocessTimeStateChanged(self, state):
         """Handle changes to the Show Postprocess Time checkbox state"""
-        if hasattr(self, 'inference'):
+        if hasattr(self, 'inference') and self.inference is not None:
             self.inference.update_config({"show_postprocess_time": bool(state)})
         else:
             self.visualization_config.update({"show_postprocess_time": bool(state)})
     
     def onFontScaleChanged(self, value):
         """Handle changes to the Font Scale slider value"""
-        if hasattr(self, 'inference'):
+        if hasattr(self, 'inference') and self.inference is not None:
             self.inference.update_config({"font_scale": value / 10.0})
         else:
             self.visualization_config.update({"font_scale": value / 10.0})
