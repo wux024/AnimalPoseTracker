@@ -236,7 +236,6 @@ class VideoWriterThread(BaseThread):
         self._frame_size = frame_size
         self.video_writer = None
         self.frames = []
-        self.results = []
         self._stop_flag = False
         self.frame_count = 0
 
@@ -271,21 +270,12 @@ class VideoWriterThread(BaseThread):
             if self.frames:
                 frame = self.frames.pop(0)
                 self.video_writer.write(frame)
-                results = self.results.pop(0)
-                self.save_results(results)
-                self.frame_count += 1
         self.video_writer.release()
         self.write_finished.emit()
 
-    def add_frame(self, frame, results):
+    def add_frame(self, frame):
         self.frames.append(frame)
-        self.results.append(results)
-    
-    def save_results(self, results):
-        # save_dir = Path(self.save_path).parent / f"frame_{self.frame_count}.json"
-        # with open(save_dir, 'w') as f:
-        #     json.dump(results, f, indent=4)
-        pass
+
 
     def safe_stop(self):
         super().safe_stop()

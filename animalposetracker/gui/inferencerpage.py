@@ -879,12 +879,12 @@ class InferencerPage(QWidget, Ui_Inferencer):
                 self._stop_all_threads()
             return
         
-        frame, results = self.visualize_cache.get()
+        frame, _ = self.visualize_cache.get()
 
         if (self.Save.isChecked() and 
             self.videowriter_thread is not None 
             and self.videowriter_thread.isRunning()):
-            self.videowriter_thread.add_frame(frame, results)
+            self.videowriter_thread.add_frame(frame.copy())
         
         if self.Show.isChecked():
             RGB = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
