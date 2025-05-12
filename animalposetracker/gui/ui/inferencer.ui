@@ -43,6 +43,9 @@
        <layout class="QVBoxLayout" name="BaseToolsGroupLayout">
         <item>
          <layout class="QVBoxLayout" name="BaseToolsLayout">
+          <property name="spacing">
+           <number>18</number>
+          </property>
           <item>
            <layout class="QHBoxLayout" name="BaseConfigureLayout">
             <item>
@@ -665,7 +668,7 @@
            </widget>
           </item>
           <item>
-           <widget class="QCheckBox" name="ShowClasses">
+           <widget class="QCheckBox" name="FPSShow">
             <property name="sizePolicy">
              <sizepolicy hsizetype="Preferred" vsizetype="Fixed">
               <horstretch>0</horstretch>
@@ -673,7 +676,69 @@
              </sizepolicy>
             </property>
             <property name="text">
-             <string>Show Classes</string>
+             <string>FPS</string>
+            </property>
+           </widget>
+          </item>
+          <item>
+           <widget class="QCheckBox" name="PreprocessTime">
+            <property name="enabled">
+             <bool>true</bool>
+            </property>
+            <property name="sizePolicy">
+             <sizepolicy hsizetype="Preferred" vsizetype="Fixed">
+              <horstretch>0</horstretch>
+              <verstretch>0</verstretch>
+             </sizepolicy>
+            </property>
+            <property name="text">
+             <string>Preprocess Time</string>
+            </property>
+            <property name="tristate">
+             <bool>true</bool>
+            </property>
+           </widget>
+          </item>
+          <item>
+           <widget class="QCheckBox" name="InferenceTime">
+            <property name="sizePolicy">
+             <sizepolicy hsizetype="Preferred" vsizetype="Fixed">
+              <horstretch>0</horstretch>
+              <verstretch>0</verstretch>
+             </sizepolicy>
+            </property>
+            <property name="text">
+             <string>Inference Time</string>
+            </property>
+           </widget>
+          </item>
+          <item>
+           <widget class="QCheckBox" name="PostprocessTime">
+            <property name="sizePolicy">
+             <sizepolicy hsizetype="Preferred" vsizetype="Fixed">
+              <horstretch>0</horstretch>
+              <verstretch>0</verstretch>
+             </sizepolicy>
+            </property>
+            <property name="text">
+             <string>Postprecoess Time</string>
+            </property>
+           </widget>
+          </item>
+         </layout>
+        </item>
+        <item>
+         <layout class="QHBoxLayout" name="FontScaleLayout">
+          <item>
+           <widget class="QLabel" name="FontScaleLabel">
+            <property name="sizePolicy">
+             <sizepolicy hsizetype="Preferred" vsizetype="Fixed">
+              <horstretch>0</horstretch>
+              <verstretch>0</verstretch>
+             </sizepolicy>
+            </property>
+            <property name="text">
+             <string>Font Scale</string>
             </property>
            </widget>
           </item>

@@ -49,7 +49,6 @@ class InferencerPage(QWidget, Ui_Inferencer):
         self.visualize_thread = None
 
         self.data_config_path = None
-        self.data_config = dict()
         self.weights_path = None
 
         self.platform = self._detect_platform()
@@ -115,6 +114,7 @@ class InferencerPage(QWidget, Ui_Inferencer):
         self.PreprocessTime.stateChanged.connect(self.onPreprocessTimeStateChanged)
         self.InferenceTime.stateChanged.connect(self.onInferenceTimeStateChanged)
         self.PostprocessTime.stateChanged.connect(self.onPostprocessTimeStateChanged)
+        self.FontScale.valueChanged.connect(self.onFontScaleChanged)
 
     def tools_enabled(self):
         self.CheckCameraVideosConnect.setEnabled(True)
@@ -377,7 +377,7 @@ class InferencerPage(QWidget, Ui_Inferencer):
                                     stdout=subprocess.PIPE,
                                     stderr=subprocess.DEVNULL,
                                     text=True)
-                return "NPU" in result.stdout
+                return "AI Boost" in result.stdout
             
             else:
                 return os.path.exists("/dev/accel/accel0") or \
@@ -512,19 +512,56 @@ class InferencerPage(QWidget, Ui_Inferencer):
         self.CameraVideosSelection.setEnabled(True)
         self.CheckCameraVideosConnect.setText("Preview Video")
 
-    def _detect_available_cameras(self) -> list:
+    def _detect_available_cameras(self):
         """Detects available cameras.   
         Returns:
             list: List of available cameras with their indices as keys.
         """
-        try:
-            from PyCameraList.camera_device import list_video_devices
-            self.camera_list ={
-                device[1]: device[0] for device in list_video_devices()
-            }
-        except:
-            self.camera_list = {}
-
+        system_name = sys.platform
+        if system_name == 'win32':
+            try:
+                from PyCameraList.camera_device import list_video_devices
+                self.camera_list ={
+                    device[1]: device[0] for device in list_video_devices()
+                }
+            except ImportError:
+                raise ImportError("Please install 'PyCameraList' module")
+        elif system_name == 'linux':
+            import subprocess
+            output = subprocess.check_output("ls /dev/video* 2>/dev/null", 
+                                             shell=True, 
+                                             text=True)
+            video_devices = output.strip().split('\n')
+            for device in video_devices:
+                try:
+                    index = int(device.split('/')[-1].replace('video', ''))
+                    cap = cv2.VideoCapture(index)
+                    if cap.isOpened():
+                        name = f"Camera {index}"
+                        self.camera_list.update({
+                            name: index
+                        })
+                        cap.release()
+                except:
+                    continue
+        elif system_name == 'darwin':
+            index = 0
+            while True:
+                try:
+                    cap = cv2.VideoCapture(index)
+                    if not cap.isOpened():
+                        break
+                    name = f"Camera {index}"
+                    self.camera_list.update({
+                        name: index
+                    })
+                    cap.release()
+                    index += 1
+                except:
+                    continue
+        else:
+            raise ValueError(f"Unsupported platform: {system_name}")
+            
     def _select_video_file(self):
         """Handle media file selection"""
         options = QFileDialog.Options()
@@ -606,7 +643,8 @@ class InferencerPage(QWidget, Ui_Inferencer):
         if not cap.isOpened():
             Warning("Failed to open camera/video source")
             return
-        self._set_camera_params(cap)
+        if self.CameraORVideos.isChecked():
+            self._set_camera_params(cap)
         self.videoreader_thread = VideoReaderThread()
         self.videoreader_thread.cap = cap
         self.videoreader_thread.data_ready.connect(self.display_preview_frame)
@@ -614,16 +652,14 @@ class InferencerPage(QWidget, Ui_Inferencer):
         self.videoreader_thread.start()
         mode = "Camera" if self.CameraORVideos.isChecked() else "Video"
         self.CheckCameraVideosConnect.setText(f"Close {mode}")
-    
+
     def _stop_preview(self):
         """Stop camera/video preview"""
         self.videoreader_thread.safe_stop()
-        self.videoreader_thread.data_ready.disconnect()
-        self.videoreader_thread.finished.disconnect()
         self.Display.clear()
         mode = "Camera" if self.CameraORVideos.isChecked() else "Video"
         self.CheckCameraVideosConnect.setText(f"Preview {mode}")
-    
+
     def display_preview_frame(self, frame):
         """Handle new frame from camera/video source"""
 
@@ -642,6 +678,27 @@ class InferencerPage(QWidget, Ui_Inferencer):
                 Qt.QueuedConnection,
                 Q_ARG(QPixmap, pixmap)
             )
+    
+
+    def _init_visualization_config(self):
+        """Initialize visualization configuration"""
+        return {
+            'conf': self.Conf.value(),
+            'iou': self.IoU.value(),
+           'show_classes': self.ShowClasses.isChecked(),
+           'show_keypoints': self.ShowKeypoints.isChecked(),
+           'show_skeletons': self.ShowSkeletons.isChecked(),
+           'show_bbox': self.ShowBBox.isChecked(),
+            'radius': self.ShowKeypointsRadius.value(),
+           'skeleton_line_width': self.ShowSkeletonsLineWidth.value(),
+            'bbox_line_width': self.ShowBBoxWidth.value(),
+            'background': self.Backgroud.text(),
+            'show_fps': self.FPSShow.isChecked(),
+           'show_preprocess_time': self.PreprocessTime.isChecked(),
+           'show_inference_time': self.InferenceTime.isChecked(),
+           'show_postprocess_time': self.PostprocessTime.isChecked(),
+            'font_scale': self.FontScale.value() / 10.0,
+        }
         
 
     def _init_inference_threads(self):
@@ -1048,6 +1105,10 @@ class InferencerPage(QWidget, Ui_Inferencer):
     def onPostprocessTimeStateChanged(self, state):
         """Handle changes to the Show Postprocess Time checkbox state"""
         self.inference.update_config({"show_postprocess_time": bool(state)})
+    
+    def onFontScaleChanged(self, value):
+        """Handle changes to the Font Scale slider value"""
+        self.inference.update_config({"font_scale": value / 10.0})
     
     def closeEvent(self, event):
         """Handle window close event"""
