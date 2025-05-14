@@ -51,7 +51,6 @@ class InferencerPage(QWidget, Ui_Inferencer):
 
         self.platform = self._detect_platform()
         self.device_check_results = self._detect_device_availability()
-        self._init_visualization_config()
 
         self.tools_disabled()
         self.SelectConfigure.setEnabled(True)
@@ -65,6 +64,9 @@ class InferencerPage(QWidget, Ui_Inferencer):
 
         # Connect all signals to their respective slots
         self.setupConnections()
+
+        # iningitialize visualization config
+        self._init_visualization_config()
 
     def setupConnections(self):
         """Connect all UI signals to their corresponding slot functions"""
@@ -745,7 +747,7 @@ class InferencerPage(QWidget, Ui_Inferencer):
             self.videowriter_thread.fps = self.fps
             self.videowriter_thread.frame_size = (self.width, self.height)
             self.write_frame_end = False
-            self.videowriter_thread.write_finished.connect(self.write_end)
+            self.videowriter_thread.finished.connect(self.write_end)
         else:
             self.write_frame_end = True
 
@@ -875,6 +877,8 @@ class InferencerPage(QWidget, Ui_Inferencer):
         if self.visualize_cache.empty() and not self.read_frame_end:
             return
         elif self.visualize_cache.empty() and self.read_frame_end:
+            if hasattr(self, 'videowriter_thread') and self.videowriter_thread is not None:
+                self.videowriter_thread.stop_flag = True
             if self.write_frame_end:
                 self._stop_all_threads()
             return
@@ -884,7 +888,7 @@ class InferencerPage(QWidget, Ui_Inferencer):
         if (self.Save.isChecked() and 
             self.videowriter_thread is not None 
             and self.videowriter_thread.isRunning()):
-            self.videowriter_thread.add_frame(frame.copy())
+            self.videowriter_thread.add_frame(frame)
         
         if self.Show.isChecked():
             RGB = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
@@ -957,6 +961,7 @@ class InferencerPage(QWidget, Ui_Inferencer):
             self.inference.engine = self.engine
             self.inference.device = self.device
             self.inference.model_bits = self.model_bits
+            self._init_visualization_config()
             self.inference.update_config(self.visualization_config)
             self.inference.model_init()
             # init threads

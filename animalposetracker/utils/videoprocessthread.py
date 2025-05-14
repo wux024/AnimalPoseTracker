@@ -228,14 +228,13 @@ class VisualizeThread(BaseThread):
 
 class VideoWriterThread(BaseThread):
     """Thread to run video writing"""
-    write_finished = Signal()
     def __init__(self, save_path=None, fps=30, frame_size=(640, 480)):
         super().__init__()
         self._save_path = save_path
         self._fps = fps
         self._frame_size = frame_size
         self.video_writer = None
-        self.frames = []
+        self.frames = queue.Queue(maxsize=1024)
         self._stop_flag = False
         self.frame_count = 0
 
@@ -262,19 +261,34 @@ class VideoWriterThread(BaseThread):
     @frame_size.setter
     def frame_size(self, value):
         self._frame_size = value
+    
+    @property
+    def stop_flag(self):
+        return self._stop_flag
+    
+    @stop_flag.setter
+    def stop_flag(self, value):
+        self._stop_flag = value
 
     def run(self):
         fourcc = cv2.VideoWriter_fourcc(*'XVID')
         self.video_writer = cv2.VideoWriter(self.save_path, fourcc, self.fps, self.frame_size)
-        while not self._stop_flag:
-            if self.frames:
-                frame = self.frames.pop(0)
+        while True:
+            try:
+                frame = self.frames.get(timeout=1, block=True)
                 self.video_writer.write(frame)
+                self.frame_count += 1
+            except queue.Empty:
+                if self._stop_flag:
+                    break
         self.video_writer.release()
-        self.write_finished.emit()
+        self.finished.emit()
 
     def add_frame(self, frame):
-        self.frames.append(frame)
+        try:
+            self.frames.put(frame)
+        except queue.Full:
+            pass
 
 
     def safe_stop(self):
