@@ -1014,6 +1014,7 @@ class InferencerPage(QWidget, Ui_Inferencer):
             background = "White"
         else:
             background = "Black"
+        self.Backgroud.setText(background)
         if hasattr(self, 'inference') and self.inference is not None:
             self.inference.update_config({"background": background})
         else:

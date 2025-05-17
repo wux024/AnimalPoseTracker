@@ -1,2 +1,1 @@
-# AnimalPoseTracker
-A cross-species animal pose decoding software package that integrates numerous features.
+![](https://s3.bmp.ovh/imgs/2025/05/15/e246d2b0dec75c56.png)
