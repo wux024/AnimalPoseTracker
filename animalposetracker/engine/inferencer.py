@@ -902,12 +902,12 @@ class InferenceEngine:
 
 
         # Postprocess the model's output to extract bounding boxes, scores, and class IDs
-        results, postprecess_time = measure_time(self.postprocess, pred, IM)
+        results, postprocess_time = measure_time(self.postprocess, pred, IM)
 
         results['preprocess_time'] = preprocess_time
         results['inference_time'] = inference_time
-        results['postprecess_time'] = postprecess_time
-        results['fps'] = 1.0 / (inference_time + postprecess_time + preprocess_time + 1e-7)
+        results['postprocess_time'] = postprocess_time
+        results['fps'] = 1.0 / (inference_time + postprocess_time + preprocess_time + 1e-7)
 
         # Visualize the output of the model on the input image
         frame = self.visualize(frame, results)
