@@ -77,26 +77,23 @@ animalposetracker
 
 3. You can create a new project by user-defined dataset or public dataset, or open an existing project. Click "Create New Project" to create a new project.
 
+4. Click "Public Datasets Project" to open an existing project.
 
-Click "Public Datasets Project" to open an existing project.
+5. Click "Load Project" to load an existing project.
 
+6. You can Manage Configuration to set the project configuration, and also supports to other configuration settings.
 
-Click "Load Project" to load an existing project.
+7. You extract frames from the videos automatically or manually.
 
+8. You can manually label the animal poses using 'animalpose-annotator' plugin.
 
-4. You can Manage Configuration to set the project configuration, and also supports to other configuration settings.
+9. You can train a model using the labeled data and set the training configuration.
 
-5. You extract frames from the videos automatically or manually.
+10. You can evaluate the trained model on the test set and get the evaluation results.
 
-6. You can manually label the animal poses using 'animalpose-annotator' plugin.
+11. You can inference the videos or `test` set using the trained model. If you deploy the model, you should use `animalpose-inferencer` plugin to inference the videos or cameras.
 
-7. You can train a model using the labeled data and set the training configuration.
-
-8. You can evaluate the trained model on the test set and get the evaluation results.
-
-9. You can inference the videos or `test` set using the trained model. If you deploy the model, you should use `animalpose-inferencer` plugin to inference the videos or cameras.
-
-10. You can export the trained model to different inference engines.
+12. You can export the trained model to different inference engines.
 
 # Usage: How to use AnimalPoseTracker plugins to inference videos and cameras
 
@@ -111,7 +108,6 @@ animalpose-inferencer
 ```
 
 3. You can choose the configuration file.
-
 
 4. You can choose the weights file. The software will automatically show the available inference engines.
 
@@ -133,8 +129,6 @@ animalpose-inferencer
 
 13. You can set many parameters to control the inference process, such as the confidence threshold, and the visualization style.
 
-
-
 # Usage: How to use AnimalPoseTracker plugins to label and annotate animal poses
 
 1. Open the command prompt or terminal and activate the conda environment:
@@ -146,3 +140,24 @@ conda activate animalposetracker
 ```
 animalpose-annotator
 ```
+
+3. You can choose the configuration file.
+
+4. You can choose the images directory.
+
+5. You can draw 'bounding box'.
+
+6. You can the object class.
+
+7. You can draw 'keypoints'.
+
+8. You can set the keypoint class.
+
+9. You can draw 'skeleton'.
+
+10. You can save the annotations.
+
+11. You can export the annotations to a file.
+
+# Citation: How to cite AnimalPoseTracker
+
