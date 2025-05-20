@@ -2,7 +2,6 @@ from PySide6.QtCore import QMetaObject, Qt, Q_ARG, QTimer
 from PySide6.QtGui import QImage, QPixmap
 from PySide6.QtWidgets import  QApplication, QFileDialog, QWidget, QMessageBox
 import os
-import yaml
 import cv2
 import sys
 from pathlib import Path
