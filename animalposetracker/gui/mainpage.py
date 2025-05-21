@@ -568,9 +568,9 @@ class AnimalPoseTrackerPage(QMainWindow, Ui_AnimalPoseTracker):
         """Slot for starting frame labeling"""
         if hasattr(self, 'sub_page') and self.sub_page is not None:
             self.sub_page.close()
-            self.sub_page = WindowFactory.run(AnimalPoseAnnotatorPage)
+            self.sub_page = WindowFactory.run(AnnotatorPage)
             self.sub_page.deleteLater()
-        self.sub_page = WindowFactory.run(AnimalPoseAnnotatorPage)
+        self.sub_page = WindowFactory.run(AnnotatorPage)
 
     def onCreateDatasets(self):
         """Slot for starting dataset creation"""
