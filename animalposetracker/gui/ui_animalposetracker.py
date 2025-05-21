@@ -1101,7 +1101,7 @@ class Ui_AnimalPoseTracker(object):
         self.ExtractionMethodSelection.setItemText(2, QCoreApplication.translate("AnimalPoseTracker", u"all", None))
 
         self.ExtractionAlgorithmLabel.setText(QCoreApplication.translate("AnimalPoseTracker", u"Extraction algorithm", None))
-        self.ExtractionAlgorithmSelection.setItemText(0, QCoreApplication.translate("AnimalPoseTracker", u"kmeas", None))
+        self.ExtractionAlgorithmSelection.setItemText(0, QCoreApplication.translate("AnimalPoseTracker", u"kmeans", None))
         self.ExtractionAlgorithmSelection.setItemText(1, QCoreApplication.translate("AnimalPoseTracker", u"uniform", None))
         self.ExtractionAlgorithmSelection.setItemText(2, QCoreApplication.translate("AnimalPoseTracker", u"None", None))
 

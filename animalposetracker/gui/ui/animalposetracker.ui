@@ -774,7 +774,7 @@
                     <widget class="QComboBox" name="ExtractionAlgorithmSelection">
                      <item>
                       <property name="text">
-                       <string>kmeas</string>
+                       <string>kmeans</string>
                       </property>
                      </item>
                      <item>

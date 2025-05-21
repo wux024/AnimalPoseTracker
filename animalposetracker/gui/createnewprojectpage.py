@@ -282,6 +282,10 @@ class CreateNewProjectPage(QWidget, Ui_CreateNewProject):
             project_config["keypoints_name"] = [f"keypoint{i+1}" for i in range(project_config["keypoints"])]
         if not project_config["classes_name"]:
             project_config["classes_name"] = [f"class{i+1}" for i in range(project_config["classes"])]
+        
+        project_config.update({
+            "oks_sigmas": [1.0 / self.KeypointConfig.value()] * self.KeypointConfig.value()
+        })
 
         return project_config
 
