@@ -2,7 +2,7 @@
 # -*- coding: utf-8 -*-
 
 """
-File Name: __init__.py.py
+File Name: __init__.py
 Author: wux024
 Email: wux024@nenu.edu.cn
 Created On: 2024/9/6

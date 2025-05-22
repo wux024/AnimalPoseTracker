@@ -1091,8 +1091,9 @@ class DrawingBoard(QLabel):
             print(f"Missing keypoints for connection {src}->{dest}")
             return
             
-        start_pos = keypoints[src]["pos"]
-        end_pos = keypoints[dest]["pos"]
+        start_pos = keypoints[src]["pos"][0:2]
+        end_pos = keypoints[dest]["pos"][0:2]
+
         
         skeleton_id = len(self.current_target.skeletons)
         self.current_target.skeletons[skeleton_id] = {
@@ -1173,7 +1174,6 @@ class DrawingBoard(QLabel):
     
     def _on_skeletons_cleared(self, target_id):
         """Handle skeletons clear event"""
-        print(target_id)
         target = next((t for t in self.targets if t.id == target_id), None)
         if target:
             target.skeletons.clear()
