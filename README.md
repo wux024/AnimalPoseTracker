@@ -129,27 +129,23 @@ conda activate animalposetracker
 animalpose-inferencer
 ```
 
-3. You can choose the configuration file.
+3. You can choose the configuration file and the weights file. The software will automatically show the available inference engines and devices.
 
-4. You can choose the weights file. The software will automatically show the available inference engines.
+https://github.com/user-attachments/assets/db726dd8-a092-40e3-94ea-e3d423973a03
 
-5. You can enable the camera or video to inference.
+4. You can enable the camera or video to inference. Then, you can choose a video from the local directory or a camera to inference. And, you can preview video or camera.
 
-6. You can choose a video from the local directory or a camera to inference.
+https://github.com/user-attachments/assets/007caeb6-b5b2-48a8-9873-58ff9db002b7
 
-7. You can preview video or camera.
+5. You can set camera parameters. Note: It requires the camera to support the specified resolution and FPS, set Model Bits, but it requires you know the model precision, and set the inference engine. It will automatically show the available inference devices, and set the inference device.
 
-8. You can set camera parameters. Note: It requires the camera to support the specified resolution and FPS.
+https://github.com/user-attachments/assets/e67da907-e765-4247-affb-b85563a33d28
 
-9. You can set Model Bits, but it requires you know the model precision.
+6. You can start the inference. And, you can set many parameters to control the inference process, such as the confidence threshold, and the visualization style.
 
-10. You can set the inference engine. It will automatically show the available inference devices.
+https://github.com/user-attachments/assets/0b57bba6-9ed6-47b1-9f4f-1d449762c784
 
-11. You can set the inference device.
-
-12. You can start the inference.
-
-13. You can set many parameters to control the inference process, such as the confidence threshold, and the visualization style.
+https://github.com/user-attachments/assets/9d2ad685-7201-4488-a653-500a6c72b3bf
 
 # Usage: How to use AnimalPoseTracker plugins to label and annotate animal poses
 
@@ -163,23 +159,11 @@ conda activate animalposetracker
 animalpose-annotator
 ```
 
-3. You can choose the configuration file.
+3. You can choose the configuration file. You can choose the images directory.
 
-4. You can choose the images directory.
+4. You can draw 'bounding box'. You can choose the object class. You can draw 'keypoints'. You can set the keypoint class. You can draw 'skeleton'.
 
-5. You can draw 'bounding box'.
-
-6. You can the object class.
-
-7. You can draw 'keypoints'.
-
-8. You can set the keypoint class.
-
-9. You can draw 'skeleton'.
-
-10. You can save the annotations.
-
-11. You can export the annotations to a file.
+5. You can save the annotations.. You can export the annotations to a file.
 
 # Citation: How to cite AnimalPoseTracker
 
