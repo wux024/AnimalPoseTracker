@@ -89,9 +89,17 @@ https://github.com/user-attachments/assets/e92ca200-421e-4bce-936e-92cc2d456f12
 
 6. You can Manage Configuration to set the project configuration, and also supports to other configuration settings.
 
+https://github.com/user-attachments/assets/c48b6511-7979-4a84-ac59-b9ba4d6edebe
+
 7. You extract frames from the videos automatically or manually.
 
+https://github.com/user-attachments/assets/61662bd7-4ee4-4266-92f1-6f22bedcac3b
+
 8. You can manually label the animal poses using 'animalpose-annotator' plugin.
+
+
+https://github.com/user-attachments/assets/6ec6ac35-b6c9-41ee-8107-403861ec054a
+
 
 9. You can train a model using the labeled data and set the training configuration.
 
