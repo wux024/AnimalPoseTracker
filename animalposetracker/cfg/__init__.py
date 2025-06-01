@@ -9,7 +9,8 @@ DEFAULT_CFG_PATH = CFG_DIR / 'default.yaml'
 MODEL_YAML_PATHS = {
     'AnimalRTPose': MODEL_DIR / 'animalrtpose.yaml',
     'AnimalRTPose-P6': MODEL_DIR / 'animalrtpose-p6.yaml',
-    'AnimalViTPose': MODEL_DIR / 'animalvitpose.yaml',
+    #'AnimalViTPose': MODEL_DIR / 'animalvitpose.yaml',
+    'SPIPose': MODEL_DIR /'spipose.yaml',
     'YOLOv12-Pose': MODEL_DIR / 'yolov12-pose.yaml',
     'YOLO11-Pose': MODEL_DIR / 'yolo11-pose.yaml',
     'YOLOv8-Pose': MODEL_DIR / 'yolov8-pose.yaml',
