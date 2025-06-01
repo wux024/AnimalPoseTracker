@@ -7,9 +7,9 @@
 # Installation: How to install AnimalPoseTracker
 
 1. Create a conda environment:
-We recommend creating a new conda environment for AnimalPoseTracker, recommended Python >= 3.8. You can do this by running the following command in your terminal:
+We recommend creating a new conda environment for AnimalPoseTracker, recommended Python >= 3.10. You can do this by running the following command in your terminal:
 ```
-conda create -n animalposetracker python=3.8
+conda create -n animalposetracker python=3.10
 ```
 
 2. [Optional] If you want to train a model, you need to install "PyTorch" and "torchvision" first. You can install them by following the instructions on the official website: https://pytorch.org/get-started/locally/. We recommend Pytorch >= 1.8. For example, if you are using conda, you can run the following command:
@@ -77,9 +77,15 @@ animalposetracker
 
 3. You can create a new project by user-defined dataset or public dataset, or open an existing project. Click "Create New Project" to create a new project.
 
-4. Click "Public Datasets Project" to open an existing project.
+https://github.com/user-attachments/assets/156b6e16-5660-4c81-b14b-73120b67417a
+
+4. Click "Public Datasets Project" to create a project based on public datasets, and you need to download datasets.
+
+https://github.com/user-attachments/assets/7c850634-9aef-4b72-95f3-1b11c491a25c
 
 5. Click "Load Project" to load an existing project.
+
+https://github.com/user-attachments/assets/e92ca200-421e-4bce-936e-92cc2d456f12
 
 6. You can Manage Configuration to set the project configuration, and also supports to other configuration settings.
 
