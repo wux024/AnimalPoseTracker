@@ -161,9 +161,11 @@ animalpose-annotator
 
 3. You can choose the configuration file. You can choose the images directory.
 
-4. You can draw 'bounding box'. You can choose the object class. You can draw 'keypoints'. You can set the keypoint class. You can draw 'skeleton'.
+https://github.com/user-attachments/assets/7d820fbe-390e-4387-9678-ac229e930cda
 
-5. You can save the annotations.. You can export the annotations to a file.
+4. You can draw 'bounding box'. You can choose the object class. You can draw 'keypoints'. You can set the keypoint class. You can draw 'skeleton'. You can save the annotations..You can export the annotations to a file.
+
+https://github.com/user-attachments/assets/a22b28df-4b12-48b0-a087-4ab07f6ea17f
 
 # Citation: How to cite AnimalPoseTracker
 
