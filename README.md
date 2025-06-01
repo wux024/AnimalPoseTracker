@@ -97,17 +97,25 @@ https://github.com/user-attachments/assets/61662bd7-4ee4-4266-92f1-6f22bedcac3b
 
 8. You can manually label the animal poses using 'animalpose-annotator' plugin.
 
-
 https://github.com/user-attachments/assets/6ec6ac35-b6c9-41ee-8107-403861ec054a
 
+https://github.com/user-attachments/assets/3e92d508-c1e1-4dae-8ea7-848c5b9237d8
 
 9. You can train a model using the labeled data and set the training configuration.
 
+https://github.com/user-attachments/assets/79636a6e-3813-40f1-8595-06040e2fe178
+
 10. You can evaluate the trained model on the test set and get the evaluation results.
+
+https://github.com/user-attachments/assets/f352d5fe-1303-4070-b810-b26769faab28
 
 11. You can inference the videos or `test` set using the trained model. If you deploy the model, you should use `animalpose-inferencer` plugin to inference the videos or cameras.
 
+https://github.com/user-attachments/assets/ba5d9c05-73ec-44ae-b4b1-8100f02f1998
+
 12. You can export the trained model to different inference engines.
+
+https://github.com/user-attachments/assets/4abf70c0-e277-4860-ae12-a87e3051a3c8
 
 # Usage: How to use AnimalPoseTracker plugins to inference videos and cameras
 
