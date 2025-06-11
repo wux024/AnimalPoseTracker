@@ -169,4 +169,15 @@ https://github.com/user-attachments/assets/a22b28df-4b12-48b0-a087-4ab07f6ea17f
 
 # Citation: How to cite AnimalPoseTracker
 
-
+```
+@article{Wu2025,
+   author = {Xin Wu and Lianming Wang and Jipeng Huang},
+   doi = {https://doi.org/10.1016/j.neunet.2025.107685},
+   issn = {0893-6080},
+   journal = {Neural Networks},
+   keywords = {Animal pose estimation,Cross-species,Lightweight network,Real-time},
+   pages = {107685},
+   title = {AnimalRTPose: Faster cross-species real-time animal pose estimation},
+   year = {2025}
+}
+```
