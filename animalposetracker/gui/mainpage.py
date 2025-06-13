@@ -34,8 +34,6 @@ class AnimalPoseTrackerPage(QMainWindow, Ui_AnimalPoseTracker):
 
     def initialize_controls(self):
         """Initialize the controls of the main page"""
-        if sys.platform == "darwin":
-            self.setUnifiedTitleAndToolBarOnMac(True)
 
         self.sub_page = None
         # set work directory
