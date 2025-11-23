@@ -170,6 +170,16 @@ https://github.com/user-attachments/assets/a22b28df-4b12-48b0-a087-4ab07f6ea17f
 # Citation: How to cite AnimalPoseTracker
 
 ```
+@article{Wu2026, 
+   title = {Cross-species animal pose estimation via feature map orthogonal decomposition decoder}, 
+   journal = {Engineering Applications of Artificial Intelligence}, 
+   volume = {163}, 
+   pages = {112749}, 
+   year = {2026}, 
+   doi = {https://doi.org/10.1016/j.engappai.2025.112749}, 
+   author = {Xin Wu and Yanmei Wang and Lianming Wang and Jipeng Huang}, 
+   keywords = {Animal pose estimation, Vision transformer, Feature map decomposition}
+   }
 @article{Wu2025,
    title = {AnimalRTPose: Faster cross-species real-time animal pose estimation},
    journal = {Neural Networks},
