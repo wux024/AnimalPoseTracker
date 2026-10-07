@@ -963,6 +963,12 @@ class InferencerPage(QWidget, Ui_Inferencer):
             self._init_visualization_config()
             self.inference.update_config(self.visualization_config)
             self.inference.model_init()
+            # Warmup: remove the first-call kernel-compile / memory-allocation overhead. Without it,
+            # the first frames of the first video run abnormally slow and that cost is included in
+            # the FPS statistics. warmup() goes through the existing preprocess / inference /
+            # postprocess entry points, so it works for all six engines; it returns the average
+            # forward time in seconds. Uncomment to enable:
+            # self.inference.warmup(times=3, with_postprocess=True, verbose=True)
             # init threads
             self._init_inference_threads()
             # start threads

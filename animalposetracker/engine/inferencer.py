@@ -2,6 +2,7 @@ from typing import Dict, Union
 import cv2
 import numpy as np
 import yaml
+import time
 from pathlib import Path
 import os
 
@@ -689,6 +690,54 @@ class InferenceEngine:
             return trt_outputs
         except ImportError:
             raise ImportError("Please install tensorrt and pycuda to use TensorRT engine.")
+
+    def warmup(self, times: int = 3, with_postprocess: bool = True, verbose: bool = False):
+        """Warm up the model and post-processing ops to remove first-call overhead.
+
+        Why this matters: the first inference on TensorRT / CUDA compiles kernels and allocates
+        device memory, which can be tens of times slower than steady state. NMS and other
+        post-processing ops also pay a one-off cost on their first call. Without warmup, the first
+        frames of the first video run abnormally slow and that cost is included in the FPS
+        statistics, which distorts the reported real-time numbers.
+
+        Must be called after model_init(). Works for all six engines because it goes through the
+        existing preprocess / inference / postprocess dispatch, so no per-backend implementation
+        is required.
+
+        Args:
+            times (int): Number of forward passes. The one-off cost is mostly paid by the first
+                call, so 3 is already enough to stabilize.
+            with_postprocess (bool): Also warm up post-processing (NMS etc.). Keep True.
+            verbose (bool): Print warmup timing.
+
+        Returns:
+            float: Average time per forward pass after warmup, in seconds.
+
+        Raises:
+            RuntimeError: Model has not been loaded yet.
+        """
+        if self.model is None:
+            raise RuntimeError("Model not loaded, call model_init() first.")
+
+        # Build a valid input from a zero image; preprocess scales it to input_width/height
+        dummy = np.zeros((self._input_height, self._input_width, 3), dtype=np.uint8)
+        img, IM = self.preprocess(dummy)
+
+        start = time.perf_counter()
+        for _ in range(max(int(times), 1)):
+            pred = self.inference(img)
+            if with_postprocess:
+                self.postprocess(pred, IM)  # warm up NMS and other post-processing ops
+        elapsed = time.perf_counter() - start
+        avg = elapsed / max(int(times), 1)
+
+        if verbose:
+            print(
+                f"[warmup] engine={self._engine} device={self._device} "
+                f"bits={self._model_bits} times={times} "
+                f"total={elapsed * 1000:.1f} ms  avg={avg * 1000:.2f} ms"
+            )
+        return avg
 
     def draw_detections(self, 
                         img, 
