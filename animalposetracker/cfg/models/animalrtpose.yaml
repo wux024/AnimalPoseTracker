@@ -12,6 +12,15 @@ scales: # model compound scaling constants, i.e. 'model=yolov8n-pose-cspnext.yam
   l: [1.00, 1.00, 512]
   x: [1.00, 1.25, 512]
 
+# Full AnimalRTPose checkpoints by model scale. These are full pose-model weights;
+# AnimalViTPose's separate MAE backbone initialization URLs live in its model variants.
+pretrained_urls:
+  n: https://drive.google.com/uc?export=download&id=1frHtyJKbyAZUr4uGpbTSje4L0hrkeqgz
+  s: https://drive.google.com/uc?export=download&id=19XeuqZRvF9IBoBbPPkDrjew3Pw9MdBLJ
+  m: https://drive.google.com/uc?export=download&id=1BRlOoZnVHyf_P_UJJWhhw9udF3HsNBT6
+  l: https://drive.google.com/uc?export=download&id=1CeQTPO4Mf-uG3jwkD5rnzttn6yFZoHjK
+  x: https://drive.google.com/uc?export=download&id=1ubZL6AVGuLb8616Y6lySQKjNNbV85qUL
+
 # CSPNeXt backbone
 backbone:
   # [from, repeats, module, args]

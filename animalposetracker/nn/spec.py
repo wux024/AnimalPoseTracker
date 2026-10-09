@@ -136,6 +136,7 @@ def _build_namespace(d: Dict[str, Any], ctx: BuildContext) -> Dict[str, Any]:
         {
             "nc": ctx.nc,
             "kpt_shape": ctx.kpt_shape,
+            "num_keypoints": ctx.kpt_shape[0],
             "depth": ctx.depth,
             "width": ctx.width,
             "max_channels": ctx.max_channels,

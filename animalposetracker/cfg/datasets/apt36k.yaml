@@ -41,7 +41,7 @@ names:
   28: monkey
   29: orangutan
 
-oks_sigmas:
+kpt_oks_sigmas:
   [
     0.025,
     0.025,

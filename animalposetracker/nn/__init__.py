@@ -38,20 +38,7 @@ Revision History:
     - [2026/9/16] wux024: Initial file creation
 """
 
-from pathlib import Path
-
-# Model yaml directory (reuse the existing location, do not keep a second copy)
-MODEL_DIR = Path(__file__).resolve().parent.parent / "cfg" / "models"
-
-MODEL_YAML_PATHS = {
-    "AnimalRTPose": MODEL_DIR / "animalrtpose.yaml",
-    "AnimalRTPose-P6": MODEL_DIR / "animalrtpose-p6.yaml",
-    "SPIPose": MODEL_DIR / "spipose.yaml",
-    "YOLOv8-Pose": MODEL_DIR / "yolov8-pose.yaml",
-    "YOLOv8-Pose-P6": MODEL_DIR / "yolov8-pose-p6.yaml",
-    "YOLO11-Pose": MODEL_DIR / "yolo11-pose.yaml",
-    "YOLOv12-Pose": MODEL_DIR / "yolo12-pose.yaml",
-}
+from animalposetracker.cfg import MODEL_DIR, MODEL_YAML_PATHS
 
 __all__ = [
     "MODEL_YAML_PATHS",

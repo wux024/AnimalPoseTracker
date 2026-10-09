@@ -12,27 +12,50 @@ We recommend creating a new conda environment for AnimalPoseTracker, recommended
 conda create -n animalposetracker python=3.10
 ```
 
-2. [Optional] If you want to train a model, you need to install "PyTorch" and "torchvision" first. You can install them by following the instructions on the official website: https://pytorch.org/get-started/locally/. We recommend Pytorch >= 1.8. For example, if you are using conda, you can run the following command:
+2. [Optional] To train with AnimalPoseTracker's built-in PyTorch framework, install a PyTorch 2.0+ build that matches your CPU or CUDA setup. Follow the instructions on the official website: https://pytorch.org/get-started/locally/. For example, if you are using conda, you can run the following command:
 ```
 pip install torch==2.5.0 torchvision==0.20.0 torchaudio==2.5.0 --index-url https://download.pytorch.org/whl/cu118
 ```
 
-And then install 'ultralytics' (ours customized) by running the following command:
-```
-pip install git+https://github.com/wux024/ultralytics.git@animalrtpose
-```
-
-3. Install AnimalPoseTracker: 
+3. Install AnimalPoseTracker with its optional training dependencies:
 Clone the repository:
 ```
 git clone https://github.com/wux024/AnimalPoseTracker.git
 cd AnimalPoseTracker
-pip install -v -e.
+pip install -v -e ".[training]"
 ```
 or 
 ```
 pip install git+https://github.com/wux024/AnimalPoseTracker.git
 ```
+
+Project training, validation, prediction, and model export use AnimalPoseTracker's own workflows; they do not require the YOLO training framework or CLI. Install `.[training]` for PyTorch and COCO evaluation support. Export targets include TorchScript, ONNX, OpenVINO, TensorRT, CoreML, TensorFlow SavedModel/GraphDef/Lite/Edge TPU/JS, PaddlePaddle, MNN, NCNN, IMX500, and RKNN. Project prediction also accepts a remote Triton model URL; TensorFlow.js is export-only, matching the Ultralytics AutoBackend baseline. Each target needs its optional runtime or vendor SDK; see [deployment format support](docs/deployment_formats.md) for the matrix and installation extras.
+
+AnimalViTPose uses the same built-in trainer as AnimalRTPose, with a top-down instance-crop data adapter and the SimCC/KL loss, optimizer, schedule, and COCO/PCK/AUC/EPE evaluation settings from the [MMPose AnimalViTPose recipe](https://github.com/wux024/mmpose/blob/main/configs/animal_2d_keypoint/animalvitpose/ap10k/animalvitpose-small_8xb64-210e_ap10k-256x256.py). The MMPose Small/Base/Large/Huge scales and project image size select the ViT graph inside the same trainer. MMPose itself is not imported at training time; install `.[training]` for PyTorch and COCO evaluation support.
+
+Built-in training defaults are defined in [`animalposetracker/cfg/training.yaml`](animalposetracker/cfg/training.yaml). Values identical across AnimalRTPose and AnimalViTPose are defined once under `training.shared`; each model profile contains only its specific or differing training, loss, augmentation and validation values. The model type in `project.yaml` selects the matching key under `training.models`, so the selection is stored only once. Network graphs, AnimalViTPose scale variants, SimCC head geometry and input normalization stay in the single selected project's `configs/model.yaml`; dataset paths and keypoint metadata stay in `configs/dataset.yaml`. The selected scale comes from `project.yaml` and is applied to the model graph at training time. Project code exposes the selected training profile as a flat view to the existing settings UI.
+
+`project.yaml` also keeps GUI-facing class/keypoint names, counts and skeleton metadata because existing annotation pages read that file directly; `dataset.yaml` carries the corresponding loader fields. `model.yaml` repeats `kpt_shape` as the model output contract, which must match the dataset. OKS sigmas have a single owner: `dataset.yaml`.
+
+The AnimalViTPose profile defaults to the matching MAE ViT checkpoint and caches it under the user's local cache directory. Set `pretrained: false` to train from scratch, or provide `pretrained_weights` to use a local or remote checkpoint. Project evaluation uses the native COCO/PCK/AUC/EPE validator. Project prediction defaults to the configured `test` split, then `val`; AnimalRTPose runs on full images, while AnimalViTPose crops each annotated instance from the selected COCO/YOLO split and maps SimCC predictions back to the source image. The predictor exposes an `InstanceBoxProvider` interface for a future detector; live camera/video inference remains the separate inferencer workflow. Video project predictions can optionally chain tracking and temporal filtering, and synchronized camera outputs can be triangulated through the project API; see [the pose analysis workflow guide](docs/pose_analysis_workflows.md). Native TorchScript export supports both model heads; ONNX export and simplification use the optional `.[export]` dependencies.
+
+Both AnimalRTPose and AnimalViTPose read normalized YOLO-Pose TXT labels or COCO Keypoints JSON. AnimalViTPose can validate YOLO labels by building COCO ground truth from them in memory. For COCO, point the split image fields at the image folders and provide the split annotation files:
+```yaml
+annotation_format: coco
+path: /datasets/mouse
+train: images/train
+val: images/val
+test: images/test
+kpt_shape: [12, 3]
+names:
+  0: mus1
+  1: mus2
+  2: mus3
+skeleton: [[0, 1], [0, 2], [3, 4], [4, 5], [5, 6], [6, 7], [7, 8], [8, 9], [9, 10], [10, 11]]
+```
+With this layout, the trainer automatically reads `annotations/train.json`, `val.json`, and `test.json`; standard `person_keypoints_{split}2017.json` names are also detected. Explicit `train_annotations` and `val_annotations` paths can override discovery. COCO category names map to the configured class names. Images, boxes, and keypoints are read directly from JSON; training does not convert the dataset or import Ultralytics.
+
+For keypoint AP, configure one positive OKS sigma per landmark with `kpt_oks_sigmas` in the dataset YAML. This replaces COCOeval's built-in human COCO-17 vector. When bringing in an MMPose dataset metainfo, write its `sigmas` values under this field. If omitted, the trainer warns and uses the uniform `1 / number_of_keypoints` custom-keypoint fallback; animal datasets should provide their own vector when landmark tolerances differ.
 
 4. [Optional] AnimalPoseTracker supports six inference engines: `ONNX`, `OpenVINO`, `TensorRT`, `CoreML`, `CANN`, and `OpenCV`. 
 

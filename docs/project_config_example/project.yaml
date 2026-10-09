@@ -1,0 +1,48 @@
+project_path: .
+project_name: trimouse-example
+worker: example
+model_type: AnimalViTPose
+model_scale: S
+date: '20261007'
+keypoints: 12
+visible: true
+classes: 3
+keypoints_name:
+- kpt_0
+- kpt_1
+- kpt_2
+- kpt_3
+- kpt_4
+- kpt_5
+- kpt_6
+- kpt_7
+- kpt_8
+- kpt_9
+- kpt_10
+- kpt_11
+skeleton:
+- - 0
+  - 1
+- - 0
+  - 2
+- - 3
+  - 4
+- - 4
+  - 5
+- - 5
+  - 6
+- - 6
+  - 7
+- - 7
+  - 8
+- - 8
+  - 9
+- - 9
+  - 10
+- - 10
+  - 11
+classes_name:
+- mus1
+- mus2
+- mus3
+sources: []

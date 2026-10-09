@@ -9,7 +9,8 @@
 # head consumes it directly -- there is no FPN and no multi-scale head, unlike AnimalRTPose.
 #
 # The ViT architecture is written positionally (see the ViT rule in nn/registry.py):
-#   [embed_dims, num_layers, num_heads, feedforward_channels, patch_size, img_size, patch_cfg]
+#   [embed_dims, num_layers, num_heads, feedforward_channels, patch_size, img_size,
+#    patch_cfg, vit_options]
 # The arch name is not used on purpose: this yaml is also read by spec.parse, which stays
 # torch-free and therefore cannot look up VisionTransformer.ARCH_ZOO.
 
@@ -17,11 +18,53 @@ nc: 1 # (int) number of classes; a SimCC head is class-agnostic, one animal per 
 kpt_shape: [17, 3] # (list) number of keypoints, number of dims (x, y, visible)
 
 backbone:
-  # ViT-S: 384 embedding dims, 12 layers, 12 heads, FFN 1536, 16x16 patches, 256x256 input.
+  # Default to ViT-S at 256px; the trainer maps model_scale and image_size to the
+  # Small/Base/Large/Huge MMPose variants without maintaining separate training graphs.
   # patch_cfg padding=2 matches the AnimalViTPose configs in the mmpose fork.
-  - [-1, 1, ViT, [384, 12, 12, 1536, 16, 256, {padding: 2}]] # 0, output 16x16
+  - [-1, 1, ViT, [384, 12, 12, 1536, 16, 256, {padding: 2}, {drop_path_rate: 0.1}]] # 0, output 16x16
 
 head:
-  # SimCCHead: 17 keypoints; 256x256 input with a 16x16 feature map; split ratio 2.0,
-  # so the 1D distributions are 512 long; one deconv layer of 256 channels, kernel 4.
-  - [[-1], 1, SimCCHead, [17, [256, 256], [16, 16], 2.0, [256], [4]]] # 1
+  # num_keypoints resolves from the single top-level kpt_shape field.
+  # The trainer adjusts the input grid and vector length from image_size.
+  - [[-1], 1, SimCCHead, [num_keypoints, [256, 256], [16, 16], 2.0, [256], [4]]] # 1
+
+# Architecture choices belong with the model graph, not the training recipe.
+model_variants:
+  small:
+    embed_dims: 384
+    num_layers: 12
+    num_heads: 12
+    feedforward_channels: 1536
+    drop_path_rate: 0.1
+    pretrained_url: https://download.openmmlab.com/mmpose/v1/pretrained_models/mae_pretrain_vit_small_20230913.pth
+  base:
+    embed_dims: 768
+    num_layers: 12
+    num_heads: 12
+    feedforward_channels: 3072
+    drop_path_rate: 0.3
+    pretrained_url: https://download.openmmlab.com/mmpose/v1/pretrained_models/mae_pretrain_vit_base_20230913.pth
+  large:
+    embed_dims: 1024
+    num_layers: 24
+    num_heads: 16
+    feedforward_channels: 4096
+    drop_path_rate: 0.5
+    pretrained_url: https://download.openmmlab.com/mmpose/v1/pretrained_models/mae_pretrain_vit_large_20230913.pth
+  huge:
+    embed_dims: 1280
+    num_layers: 32
+    num_heads: 16
+    feedforward_channels: 5120
+    drop_path_rate: 0.55
+    pretrained_url: https://download.openmmlab.com/mmpose/v1/pretrained_models/mae_pretrain_vit_huge_20230913.pth
+
+# The head's coordinate-distribution geometry and crop normalization are shared
+# by training and inference, so they travel with the model definition.
+simcc:
+  split_ratio: 2.0
+
+preprocessing:
+  pixel_mean: [123.675, 116.28, 103.53]
+  pixel_std: [58.395, 57.12, 57.375]
+  bbox_padding: 1.25

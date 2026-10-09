@@ -156,6 +156,8 @@ def _vit(args, n, ch_in, ctx):
     yaml form:
         [embed_dims, num_layers, num_heads, feedforward_channels, patch_size, img_size]
     an optional 7th entry is a patch_cfg dict forwarded to PatchEmbed, e.g. {padding: 2}.
+    An optional 8th entry is a VisionTransformer keyword-argument mapping, e.g.
+    {drop_path_rate: 0.1}.
 
     The architecture is spelled out positionally rather than by arch name, because this
     function also runs inside spec.parse, which must stay torch-free and therefore cannot
@@ -171,6 +173,9 @@ def _vit(args, n, ch_in, ctx):
         )
     embed_dims, num_layers, num_heads, feedforward_channels, patch_size, img_size = args[:6]
     patch_cfg = args[6] if len(args) > 6 else None
+    vit_options = args[7] if len(args) > 7 else None
+    if vit_options is not None and not isinstance(vit_options, dict):
+        raise TypeError(f"ViT's optional 8th argument must be a mapping, got {type(vit_options).__name__}")
 
     if img_size % patch_size != 0:
         raise ValueError(f"ViT: img_size {img_size} must be divisible by patch_size {patch_size}")
@@ -188,6 +193,19 @@ def _vit(args, n, ch_in, ctx):
     )
     if patch_cfg:
         kwargs["patch_cfg"] = patch_cfg
+    if vit_options:
+        allowed_options = {
+            "drop_rate",
+            "drop_path_rate",
+            "qkv_bias",
+            "final_norm",
+            "out_type",
+            "with_cls_token",
+        }
+        unknown = sorted(set(vit_options) - allowed_options)
+        if unknown:
+            raise ValueError(f"Unsupported ViT options: {unknown}; allowed: {sorted(allowed_options)}")
+        kwargs.update(vit_options)
 
     return [kwargs], n, embed_dims, patch_size / img_size
 

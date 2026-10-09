@@ -137,7 +137,7 @@ class InferenceEngine:
         if self._data_config is None:
             return
         
-        if isinstance(self._data_config, str or Path):
+        if isinstance(self._data_config, (str, Path)):
             # Load the data config file
             with open(self._data_config, 'r') as f:
                 config = yaml.load(f, Loader=yaml.FullLoader)

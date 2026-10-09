@@ -40,7 +40,6 @@ dependencies = [
     "PyCameraList>=1.0.0",
     "numpy>=1.23.0",
     "matplotlib>=3.3.0",
-    "opencv-python>=4.6.0",
     "opencv-contrib-python>=4.6.0",
     "pillow>=7.1.2",
     "pyyaml>=5.3.1",
@@ -52,14 +51,31 @@ dependencies = [
     "tqdm>=4.64.0",
 ]
 
+[project.optional-dependencies]
+training = ["torch>=2.0.0", "pycocotools>=2.0.7"]
+export = ["onnx>=1.14.0", "onnxsim>=0.4.0"]
+export-openvino = ["openvino>=2024.0.0"]
+export-coreml = ["coremltools>=8.0"]
+export-tensorflow = ["tensorflow>=2.0.0", "onnx2tf>=1.26.3", "tensorflowjs"]
+export-paddle = ["paddlepaddle>=3.0.0", "x2paddle"]
+export-mnn = ["MNN>=2.9.6"]
+export-ncnn = ["ncnn"]
+predict-triton = ["tritonclient[http,grpc]"]
+
 
 # Package discovery configuration
 [tool.setuptools]
-packages = ["animalposetracker"]
 package-dir = {"" = "."}
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["animalposetracker*"]
 
 [tool.setuptools.package-data]
 animalposetracker = [
+    "cfg/*.yaml",
+    "cfg/models/*.yaml",
+    "cfg/datasets/*.yaml",
     "assets/logo_transparent.png",
     "assets/logo.png",
     "assets/welcome.png",

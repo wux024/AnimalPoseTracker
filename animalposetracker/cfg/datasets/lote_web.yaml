@@ -22,7 +22,7 @@ names:
   9: CapricornisMilneedwardsii
   10: PseudoisNayaur
 
-oks_sigmas:
+kpt_oks_sigmas:
   [
     0.025,
     0.025,

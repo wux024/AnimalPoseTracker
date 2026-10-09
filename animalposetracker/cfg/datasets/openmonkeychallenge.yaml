@@ -37,7 +37,7 @@ names:
   24: Formosan_rock_macaque
   25: Bonobo
 
-oks_sigmas:
+kpt_oks_sigmas:
   [
     0.025,
     0.025,

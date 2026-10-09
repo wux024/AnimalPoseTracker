@@ -88,7 +88,7 @@ names:
   34: wolf
   35: zebra
 
-oks_sigmas:
+kpt_oks_sigmas:
   [
     0.026,
     0.067,

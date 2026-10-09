@@ -1202,19 +1202,19 @@
                     </property>
                    </item>
                    <item>
-                    <property name="text">
+                   <property name="text">
                      <string>project</string>
-                    </property>
-                    <property name="text">
-                     <string>None</string>
+                   </property>
+                   <property name="text">
+                     <string>runs</string>
                     </property>
                    </item>
                    <item>
-                    <property name="text">
+                   <property name="text">
                      <string>name</string>
-                    </property>
-                    <property name="text">
-                     <string>None</string>
+                   </property>
+                   <property name="text">
+                     <string>train</string>
                     </property>
                    </item>
                    <item>
@@ -1234,11 +1234,11 @@
                     </property>
                    </item>
                    <item>
-                    <property name="text">
+                   <property name="text">
                      <string>seed</string>
-                    </property>
-                    <property name="text">
-                     <string>date</string>
+                   </property>
+                   <property name="text">
+                     <string>0</string>
                     </property>
                    </item>
                    <item>
@@ -1282,11 +1282,11 @@
                     </property>
                    </item>
                    <item>
-                    <property name="text">
+                   <property name="text">
                      <string>profile</string>
-                    </property>
-                    <property name="text">
-                     <string>false</string>
+                   </property>
+                   <property name="text">
+                     <string>False</string>
                     </property>
                    </item>
                    <item>
@@ -1370,19 +1370,19 @@
                     </property>
                    </item>
                    <item>
-                    <property name="text">
+                   <property name="text">
                      <string>pose</string>
-                    </property>
-                    <property name="text">
-                     <string>40.0</string>
+                   </property>
+                   <property name="text">
+                     <string>12.0</string>
                     </property>
                    </item>
                    <item>
-                    <property name="text">
+                   <property name="text">
                      <string>kobj</string>
-                    </property>
-                    <property name="text">
-                     <string>2.0</string>
+                   </property>
+                   <property name="text">
+                     <string>1.0</string>
                     </property>
                    </item>
                    <item>
@@ -1426,11 +1426,11 @@
                     </property>
                    </item>
                    <item>
-                    <property name="text">
+                   <property name="text">
                      <string>plots</string>
-                    </property>
-                    <property name="text">
-                     <string>False</string>
+                   </property>
+                   <property name="text">
+                     <string>True</string>
                     </property>
                    </item>
                   </widget>

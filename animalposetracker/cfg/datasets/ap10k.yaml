@@ -6,6 +6,9 @@ test: images/test
 
 # Keypoints
 kpt_shape: [17, 3] # number of keypoints, number of dims (2 for x,y or 3 for x,y,visible)
+keypoint_names: [L_Eye, R_Eye, Nose, Neck, Root_of_tail, L_Shoulder, L_Elbow, L_F_Paw, R_Shoulder, R_Elbow, R_F_Paw, L_Hip, L_Knee, L_B_Paw, R_Hip, R_Knee, R_B_Paw]
+upper_body_ids: [0, 1, 2, 3, 5, 6, 7, 8, 9]
+lower_body_ids: [4, 10, 11, 12, 13, 14, 15, 16]
 flip_idx: [1, 0, 2, 3, 4, 8, 9, 10, 5, 6, 7, 14, 15, 16, 11, 12, 13]
 
 # Classes
@@ -61,7 +64,7 @@ names:
   48: panda
   49: polar bear
 
-oks_sigmas:
+kpt_oks_sigmas:
   [
     0.025,
     0.025,

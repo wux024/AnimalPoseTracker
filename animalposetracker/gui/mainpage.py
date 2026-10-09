@@ -842,6 +842,8 @@ class AnimalPoseTrackerPage(QMainWindow, Ui_AnimalPoseTracker):
         Check if the current process is still running.
         If not, perform corresponding actions based on the current mode.
         """
+        if self.current_mode == "train":
+            self._display_training_events()
         if self.project.process.poll() is not None:
             if self.current_mode == "train":
                 self._toggle_buttons("train", start=True)
@@ -852,11 +854,47 @@ class AnimalPoseTrackerPage(QMainWindow, Ui_AnimalPoseTracker):
             self.project.stop()
             self._stop_check_thread()
 
+    def _display_training_events(self):
+        """Show the latest structured training status in the application status bar."""
+        for event in self.project.read_training_events():
+            kind = event.get("event")
+            epoch = event.get("epoch")
+            epochs = event.get("epochs")
+            if kind == "batch":
+                metrics = event.get("metrics", {})
+                loss = metrics.get("loss")
+                detail = f", loss={loss:.4g}" if isinstance(loss, (int, float)) else ""
+                self.statusBar().showMessage(
+                    f"Training epoch {epoch}/{epochs}, batch {event.get('step')}/{event.get('steps')}{detail}"
+                )
+            elif kind == "validation":
+                metrics = event.get("metrics", {})
+                loss = metrics.get("loss")
+                pose_map = metrics.get("metrics/mAP50-95(P)")
+                box_map = metrics.get("metrics/mAP50-95(B)")
+                details = []
+                if isinstance(loss, (int, float)):
+                    details.append(f"loss={loss:.4g}")
+                if isinstance(pose_map, (int, float)):
+                    details.append(f"pose mAP50-95={pose_map:.3f}")
+                if isinstance(box_map, (int, float)):
+                    details.append(f"box mAP50-95={box_map:.3f}")
+                detail = f", {', '.join(details)}" if details else ""
+                self.statusBar().showMessage(f"Validation epoch {epoch}/{epochs}{detail}")
+            elif kind == "pretrained":
+                self.statusBar().showMessage(event.get("message", "Pretrained weights loaded."))
+            elif kind == "stopped":
+                self.statusBar().showMessage("Training stopped; checkpoint saved.")
+            elif kind == "failed":
+                self.statusBar().showMessage(f"Training failed: {event.get('message', 'unknown error')}")
+            elif kind == "finished":
+                self.statusBar().showMessage("Training finished.")
+
     def onEndTrain(self):
-        """Slot for ending training"""
-        self._toggle_buttons("train", start=True)
-        self._stop_check_thread()
-        self.project.stop()
+        """Request an orderly stop after the custom trainer saves its checkpoint."""
+        self.EndTrain.setEnabled(False)
+        self.project.request_training_stop()
+        self.statusBar().showMessage("Stopping after the current training batch...")
 
     def onStartEvaluate(self):
         """Slot for starting evaluation"""
@@ -1048,5 +1086,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-
-        

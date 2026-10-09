@@ -59,14 +59,14 @@ __all__ = [
 def resize_pos_embed(pos_embed: torch.Tensor, target_length: int, num_extra_tokens: int) -> torch.Tensor:
     """Bicubic-interpolate patch positional embeddings onto a different grid size.
 
-    The pretrained MAE checkpoints use 224x224 input (14x14 patches, 196 + 1 tokens); a
-    256x256 input needs 16x16 patches (256 + 1 tokens). The extra tokens (cls / distillation)
-    are copied as is, the patch tokens are reshaped to a grid and interpolated.
+    Infer leading class/distillation tokens from the source grid length. This also handles
+    AnimalViTPose's ``with_cls_token=False`` target: a 197-token MAE embedding is converted
+    to 196 patch tokens, then resized onto the target 16x16 grid.
 
     Args:
         pos_embed (torch.Tensor): Source embeddings with shape (1, old_length, channels)
         target_length (int): Wanted number of tokens, i.e. the length of the target tensor
-        num_extra_tokens (int): Leading tokens that are not patch tokens (0 or 1)
+        num_extra_tokens (int): Number of leading non-patch tokens required by the target.
 
     Returns:
         (torch.Tensor): Embeddings with shape (1, target_length, channels)
@@ -75,18 +75,32 @@ def resize_pos_embed(pos_embed: torch.Tensor, target_length: int, num_extra_toke
         return pos_embed
 
     num_tokens, channels = pos_embed.shape[1], pos_embed.shape[2]
-    num_patches = num_tokens - num_extra_tokens
     num_target_patches = target_length - num_extra_tokens
-
-    old_grid = int(round(math.sqrt(num_patches)))
+    source_grid = None
+    source_extra_tokens = None
+    for candidate_extra_tokens in (num_extra_tokens, 0, 1, 2):
+        candidate_patches = num_tokens - candidate_extra_tokens
+        candidate_grid = int(round(math.sqrt(candidate_patches))) if candidate_patches > 0 else 0
+        if candidate_grid * candidate_grid == candidate_patches:
+            source_grid = candidate_grid
+            source_extra_tokens = candidate_extra_tokens
+            break
+    if source_grid is None:
+        raise ValueError(f"Cannot infer a square source grid from {num_tokens} position tokens")
+    old_grid = source_grid
     new_grid = int(round(math.sqrt(num_target_patches)))
-    if old_grid * old_grid != num_patches or new_grid * new_grid != num_target_patches:
+    if new_grid * new_grid != num_target_patches:
         raise ValueError(
-            f"Cannot resize a non-square positional embedding: {num_patches} -> {num_target_patches} patches"
+            f"Cannot resize a non-square positional embedding: "
+            f"{old_grid * old_grid} -> {num_target_patches} patches"
         )
 
+    if source_extra_tokens < num_extra_tokens:
+        raise ValueError(
+            f"Source has {source_extra_tokens} extra tokens, but target requires {num_extra_tokens}"
+        )
     extra = pos_embed[:, :num_extra_tokens, :]
-    patch = pos_embed[:, num_extra_tokens:, :]
+    patch = pos_embed[:, source_extra_tokens:, :]
     patch = patch.reshape(1, old_grid, old_grid, channels).permute(0, 3, 1, 2)
     patch = F.interpolate(patch, size=(new_grid, new_grid), mode="bicubic", align_corners=False)
     patch = patch.permute(0, 2, 3, 1).reshape(1, new_grid * new_grid, channels)
@@ -458,7 +472,7 @@ class VisionTransformer(nn.Module):
         for i in out_indices:
             if i < -num_layers or i >= num_layers:
                 raise ValueError(f"out_indices {out_indices} out of range for {num_layers} layers")
-        self.out_indices = out_indices
+        self.out_indices = [i if i >= 0 else num_layers + i for i in out_indices]
 
         dpr = [x.item() for x in torch.linspace(0, drop_path_rate, num_layers)]
         self.layers = nn.ModuleList(
@@ -475,7 +489,7 @@ class VisionTransformer(nn.Module):
         )
 
         self.final_norm = final_norm
-        self.ln1 = nn.LayerNorm(embed_dims) if final_norm else nn.Identity()
+        self.ln1 = nn.LayerNorm(embed_dims, eps=1e-6) if final_norm else nn.Identity()
 
         self.init_weights()
         # A pretrained positional embedding usually sits on a different grid; interpolate it on load.
@@ -499,8 +513,16 @@ class VisionTransformer(nn.Module):
             elif isinstance(m, nn.Conv2d):
                 nn.init.kaiming_normal_(m.weight, mode="fan_out")
 
-    def _prepare_pos_embed(self, state_dict: dict, prefix: str, *args, **kwargs) -> None:
+    def _prepare_pos_embed(self, *args, **kwargs) -> None:
         """Interpolate a pretrained positional embedding onto this model's grid before loading."""
+        # PyTorch's register_load_state_dict_pre_hook may pass the owning module explicitly;
+        # accept both documented callback layouts while keeping this as a bound method.
+        if len(args) >= 3 and isinstance(args[0], nn.Module):
+            _module, state_dict, prefix = args[:3]
+        elif len(args) >= 2:
+            state_dict, prefix = args[:2]
+        else:
+            raise TypeError("Unexpected state-dict pre-hook signature")
         key = prefix + "pos_embed"
         if key not in state_dict or state_dict[key].shape == self.pos_embed.shape:
             return

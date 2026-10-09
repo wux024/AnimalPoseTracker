@@ -53,7 +53,7 @@ flip_idx:
 names:
   0: animal
 
-oks_sigmas:
+kpt_oks_sigmas:
   [
     0.026,
     0.067,

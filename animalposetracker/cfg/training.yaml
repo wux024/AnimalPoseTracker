@@ -1,0 +1,133 @@
+# Single source of training defaults for the built-in PyTorch trainer.
+# Project-level configs/other.yaml stores shared and model-specific training settings.
+
+shared:
+  runtime:
+    device: auto
+    num_workers: 8
+    time_hours:
+    cache: false
+    fraction: 1.0
+    profile: false
+    plots: true
+    val: true
+    seed: 0
+    deterministic: true
+    project: runs
+    name: train
+    exist_ok: false
+    save: true
+    save_period: -1
+    pretrained: true
+    verbose: true
+    resume: false
+    resume_from:
+  training:
+    lr_gamma: 0.1
+    single_cls: false
+    multi_scale: false
+    freeze:
+    best_metric: coco/AP
+    best_metric_mode: max
+
+metrics:
+  pck_threshold: 0.05
+  auc_norm_factor: 30.0
+  auc_thresholds: 20
+  coco_max_detections: 20
+
+models:
+  AnimalRTPose:
+    training:
+      epochs: 1000
+      batch_size: 16
+      image_size: 640
+      validation_batch_size:
+      optimizer: auto
+      learning_rate: 0.01
+      final_lr_factor: 0.01
+      momentum: 0.937
+      weight_decay: 0.0005
+      warmup_epochs: 3.0
+      warmup_momentum: 0.8
+      warmup_bias_lr: 0.1
+      nominal_batch_size: 64
+      gradient_accumulation_steps:
+      gradient_clip_norm:
+      layer_decay_rate:
+      lr_milestones:
+      early_stopping_patience: 300
+      amp: true
+      ema: true
+      validation_interval: 1
+      log_interval: 20
+      cosine_schedule: false
+      close_mosaic: 10
+    loss:
+      box_loss_weight: 7.5
+      class_loss_weight: 0.5
+      distribution_loss_weight: 1.5
+      keypoint_loss_weight: 12.0
+      visibility_loss_weight: 1.0
+    augmentation:
+      hsv_h: 0.015
+      hsv_s: 0.7
+      hsv_v: 0.4
+      degrees: 0.0
+      translate: 0.1
+      scale: 0.5
+      shear: 0.0
+      perspective: 0.0
+      flipud: 0.0
+      fliplr: 0.5
+      bgr: 0.0
+      mosaic: 1.0
+      mixup: 0.0
+    validation:
+      conf: 0.001
+      iou: 0.7
+      max_det: 300
+      agnostic_nms: false
+
+  AnimalViTPose:
+    training:
+      epochs: 500
+      batch_size: 64
+      validation_batch_size: 32
+      image_size: 256
+      optimizer: AdamW
+      learning_rate: 0.0005
+      weight_decay: 0.1
+      momentum: 0.9
+      warmup_iters: 500
+      warmup_start_factor: 0.001
+      lr_milestones: [460, 490]
+      gradient_clip_norm: 1.0
+      gradient_accumulation_steps: 1
+      validation_interval: 10
+      log_interval: 50
+      seed: 21
+      early_stopping_patience: 0
+      ema: false
+      amp: false
+      layer_decay_rate_by_scale:
+        small: 0.8
+        base: 0.75
+        large: 0.8
+        huge: 0.85
+    loss:
+      label_sigma: 6.0
+      kl_beta: 1.0
+    augmentation:
+      horizontal_flip_probability: 0.5
+      half_body_probability: 0.3
+      half_body_upper_probability: 0.7
+      half_body_scale_factor: 1.5
+      bbox_shift_probability: 0.3
+      bbox_shift_factor: 0.16
+      bbox_scale_factor: 0.5
+      bbox_rotation_probability: 0.6
+      bbox_rotation_factor: 80.0
+    validation:
+      oks_nms_threshold: 0.9
+      keypoint_score_threshold: 0.2
