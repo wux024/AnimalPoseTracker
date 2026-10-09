@@ -72,7 +72,7 @@ class IndependentTrackingTests(unittest.TestCase):
             "import sys; import animalposetracker.tracking; "
             "assert 'ultralytics' not in sys.modules; "
             "assert 'animalposetracker.gui' not in sys.modules; "
-            "assert 'animalposetracker.projector' not in sys.modules"
+            "assert 'animalposetracker.project' not in sys.modules"
         )
         subprocess.run([sys.executable, "-c", check], check=True)
 

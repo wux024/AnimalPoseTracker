@@ -1,9 +1,4 @@
-"""MMPose-compatible top-down data, SimCC loss, and validation adapters.
-
-The adapters in this module plug into the shared AnimalPoseTracker ``Trainer``. They mirror
-the AnimalViTPose MMPose recipe without introducing a second training loop or a runtime
-dependency on MMPose.
-"""
+"""Top-down instance-crop datasets for AnimalViTPose."""
 
 import hashlib
 import io
@@ -17,162 +12,16 @@ from typing import Any, Dict, Optional, Sequence, Tuple, Union
 import cv2
 import numpy as np
 import torch
-import torch.nn.functional as F
 from PIL import Image
 from scipy.stats import truncnorm
 from torch.utils.data import DataLoader, Dataset, SequentialSampler
 from torch.utils.data.distributed import DistributedSampler
 
-from .data import PoseTextDataset, _read_yaml
-from .metrics import build_coco_ground_truth, evaluate_coco_keypoints, keypoint_error_metrics
-
-
-class SimCCLabel:
-    """Encode keypoints as the 1D Gaussian labels used by MMPose ``SimCCLabel``."""
-
-    def __init__(
-        self,
-        input_size: Tuple[int, int],
-        sigma: float = 6.0,
-        split_ratio: float = 2.0,
-        normalize: bool = True,
-    ) -> None:
-        self.input_size = tuple(map(int, input_size))
-        self.sigma = float(sigma)
-        self.split_ratio = float(split_ratio)
-        self.normalize = bool(normalize)
-        if len(self.input_size) != 2 or min(self.input_size) < 1:
-            raise ValueError("SimCC input_size must be a positive (width, height) pair")
-        if self.sigma <= 0 or self.split_ratio <= 0:
-            raise ValueError("SimCC sigma and split_ratio must be positive")
-
-    def encode(self, keypoints: np.ndarray, visible: np.ndarray):
-        """Return x/y labels and visibility weights for one cropped instance."""
-        keypoints = np.asarray(keypoints, dtype=np.float32).reshape(-1, 2)
-        weights = np.asarray(visible, dtype=np.float32).reshape(-1).copy()
-        if len(weights) != len(keypoints):
-            raise ValueError("SimCC keypoint coordinates and visibility have different lengths")
-
-        width, height = self.input_size
-        bins_x = int(np.around(width * self.split_ratio))
-        bins_y = int(np.around(height * self.split_ratio))
-        labels_x = np.zeros((len(keypoints), bins_x), dtype=np.float32)
-        labels_y = np.zeros((len(keypoints), bins_y), dtype=np.float32)
-        split_points = np.around(keypoints * self.split_ratio).astype(np.int64)
-        x_grid = np.arange(bins_x, dtype=np.float32)
-        y_grid = np.arange(bins_y, dtype=np.float32)
-        radius = self.sigma * 3.0
-
-        for index, (mu_x, mu_y) in enumerate(split_points):
-            if weights[index] < 0.5:
-                continue
-            if mu_x < 0 or mu_y < 0 or mu_x >= bins_x or mu_y >= bins_y:
-                weights[index] = 0.0
-                continue
-            left, top = mu_x - radius, mu_y - radius
-            right, bottom = mu_x + radius + 1, mu_y + radius + 1
-            if left >= bins_x or top >= bins_y or right < 0 or bottom < 0:
-                weights[index] = 0.0
-                continue
-            labels_x[index] = np.exp(-((x_grid - mu_x) ** 2) / (2.0 * self.sigma**2))
-            labels_y[index] = np.exp(-((y_grid - mu_y) ** 2) / (2.0 * self.sigma**2))
-
-        if self.normalize:
-            norm = self.sigma * np.sqrt(2.0 * np.pi)
-            labels_x /= norm
-            labels_y /= norm
-        return labels_x, labels_y, weights
-
-
-class SimCCKLLoss:
-    """MMPose ``KLDiscretLoss`` defaults for the AnimalViTPose SimCC head."""
-
-    # MMPose sums the per-instance KL terms and divides by K, not by batch size.
-    loss_is_batch_sum = True
-
-    def __init__(self, keypoint_count: int, beta: float = 1.0) -> None:
-        self.keypoint_count = int(keypoint_count)
-        self.beta = float(beta)
-        if self.keypoint_count < 1 or self.beta <= 0:
-            raise ValueError("keypoint_count and KL beta must be positive")
-
-    def __call__(self, predictions, targets: Dict[str, torch.Tensor]):
-        if not isinstance(predictions, (tuple, list)) or len(predictions) != 2:
-            raise TypeError("SimCCHead must return the x and y coordinate logits")
-        pred_x, pred_y = predictions
-        target_x = targets["simcc_x"]
-        target_y = targets["simcc_y"]
-        weights = targets["keypoint_weights"].reshape(-1)
-        if pred_x.shape != target_x.shape or pred_y.shape != target_y.shape:
-            raise ValueError(
-                "SimCC prediction/target shapes differ: "
-                f"x={tuple(pred_x.shape)}/{tuple(target_x.shape)}, "
-                f"y={tuple(pred_y.shape)}/{tuple(target_y.shape)}"
-            )
-        if pred_x.shape[1] != self.keypoint_count or pred_y.shape[1] != self.keypoint_count:
-            raise ValueError("SimCC output keypoint count does not match the dataset")
-
-        def axis_loss(prediction, target):
-            logits = prediction.reshape(-1, prediction.shape[-1]) * self.beta
-            labels = target.reshape(-1, target.shape[-1])
-            log_probability = F.log_softmax(logits, dim=1)
-            divergence = F.kl_div(log_probability, labels, reduction="none").mean(dim=1)
-            return (divergence * weights).sum() / self.keypoint_count
-
-        loss_x = axis_loss(pred_x, target_x)
-        loss_y = axis_loss(pred_y, target_y)
-        return {
-            "loss": loss_x + loss_y,
-            "loss_simcc_x": loss_x,
-            "loss_simcc_y": loss_y,
-        }
-
-
-def _rotate_point(point: np.ndarray, angle_radians: float) -> np.ndarray:
-    cosine, sine = np.cos(angle_radians), np.sin(angle_radians)
-    return np.asarray(
-        [point[0] * cosine - point[1] * sine, point[0] * sine + point[1] * cosine],
-        dtype=np.float32,
-    )
-
-
-def _third_point(first: np.ndarray, second: np.ndarray) -> np.ndarray:
-    direction = first - second
-    return second + np.asarray([-direction[1], direction[0]], dtype=np.float32)
-
-
-def _topdown_warp_matrix(center, scale, rotation, output_size):
-    """Port MMPose's ``get_warp_matrix`` for the default non-UDP affine transform."""
-    center = np.asarray(center, dtype=np.float32)
-    scale = np.asarray(scale, dtype=np.float32)
-    output_width, output_height = map(int, output_size)
-    angle = np.deg2rad(float(rotation))
-    source_direction = _rotate_point(np.asarray([-scale[0] * 0.5, 0.0]), angle)
-    target_direction = np.asarray([-output_width * 0.5, 0.0], dtype=np.float32)
-
-    source = np.zeros((3, 2), dtype=np.float32)
-    source[0] = center
-    source[1] = center + source_direction
-    source[2] = _third_point(source[0], source[1])
-
-    target_center = np.asarray([output_width * 0.5, output_height * 0.5], dtype=np.float32)
-    target = np.zeros((3, 2), dtype=np.float32)
-    target[0] = target_center
-    target[1] = target_center + target_direction
-    target[2] = _third_point(target[0], target[1])
-    return cv2.getAffineTransform(source, target)
-
-
-def _fix_aspect_ratio(scale: np.ndarray, input_size: Tuple[int, int]) -> np.ndarray:
-    width, height = map(float, scale)
-    output_width, output_height = input_size
-    aspect_ratio = output_width / output_height
-    if width > height * aspect_ratio:
-        height = width / aspect_ratio
-    else:
-        width = height * aspect_ratio
-    return np.asarray([width, height], dtype=np.float32)
-
+from animalposetracker.data.pose import PoseTextDataset, _read_yaml
+from animalposetracker.preprocessing.topdown import (
+    _fix_aspect_ratio, _topdown_warp_matrix,
+)
+from animalposetracker.data.simcc import SimCCLabel
 
 class TopDownPoseDataset(Dataset):
     """Read one person/animal instance per sample and apply MMPose top-down geometry."""
@@ -193,7 +42,10 @@ class TopDownPoseDataset(Dataset):
         augmentation_config: Optional[Dict[str, Any]] = None,
         preprocessing_config: Optional[Dict[str, Any]] = None,
     ) -> None:
-        from .profiles import ANIMALVITPOSE_AUGMENTATION, ANIMALVITPOSE_PREPROCESSING
+        from animalposetracker.data.topdown_defaults import (
+            ANIMALVITPOSE_AUGMENTATION,
+            ANIMALVITPOSE_PREPROCESSING,
+        )
 
         self.config_path = Path(data_yaml).expanduser().resolve()
         self.data_config = _read_yaml(self.config_path)
@@ -575,9 +427,6 @@ def build_topdown_dataloaders(
     preprocessing_config: Optional[Dict[str, Any]] = None,
 ) -> Tuple[DataLoader, Optional[DataLoader], Dict[str, Any]]:
     """Build MMPose-style instance-crop loaders for the shared training engine."""
-    from .engine import _require_torch
-
-    torch = _require_torch()
     config_path = Path(data_yaml).expanduser().resolve()
     train_dataset = TopDownPoseDataset(
         config_path,
@@ -662,181 +511,3 @@ def build_topdown_dataloaders(
         if metadata_dataset.annotations._coco_category_to_class is not None else {},
     }
     return train_loader, validation_loader, metadata
-
-
-class SimCCPoseValidator:
-    """Compute MMPose-compatible SimCC decoding and keypoint metrics."""
-
-    def __init__(
-        self,
-        input_size: Tuple[int, int],
-        split_ratio: float,
-        flip_indices: Optional[Sequence[int]],
-        kpt_oks_sigmas: Sequence[float],
-        validation_dataset,
-        coco_max_detections: int = 20,
-        oks_nms_threshold: float = 0.9,
-        keypoint_score_threshold: float = 0.2,
-        pck_threshold: float = 0.05,
-        auc_norm_factor: float = 30.0,
-        auc_thresholds: int = 20,
-    ) -> None:
-        self.input_size = tuple(map(int, input_size))
-        self.split_ratio = float(split_ratio)
-        self.flip_indices = (
-            torch.as_tensor(flip_indices, dtype=torch.long) if flip_indices is not None else None
-        )
-        self.kpt_oks_sigmas = np.asarray(kpt_oks_sigmas, dtype=np.float32)
-        self.validation_dataset = validation_dataset
-        self.coco_max_detections = int(coco_max_detections)
-        self.oks_nms_threshold = float(oks_nms_threshold)
-        self.keypoint_score_threshold = float(keypoint_score_threshold)
-        self.pck_threshold = float(pck_threshold)
-        self.auc_norm_factor = float(auc_norm_factor)
-        self.auc_thresholds = int(auc_thresholds)
-
-    def __call__(self, model, loader, device):
-        predictions_for_coco = []
-        errors = []
-        visibility_parts = []
-        bbox_sizes = []
-        if self.validation_dataset is None:
-            raise ValueError("AnimalViTPose validation requires the validation dataset")
-        coco_gt, _image_ids_by_path, _category_ids_by_class = build_coco_ground_truth(
-            self.validation_dataset.annotations
-        )
-
-        with torch.inference_mode():
-            for batch in loader:
-                images = batch["images"].to(device, non_blocking=device.type == "cuda")
-                targets = batch["targets"]
-                pred_x, pred_y = model(images)
-                if self.flip_indices is not None:
-                    flipped_x, flipped_y = model(torch.flip(images, dims=(-1,)))
-                    permutation = self.flip_indices.to(pred_x.device)
-                    flipped_x = flipped_x.flip(dims=(-1,)).index_select(1, permutation)
-                    flipped_y = flipped_y.index_select(1, permutation)
-                    pred_x = (pred_x + flipped_x) * 0.5
-                    pred_y = (pred_y + flipped_y) * 0.5
-
-                max_x, coords_x = pred_x.max(dim=-1)
-                max_y, coords_y = pred_y.max(dim=-1)
-                keypoint_scores = torch.minimum(max_x, max_y)
-                crop_coords = torch.stack((coords_x, coords_y), dim=-1).float()
-                crop_coords /= self.split_ratio
-                invalid = keypoint_scores <= 0
-                crop_coords[invalid] = -1.0 / self.split_ratio
-                crop_coords = crop_coords.detach().cpu().numpy()
-                keypoint_scores = keypoint_scores.detach().cpu().numpy()
-                inverse = targets["warp_inverse"].numpy()
-                homogeneous = np.concatenate(
-                    [crop_coords, np.ones((*crop_coords.shape[:2], 1), dtype=np.float32)], axis=-1
-                )
-                source_coords = np.einsum("bij,bkj->bki", inverse, homogeneous)
-
-                gt_coords = targets["keypoints"].numpy()
-                visible = targets["keypoints_visible"].numpy() > 0
-                boxes = targets["bbox_xyxy"].numpy()
-                ids = targets["image_id"].numpy().tolist()
-                categories = targets["category_id"].numpy().tolist()
-                areas = targets["area"].numpy().tolist()
-
-                for sample_index in range(len(source_coords)):
-                    sample_visible = visible[sample_index]
-                    delta = source_coords[sample_index] - gt_coords[sample_index]
-                    distance = np.linalg.norm(delta, axis=-1)
-                    errors.append(distance.astype(np.float32))
-                    visibility_parts.append(sample_visible)
-                    bbox = boxes[sample_index]
-                    bbox_sizes.append(max(float(bbox[2] - bbox[0]), float(bbox[3] - bbox[1])))
-
-                    if coco_gt is not None:
-                        sample_scores = keypoint_scores[sample_index]
-                        keypoint_array = np.concatenate(
-                            [source_coords[sample_index], sample_scores[:, None]], axis=1
-                        )
-                        valid_scores = sample_scores[
-                            sample_scores > self.keypoint_score_threshold
-                        ]
-                        confidence = float(valid_scores.mean()) if valid_scores.size else 0.0
-                        predictions_for_coco.append({
-                            "image_id": int(ids[sample_index]),
-                            "category_id": int(categories[sample_index]),
-                            "keypoints": keypoint_array.reshape(-1).tolist(),
-                            "score": confidence,
-                            "area": float(areas[sample_index]),
-                        })
-
-        if not errors:
-            raise ValueError("Validation data loader produced no top-down samples")
-        errors = np.stack(errors)
-        visible = np.stack(visibility_parts)
-        bbox_sizes = np.maximum(np.asarray(bbox_sizes, dtype=np.float32), 1.0)
-        metrics = keypoint_error_metrics(
-            errors,
-            visible,
-            bbox_sizes,
-            pck_threshold=self.pck_threshold,
-            auc_norm_factor=self.auc_norm_factor,
-            auc_thresholds=self.auc_thresholds,
-        )
-        metrics.update(self._coco_metrics(coco_gt, predictions_for_coco))
-        return metrics
-
-    def _coco_metrics(self, coco_gt, detections):
-        detections = self._oks_nms(detections, threshold=self.oks_nms_threshold)
-        return evaluate_coco_keypoints(
-            coco_gt,
-            detections,
-            self.kpt_oks_sigmas,
-            max_detections=self.coco_max_detections,
-        )
-
-    def _oks_nms(self, detections, threshold: float):
-        """Match MMPose CocoMetric's default hard OKS NMS for top-down predictions."""
-        grouped = {}
-        for detection in detections:
-            group_key = (
-                int(detection["image_id"]),
-                int(detection.get("category_id", 1)),
-            )
-            grouped.setdefault(group_key, []).append(detection)
-        kept = []
-        variances = (self.kpt_oks_sigmas * 2.0) ** 2
-        for instances in grouped.values():
-            order = sorted(
-                range(len(instances)),
-                key=lambda index: instances[index]["score"],
-                reverse=True,
-            )
-            image_kept = []
-            while order:
-                selected_index = order[0]
-                selected = instances[selected_index]
-                image_kept.append(selected)
-                selected_keypoints = np.asarray(selected["keypoints"], dtype=np.float32).reshape(-1, 3)
-                remaining = []
-                for candidate_index in order[1:]:
-                    candidate = instances[candidate_index]
-                    candidate_keypoints = np.asarray(candidate["keypoints"], dtype=np.float32).reshape(-1, 3)
-                    delta = candidate_keypoints[:, :2] - selected_keypoints[:, :2]
-                    denominator = (
-                        variances
-                        * ((float(selected["area"]) + float(candidate["area"])) * 0.5 + np.spacing(1))
-                        * 2.0
-                    )
-                    oks = float(np.exp(-np.sum(delta * delta, axis=1) / denominator).mean())
-                    if oks <= threshold:
-                        remaining.append(candidate_index)
-                order = remaining
-            kept.extend(image_kept)
-        return kept
-
-
-__all__ = [
-    "SimCCLabel",
-    "SimCCKLLoss",
-    "SimCCPoseValidator",
-    "TopDownPoseDataset",
-    "build_topdown_dataloaders",
-]

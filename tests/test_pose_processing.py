@@ -2,7 +2,7 @@ import unittest
 
 import numpy as np
 
-from animalposetracker.pose_filters import filter_pose_2d, filter_pose_3d
+from animalposetracker.postprocessing.filters import filter_pose_2d, filter_pose_3d
 from animalposetracker.pose3d import (
     CameraCalibration,
     triangulate_keypoints,

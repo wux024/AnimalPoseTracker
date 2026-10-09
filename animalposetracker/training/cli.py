@@ -25,6 +25,7 @@ from .profiles import (
     apply_animalvitpose_defaults,
     flatten_project_training_config,
 )
+from animalposetracker.nn.model_config import head_config, set_simcc_keypoint_count
 
 
 def _read_mapping(path: Path) -> Dict[str, Any]:
@@ -63,16 +64,6 @@ def _resolve_project_pretrained_path(source, project_dir: Path) -> Path:
                 temporary.unlink(missing_ok=True)
             return destination.resolve()
     return resolve_checkpoint_path(source, cache_dir=cache_dir)
-
-
-def _head_config(model_spec: Dict[str, Any]):
-    entries = model_spec.get("head") or []
-    if not isinstance(entries, list) or not entries:
-        return None, None
-    entry = entries[-1]
-    if not isinstance(entry, (list, tuple)) or len(entry) < 4:
-        return None, None
-    return str(entry[2]), entry
 
 
 def _resolve_project_path(value, project_dir: Path) -> Path:
@@ -118,18 +109,6 @@ def _load_evaluation_weights(weights_path, trainer, emitter):
         message=f"Loaded {source_kind}: {path}",
     ))
     return path
-
-
-def _set_simcc_keypoint_count(model_spec: Dict[str, Any], count: int, shape) -> None:
-    model_spec["nc"] = 1
-    model_spec["kpt_shape"] = list(shape)
-    _module_name, entry = _head_config(model_spec)
-    if entry is None:
-        raise ValueError("SimCC model configuration has no head layer")
-    args = entry[3]
-    if not isinstance(args, list) or not args:
-        raise ValueError("SimCCHead configuration must use a positional argument list")
-    args[0] = int(count)
 
 
 def _device_ids(device) -> list:
@@ -220,7 +199,7 @@ def _launch_distributed(
 
 def _make_argument_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
-        prog="animalposetracker-train",
+        prog="animalpose-cli train",
         description="Train a pose model with AnimalPoseTracker's PyTorch training engine.",
     )
     parser.add_argument(
@@ -278,7 +257,7 @@ def run(argv=None) -> int:
             values["resume_from"] = None
         world_size_env = int(os.environ.get("WORLD_SIZE", "1"))
         if args.output_dir:
-            from animalposetracker.workflows import unique_output_directory
+            from animalposetracker.project.model_context import unique_output_directory
 
             output_path = Path(args.output_dir).expanduser()
             if not output_path.is_absolute():
@@ -289,7 +268,7 @@ def run(argv=None) -> int:
                 )
             values["output_dir"] = str(output_path.resolve())
         elif args.validate_only and world_size_env <= 1:
-            from animalposetracker.workflows import unique_output_directory
+            from animalposetracker.project.model_context import unique_output_directory
 
             validation_root = project_dir / "runs" / "val"
             values["output_dir"] = str(unique_output_directory(
@@ -297,7 +276,7 @@ def run(argv=None) -> int:
                 exist_ok=bool(values.get("exist_ok", False)),
             ))
         elif not args.validate_only and not args.resume and world_size_env <= 1:
-            from animalposetracker.workflows import unique_output_directory
+            from animalposetracker.project.model_context import unique_output_directory
 
             configured_output = values.get("output_dir", values.get("save_dir"))
             if configured_output is None:
@@ -351,7 +330,7 @@ def run(argv=None) -> int:
             candidate_model_path = _resolve_project_path(values["model"], project_dir)
             if candidate_model_path.is_file():
                 model_spec = _read_mapping(candidate_model_path)
-                head_name, _head_entry = _head_config(model_spec)
+                head_name, _head_entry = head_config(model_spec)
                 if head_name == "SimCCHead":
                     values, profile_defaults = apply_animalvitpose_defaults(
                         values,
@@ -393,7 +372,7 @@ def run(argv=None) -> int:
 
         if model_spec is None:
             model_spec = _read_mapping(config.model)
-            head_name, _head_entry = _head_config(model_spec)
+            head_name, _head_entry = head_config(model_spec)
 
         if float(values.get("copy_paste", 0.0) or 0.0) > 0:
             raise NotImplementedError(
@@ -403,9 +382,10 @@ def run(argv=None) -> int:
         from animalposetracker.nn import build_model
         from animalposetracker.nn.head import SimCCHead, YOLOPoseHead
         from .checkpoint import load_model_weights
-        from .data import build_pose_dataloaders
+        from animalposetracker.data.pose import build_pose_dataloaders
         from .engine import Trainer
-        from .losses import PoseDetectionLoss, PoseDetectionValidator
+        from .losses import PoseDetectionLoss
+        from animalposetracker.evaluation.animalrtpose import PoseDetectionValidator
 
         seed_everything(config.seed, config.deterministic)
         if config.single_cls:
@@ -435,7 +415,7 @@ def run(argv=None) -> int:
                 scale=scale,
                 image_size=config.image_size,
             )
-            _module_name, head_entry = _head_config(model_spec)
+            _module_name, head_entry = head_config(model_spec)
             head_args = head_entry[3]
             if not isinstance(head_args, (list, tuple)) or len(head_args) < 3:
                 raise ValueError("SimCCHead requires output channels, input_size and feature-map size")
@@ -475,11 +455,9 @@ def run(argv=None) -> int:
                         "YOLO Mosaic, MixUp and HSV settings do not apply to AnimalViTPose."
                     ),
                 ))
-            from .topdown import (
-                SimCCKLLoss,
-                SimCCPoseValidator,
-                build_topdown_dataloaders,
-            )
+            from animalposetracker.training.simcc import SimCCKLLoss
+            from animalposetracker.evaluation.topdown import SimCCPoseValidator
+            from animalposetracker.data.topdown import build_topdown_dataloaders
 
             train_loader, validation_loader, metadata = build_topdown_dataloaders(
                 config.data,
@@ -500,7 +478,7 @@ def run(argv=None) -> int:
                 preprocessing_config=preprocessing_config,
             )
             config.train_dataset_size = metadata["train_instances"]
-            _set_simcc_keypoint_count(
+            set_simcc_keypoint_count(
                 model_spec,
                 metadata["kpt_shape"][0],
                 metadata["kpt_shape"],

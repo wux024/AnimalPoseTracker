@@ -16,9 +16,17 @@
 #
 
 import ctypes
+from datetime import datetime
 from typing import Optional, List, Union
 import numpy as np
 from pathlib import Path
+
+
+def measure_time(func, *args, **kwargs):
+    start_time = datetime.now()
+    result = func(*args, **kwargs)
+    end_time = datetime.now()
+    return result, (end_time - start_time).total_seconds()
 
 try:
     import tensorrt as trt

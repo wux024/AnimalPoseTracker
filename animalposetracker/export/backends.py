@@ -123,13 +123,13 @@ def _representative_dataset(context, metadata, values, sample_count=100):
     config_path = context.get("dataset_config_path")
     if config_path is None:
         raise ValueError("INT8 calibration requires the project dataset.yaml")
-    from animalposetracker.training.data import PoseTextDataset
+    from animalposetracker.data.pose import PoseTextDataset
 
     data_values = context["dataset"]
     split = "val" if data_values.get("val") else "test"
     width, height = map(int, metadata["input_size"][:2])
     if context.get("head_name") == "SimCCHead":
-        from animalposetracker.training.topdown import TopDownPoseDataset
+        from animalposetracker.data.topdown import TopDownPoseDataset
 
         dataset = TopDownPoseDataset(
             config_path,

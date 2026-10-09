@@ -7,6 +7,10 @@ from typing import Any, Dict, Iterable, Mapping, Optional, Tuple
 import yaml
 
 from animalposetracker.cfg import MODEL_YAML_PATHS, TRAINING_CFG_PATH
+from animalposetracker.data.topdown_defaults import (
+    ANIMALVITPOSE_AUGMENTATION,
+    ANIMALVITPOSE_PREPROCESSING,
+)
 
 
 with Path(TRAINING_CFG_PATH).open("r", encoding="utf-8") as _stream:
@@ -98,8 +102,6 @@ ANIMALVITPOSE_RECIPE = {
 }
 ANIMALVITPOSE_VARIANTS = dict(ANIMALVITPOSE_MODEL_DEFAULTS.get("model_variants", {}))
 ANIMALVITPOSE_SIMCC = dict(ANIMALVITPOSE_MODEL_DEFAULTS.get("simcc", {}))
-ANIMALVITPOSE_PREPROCESSING = dict(ANIMALVITPOSE_MODEL_DEFAULTS.get("preprocessing", {}))
-ANIMALVITPOSE_AUGMENTATION = dict(ANIMALVITPOSE_PROFILE.get("augmentation", {}))
 ANIMALVITPOSE_VALIDATION = dict(ANIMALVITPOSE_PROFILE.get("validation", {}))
 KEYPOINT_METRICS = dict(TRAINING_PROFILES.get("metrics", {}))
 

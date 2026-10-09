@@ -81,7 +81,7 @@ def load_project_context(config_path: Path) -> Tuple[TrainingConfig, Dict[str, A
 
 def configure_project_model_spec(config: TrainingConfig, context: Dict[str, Any]):
     """Materialize model architecture values from the project, model and dataset configs."""
-    from animalposetracker.training.cli import _head_config, _set_simcc_keypoint_count
+    from animalposetracker.nn.model_config import head_config, set_simcc_keypoint_count
 
     model_spec = deepcopy(context["model_spec"])
     dataset_spec = context["dataset"]
@@ -94,12 +94,12 @@ def configure_project_model_spec(config: TrainingConfig, context: Dict[str, Any]
     )
 
     scale = str(context["project"].get("model_scale") or "n").lower()
-    head_name, _head_entry = _head_config(model_spec)
+    head_name, _head_entry = head_config(model_spec)
     if head_name == "SimCCHead":
         configure_animalvitpose_model(model_spec, scale, config.image_size)
         if not isinstance(dataset_shape, (list, tuple)) or len(dataset_shape) != 2:
             raise ValueError("AnimalViTPose dataset.yaml must define kpt_shape=[count, dimensions]")
-        _set_simcc_keypoint_count(model_spec, int(dataset_shape[0]), dataset_shape)
+        set_simcc_keypoint_count(model_spec, int(dataset_shape[0]), dataset_shape)
         model_spec["nc"] = 1
     elif head_name == "YOLOPoseHead":
         model_spec["nc"] = 1 if config.single_cls else class_count

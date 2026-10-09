@@ -12,22 +12,23 @@ from PIL import Image
 
 from animalposetracker.cfg import DATA_YAML_PATHS, MODEL_YAML_PATHS
 from animalposetracker.nn import MODEL_YAML_PATHS as NN_MODEL_YAML_PATHS
-from animalposetracker.predict_cli import _output_stem
-from animalposetracker.postprocess import (
+from animalposetracker.prediction.cli import _output_stem
+from animalposetracker.postprocessing.workflows import (
     filter_tracked_video_records,
     track_frame_predictions,
     triangulate_multiview_predictions,
 )
 from animalposetracker.pose3d import CameraCalibration
-from animalposetracker.projector.animalposeproject import AnimalPoseTrackerProject
+from animalposetracker.project.api import AnimalPoseTrackerProject
 from animalposetracker.training.config import TrainingConfig
 from animalposetracker.training.checkpoint import load_model_weights, save_checkpoint
-from animalposetracker.training.data import PoseTextDataset
+from animalposetracker.data.pose import PoseTextDataset
 from animalposetracker.training.engine import Trainer
 from animalposetracker.training.losses import PoseDetectionLoss
-from animalposetracker.training.topdown import SimCCLabel, SimCCPoseValidator
+from animalposetracker.data.simcc import SimCCLabel
+from animalposetracker.evaluation.topdown import SimCCPoseValidator
 from animalposetracker.tracking import create_tracker
-from animalposetracker.workflows import unique_output_directory
+from animalposetracker.project.model_context import unique_output_directory
 
 
 class ReviewFixTests(unittest.TestCase):
@@ -146,7 +147,7 @@ class ReviewFixTests(unittest.TestCase):
         self.assertEqual(records[2]["predictions"][0]["keypoints"][0][0], 100.0)
 
     def test_video_writer_keeps_raw_and_tracked_frame_records(self):
-        from animalposetracker.predict_cli import _write_video
+        from animalposetracker.prediction.cli import _write_video
 
         frame = np.zeros((32, 32, 3), dtype=np.uint8)
         detection = {
@@ -185,9 +186,9 @@ class ReviewFixTests(unittest.TestCase):
         raw_records = []
         with tempfile.TemporaryDirectory() as temporary:
             output_path = Path(temporary) / "tracked.mp4"
-            with patch("animalposetracker.predict_cli.cv2.VideoCapture", return_value=FakeCapture()), \
-                 patch("animalposetracker.predict_cli.cv2.VideoWriter", return_value=FakeWriter()), \
-                 patch("animalposetracker.predict_cli.cv2.VideoWriter_fourcc", return_value=0):
+            with patch("animalposetracker.prediction.cli.cv2.VideoCapture", return_value=FakeCapture()), \
+                 patch("animalposetracker.prediction.cli.cv2.VideoWriter", return_value=FakeWriter()), \
+                 patch("animalposetracker.prediction.cli.cv2.VideoWriter_fourcc", return_value=0):
                 frame_count, tracked_records = _write_video(
                     Path(temporary) / "input.mp4",
                     output_path,

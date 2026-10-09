@@ -8,9 +8,9 @@ from pathlib import Path
 import torch
 
 from animalposetracker.nn.head import SimCCHead, YOLOPoseHead
-from animalposetracker.export_backends import export_with_backend
-from animalposetracker.prediction_backends import EXPORT_FORMATS
-from animalposetracker.workflows import load_project_model, unique_output_directory
+from animalposetracker.artifacts import EXPORT_FORMATS
+from .backends import export_with_backend
+from animalposetracker.project.model_context import load_project_model, unique_output_directory
 
 
 class _ExportAdapter(torch.nn.Module):
@@ -34,7 +34,7 @@ class _ExportAdapter(torch.nn.Module):
 
 def _make_argument_parser():
     parser = argparse.ArgumentParser(
-        prog="animalposetracker-export",
+        prog="animalpose-cli export",
         description="Export AnimalPoseTracker checkpoints without the YOLO CLI.",
     )
     parser.add_argument("--config", default="configs/other.yaml")

@@ -1,4 +1,4 @@
-from typing import Dict, Union
+from typing import Dict, Optional, Sequence, Union
 import cv2
 import numpy as np
 import yaml
@@ -7,7 +7,7 @@ from pathlib import Path
 import os
 
 from .constant import ENGINEtoBackend, OpenCV_TARGETS, EP_PARAMS
-from animalposetracker.utils.base import measure_time
+from .utils import measure_time
 
 
 
@@ -35,6 +35,7 @@ class InferenceEngine:
                  show_inference_time: bool = True,
                  show_postprocess_time: bool = True,
                  font_scale: float = 1.0,
+                 output_names: Optional[Sequence[str]] = None,
                  ):
         self.model = None
         self._weights_path = weights_path
@@ -45,6 +46,9 @@ class InferenceEngine:
         self._tensorrt = False
         self._input_width = input_width
         self._input_height = input_height
+        self._configured_output_names = tuple(output_names or ())
+        self._runtime_output_names = ()
+        self._runtime_output_shapes = {}
         self.visualize_config = {
             'conf': conf,
             'iou': iou,
@@ -123,6 +127,11 @@ class InferenceEngine:
     def weights_path(self, weights_path):
         self._weights_path = weights_path
 
+    @property
+    def output_names(self):
+        """Names used to request model outputs, when the backend exposes them."""
+        return self._configured_output_names or self._runtime_output_names
+
     def print_config(self):
         print(f"Engine: {self._engine}")
         print(f"Device: {self._device}")
@@ -166,6 +175,8 @@ class InferenceEngine:
         self.data_config = config
 
     def model_init(self):
+        self._runtime_output_names = ()
+        self._runtime_output_shapes = {}
         engine_init_method = {
             'OpenCV': self._init_opencv,
             'ONNX': self._init_onnx,
@@ -217,6 +228,9 @@ class InferenceEngine:
         cv2_backend, cv2_target = self._get_backend_and_target(cv2_backends)
         self.model = self._load_model()
         self._init_model_input_shape()
+        self._runtime_output_names = tuple(
+            str(name) for name in self.model.getUnconnectedOutLayersNames()
+        )
         self.model.setPreferableBackend(cv2_backend)
         self.model.setPreferableTarget(cv2_target)
 
@@ -319,7 +333,10 @@ class InferenceEngine:
             
             # Get input/output names
             self.input_name = self.model.get_inputs()[0].name
-            self.output_name = self.model.get_outputs()[0].name
+            self._runtime_output_names = tuple(
+                output.name for output in self.model.get_outputs()
+            )
+            self.output_name = self._runtime_output_names[0]
 
             input_shape = self.model.get_inputs()[0].shape
 
@@ -413,6 +430,9 @@ class InferenceEngine:
                 if len(input_shape) >= 4 and isinstance(input_shape[2], int) and isinstance(input_shape[3], int):
                     self._input_width = input_shape[2]
                     self._input_height = input_shape[3]
+            self._runtime_output_names = tuple(
+                output.get_any_name() for output in self.model.outputs
+            )
         except ImportError:
             raise ImportError("Please install openvino to use OpenVINO engine.")
 
@@ -435,6 +455,19 @@ class InferenceEngine:
                 self.model = self._build_engine_from_engine(TRT_LOGGER)
             self.context = self.model.create_execution_context()
             self.inputs, self.outputs, self.bindings, self.stream = allocate_buffers(self.model)
+
+            output_names = []
+            output_shapes = {}
+            for index in range(self.model.num_io_tensors):
+                tensor_name = self.model.get_tensor_name(index)
+                if self.model.get_tensor_mode(tensor_name) == trt.TensorIOMode.OUTPUT:
+                    output_names.append(tensor_name)
+                    output_shapes[tensor_name] = tuple(
+                        int(dimension)
+                        for dimension in self.model.get_tensor_shape(tensor_name)
+                    )
+            self._runtime_output_names = tuple(output_names)
+            self._runtime_output_shapes = output_shapes
             
             input_layer_name = self.model.get_tensor_name(0)
             input_layer_shape = self.model.get_tensor_shape(input_layer_name)
@@ -493,6 +526,9 @@ class InferenceEngine:
             self.model = ct.models.MLModel(self._weights_path)
             input_description = self.model.get_spec().description.input[0]
             self.input_name = input_description.name
+            self._runtime_output_names = tuple(
+                output.name for output in self.model.get_spec().description.output
+            )
             input_type = input_description.type
             if hasattr(input_type, 'imageType'):
                 shape = input_type.imageType
@@ -504,58 +540,18 @@ class InferenceEngine:
     
     def preprocess(self, input_image):
         """
-        Preprocesses the input image before performing inference.
+        Preprocess a frame using the established live-inference input contract.
 
-        Returns:
-            image_data: Preprocessed image data ready for inference.
+        Returns the model-ready image and the inverse affine transform.
         """
-        # Read the input image using OpenCV
-        img = input_image.copy()
+        from animalposetracker.preprocessing.live import preprocess_live_frame
 
-        # Get the height and width of the input image
-        img_height, img_width = img.shape[:2]
-
-        scale = min(self._input_width / img_width, self._input_height / img_height)
-
-        ox = self._input_width - scale * img_width
-        oy = self._input_height - scale * img_height
-
-        M = np.array([
-            [scale, 0, ox],
-            [0, scale, oy],
-        ], dtype="float32"
+        return preprocess_live_frame(
+            input_image,
+            self._input_width,
+            self._input_height,
+            coreml=self._coreml,
         )
-
-        img = cv2.warpAffine(img, M,
-                             (self._input_width, self._input_height),
-                             flags=cv2.INTER_LINEAR,
-                             borderMode=cv2.BORDER_CONSTANT,
-                             borderValue=(114, 114, 114))
-
-        IM = cv2.invertAffineTransform(M)
-
-        # Convert the image color space from BGR to RGB
-        img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
-
-        if self._coreml:
-            try:
-                from PIL import Image
-                img = Image.fromarray(img)
-                return img, IM
-            except ImportError:
-                raise ImportError("Please install Pillow to use CoreML engine.")
-
-        # Normalize the image data by dividing it by 255.0
-        img = np.array(img) / 255.0
-
-        # Transpose the image to have the channel dimension as the first dimension
-        img = np.transpose(img, (2, 0, 1))  # Channel first
-
-        # Expand the dimensions of the image data to match the expected input shape
-        img = np.expand_dims(img, axis=0).astype(np.float32)
-
-        # Return the preprocessed image data
-        return img, IM
 
     def postprocess(self, pred, IM=[]):
         """
@@ -671,6 +667,58 @@ class InferenceEngine:
             pred = self.model.predict({self.input_name: img})
         
         return pred
+
+    def inference_named_outputs(self, img, output_names=None):
+        """Run the model and normalize its outputs to a name-to-array mapping.
+
+        The legacy ``inference`` method remains unchanged for the existing GUI
+        path. Stream pipelines use this method to consume multi-output models.
+        """
+        from animalposetracker.postprocessing.output_decoders import normalize_output_tensors
+
+        if self.model is None:
+            raise RuntimeError("Model not loaded, call model_init() first.")
+
+        requested_names = tuple(output_names or self.output_names or ())
+        if self._engine == 'OpenCV':
+            self.model.setInput(img)
+            layer_names = list(requested_names or self._runtime_output_names)
+            if len(layer_names) > 1:
+                raw_outputs = self.model.forward(layer_names)
+            elif layer_names:
+                raw_outputs = self.model.forward(layer_names[0])
+            else:
+                raw_outputs = self.model.forward()
+        elif self._engine == 'OpenVINO':
+            raw_outputs = self.model([img])
+        elif self._engine == 'ONNX':
+            names = list(requested_names or self._runtime_output_names)
+            raw_outputs = self.model.run(
+                names or None,
+                {self.input_name: img},
+            )
+        elif self._engine == 'TensorRT':
+            raw_outputs = self.inference_tensorrt(img)
+            names = requested_names or self._runtime_output_names
+            shaped_outputs = []
+            for index, output in enumerate(raw_outputs):
+                name = names[index] if index < len(names) else None
+                shape = self._runtime_output_shapes.get(name)
+                output = np.asarray(output)
+                if shape and all(dimension >= 0 for dimension in shape):
+                    if output.size == int(np.prod(shape)):
+                        output = output.reshape(shape)
+                shaped_outputs.append(output)
+            raw_outputs = shaped_outputs
+        elif self._engine == 'CANN':
+            raw_outputs = self.model.infer([img])
+        elif self._engine == 'CoreML':
+            raw_outputs = self.model.predict({self.input_name: img})
+        else:
+            raise ValueError(f"Unsupported inference engine: {self._engine!r}")
+
+        names = requested_names or self._runtime_output_names
+        return normalize_output_tensors(raw_outputs, names)
     
     def inference_tensorrt(self, img):
         try:

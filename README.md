@@ -86,6 +86,20 @@ For CANN inference engine, you need to install CANN first. You can refer more in
 
 For the OpenCV inference engine, you don't need to install anything. We default to the OpenCV inference engine. But our opencv only support CPU. If you want to use GPU or other devices, you need to build OpenCV from source with the corresponding backend.
 
+## Command-line workflows
+
+AnimalPoseTracker provides unified `train`, `val`, `predict`, and `export` commands through `animalpose-cli`. Run them from the project directory; each command accepts the existing project configuration and workflow-specific options:
+
+```bash
+animalpose-cli --help
+animalpose-cli train --config configs/other.yaml
+animalpose-cli val --config configs/other.yaml --weights runs/train/weights/best.pt
+animalpose-cli predict --config configs/other.yaml --weights runs/train/weights/best.pt --split test
+animalpose-cli export --config configs/other.yaml --weights runs/train/weights/best.pt --format onnx
+```
+
+Use `animalpose-cli <command> --help` to see a workflow's options. The existing `animalposetracker` command continues to launch the GUI.
+
 # Usage: How to use AnimalPoseTracker to train and test a model
 
 1. Open the command prompt or terminal and activate the conda environment:

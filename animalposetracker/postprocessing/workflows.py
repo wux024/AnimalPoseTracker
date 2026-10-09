@@ -11,9 +11,9 @@ from pathlib import Path
 
 import numpy as np
 
-from .pose_filters import filter_pose_2d
-from .pose3d import CameraCalibration, triangulate_sequence
-from .tracking import PoseDetection
+from .filters import filter_pose_2d
+from animalposetracker.pose3d import CameraCalibration, triangulate_sequence
+from animalposetracker.tracking import PoseDetection
 
 
 def track_frame_predictions(

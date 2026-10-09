@@ -22,7 +22,7 @@
 - `animalposetracker/cfg/training.yaml` 只定义训练侧默认值。两个模型完全相同的参数只放在 `training.shared`，同名但取值不同以及模型独有的训练、损失、增强、验证参数留在各自 profile。训练 profile 根据 `project.yaml` 中唯一的 `model_type` 选择，不在 `other.yaml` 重复保存模型选择；模型图、AnimalViTPose 规模、SimCC 输出几何和输入归一化属于 `configs/model.yaml`；数据路径与关键点元数据属于 `configs/dataset.yaml`。项目管理层只在内存中展平选中的训练 profile，GUI 源码不需要改动。
 - `project.yaml` 保留标注 GUI 直接读取的类别/关键点名称、数量和骨架元数据；`dataset.yaml` 提供数据加载器需要的对应字段；`model.yaml.kpt_shape` 是模型输出形状约束，必须与数据集一致。`kpt_oks_sigmas` 只保留在 `dataset.yaml`，模型选择只保留在 `project.yaml`。
 - 项目评估通过 `animalposetracker.training.cli --validate-only` 执行，复用训练验证器并把 COCO/PCK/AUC/EPE 写入 `runs/val/metrics.json`。项目预测默认为 test split（缺失时使用 val）：AnimalRTPose 在整图上预测，AnimalViTPose 从 YOLO/COCO 标注框生成 top-down crop，并通过独立的 `InstanceBoxProvider` 接口预留检测器来源。预测 worker 不调用 GUI 的实时推理引擎。
-- 项目导出通过 `animalposetracker.export_cli` 执行，不调用 YOLO CLI。TorchScript、ONNX、OpenVINO、TensorRT、CoreML、TensorFlow SavedModel/GraphDef/TFLite/Edge TPU/TF.js、PaddlePaddle、MNN、NCNN、IMX500、RKNN 有本地转换分派；目标 SDK/转换器按格式可选安装。导出的模型保存 JSON 元数据描述输入尺寸、归一化、关键点形状和输出张量。
+- 项目导出通过 `animalposetracker.export.cli` 执行，不调用 YOLO CLI。TorchScript、ONNX、OpenVINO、TensorRT、CoreML、TensorFlow SavedModel/GraphDef/TFLite/Edge TPU/TF.js、PaddlePaddle、MNN、NCNN、IMX500、RKNN 有本地转换分派；目标 SDK/转换器按格式可选安装。导出的模型保存 JSON 元数据描述输入尺寸、归一化、关键点形状和输出张量。
 - 数据集 YAML 只使用 `kpt_oks_sigmas` 记录逐关键点 OKS sigma，并显式传入 COCOeval 覆盖其人体 COCO-17 内置值。MMPose 数据集 metainfo 的 `sigmas` 在迁入本项目配置时写入 `kpt_oks_sigmas`。缺省时使用均匀 `1/K` 自定义关键点回退；自定义动物数据应配置逐关键点 sigma。`plots` 输出训练与验证曲线。
 - GUI 的训练、恢复入口已调用 `python -m animalposetracker.training.cli`；训练状态写入 JSONL 并显示在状态栏，停止请求通过标记文件传递以保存检查点。
 - GUI 保存的 `box/cls/dfl/pose/kobj`、`val` 和 `patience` 现在映射到自有损失权重、验证开关和早停；界面静态默认值也已与 `cfg/default.yaml` 对齐。

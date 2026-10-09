@@ -11,17 +11,17 @@ from typing import Any, Dict, List, Tuple
 import cv2
 import numpy as np
 
-from animalposetracker.workflows import (
+from animalposetracker.project.model_context import (
     configure_project_model_spec,
     load_project_context,
     load_project_model,
     read_yaml_mapping,
     unique_output_directory,
 )
-from animalposetracker.prediction_backends import (
+from animalposetracker.artifacts import detect_artifact_format, read_artifact_metadata
+from animalposetracker.preprocessing.letterbox import letterbox_image
+from animalposetracker.prediction.backends import (
     ModelArtifactBackend,
-    detect_artifact_format,
-    read_artifact_metadata,
 )
 
 
@@ -46,15 +46,7 @@ def _output_stem(path: Path, peers: List[Path]) -> str:
 
 
 def _letterbox(image: np.ndarray, size: int):
-    height, width = image.shape[:2]
-    scale = min(size / width, size / height)
-    resized_width = max(1, int(round(width * scale)))
-    resized_height = max(1, int(round(height * scale)))
-    resized = cv2.resize(image, (resized_width, resized_height), interpolation=cv2.INTER_LINEAR)
-    left = (size - resized_width) // 2
-    top = (size - resized_height) // 2
-    canvas = np.full((size, size, 3), 114, dtype=np.uint8)
-    canvas[top:top + resized_height, left:left + resized_width] = resized
+    canvas, scale, left, top = letterbox_image(image, size, size)
     return canvas, scale, float(left), float(top)
 
 
@@ -113,7 +105,7 @@ def _source_paths(source: Any, project_dir: Path, dataset: Dict[str, Any]) -> Tu
 
 def _resolve_dataset_split(dataset, requested: str):
     """Choose a configured dataset split, preferring test and falling back to val."""
-    from animalposetracker.training.data import PoseTextDataset
+    from animalposetracker.data.pose import PoseTextDataset
 
     if requested != "auto":
         resolved = PoseTextDataset(dataset, split=requested, image_size=640, cache=False)
@@ -218,7 +210,7 @@ def _resolve_image_split(data_path: Path, requested: str):
 
 
 def _make_topdown_dataset(config, context, split):
-    from animalposetracker.training.topdown import TopDownPoseDataset
+    from animalposetracker.data.topdown import TopDownPoseDataset
 
     width, height = context["topdown_input_size"]
     return TopDownPoseDataset(
@@ -333,7 +325,7 @@ def _render_pose(
 def _predict_frame(image, model, config, context, settings, external_backend=False):
     import torch
 
-    from animalposetracker.training.metrics import pose_non_max_suppression
+    from animalposetracker.postprocessing.nms import pose_non_max_suppression
 
     canvas, scale, pad_x, pad_y = _letterbox(image, config.image_size)
     tensor = torch.from_numpy(
@@ -386,16 +378,7 @@ def _predict_frame(image, model, config, context, settings, external_backend=Fal
 
 
 def _letterbox_shape(image: np.ndarray, width: int, height: int):
-    original_height, original_width = image.shape[:2]
-    scale = min(width / original_width, height / original_height)
-    resized_width = max(1, int(round(original_width * scale)))
-    resized_height = max(1, int(round(original_height * scale)))
-    resized = cv2.resize(image, (resized_width, resized_height), interpolation=cv2.INTER_LINEAR)
-    left = (width - resized_width) // 2
-    top = (height - resized_height) // 2
-    canvas = np.full((height, width, 3), 114, dtype=np.uint8)
-    canvas[top:top + resized_height, left:left + resized_width] = resized
-    return canvas, scale, left, top
+    return letterbox_image(image, width, height)
 
 
 class InstanceBoxProvider:
@@ -445,7 +428,7 @@ def _predict_topdown_image(image, image_path, boxes, model, context, settings, e
     """Predict all supplied instance boxes using AnimalViTPose's evaluation geometry."""
     import torch
 
-    from animalposetracker.training.topdown import _fix_aspect_ratio, _topdown_warp_matrix
+    from animalposetracker.preprocessing.topdown import _fix_aspect_ratio, _topdown_warp_matrix
 
     original = image
     rendered = image.copy()
@@ -530,7 +513,7 @@ def _write_video(
     tracker=None,
     class_names=None,
 ):
-    from animalposetracker.postprocess import track_frame_predictions
+    from animalposetracker.postprocessing.workflows import track_frame_predictions
 
     capture = cv2.VideoCapture(str(source_path))
     if not capture.isOpened():
@@ -600,7 +583,7 @@ def _make_argument_parser():
     from animalposetracker.tracking.config import ALGORITHMS
 
     parser = argparse.ArgumentParser(
-        prog="animalposetracker-predict",
+        prog="animalpose-cli predict",
         description="Predict AnimalRTPose or AnimalViTPose on a project dataset split.",
     )
     parser.add_argument("--config", default="configs/other.yaml")
@@ -663,7 +646,7 @@ def run(argv=None, box_provider: InstanceBoxProvider = None) -> int:
             "scale": scale,
             "model_nc": int(model_spec.get("nc", 1)),
             "kpt_shape": tuple(model_spec.get("kpt_shape") or context["dataset"].get("kpt_shape")),
-            "device": __import__("animalposetracker.workflows", fromlist=["resolve_device"])
+            "device": __import__("animalposetracker.project.model_context", fromlist=["resolve_device"])
             .resolve_device(torch, config.device),
         })
         model = ModelArtifactBackend(
@@ -912,7 +895,7 @@ def run(argv=None, box_provider: InstanceBoxProvider = None) -> int:
             tracked_results.extend(processed_records)
             tracked_results.append(video_summary)
             if filter_method != "none":
-                from animalposetracker.postprocess import filter_tracked_video_records
+                from animalposetracker.postprocessing.workflows import filter_tracked_video_records
 
                 filtered_records = filter_tracked_video_records(
                     processed_records,

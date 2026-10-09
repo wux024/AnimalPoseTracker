@@ -18,28 +18,28 @@ from animalposetracker.training.checkpoint import load_model_weights
 from animalposetracker.training.cli import _resolve_project_pretrained_path
 from animalposetracker.training.config import TrainingConfig
 from animalposetracker.training.engine import build_optimizer
-from animalposetracker.training.metrics import (
+from animalposetracker.evaluation.metrics import (
     build_coco_ground_truth,
     evaluate_coco_keypoints,
     _coco_keypoint_api,
 )
-from animalposetracker.training.losses import PoseDetectionValidator
-from animalposetracker.training.data import pose_collate
+from animalposetracker.evaluation.animalrtpose import PoseDetectionValidator
+from animalposetracker.data.pose import pose_collate
 from animalposetracker.training.profiles import (
     TRAINING_PROFILES,
     apply_animalvitpose_defaults,
     configure_animalvitpose_model,
     flatten_project_training_config,
 )
-from animalposetracker.projector.animalposeproject import (
+from animalposetracker.project.api import (
     AnimalPoseTrackerProject,
     _download_google_drive_checkpoint,
 )
-from animalposetracker.export_cli import _resolve_export_format
-from animalposetracker.training.topdown import (
-    SimCCKLLoss,
-    SimCCLabel,
-    SimCCPoseValidator,
+from animalposetracker.export.cli import _resolve_export_format
+from animalposetracker.data.simcc import SimCCLabel
+from animalposetracker.training.simcc import SimCCKLLoss
+from animalposetracker.evaluation.topdown import SimCCPoseValidator
+from animalposetracker.data.topdown import (
     TopDownPoseDataset,
     build_topdown_dataloaders,
 )
@@ -88,7 +88,7 @@ class SimCCTrainingTests(unittest.TestCase):
                 Path(destination).write_bytes(b"PK\x03\x04checkpoint-bytes")
 
             with patch(
-                "animalposetracker.projector.animalposeproject._download_google_drive_checkpoint",
+                "animalposetracker.project.api._download_google_drive_checkpoint",
                 side_effect=write_checkpoint,
             ) as download:
                 project._detect_pretrained()
@@ -506,7 +506,7 @@ class SimCCTrainingTests(unittest.TestCase):
                 "names: {0: mouse}\n",
                 encoding="utf-8",
             )
-            from animalposetracker.training.data import PoseTextDataset
+            from animalposetracker.data.pose import PoseTextDataset
 
             dataset = PoseTextDataset(config_path, "val", image_size=32)
             coco_gt, image_ids, category_ids = build_coco_ground_truth(dataset)
@@ -615,7 +615,7 @@ class SimCCTrainingTests(unittest.TestCase):
                     "names: {0: animal}\n",
                     encoding="utf-8",
                 )
-                from animalposetracker.training.data import PoseTextDataset
+                from animalposetracker.data.pose import PoseTextDataset
 
                 with self.assertRaisesRegex(ValueError, "rename the vector to kpt_oks_sigmas"):
                     PoseTextDataset(config_path, "val", image_size=16)
@@ -763,7 +763,7 @@ class SimCCTrainingTests(unittest.TestCase):
             with patch.object(project, "_execute_command") as execute:
                 project.predict(inference_source="input.png")
             predict_command = execute.call_args.args[0]
-            self.assertIn("animalposetracker.predict_cli", predict_command)
+            self.assertIn("animalposetracker.prediction.cli", predict_command)
             self.assertIn("--source", predict_command)
             self.assertIn("input.png", predict_command)
             self.assertNotIn("yolo", predict_command)
@@ -771,13 +771,13 @@ class SimCCTrainingTests(unittest.TestCase):
             with patch.object(project, "_execute_command") as execute:
                 project.predict()
             dataset_predict_command = execute.call_args.args[0]
-            self.assertIn("animalposetracker.predict_cli", dataset_predict_command)
+            self.assertIn("animalposetracker.prediction.cli", dataset_predict_command)
             self.assertNotIn("--source", dataset_predict_command)
 
             with patch.object(project, "_execute_command") as execute:
                 project.export(format="onnx")
             export_command = execute.call_args.args[0]
-            self.assertIn("animalposetracker.export_cli", export_command)
+            self.assertIn("animalposetracker.export.cli", export_command)
             self.assertIn("--weights", export_command)
             self.assertIn("--format", export_command)
             self.assertIn("onnx", export_command)
@@ -807,12 +807,11 @@ class SimCCTrainingTests(unittest.TestCase):
             self.assertEqual(project._resolve_project_prediction_model(), artifact.resolve())
 
     def test_project_predict_keeps_dataset_mode_separate_from_live_inference_engine(self):
-        source = (Path(__file__).parent.parent / "animalposetracker" / "predict_cli.py").read_text(
+        source = (Path(__file__).parent.parent / "animalposetracker" / "prediction" / "cli.py").read_text(
             encoding="utf-8"
         )
-        self.assertNotIn("animalposetracker.engine.inferencer", source)
-        from animalposetracker.prediction_backends import EXPORT_FORMATS, PREDICT_FORMATS
-        from animalposetracker.prediction_backends import detect_artifact_format
+        self.assertNotIn("animalposetracker.inference.inferencer", source)
+        from animalposetracker.artifacts import EXPORT_FORMATS, PREDICT_FORMATS, detect_artifact_format
 
         self.assertEqual(len(EXPORT_FORMATS), 15)
         self.assertEqual(len(PREDICT_FORMATS), 16)
@@ -823,7 +822,7 @@ class SimCCTrainingTests(unittest.TestCase):
         self.assertEqual(detect_artifact_format("grpc://localhost:8001/animal_pose"), "triton")
 
     def test_topdown_prediction_uses_dataset_or_detector_box_provider(self):
-        from animalposetracker.predict_cli import (
+        from animalposetracker.prediction.cli import (
             DetectorBoxProvider,
             _predict_topdown_image,
         )
@@ -877,7 +876,7 @@ class SimCCTrainingTests(unittest.TestCase):
         self.assertEqual(len(records[0]["keypoints"]), 2)
 
     def test_animalrtpose_default_dataset_prediction_does_not_require_test_labels(self):
-        from animalposetracker.predict_cli import _resolve_image_split
+        from animalposetracker.prediction.cli import _resolve_image_split
 
         with tempfile.TemporaryDirectory() as temporary_directory:
             root = Path(temporary_directory)
@@ -900,7 +899,7 @@ class SimCCTrainingTests(unittest.TestCase):
             self.assertEqual(split.image_paths, [image_path.resolve()])
 
     def test_exported_animalrtpose_output_uses_native_pose_postprocessing(self):
-        from animalposetracker.predict_cli import _predict_frame
+        from animalposetracker.prediction.cli import _predict_frame
         from animalposetracker.training.config import TrainingConfig
 
         prediction = torch.tensor(
@@ -947,9 +946,9 @@ class SimCCTrainingTests(unittest.TestCase):
 
     def test_animalvitpose_project_prediction_runs_from_annotated_dataset_split(self):
         from animalposetracker.nn import build_model
-        from animalposetracker.export_cli import run as run_export
-        from animalposetracker.predict_cli import run as run_prediction
-        from animalposetracker.workflows import (
+        from animalposetracker.export.cli import run as run_export
+        from animalposetracker.prediction.cli import run as run_prediction
+        from animalposetracker.project.model_context import (
             configure_project_model_spec,
             load_project_context,
         )
