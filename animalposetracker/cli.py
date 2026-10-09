@@ -8,6 +8,7 @@ from animalposetracker import __version__
 
 
 COMMANDS = {
+    "create": "Create and configure a project",
     "train": "Train a pose model",
     "val": "Validate a checkpoint on the configured validation split",
     "predict": "Predict on images, videos, or a dataset split",
@@ -71,6 +72,9 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
         return _run_validation(command_args)
     elif parsed.command == "predict":
         from animalposetracker.prediction.cli import run
+
+    elif parsed.command == "create":
+        from animalposetracker.project.cli import run
 
     else:
         from animalposetracker.export.cli import run
