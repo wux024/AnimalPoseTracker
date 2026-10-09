@@ -27,6 +27,7 @@ from animalposetracker.training.engine import Trainer
 from animalposetracker.training.losses import PoseDetectionLoss
 from animalposetracker.data.simcc import SimCCLabel
 from animalposetracker.evaluation.topdown import SimCCPoseValidator
+from animalposetracker.nn.head import YOLOPoseHead
 from animalposetracker.tracking import create_tracker
 from animalposetracker.project.model_context import unique_output_directory
 
@@ -89,6 +90,24 @@ class ReviewFixTests(unittest.TestCase):
 
         torch.testing.assert_close(boxes[0, 0], torch.tensor([256.0, 96.0, 384.0, 224.0]))
         torch.testing.assert_close(keypoints[0, 0, 0], torch.tensor([160.0, 240.0, 1.0]))
+
+    def test_pose_head_rebuilds_cached_anchors_after_device_move(self):
+        head = YOLOPoseHead(nc=1, kpt_shape=(1, 3), ch=(16, 32, 64)).eval()
+        head.stride = torch.tensor([8.0, 16.0, 32.0])
+        feature_shapes = ((1, 16, 8, 8), (1, 32, 4, 4), (1, 64, 2, 2))
+
+        with torch.inference_mode():
+            head([torch.randn(shape) for shape in feature_shapes])
+        self.assertEqual(head.anchors.device.type, "cpu")
+
+        head.to("meta")
+        meta_features = [torch.empty(shape, device="meta") for shape in feature_shapes]
+        with torch.inference_mode():
+            output, _raw = head(meta_features)
+
+        self.assertEqual(head.anchors.device.type, "meta")
+        self.assertEqual(head.strides.device.type, "meta")
+        self.assertEqual(output.device.type, "meta")
 
     def test_simcc_label_masks_points_just_outside_the_crop(self):
         codec = SimCCLabel((64, 64), sigma=3.0, split_ratio=2.0)

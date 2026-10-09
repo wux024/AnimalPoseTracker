@@ -187,7 +187,15 @@ class YOLOPoseHead(nn.Module):
         """Decode into cat(dbox, cls, pred_kpt), shaped (bs, 4 + nc + nk, num_anchors)."""
         shape = x[0].shape  # BCHW
         x_cat = torch.cat([xi.view(shape[0], self.no, -1) for xi in x], 2)
-        if self.dynamic or self.shape != shape:
+        cache_device = x[0].device
+        cache_dtype = x[0].dtype
+        cache_mismatch = (
+            self.anchors.device != cache_device
+            or self.strides.device != cache_device
+            or self.anchors.dtype != cache_dtype
+            or self.strides.dtype != cache_dtype
+        )
+        if self.dynamic or self.shape != shape or cache_mismatch:
             self.anchors, self.strides = (t.transpose(0, 1) for t in make_anchors(x, self.stride, 0.5))
             self.shape = shape
         box, cls = x_cat.split((self.reg_max * 4, self.nc), 1)
