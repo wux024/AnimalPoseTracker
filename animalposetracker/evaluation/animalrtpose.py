@@ -58,6 +58,8 @@ class PoseDetectionValidator:
         totals: Dict[str, float] = {}
         batches = 0
         coco_detections = []
+        if hasattr(self.criterion, "to"):
+            self.criterion.to(device)
         if self.validation_dataset is None:
             raise ValueError("COCO keypoint validation requires the validation dataset metadata")
         coco_gt, image_ids_by_path, category_ids_by_class = build_coco_ground_truth(

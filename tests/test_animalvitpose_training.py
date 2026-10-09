@@ -535,10 +535,15 @@ class SimCCTrainingTests(unittest.TestCase):
 
                 def __init__(self):
                     super().__init__()
+                    self.to_called = False
                     self.keypoint_loss = torch.nn.Module()
                     self.keypoint_loss.register_buffer(
                         "kpt_oks_sigmas", torch.tensor(dataset.kpt_oks_sigmas)
                     )
+
+                def to(self, *args, **kwargs):
+                    self.to_called = True
+                    return super().to(*args, **kwargs)
 
                 def forward(self, _raw_predictions, _targets):
                     return {"metrics": {"val_loss": torch.tensor(0.1)}}
@@ -551,10 +556,18 @@ class SimCCTrainingTests(unittest.TestCase):
                     return decoded, None
 
             loader = DataLoader(dataset, batch_size=1, collate_fn=pose_collate)
-            validator = PoseDetectionValidator(
-                FakeCriterion(), validation_dataset=dataset, max_detections=20
+            validation_device = torch.device(
+                "cuda" if torch.cuda.is_available() else "cpu"
             )
-            validation_result = validator(FakeModel(), loader, torch.device("cpu"))
+            criterion = FakeCriterion()
+            validator = PoseDetectionValidator(
+                criterion, validation_dataset=dataset, max_detections=20
+            )
+            validation_result = validator(FakeModel(), loader, validation_device)
+            self.assertTrue(criterion.to_called)
+            self.assertEqual(
+                criterion.keypoint_loss.kpt_oks_sigmas.device, validation_device
+            )
             self.assertAlmostEqual(validation_result["coco/AP"], 1.0)
             self.assertAlmostEqual(validation_result["fitness"], validation_result["coco/AP"])
             self.assertAlmostEqual(validation_result["PCK"], 1.0)
