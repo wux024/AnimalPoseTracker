@@ -32,7 +32,7 @@ class PoseDetectionValidator:
         keypoint_pck_threshold: float = 0.05,
         keypoint_auc_norm_factor: float = 30.0,
         keypoint_auc_thresholds: int = 20,
-        coco_max_detections: int = 20,
+        coco_max_detections: int = 300,
     ) -> None:
         if not 0.0 <= confidence_threshold <= 1.0:
             raise ValueError("validation confidence threshold must be between 0 and 1")
@@ -107,6 +107,7 @@ class PoseDetectionValidator:
             use_categories=not bool(getattr(self.validation_dataset, "single_cls", False)),
             max_detections=self.coco_max_detections,
             return_matches=True,
+            oks_area_mode="ultralytics_bbox",
         )
         result.update(coco_metrics)
         result.update(keypoint_error_metrics_from_coco_matches(
