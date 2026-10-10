@@ -26,6 +26,27 @@ from animalposetracker.postprocessing.output_decoders import (
 )
 
 
+def _pose_instance_to_detection(instance: PoseInstance) -> dict:
+    """Adapt one decoded PoseInstance to the tracker input mapping."""
+    keypoints = np.asarray(instance.keypoints_xy, dtype=np.float32)
+    scores = instance.keypoint_scores
+    if scores is None:
+        scores = instance.keypoints_visible
+    if scores is not None:
+        scores = np.asarray(scores, dtype=np.float32).reshape(-1, 1)
+        if scores.shape[0] == keypoints.shape[0]:
+            keypoints = np.concatenate([keypoints, scores], axis=1)
+    return {
+        "bbox_xyxy": (
+            None if instance.bbox_xyxy is None
+            else np.asarray(instance.bbox_xyxy, dtype=np.float32)
+        ),
+        "score": float(instance.score) if instance.score is not None else 1.0,
+        "class_id": int(instance.class_id) if instance.class_id is not None else 0,
+        "keypoints": keypoints,
+    }
+
+
 @dataclass(frozen=True)
 class DetectorBox:
     """A detector result in the original stream-frame coordinate system."""
@@ -200,6 +221,8 @@ class StreamInferencePipeline:
         input_mode: Optional[str] = None,
         input_config: Optional[Union[StreamInputConfig, Mapping[str, Any]]] = None,
         detector: Optional[DetectorProvider] = None,
+        tracker=None,
+        class_names: Optional[Sequence[str]] = None,
     ):
         if pose_engine is None:
             raise ValueError("pose_engine is required")
@@ -258,6 +281,48 @@ class StreamInferencePipeline:
         self.input_mode = input_mode
         self.input_config = input_config
         self.detector = detector
+        self.class_names = list(class_names) if class_names is not None else []
+        self.tracker = self._build_tracker(tracker)
+
+    @staticmethod
+    def _build_tracker(tracker):
+        """Accept an algorithm name, config mapping, TrackerConfig, or tracker instance."""
+        if tracker is None:
+            return None
+        from animalposetracker.tracking import create_tracker
+        from animalposetracker.tracking.base import BaseTracker
+
+        if isinstance(tracker, BaseTracker):
+            return tracker
+        return create_tracker(tracker)
+
+    def reset_tracker(self) -> None:
+        """Reset sequence state; call between independent streams."""
+        if self.tracker is not None:
+            self.tracker.reset()
+
+    def track_frame(self, frame: np.ndarray, frame_index: int) -> list:
+        """Decode poses for one stream frame and attach sequence-local track IDs.
+
+        Returns the same record dictionaries produced by
+        ``postprocessing.workflows.track_frame_predictions``, so results can be
+        fed straight into ``filter_tracked_video_records`` for temporal
+        smoothing, mirroring the offline ``predict --tracker --pose-filter``
+        chain.
+        """
+        if self.tracker is None:
+            raise RuntimeError("track_frame requires tracker=... at construction")
+        from animalposetracker.postprocessing.workflows import track_frame_predictions
+
+        instances = self.process_frame(frame)
+        detections = [_pose_instance_to_detection(instance) for instance in instances]
+        return track_frame_predictions(
+            detections,
+            self.tracker,
+            int(frame_index),
+            frame=frame,
+            class_names=self.class_names,
+        )
 
     def _pose_input_size(self) -> Tuple[int, int]:
         if self.input_config.input_size is not None:

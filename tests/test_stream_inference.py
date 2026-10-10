@@ -21,6 +21,85 @@ from animalposetracker.inference.stream_inference import (
 from animalposetracker.inference.inferencer import InferenceEngine
 
 
+class StreamTrackingTests(unittest.TestCase):
+    def _make_pipeline(self, tracker):
+        config = PoseOutputConfig(
+            schema=RTMPOSE_SIMCC,
+            num_keypoints=1,
+            keypoint_dims=2,
+            simcc_split_ratio=2.0,
+        )
+        simcc_x = np.zeros((1, 1, 16), dtype=np.float32)
+        simcc_y = np.zeros((1, 1, 16), dtype=np.float32)
+        simcc_x[0, 0, 8] = 1.0
+        simcc_y[0, 0, 8] = 1.0
+        engine = StreamPipelineTests.FakePoseEngine({"simcc_x": simcc_x, "simcc_y": simcc_y})
+        detector = StreamPipelineTests.FakeDetector([DetectorBox([10, 10, 30, 30], 0.9, 0)])
+        return StreamInferencePipeline(
+            engine,
+            config,
+            input_mode="topdown",
+            input_config=StreamInputConfig(
+                input_size=(8, 8),
+                color_order="BGR",
+                input_scale=1.0,
+                pixel_mean=(0, 0, 0),
+                pixel_std=(1, 1, 1),
+                bbox_padding=1.0,
+            ),
+            detector=detector,
+            tracker=tracker,
+            class_names=["mouse"],
+        )
+
+    def test_track_frame_requires_tracker(self):
+        pipeline = self._make_pipeline(None)
+        with self.assertRaisesRegex(RuntimeError, "tracker"):
+            pipeline.track_frame(np.zeros((40, 40, 3), dtype=np.uint8), 0)
+
+    def test_tracker_accepts_algorithm_name_and_keeps_ids(self):
+        pipeline = self._make_pipeline("bytetrack")
+        frame = np.zeros((40, 40, 3), dtype=np.uint8)
+        first = pipeline.track_frame(frame, 0)
+        second = pipeline.track_frame(frame, 1)
+        self.assertEqual(len(first), 1)
+        self.assertEqual(first[0]["track_id"], second[0]["track_id"])
+        self.assertEqual(first[0]["class_name"], "mouse")
+        self.assertEqual(first[0]["class_id"], 0)
+        keypoints = np.asarray(first[0]["keypoints"], dtype=np.float32)
+        self.assertEqual(keypoints.shape, (1, 2))
+        np.testing.assert_allclose(keypoints[0], [20, 20], atol=1e-5)
+
+    def test_tracker_accepts_config_mapping(self):
+        pipeline = self._make_pipeline({"algorithm": "ocsort", "track_buffer": 45})
+        frame = np.zeros((40, 40, 3), dtype=np.uint8)
+        tracked = pipeline.track_frame(frame, 0)
+        self.assertEqual(len(tracked), 1)
+
+    def test_reset_tracker_restarts_sequence(self):
+        pipeline = self._make_pipeline("bytetrack")
+        frame = np.zeros((40, 40, 3), dtype=np.uint8)
+        pipeline.track_frame(frame, 0)
+        pipeline.reset_tracker()
+        restarted = pipeline.track_frame(frame, 0)
+        self.assertEqual(restarted[0]["track_id"], 1)
+
+    def test_tracked_records_feed_temporal_filter(self):
+        from animalposetracker.postprocessing.workflows import filter_tracked_video_records
+
+        pipeline = self._make_pipeline("bytetrack")
+        frame = np.zeros((40, 40, 3), dtype=np.uint8)
+        records = [
+            {"frame": index, "predictions": pipeline.track_frame(frame, index)}
+            for index in range(4)
+        ]
+        filtered = filter_tracked_video_records(
+            records, method="median", window_length=3, polyorder=1
+        )
+        self.assertEqual(len(filtered), 4)
+        self.assertEqual(filtered[0]["predictions"][0]["track_id"], 1)
+
+
 class OutputNormalizationTests(unittest.TestCase):
     def test_single_array_is_assigned_configured_name(self):
         result = normalize_output_tensors(np.ones((1, 2)), ("predictions",))

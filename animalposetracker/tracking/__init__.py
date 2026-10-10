@@ -9,11 +9,13 @@ from .algorithms import (
     TrackTrack,
     create_tracker,
 )
+from .base import BaseTracker
 from .config import ALGORITHMS, TrackerConfig
 from .types import DetectionInput, DetectionSequence, PoseDetection, TrackedDetection
 
 __all__ = [
     "ALGORITHMS",
+    "BaseTracker",
     "TrackerConfig",
     "PoseDetection",
     "TrackedDetection",
