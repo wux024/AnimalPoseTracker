@@ -870,7 +870,7 @@ class AnimalPoseTrackerPage(QMainWindow, Ui_AnimalPoseTracker):
             elif kind == "validation":
                 metrics = event.get("metrics", {})
                 loss = metrics.get("loss")
-                pose_map = metrics.get("metrics/mAP50-95(P)")
+                pose_map = metrics.get("coco/AP")
                 box_map = metrics.get("metrics/mAP50-95(B)")
                 details = []
                 if isinstance(loss, (int, float)):

@@ -115,11 +115,9 @@ class PoseDetectionValidator:
             auc_norm_factor=self.keypoint_auc_norm_factor,
             auc_thresholds=self.keypoint_auc_thresholds,
         ))
-        # Keep legacy checkpoint selection and chart keys working while the common
-        # COCO names become the canonical metrics for both pose architectures.
+        # fitness stays as the single scalar used by console rendering and
+        # historical checkpoint metadata; COCO names are the canonical metrics.
         result["fitness"] = coco_metrics["coco/AP"]
-        result["metrics/mAP50(P)"] = coco_metrics["coco/AP50"]
-        result["metrics/mAP50-95(P)"] = coco_metrics["coco/AP"]
         return result
 
     def _collect_coco_detections(
