@@ -115,9 +115,6 @@ class PoseDetectionValidator:
             auc_norm_factor=self.keypoint_auc_norm_factor,
             auc_thresholds=self.keypoint_auc_thresholds,
         ))
-        # fitness stays as the single scalar used by console rendering and
-        # historical checkpoint metadata; COCO names are the canonical metrics.
-        result["fitness"] = coco_metrics["coco/AP"]
         return result
 
     def _collect_coco_detections(

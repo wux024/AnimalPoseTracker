@@ -226,14 +226,14 @@ class PrettyTrainingRendererTests(unittest.TestCase):
             ),
             TrainingEvent(
                 event="epoch_end", epoch=1, epochs=2,
-                metrics={"train_loss": 22.4, "val_loss": 20.6, "val_fitness": 0.0},
+                metrics={"train_loss": 22.4, "val_loss": 20.6, "val_coco/AP": 0.7},
             ),
             TrainingEvent(event="finished", epoch=2, epochs=2),
         ])
         self.assertIn("[pretrained] loaded 423 tensors (42 incompatible shapes skipped)", output)
         self.assertIn("[started] device=cuda", output)
         self.assertIn("[val] epoch 1/2", output)
-        self.assertIn("[epoch 1/2] train_loss=22.4 val_loss=20.6", output)
+        self.assertIn("[epoch 1/2] train_loss=22.4 val_loss=20.6 AP=0.7", output)
         self.assertIn("[finished]", output)
         self.assertNotIn('"event"', output)
 

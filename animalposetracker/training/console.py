@@ -122,14 +122,14 @@ class PrettyTrainingRenderer:
         if name == "epoch_end":
             train_loss = metrics.get("train_loss")
             val_loss = metrics.get("val_loss")
-            fitness = metrics.get("val_fitness", metrics.get("fitness"))
+            ap = metrics.get("val_coco/AP", metrics.get("coco/AP"))
             parts = [f"[epoch {event.epoch}/{event.epochs}]"]
             if train_loss is not None:
                 parts.append(f"train_loss={_fmt(float(train_loss))}")
             if val_loss is not None:
                 parts.append(f"val_loss={_fmt(float(val_loss))}")
-            if fitness is not None:
-                parts.append(f"fitness={_fmt(float(fitness))}")
+            if ap is not None:
+                parts.append(f"AP={_fmt(float(ap))}")
             self._line(" ".join(parts))
             return
 
