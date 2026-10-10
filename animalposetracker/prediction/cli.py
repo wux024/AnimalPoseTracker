@@ -4,6 +4,7 @@ import argparse
 import glob
 import hashlib
 import json
+import sys
 from pathlib import Path
 from types import SimpleNamespace
 from typing import Any, Dict, List, Tuple
@@ -615,6 +616,63 @@ def _make_argument_parser():
     return parser
 
 
+def _print_predict_banner(
+    *,
+    weights_path,
+    artifact_format: str,
+    context: Dict[str, Any],
+    head_name: str,
+    image_count: int,
+    video_count: int,
+    tracker_name,
+    filter_method: str,
+    output_dir: Path,
+) -> None:
+    if not sys.stdout.isatty():
+        return
+    from animalposetracker.training.console import environment_line, format_summary_block
+
+    project = context.get("project") or {}
+    model_type = str(project.get("model_type") or "model")
+    model_scale = str(project.get("model_scale") or "")
+    source_parts = []
+    if image_count:
+        source_parts.append(f"{image_count} images")
+    if video_count:
+        source_parts.append(f"{video_count} videos")
+    split = context.get("prediction_split")
+    if split:
+        source_parts.append(f"split={split}")
+    tracking = str(tracker_name) if tracker_name else "off"
+    if tracker_name and filter_method != "none":
+        tracking += f" + {filter_method} filter"
+    rows = [
+        ("Model", f"{model_type}-{model_scale}".rstrip("-") + f" ({artifact_format})"),
+        ("Weights", str(weights_path)),
+        ("Head", str(head_name)),
+        ("Source", " · ".join(source_parts) if source_parts else "dataset split"),
+        ("Tracking", tracking),
+        ("Output", str(output_dir)),
+    ]
+    print()
+    print(environment_line())
+    print()
+    print(format_summary_block(rows))
+    print()
+
+
+def _print_progress(text: str) -> None:
+    if sys.stdout.isatty():
+        sys.stdout.write("\r" + text.ljust(110))
+        sys.stdout.flush()
+
+
+def _end_progress() -> None:
+    if sys.stdout.isatty():
+        sys.stdout.write("\n")
+        sys.stdout.flush()
+
+
 def run(argv=None, box_provider: InstanceBoxProvider = None) -> int:
     import torch
 
@@ -817,13 +875,26 @@ def run(argv=None, box_provider: InstanceBoxProvider = None) -> int:
         raise ValueError("Video tracking requires at least one video source")
     output_dir = config.output_dir
     output_dir.mkdir(parents=True, exist_ok=True)
+    _print_predict_banner(
+        weights_path=weights_path,
+        artifact_format=artifact_format,
+        context=context,
+        head_name=head_name,
+        image_count=len(image_paths),
+        video_count=len(videos),
+        tracker_name=tracker_name,
+        filter_method=filter_method,
+        output_dir=output_dir,
+    )
     results = []
     tracked_results = []
     filtered_results = []
 
     external_backend = artifact_format != "pt"
+    image_total = len(image_paths)
     if head_name == "YOLOPoseHead":
-        for image_path in image_paths:
+        for image_index, image_path in enumerate(image_paths, 1):
+            _print_progress(f"predict {image_index}/{image_total} {image_path.name}")
             image = _read_image(image_path)
             rendered, records = _predict_frame(
                 image, model, config, context, settings, external_backend=external_backend
@@ -836,7 +907,8 @@ def run(argv=None, box_provider: InstanceBoxProvider = None) -> int:
 
     else:
         provider = context["box_provider"]
-        for image_path in image_paths:
+        for image_index, image_path in enumerate(image_paths, 1):
+            _print_progress(f"predict {image_index}/{image_total} {image_path.name}")
             image = _read_image(image_path)
             boxes = provider.boxes_for_image(image, image_path)
             rendered, records = _predict_topdown_image(
@@ -855,6 +927,7 @@ def run(argv=None, box_provider: InstanceBoxProvider = None) -> int:
             results.append({"source": str(image_path), "output": str(output_path), "predictions": records})
 
     for video_path in videos:
+        _print_progress(f"video {video_path.name}")
         output_path = output_dir / "videos" / f"{_output_stem(video_path, videos)}.mp4"
         if head_name == "YOLOPoseHead":
             frame_predictor = lambda frame: _predict_frame(
@@ -944,9 +1017,9 @@ def run(argv=None, box_provider: InstanceBoxProvider = None) -> int:
         }, ensure_ascii=False, indent=2, allow_nan=False) + "\n",
         encoding="utf-8",
     )
+    _end_progress()
     print(f"Predictions saved to {output_dir}")
     return 0
-
 
 if __name__ == "__main__":
     raise SystemExit(run())

@@ -2,6 +2,7 @@
 
 import argparse
 import json
+import sys
 import tempfile
 from pathlib import Path
 
@@ -180,6 +181,24 @@ def run(argv=None) -> int:
         "rknn": f"{stem}_rknn_model",
     }
     output_path = output_dir / path_suffixes[export_format]
+
+    if sys.stdout.isatty():
+        from animalposetracker.training.console import environment_line, format_summary_block
+
+        project = context.get("project") or {}
+        model_type = str(project.get("model_type") or "model")
+        model_scale = str(project.get("model_scale") or "")
+        print()
+        print(environment_line())
+        print()
+        print(format_summary_block([
+            ("Model", f"{model_type}-{model_scale}".rstrip("-")),
+            ("Weights", str(context["weights"])),
+            ("Format", export_format),
+            ("Device", str(context["device"])),
+            ("Output", str(output_path)),
+        ]))
+        print()
 
     half = bool(values.get("half", False))
     if export_format == "imx" and half:
