@@ -29,8 +29,23 @@ def _make_create_parser() -> argparse.ArgumentParser:
     parser.add_argument("--workers", type=int, default=8)
     parser.add_argument("--device", default="auto")
     pretrained = parser.add_mutually_exclusive_group()
-    pretrained.add_argument("--pretrained", dest="pretrained", action="store_true")
-    pretrained.add_argument("--no-pretrained", dest="pretrained", action="store_false")
+    pretrained.add_argument(
+        "--pretrained",
+        nargs="?",
+        const=True,
+        metavar="PATH",
+        help=(
+            "Start from pretrained weights (default). Optionally record a local "
+            "checkpoint path in configs/other.yaml; nothing is checked or "
+            "downloaded at create time."
+        ),
+    )
+    pretrained.add_argument(
+        "--no-pretrained",
+        dest="pretrained",
+        action="store_false",
+        help="Train from scratch.",
+    )
     parser.set_defaults(pretrained=True)
     return parser
 
@@ -103,7 +118,8 @@ def _create_project(args: argparse.Namespace) -> AnimalPoseTrackerProject:
         "name": "train",
         "exist_ok": False,
     })
-    project._detect_pretrained()
+    # Pretrained weight resolution is deferred to training time so project
+    # creation never performs file checks or network downloads.
     project.save_configs("all")
     print(f"Project: {project.project_path}")
     print(f"Dataset: {dataset_root}")

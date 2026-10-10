@@ -73,6 +73,31 @@ def _resolve_project_path(value, project_dir: Path) -> Path:
     return path.resolve()
 
 
+_FULL_MODEL_PRETRAINED_TYPES = frozenset({"AnimalRTPose", "AnimalRTPose-P6"})
+
+
+def _resolve_project_default_pretrained(project_dir: Path, project_values: Dict[str, Any]) -> Path:
+    """Locate the bundled full-model checkpoint for ``pretrained: true`` projects.
+
+    Resolution happens at training time so project directories stay movable and
+    ``animalpose-cli create`` never performs file checks or network downloads.
+    AnimalViTPose is excluded: its backbone initialization is resolved by the
+    training profile instead of a full-model checkpoint.
+    """
+    model_type = project_values.get("model_type")
+    model_scale = project_values.get("model_scale")
+    filename = f"{model_type}-{model_scale}.pt".lower()
+    candidate = (Path(project_dir) / "pretrained" / filename).resolve()
+    if not candidate.is_file():
+        raise FileNotFoundError(
+            f"Pretrained weights not found: {candidate}\n"
+            "Place the checkpoint at that path, record an explicit path in "
+            "configs/other.yaml (pretrained: /path/to/checkpoint.pt), or set "
+            "pretrained: false to train from scratch."
+        )
+    return candidate
+
+
 def _load_evaluation_weights(weights_path, trainer, emitter):
     """Load a full AnimalPoseTracker checkpoint or compatible weights-only file."""
     from .checkpoint import load_checkpoint, load_model_weights, resolve_checkpoint_path
@@ -348,6 +373,14 @@ def run(argv=None) -> int:
             values["output_dir"] = str(Path(args.resume).expanduser().resolve().parent.parent)
             values["pretrained_weights"] = None
             values["pretrained"] = False
+        if (
+            values.get("pretrained") is True
+            and not values.get("pretrained_weights")
+            and str(project_values.get("model_type")) in _FULL_MODEL_PRETRAINED_TYPES
+        ):
+            values["pretrained_weights"] = str(
+                _resolve_project_default_pretrained(project_dir, project_values)
+            )
         config = TrainingConfig.from_mapping(values, project_dir=project_dir)
         config.output_dir.mkdir(parents=True, exist_ok=True)
         if rank == 0:
