@@ -611,6 +611,16 @@ def _make_argument_parser():
     )
     parser.add_argument("--output-dir", help="Override the prediction output directory")
     parser.add_argument(
+        "--conf",
+        type=float,
+        help="Prediction confidence threshold (default: 0.25)",
+    )
+    parser.add_argument(
+        "--iou",
+        type=float,
+        help="Prediction NMS IoU threshold (default: 0.7)",
+    )
+    parser.add_argument(
         "--tracker",
         choices=ALGORITHMS,
         help="Optionally track video detections with this AnimalPoseTracker algorithm",
@@ -845,10 +855,24 @@ def run(argv=None, box_provider: InstanceBoxProvider = None) -> int:
     )
 
     settings_values = context["other"]
+    prediction_confidence = (
+        args.conf
+        if args.conf is not None
+        else settings_values.get("prediction_confidence", 0.25)
+    )
+    prediction_iou = (
+        args.iou
+        if args.iou is not None
+        else settings_values.get("prediction_iou", 0.7)
+    )
+    if not 0.0 <= float(prediction_confidence) <= 1.0:
+        raise ValueError("Prediction confidence threshold must be between 0 and 1")
+    if not 0.0 <= float(prediction_iou) <= 1.0:
+        raise ValueError("Prediction NMS IoU threshold must be between 0 and 1")
     settings = {
-        "confidence": 0.25 if settings_values.get("conf") is None else float(settings_values["conf"]),
+        "confidence": float(prediction_confidence),
         "keypoint_confidence": float(settings_values.get("keypoint_score_threshold", 0.25)),
-        "iou": float(settings_values.get("iou", 0.7)),
+        "iou": float(prediction_iou),
         "max_detections": int(settings_values.get("max_det", 300)),
         "agnostic_nms": bool(settings_values.get("agnostic_nms", False)),
         "show_boxes": bool(settings_values.get("show_boxes", True)),
