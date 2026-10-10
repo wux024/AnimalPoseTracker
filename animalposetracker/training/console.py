@@ -10,9 +10,23 @@ from typing import Optional, Sequence, TextIO, Tuple
 
 from .events import TrainingEvent
 
-_LOSS_KEYS = ("loss", "box", "pose", "kobj", "class", "dfl")
-_VAL_KEYS = (
-    "loss", "coco/AP", "coco/AP50", "coco/AP75", "coco/AR", "PCK", "AUC", "EPE"
+_TRAIN_COLUMNS = (
+    ("loss", "loss"),
+    ("box", "box_loss"),
+    ("pose", "pose_loss"),
+    ("kobj", "kobj_loss"),
+    ("class", "cls_loss"),
+    ("dfl", "dfl_loss"),
+)
+_VAL_COLUMNS = (
+    ("loss", "Loss"),
+    ("coco/AP", "AP"),
+    ("coco/AP50", "AP50"),
+    ("coco/AP75", "AP75"),
+    ("coco/AR", "AR"),
+    ("PCK", "PCK"),
+    ("AUC", "AUC"),
+    ("EPE", "EPE"),
 )
 
 
@@ -59,24 +73,34 @@ def _fmt(value: float) -> str:
 
 def _speed_text(metrics, prefix: str = "") -> str:
     stages = (
-        ("preprocess", "input transfer"),
-        ("inference", "model forward"),
-        ("loss", "validation loss"),
-        ("postprocess", "NMS/COCO prep"),
-        ("coco_eval", "COCO evaluation"),
+        ("preprocess", "preprocess"),
+        ("inference", "inference"),
+        ("loss", "loss"),
+        ("postprocess", "postprocess"),
     )
     values = [
-        f"{label}={float(metrics[f'{prefix}speed/{key}_ms']):.1f}ms/im"
+        f"{float(metrics[f'{prefix}speed/{key}_ms']):.1f}ms {label}"
         for key, label in stages
         if f"{prefix}speed/{key}_ms" in metrics
     ]
-    fps = metrics.get(f"{prefix}speed/inference_fps")
-    if fps is not None:
-        values.append(f"model_forward_FPS={float(fps):.1f}")
-    validation_fps = metrics.get(f"{prefix}speed/validation_fps")
-    if validation_fps is not None:
-        values.append(f"validation_FPS={float(validation_fps):.1f}")
-    return " | ".join(values)
+    return f"Speed: {', '.join(values)} per image" if values else ""
+
+
+def _validation_table(metrics, prefix: str = "") -> Tuple[str, str]:
+    headers = ("Images", "Instances", *(label for _, label in _VAL_COLUMNS))
+    header = f"{'Class':>22s}" + "".join(f"{label:>11s}" for label in headers)
+    image_count = metrics.get(f"{prefix}images")
+    instance_count = metrics.get(f"{prefix}instances")
+    values = [
+        "all",
+        str(int(image_count)) if image_count is not None else "-",
+        str(int(instance_count)) if instance_count is not None else "-",
+    ]
+    for key, _ in _VAL_COLUMNS:
+        value = metrics.get(f"{prefix}{key}")
+        values.append(_fmt(float(value)) if value is not None else "-")
+    row = f"{values[0]:>22s}" + "".join(f"{value:>11s}" for value in values[1:])
+    return header, row
 
 
 def format_progress_bar(current: int, total: int, width: int = 16) -> str:
@@ -94,6 +118,7 @@ class PrettyTrainingRenderer:
     def __init__(self, stream: Optional[TextIO] = None) -> None:
         self.stream = stream if stream is not None else sys.stdout
         self._batch_open = False
+        self._header_epoch = None
 
     def _write(self, text: str) -> None:
         self.stream.write(text)
@@ -105,27 +130,33 @@ class PrettyTrainingRenderer:
             self._batch_open = False
         self._write(text + "\n")
 
-    @staticmethod
-    def _metrics(metrics, keys) -> str:
-        parts = []
-        for key in keys:
-            value = metrics.get(key)
-            if value is not None:
-                parts.append(f"{key}={_fmt(float(value))}")
-        return " ".join(parts)
-
     def emit(self, event: TrainingEvent) -> None:
         metrics = event.metrics or {}
         name = event.event
 
         if name == "batch":
+            if self._header_epoch != event.epoch:
+                headers = (
+                    "Epoch", "GPU_mem", *(label for _, label in _TRAIN_COLUMNS), "Instances", "Size"
+                )
+                self._line("".join(f"{label:>11s}" for label in headers))
+                self._header_epoch = event.epoch
             total_steps = max(int(event.steps or 0), 1)
             progress_bar = format_progress_bar(event.step or 0, total_steps)
-            text = (
-                f"epoch {event.epoch}/{event.epochs} [{progress_bar}] "
-                + self._metrics(metrics, _LOSS_KEYS)
+            values = [
+                f"{event.epoch}/{event.epochs}",
+                f"{float(metrics.get('gpu_mem', 0.0)):.3g}G",
+            ]
+            values.extend(
+                _fmt(float(metrics[key])) if key in metrics else "-"
+                for key, _ in _TRAIN_COLUMNS
             )
-            self._write("\r" + text.ljust(110))
+            values.extend((
+                str(int(metrics.get("instances", 0))),
+                str(int(metrics.get("size", 0))),
+            ))
+            text = progress_bar + " " + "".join(f"{value:>11s}" for value in values)
+            self._write("\r" + text.ljust(145))
             self._batch_open = True
             return
 
@@ -150,46 +181,34 @@ class PrettyTrainingRenderer:
             return
 
         if name == "final_validation":
-            self._line("[best] " + self._metrics(metrics, _VAL_KEYS))
+            header, row = _validation_table(metrics)
+            self._line(header)
+            self._line(row)
             speed = _speed_text(metrics)
             if speed:
-                self._line("[best speed] " + speed)
+                self._line(speed)
             return
 
         if name == "evaluation":
-            self._line("[val] " + self._metrics(metrics, _VAL_KEYS))
+            header, row = _validation_table(metrics)
+            self._line(header)
+            self._line(row)
             speed = _speed_text(metrics)
             if speed:
-                self._line("[val speed] " + speed)
+                self._line(speed)
             if event.message:
                 self._line(str(event.message))
             return
 
         if name == "epoch_end":
             train_loss = metrics.get("train_loss")
-            val_loss = metrics.get("val_loss")
-            ap = metrics.get("val_coco/AP", metrics.get("coco/AP"))
             parts = [f"[epoch {event.epoch}/{event.epochs}]"]
             if train_loss is not None:
                 parts.append(f"train_loss={_fmt(float(train_loss))}")
-            if ap is not None:
-                parts.append(f"val_AP={_fmt(float(ap))}")
-            for key, label in (
-                ("val_loss", "val_loss"),
-                ("val_coco/AP50", "val_AP50"),
-                ("val_coco/AP75", "val_AP75"),
-                ("val_coco/AR", "val_AR"),
-                ("val_PCK", "val_PCK"),
-                ("val_AUC", "val_AUC"),
-                ("val_EPE", "val_EPE"),
-            ):
-                value = metrics.get(key)
-                if value is not None:
-                    parts.append(f"{label}={_fmt(float(value))}")
             self._line(" ".join(parts))
-            speed = _speed_text(metrics, prefix="val_")
-            if speed:
-                self._line("[val speed] " + speed)
+            header, row = _validation_table(metrics, prefix="val_")
+            self._line(header)
+            self._line(row)
             return
 
         if name in {"started", "finished", "plot", "profile"}:

@@ -837,6 +837,18 @@ class Trainer:
                 running_metrics = {
                     name: value / batches for name, value in totals.items()
                 }
+                boxes = targets.get("boxes") if isinstance(targets, Mapping) else None
+                instances = int(boxes.shape[0]) if torch.is_tensor(boxes) else 0
+                gpu_mem = (
+                    float(torch.cuda.memory_reserved(self.device) / (1024 ** 3))
+                    if self.device.type == "cuda"
+                    else 0.0
+                )
+                running_metrics.update({
+                    "gpu_mem": gpu_mem,
+                    "instances": instances,
+                    "size": int(images.shape[-1]),
+                })
                 self.events.emit(TrainingEvent(
                     event="batch",
                     epoch=epoch_number,
