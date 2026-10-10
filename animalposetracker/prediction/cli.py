@@ -818,6 +818,10 @@ def run(argv=None, box_provider: InstanceBoxProvider = None) -> int:
             output_dir if output_dir.is_absolute()
             else context["project_dir"] / output_dir
         ).resolve()
+    else:
+        # Prediction runs get their own namespace instead of inheriting the
+        # training run name (project/name = runs/train) from other.yaml.
+        config.output_dir = context["project_dir"] / "runs" / "predict"
     config.output_dir = unique_output_directory(
         config.output_dir,
         exist_ok=bool(context["other"].get("exist_ok", False)),
