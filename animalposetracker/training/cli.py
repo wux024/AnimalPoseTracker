@@ -73,7 +73,7 @@ def _resolve_project_path(value, project_dir: Path) -> Path:
     return path.resolve()
 
 
-_FULL_MODEL_PRETRAINED_TYPES = frozenset({"AnimalRTPose", "AnimalRTPose-P6"})
+_FULL_MODEL_PRETRAINED_TYPES = frozenset({"AnimalRTPose"})
 
 
 def _resolve_project_default_pretrained(project_dir: Path, project_values: Dict[str, Any]) -> Path:
@@ -249,12 +249,26 @@ def _make_argument_parser() -> argparse.ArgumentParser:
         "--output-dir",
         help="Override the run output directory without editing other.yaml.",
     )
+    parser.add_argument(
+        "--json",
+        action="store_true",
+        help=(
+            "Emit machine-readable JSON-lines events on stdout. "
+            "By default interactive terminals get a human-readable renderer "
+            "while piped output stays JSON-lines."
+        ),
+    )
     return parser
 
 
 def run(argv=None) -> int:
     args = _make_argument_parser().parse_args(argv)
-    emitter = EventEmitter.json_stdout()
+    if args.json or not sys.stdout.isatty():
+        emitter = EventEmitter.json_stdout()
+    else:
+        from .console import PrettyTrainingRenderer
+
+        emitter = EventEmitter(callback=PrettyTrainingRenderer().emit)
     trainer = None
     event_stream = None
     distributed_initialized = False

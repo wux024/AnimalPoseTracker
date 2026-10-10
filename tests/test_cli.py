@@ -1,3 +1,4 @@
+import io
 import unittest
 import tempfile
 from pathlib import Path
@@ -9,6 +10,8 @@ import yaml
 from animalposetracker.cli import main
 from animalposetracker.project.api import AnimalPoseTrackerProject
 from animalposetracker.training.cli import _resolve_project_default_pretrained
+from animalposetracker.training.console import PrettyTrainingRenderer
+from animalposetracker.training.events import TrainingEvent
 
 
 class CommandDispatcherTests(unittest.TestCase):
@@ -181,6 +184,57 @@ class DefaultPretrainedResolutionTests(unittest.TestCase):
                 project_dir, {"model_type": "AnimalRTPose", "model_scale": "N"}
             )
             self.assertEqual(resolved, checkpoint.resolve())
+
+
+class PrettyTrainingRendererTests(unittest.TestCase):
+    def _render(self, events):
+        stream = io.StringIO()
+        renderer = PrettyTrainingRenderer(stream=stream)
+        for event in events:
+            renderer.emit(event)
+        return stream.getvalue()
+
+    def test_batch_events_render_in_place_with_progress(self):
+        output = self._render([
+            TrainingEvent(
+                event="batch", epoch=1, epochs=2, step=1, steps=9,
+                metrics={"loss": 22.5, "box": 0.41, "pose": 0.9},
+            ),
+        ])
+        self.assertTrue(output.startswith("\r"))
+        self.assertIn("epoch 1/2", output)
+        self.assertIn("step 1/9", output)
+        self.assertIn("loss=22.5", output)
+
+    def test_known_events_render_compact_lines(self):
+        output = self._render([
+            TrainingEvent(
+                event="pretrained",
+                metrics={"loaded_tensors": 423.0, "shape_mismatches": 42.0},
+            ),
+            TrainingEvent(event="started", epoch=0, epochs=2, message="device=cuda"),
+            TrainingEvent(
+                event="validation", epoch=1, epochs=2,
+                metrics={"loss": 20.6, "coco/AP": 0.0, "PCK": 0.0},
+            ),
+            TrainingEvent(
+                event="epoch_end", epoch=1, epochs=2,
+                metrics={"train_loss": 22.4, "val_loss": 20.6, "val_fitness": 0.0},
+            ),
+            TrainingEvent(event="finished", epoch=2, epochs=2),
+        ])
+        self.assertIn("[pretrained] loaded 423 tensors (42 incompatible shapes skipped)", output)
+        self.assertIn("[started] device=cuda", output)
+        self.assertIn("[val] epoch 1/2", output)
+        self.assertIn("[epoch 1/2] train_loss=22.4 val_loss=20.6", output)
+        self.assertIn("[finished]", output)
+        self.assertNotIn('"event"', output)
+
+    def test_unknown_event_falls_back_to_tagged_line(self):
+        output = self._render([
+            TrainingEvent(event="custom", message="hello", metrics={"x": 1.5}),
+        ])
+        self.assertIn("[custom] hello x=1.5", output)
 
 
 if __name__ == "__main__":

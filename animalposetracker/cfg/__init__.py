@@ -9,7 +9,6 @@ TRAINING_CFG_PATH = CFG_DIR / 'training.yaml'
 
 MODEL_YAML_PATHS = {
     'AnimalRTPose': MODEL_DIR / 'animalrtpose.yaml',
-    'AnimalRTPose-P6': MODEL_DIR / 'animalrtpose-p6.yaml',
     'AnimalViTPose': MODEL_DIR / 'animalvitpose.yaml',
 }
 DATA_YAML_PATHS = {

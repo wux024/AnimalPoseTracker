@@ -121,7 +121,7 @@ class ProjectWeightsMixin:
         model_type = self.project_config.get("model_type")
         model_scale = self.project_config.get("model_scale")
 
-        if model_type in ["AnimalRTPose", "AnimalViTPose", "AnimalRTPose-P6"]:
+        if model_type in ["AnimalRTPose", "AnimalViTPose"]:
             weights_name = f"{model_type}-{model_scale}.pt"
         elif model_type in ["YOLOv8-Pose", "YOLO11-Pose"]:
             weights_name = f"{model_type}{model_scale}-pose.pt"
