@@ -12,6 +12,7 @@ COMMANDS = {
     "train": "Train a pose model",
     "val": "Validate a checkpoint on the configured validation split",
     "predict": "Predict on images, videos, or a dataset split",
+    "infer": "Run live inference on a camera, video file, or stream URL",
     "export": "Export a checkpoint to a deployment format",
 }
 
@@ -75,6 +76,9 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
 
     elif parsed.command == "create":
         from animalposetracker.project.cli import run
+
+    elif parsed.command == "infer":
+        from animalposetracker.inference.cli import run
 
     else:
         from animalposetracker.export.cli import run

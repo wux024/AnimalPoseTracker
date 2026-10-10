@@ -2,7 +2,7 @@ import io
 import unittest
 import tempfile
 from pathlib import Path
-from types import ModuleType
+from types import ModuleType, SimpleNamespace
 from unittest.mock import Mock, patch
 
 import yaml
@@ -47,6 +47,13 @@ class CommandDispatcherTests(unittest.TestCase):
 
             self.assertEqual(main(["export", "--weights", "best.pt", "--format", "onnx"]), 0)
             export_cli.run.assert_called_once_with(["--weights", "best.pt", "--format", "onnx"])
+
+    def test_infer_dispatch(self):
+        inference_cli = ModuleType("animalposetracker.inference.cli")
+        inference_cli.run = Mock(return_value=3)
+        with patch.dict("sys.modules", {"animalposetracker.inference.cli": inference_cli}):
+            self.assertEqual(main(["infer", "--weights", "m.onnx", "--source", "0"]), 3)
+            inference_cli.run.assert_called_once_with(["--weights", "m.onnx", "--source", "0"])
 
     def test_project_create_writes_project_from_dataset_yaml(self):
         with tempfile.TemporaryDirectory() as temporary_directory:
@@ -235,6 +242,26 @@ class PrettyTrainingRendererTests(unittest.TestCase):
             TrainingEvent(event="custom", message="hello", metrics={"x": 1.5}),
         ])
         self.assertIn("[custom] hello x=1.5", output)
+
+
+class InferCliTests(unittest.TestCase):
+    def test_resolve_num_classes_from_runtime_shape(self):
+        from animalposetracker.inference.cli import _resolve_num_classes
+
+        engine = SimpleNamespace(_runtime_output_shapes={"predictions": (1, 43, 8400)})
+        self.assertEqual(_resolve_num_classes(engine, (12, 3)), 3)
+        empty = SimpleNamespace(_runtime_output_shapes={})
+        self.assertEqual(_resolve_num_classes(empty, (12, 3)), 1)
+
+    def test_infer_parser_defaults(self):
+        from animalposetracker.inference.cli import _make_argument_parser
+
+        args = _make_argument_parser().parse_args(["--weights", "m.onnx", "--source", "0"])
+        self.assertEqual(args.conf, 0.25)
+        self.assertEqual(args.iou, 0.45)
+        self.assertEqual(args.pose_filter, "none")
+        self.assertFalse(args.show)
+        self.assertIsNone(args.tracker)
 
 
 class ConsoleBannerTests(unittest.TestCase):
