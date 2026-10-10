@@ -6,6 +6,7 @@ from pathlib import Path
 
 import yaml
 
+from animalposetracker.cfg import DATA_YAML_PATHS
 from .api import AnimalPoseTrackerProject
 
 
@@ -14,8 +15,15 @@ def _make_create_parser() -> argparse.ArgumentParser:
         prog="animalpose-cli create",
         description="Create a project from a dataset YAML without copying the dataset.",
     )
-    parser.add_argument("--dataset", required=True, help="Dataset YAML file")
-    parser.add_argument("--dataset-root", required=True, help="Dataset directory")
+    parser.add_argument(
+        "--dataset",
+        required=True,
+        help="Built-in dataset name (for example trimouse) or a dataset YAML file",
+    )
+    parser.add_argument(
+        "--dataset-root",
+        help="Dataset directory (defaults to <project>/datasets)",
+    )
     parser.add_argument("--workspace", required=True, help="Directory where the project is created")
     parser.add_argument("--name", required=True, help="Project name")
     parser.add_argument("--worker", default="user")
@@ -50,6 +58,34 @@ def _make_create_parser() -> argparse.ArgumentParser:
     return parser
 
 
+def _normalize_dataset_name(value: str) -> str:
+    return "".join(character.casefold() for character in value if character.isalnum())
+
+
+def _resolve_dataset_path(value: str) -> Path:
+    """Resolve a built-in dataset alias or an explicit YAML path."""
+    normalized_value = _normalize_dataset_name(value)
+    for name, path in DATA_YAML_PATHS.items():
+        if normalized_value in {
+            _normalize_dataset_name(name),
+            _normalize_dataset_name(path.stem),
+        }:
+            return path
+    return Path(value).expanduser().resolve()
+
+
+def _project_path_from_args(args: argparse.Namespace) -> Path:
+    """Build the project path using the same naming rule as AnimalPoseTrackerProject."""
+    project_dir_name = "-".join((
+        args.name,
+        args.worker,
+        args.model,
+        args.scale,
+        str(args.date),
+    ))
+    return Path(args.workspace).expanduser().resolve() / project_dir_name
+
+
 def _load_dataset_config(path: Path, dataset_root: Path, annotation_format: str) -> dict:
     with path.open("r", encoding="utf-8") as stream:
         config = yaml.safe_load(stream) or {}
@@ -66,8 +102,12 @@ def _load_dataset_config(path: Path, dataset_root: Path, annotation_format: str)
 
 
 def _create_project(args: argparse.Namespace) -> AnimalPoseTrackerProject:
-    dataset_path = Path(args.dataset).expanduser().resolve()
-    dataset_root = Path(args.dataset_root).expanduser().resolve()
+    dataset_path = _resolve_dataset_path(args.dataset)
+    dataset_root = (
+        Path(args.dataset_root).expanduser().resolve()
+        if args.dataset_root
+        else _project_path_from_args(args) / "datasets"
+    )
     dataset_config = _load_dataset_config(dataset_path, dataset_root, args.annotation_format)
 
     keypoint_count, keypoint_dims = dataset_config["kpt_shape"]
