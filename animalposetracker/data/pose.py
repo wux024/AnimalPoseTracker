@@ -533,6 +533,7 @@ class PoseTextDataset(Dataset):
         if self._resize_mode == "train_aspect":
             image, scale_x, scale_y = _resize_long_side(image, self.image_size)
             pad_x = pad_y = 0.0
+            norm_width = norm_height = float(self.image_size)
         elif self._resize_mode == "rect":
             image, _, _ = _resize_long_side(image, self.image_size)
             target_shape = self.rect_shapes[index // self.rect_batch_size]
