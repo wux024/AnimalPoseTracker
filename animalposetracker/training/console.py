@@ -106,10 +106,10 @@ def _validation_table(metrics, prefix: str = "") -> Tuple[str, str]:
 def format_progress_bar(current: int, total: int, width: int = 16) -> str:
     """Return a compact fixed-width progress bar for finite workloads."""
     if total <= 0:
-        return "░" * width
+        return "-" * width
     progress = min(max(float(current) / total, 0.0), 1.0)
     filled = int(round(progress * width))
-    return "█" * filled + "░" * (width - filled)
+    return "#" * filled + "-" * (width - filled)
 
 
 class PrettyTrainingRenderer:
