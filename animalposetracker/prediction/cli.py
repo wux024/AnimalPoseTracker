@@ -5,12 +5,15 @@ import glob
 import hashlib
 import json
 import sys
+import time
 from pathlib import Path
 from types import SimpleNamespace
 from typing import Any, Dict, List, Tuple
 
 import cv2
 import numpy as np
+
+from animalposetracker.training.console import format_progress_bar
 
 from animalposetracker.project.model_context import (
     configure_project_model_spec,
@@ -513,6 +516,7 @@ def _write_video(
     all_records,
     tracker=None,
     class_names=None,
+    progress_callback=None,
 ):
     from animalposetracker.postprocessing.workflows import track_frame_predictions
 
@@ -533,8 +537,11 @@ def _write_video(
         capture.release()
         raise RuntimeError(f"Could not create output video {output_path}")
     frame_index = 0
+    total_frames = max(0, int(capture.get(cv2.CAP_PROP_FRAME_COUNT) or 0))
     processed_records = []
     try:
+        if progress_callback is not None:
+            progress_callback(0, total_frames)
         while True:
             ok, frame = capture.read()
             if not ok:
@@ -574,6 +581,8 @@ def _write_video(
                 "predictions": records,
             })
             frame_index += 1
+            if progress_callback is not None:
+                progress_callback(frame_index, total_frames)
     finally:
         capture.release()
         writer.release()
@@ -665,6 +674,14 @@ def _print_progress(text: str) -> None:
     if sys.stdout.isatty():
         sys.stdout.write("\r" + text.ljust(110))
         sys.stdout.flush()
+
+
+def _progress_text(label: str, current: int, total: int, item: str) -> str:
+    if total > 0:
+        return f"{label} [{format_progress_bar(current, total)}] {item}"
+    if label == "video":
+        return f"{label} frame {current} · {item}"
+    return f"{label} · {item}"
 
 
 def _end_progress() -> None:
@@ -895,10 +912,11 @@ def run(argv=None, box_provider: InstanceBoxProvider = None) -> int:
     filtered_results = []
 
     external_backend = artifact_format != "pt"
+    started_at = time.time()
     image_total = len(image_paths)
     if head_name == "YOLOPoseHead":
         for image_index, image_path in enumerate(image_paths, 1):
-            _print_progress(f"predict {image_index}/{image_total} {image_path.name}")
+            _print_progress(_progress_text("images", image_index, image_total, image_path.name))
             image = _read_image(image_path)
             rendered, records = _predict_frame(
                 image, model, config, context, settings, external_backend=external_backend
@@ -912,7 +930,7 @@ def run(argv=None, box_provider: InstanceBoxProvider = None) -> int:
     else:
         provider = context["box_provider"]
         for image_index, image_path in enumerate(image_paths, 1):
-            _print_progress(f"predict {image_index}/{image_total} {image_path.name}")
+            _print_progress(_progress_text("images", image_index, image_total, image_path.name))
             image = _read_image(image_path)
             boxes = provider.boxes_for_image(image, image_path)
             rendered, records = _predict_topdown_image(
@@ -929,6 +947,9 @@ def run(argv=None, box_provider: InstanceBoxProvider = None) -> int:
             if not cv2.imwrite(str(output_path), rendered):
                 raise RuntimeError(f"Could not save prediction image {output_path}")
             results.append({"source": str(image_path), "output": str(output_path), "predictions": records})
+
+    if image_paths and videos:
+        _end_progress()
 
     for video_path in videos:
         _print_progress(f"video {video_path.name}")
@@ -962,7 +983,11 @@ def run(argv=None, box_provider: InstanceBoxProvider = None) -> int:
             results,
             tracker=tracker,
             class_names=context["class_names"],
+            progress_callback=lambda current, total, name=video_path.name: _print_progress(
+                _progress_text("video", current, total, name)
+            ),
         )
+        _end_progress()
         video_summary = {
             "source": str(video_path),
             "output": str(output_path),
@@ -1022,6 +1047,12 @@ def run(argv=None, box_provider: InstanceBoxProvider = None) -> int:
         encoding="utf-8",
     )
     _end_progress()
+    video_frames = sum(int(result.get("frames", 0)) for result in results)
+    elapsed = max(time.time() - started_at, 1e-6)
+    print(
+        f"Prediction complete: {len(image_paths)} images, {len(videos)} videos, "
+        f"{video_frames} video frames in {elapsed:.1f}s"
+    )
     print(f"Predictions saved to {output_dir}")
     return 0
 

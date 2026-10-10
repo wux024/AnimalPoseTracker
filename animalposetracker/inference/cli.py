@@ -175,6 +175,14 @@ def _progress(text: str) -> None:
         sys.stdout.flush()
 
 
+def _progress_bar(current: int, total: int, width: int = 16) -> str:
+    if total <= 0:
+        return "░" * width
+    progress = min(max(float(current) / total, 0.0), 1.0)
+    filled = int(round(progress * width))
+    return "█" * filled + "░" * (width - filled)
+
+
 def _end_progress() -> None:
     if sys.stdout.isatty():
         sys.stdout.write("\n")
@@ -285,6 +293,9 @@ def run(argv=None) -> int:
     capture = cv2.VideoCapture(capture_source)
     if not capture.isOpened():
         raise RuntimeError(f"Could not open inference source: {source_text}")
+    frame_total = max(0, int(capture.get(cv2.CAP_PROP_FRAME_COUNT) or 0))
+    if args.max_frames:
+        frame_total = min(frame_total, args.max_frames) if frame_total else args.max_frames
 
     writer = None
     if args.output:
@@ -336,9 +347,14 @@ def run(argv=None) -> int:
                     if cv2.waitKey(1) & 0xFF == ord("q"):
                         break
             elapsed = max(time.time() - started_at, 1e-6)
+            current_frame = frame_index + 1
+            progress = (
+                f"[{_progress_bar(current_frame, frame_total)}] "
+                if frame_total > 0 else ""
+            )
             _progress(
-                f"frame {frame_index + 1} · {len(detections)} poses · "
-                f"{(frame_index + 1) / elapsed:.1f} fps"
+                f"infer {progress}frame {current_frame} · {len(detections)} poses · "
+                f"{current_frame / elapsed:.1f} fps"
             )
             frame_index += 1
             if args.max_frames and frame_index >= args.max_frames:

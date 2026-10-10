@@ -834,14 +834,16 @@ class Trainer:
             for name, component in components.items():
                 totals[name] = totals.get(name, 0.0) + float(component.detach().float().item())
             if self.config.verbose and batch_index % self.config.log_interval == 0:
+                running_metrics = {
+                    name: value / batches for name, value in totals.items()
+                }
                 self.events.emit(TrainingEvent(
                     event="batch",
                     epoch=epoch_number,
                     epochs=self.config.epochs,
                     step=batch_index + 1,
                     steps=total_batches,
-                    metrics={name: float(component.detach().float().item())
-                             for name, component in components.items()},
+                    metrics=running_metrics,
                 ))
             if profiling:
                 wait_started = time.perf_counter()
@@ -884,7 +886,9 @@ class Trainer:
             average_metrics["profile/epoch_ms"] = totals["profile/epoch_ms"] / max(self.world_size, 1)
         return average_metrics, self._stop_requested.is_set()
 
-    def _validate(self, loader, validator: Callable, epoch_number: int) -> Dict[str, float]:
+    def _validate(
+        self, loader, validator: Callable, epoch_number: int, event_name: str = "validation"
+    ) -> Dict[str, float]:
         metrics = None
         error = None
         if self.rank == 0:
@@ -923,7 +927,7 @@ class Trainer:
         if metrics is None:
             raise RuntimeError("Rank 0 did not return validation metrics")
         self.events.emit(TrainingEvent(
-            event="validation",
+            event=event_name,
             epoch=epoch_number,
             epochs=self.config.epochs,
             metrics=metrics,
@@ -969,7 +973,9 @@ class Trainer:
         if not ready:
             return None
         try:
-            return self._validate(loader, validator, epoch_number)
+            return self._validate(
+                loader, validator, epoch_number, event_name="final_validation"
+            )
         finally:
             if self.rank == 0 and backup is not None:
                 model.load_state_dict(backup)

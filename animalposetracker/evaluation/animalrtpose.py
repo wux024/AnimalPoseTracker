@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import time
 from pathlib import Path
 from typing import Any, Dict, Mapping, Optional, Sequence
 
@@ -57,6 +58,13 @@ class PoseDetectionValidator:
     def __call__(self, model, loader, device) -> Dict[str, float]:
         totals: Dict[str, float] = {}
         batches = 0
+        image_count = 0
+        speed_seconds = {
+            "preprocess": 0.0,
+            "inference": 0.0,
+            "loss": 0.0,
+            "postprocess": 0.0,
+        }
         coco_detections = []
         if hasattr(self.criterion, "to"):
             self.criterion.to(device)
@@ -70,17 +78,32 @@ class PoseDetectionValidator:
         try:
             with torch.inference_mode():
                 for batch in loader:
+                    self._synchronize(device)
+                    stage_started = time.perf_counter()
                     images, targets = self._move_batch(batch, device, next(model.parameters()).dtype)
+                    self._synchronize(device)
+                    speed_seconds["preprocess"] += time.perf_counter() - stage_started
+                    image_count += int(images.shape[0])
+
+                    stage_started = time.perf_counter()
                     output = model(images)
+                    self._synchronize(device)
+                    speed_seconds["inference"] += time.perf_counter() - stage_started
                     if not isinstance(output, (tuple, list)) or len(output) != 2:
                         raise TypeError("Pose validation expects model output (decoded predictions, raw predictions)")
                     decoded_predictions, raw_predictions = output
+
+                    stage_started = time.perf_counter()
                     result = self.criterion(raw_predictions, targets)
                     metrics = result.get("metrics", result)
                     batches += 1
                     for name, value in metrics.items():
                         if torch.is_tensor(value) and value.numel() == 1:
                             totals[name] = totals.get(name, 0.0) + float(value.float().item())
+                    self._synchronize(device)
+                    speed_seconds["loss"] += time.perf_counter() - stage_started
+
+                    stage_started = time.perf_counter()
                     self._collect_coco_detections(
                         decoded_predictions,
                         images,
@@ -89,11 +112,16 @@ class PoseDetectionValidator:
                         category_ids_by_class,
                         coco_detections,
                     )
+                    self._synchronize(device)
+                    speed_seconds["postprocess"] += time.perf_counter() - stage_started
         finally:
             model.train(original_model_state)
         if batches == 0:
             raise ValueError("The validation data loader produced no batches")
         result = {name: value / batches for name, value in totals.items()}
+        for stage, seconds in speed_seconds.items():
+            result[f"speed/{stage}_ms"] = seconds * 1000.0 / max(image_count, 1)
+        result["speed/inference_fps"] = image_count / max(speed_seconds["inference"], 1e-9)
         image_ids = list(image_ids_by_path.values())
         active_category_ids = (
             list(category_ids_by_class.values()) if category_ids_by_class else None
@@ -117,6 +145,11 @@ class PoseDetectionValidator:
             auc_thresholds=self.keypoint_auc_thresholds,
         ))
         return result
+
+    @staticmethod
+    def _synchronize(device) -> None:
+        if getattr(device, "type", None) == "cuda":
+            torch.cuda.synchronize(device)
 
     def _collect_coco_detections(
         self,

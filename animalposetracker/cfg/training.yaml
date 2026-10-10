@@ -60,7 +60,7 @@ models:
       amp: true
       ema: true
       validation_interval: 1
-      log_interval: 20
+      log_interval: 1
       cosine_schedule: false
       close_mosaic: 10
     loss:

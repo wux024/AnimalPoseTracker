@@ -72,7 +72,7 @@ class TrainingConfig:
     best_metric_mode: str = "max"
     early_stopping_patience: int = 300
     save_period: int = 0
-    log_interval: int = 20
+    log_interval: int = 1
     resume_from: Optional[PathLike] = None
     train_dataset_size: Optional[int] = None
     resolved_optimizer: Optional[str] = None
@@ -334,7 +334,7 @@ class TrainingConfig:
                 "early_stopping_patience", values.get("patience", 300)
             ),
             "save_period": max(0, int(values.get("save_period", 0))),
-            "log_interval": values.get("log_interval", 20),
+            "log_interval": values.get("log_interval", 1),
             "resume_from": resume_from,
             "box_loss_weight": values.get("box_loss_weight", values.get("box", 7.5)),
             "class_loss_weight": values.get("class_loss_weight", values.get("cls", 0.5)),
