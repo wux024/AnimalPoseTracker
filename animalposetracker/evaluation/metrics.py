@@ -334,7 +334,11 @@ def _ultralytics_coco_eval_type(COCOeval):
 
             overlaps = self.ious[(imgId, catId)]
             if len(overlaps):
-                overlaps = overlaps[detection_order[:maxDet]][:, gt_order]
+                overlaps = np.asarray(overlaps)[detection_order[:maxDet]][:, gt_order]
+            else:
+                overlaps = np.zeros(
+                    (len(detections), len(ground_truth)), dtype=np.float32
+                )
             threshold_count = len(params.iouThrs)
             target_count = len(ground_truth)
             detection_count = len(detections)
