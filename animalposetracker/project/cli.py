@@ -121,10 +121,38 @@ def _create_project(args: argparse.Namespace) -> AnimalPoseTrackerProject:
     # Pretrained weight resolution is deferred to training time so project
     # creation never performs file checks or network downloads.
     project.save_configs("all")
-    print(f"Project: {project.project_path}")
-    print(f"Dataset: {dataset_root}")
-    print(f"Annotation format: {project.dataset_config['annotation_format']}")
+    _print_create_banner(args, project, dataset_root)
     return project
+
+
+def _print_create_banner(args, project: AnimalPoseTrackerProject, dataset_root: Path) -> None:
+    from animalposetracker.training.console import (
+        describe_pretrained,
+        environment_line,
+        format_summary_block,
+    )
+
+    class_names = project.project_config.get("classes_name") or []
+    keypoints = project.project_config.get("keypoints")
+    print()
+    print(environment_line())
+    print()
+    print(format_summary_block([
+        ("Project", str(project.project_path)),
+        ("Model", f"{args.model}-{args.scale}"),
+        ("Dataset", str(dataset_root)),
+        ("Annotations", str(project.dataset_config["annotation_format"])),
+        ("Keypoints", str(keypoints)),
+        ("Classes", f"{len(class_names)} ({', '.join(map(str, class_names))})"),
+        (
+            "Training",
+            f"epochs={args.epochs} batch={args.batch} imgsz={args.imgsz} "
+            f"workers={args.workers} device={args.device}",
+        ),
+        ("Pretrained", describe_pretrained(args.pretrained)),
+    ]))
+    print()
+    print(f"Next: animalpose-cli train --config {project.project_path / 'configs' / 'other.yaml'}")
 
 
 def run(argv=None) -> int:

@@ -98,6 +98,38 @@ def _resolve_project_default_pretrained(project_dir: Path, project_values: Dict[
     return candidate
 
 
+def _print_train_banner(config, project_values: Dict[str, Any], validate_only: bool) -> None:
+    """Ultralytics-style startup banner for interactive terminals."""
+    from .console import environment_line, format_summary_block
+
+    model_type = str(project_values.get("model_type") or "model")
+    model_scale = str(project_values.get("model_scale") or "")
+    rows = [
+        ("Model", f"{model_type}-{model_scale}".rstrip("-")),
+        ("Model cfg", str(config.model)),
+        ("Data", str(config.data)),
+        (
+            "Training",
+            f"epochs={config.epochs} batch={config.batch_size} imgsz={config.image_size} "
+            f"workers={config.num_workers} device={config.device}",
+        ),
+        ("Optimizer", f"{config.optimizer} lr={config.learning_rate} momentum={config.momentum}"),
+        ("Output", str(config.output_dir)),
+        (
+            "Pretrained",
+            str(config.pretrained_weights) if config.pretrained_weights else "disabled (train from scratch)",
+        ),
+    ]
+    print()
+    print(environment_line())
+    print()
+    if validate_only:
+        print("  Mode  validate-only")
+        print()
+    print(format_summary_block(rows))
+    print()
+
+
 def _load_evaluation_weights(weights_path, trainer, emitter):
     """Load a full AnimalPoseTracker checkpoint or compatible weights-only file."""
     from .checkpoint import load_checkpoint, load_model_weights, resolve_checkpoint_path
@@ -263,12 +295,13 @@ def _make_argument_parser() -> argparse.ArgumentParser:
 
 def run(argv=None) -> int:
     args = _make_argument_parser().parse_args(argv)
-    if args.json or not sys.stdout.isatty():
-        emitter = EventEmitter.json_stdout()
-    else:
+    pretty_console = not (args.json or not sys.stdout.isatty())
+    if pretty_console:
         from .console import PrettyTrainingRenderer
 
         emitter = EventEmitter(callback=PrettyTrainingRenderer().emit)
+    else:
+        emitter = EventEmitter.json_stdout()
     trainer = None
     event_stream = None
     distributed_initialized = False
@@ -406,6 +439,9 @@ def run(argv=None) -> int:
             raise FileNotFoundError(f"Model configuration does not exist: {config.model}")
         if not config.data.is_file():
             raise FileNotFoundError(f"Dataset configuration does not exist: {config.data}")
+
+        if rank == 0 and pretty_console:
+            _print_train_banner(config, project_values, args.validate_only)
 
         if rank == 0 and profile_defaults:
             emitter.emit(TrainingEvent(

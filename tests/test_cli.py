@@ -237,5 +237,48 @@ class PrettyTrainingRendererTests(unittest.TestCase):
         self.assertIn("[custom] hello x=1.5", output)
 
 
+class ConsoleBannerTests(unittest.TestCase):
+    def test_environment_line_mentions_package_and_python(self):
+        from animalposetracker.training.console import environment_line
+
+        line = environment_line()
+        self.assertIn("AnimalPoseTracker", line)
+        self.assertIn("Python-", line)
+
+    def test_summary_block_aligns_values(self):
+        from animalposetracker.training.console import format_summary_block
+
+        block = format_summary_block([("Model", "A"), ("Dataset", "B")])
+        lines = block.splitlines()
+        self.assertEqual(lines[0], "  Model    A")
+        self.assertEqual(lines[1], "  Dataset  B")
+
+    def test_create_prints_banner_with_next_step(self):
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            root = Path(temporary_directory)
+            dataset_yaml = _write_minimal_dataset_yaml(root)
+            stream = io.StringIO()
+            with patch("sys.stdout", stream):
+                result = main([
+                    "create",
+                    "--dataset", str(dataset_yaml),
+                    "--dataset-root", str(root / "dataset"),
+                    "--workspace", str(root / "workspace"),
+                    "--name", "trimouse",
+                    "--worker", "test",
+                    "--model", "AnimalRTPose",
+                    "--scale", "N",
+                    "--date", "20261009-120000",
+                    "--no-pretrained",
+                ])
+            self.assertEqual(result, 0)
+            banner = stream.getvalue()
+            self.assertIn("AnimalPoseTracker", banner)
+            self.assertIn("Model", banner)
+            self.assertIn("AnimalRTPose-N", banner)
+            self.assertIn("Next: animalpose-cli train --config", banner)
+            self.assertIn("disabled (train from scratch)", banner)
+
+
 if __name__ == "__main__":
     unittest.main()
