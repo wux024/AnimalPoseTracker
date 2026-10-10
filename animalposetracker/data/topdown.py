@@ -163,18 +163,23 @@ class TopDownPoseDataset(Dataset):
             if self.annotations._coco_annotations_by_path is not None:
                 image_records = self.annotations._coco_annotations_by_path.get(str(image_path), [])
                 for record in image_records:
+                    if int(record.get("iscrowd", 0)) != 0:
+                        continue
                     if int(record.get("category_id", -1)) not in self.annotations._coco_category_to_class:
                         continue
                     bbox = np.asarray(record.get("bbox", ()), dtype=np.float32)
                     if bbox.shape != (4,) or not np.isfinite(bbox).all() or bbox[2] <= 0 or bbox[3] <= 0:
                         continue
-                    x1 = float(np.clip(bbox[0], 0, image_width))
-                    y1 = float(np.clip(bbox[1], 0, image_height))
-                    x2 = float(np.clip(bbox[0] + bbox[2], 0, image_width))
-                    y2 = float(np.clip(bbox[1] + bbox[3], 0, image_height))
+                    x1 = float(np.clip(bbox[0], 0, image_width - 1))
+                    y1 = float(np.clip(bbox[1], 0, image_height - 1))
+                    x2 = float(np.clip(bbox[0] + bbox[2], 0, image_width - 1))
+                    y2 = float(np.clip(bbox[1] + bbox[3], 0, image_height - 1))
                     if x2 <= x1 or y2 <= y1:
                         continue
                     points, visible = self._coco_keypoints(record)
+                    num_keypoints = int(record.get("num_keypoints", visible.sum()))
+                    if num_keypoints <= 0 or not np.any(visible):
+                        continue
                     self._entries.append({
                         "image_path": str(image_path),
                         "bbox": np.asarray([x1, y1, x2, y2], dtype=np.float32),
@@ -369,6 +374,7 @@ class TopDownPoseDataset(Dataset):
             center, scale, rotation = self._augment_bbox(center, scale)
 
         scale = _fix_aspect_ratio(scale, self.input_size)
+        bbox_scale = scale.copy()
         warp_matrix = _topdown_warp_matrix(center, scale, rotation, self.input_size)
         inverse_matrix = cv2.invertAffineTransform(warp_matrix).astype(np.float32)
         crop = cv2.warpAffine(
@@ -401,6 +407,7 @@ class TopDownPoseDataset(Dataset):
                 "keypoints": torch.from_numpy(entry["keypoints"].copy()),
                 "keypoints_visible": torch.from_numpy(entry["visible"].copy()),
                 "bbox_xyxy": torch.from_numpy(entry["bbox"].copy()),
+                "bbox_scale": torch.from_numpy(bbox_scale.astype(np.float32, copy=False)),
                 "warp_inverse": torch.from_numpy(inverse_matrix),
                 "image_id": int(entry["image_id"]),
                 "category_id": int(entry["category_id"]),

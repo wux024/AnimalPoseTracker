@@ -12,7 +12,7 @@ import yaml
 from PIL import Image
 from torch.utils.data import DataLoader
 
-from animalposetracker.nn.transformer import VisionTransformer, resize_pos_embed
+from animalposetracker.nn.transformer import ViTEncoderLayer, VisionTransformer, resize_pos_embed
 from animalposetracker.nn.spec import parse as parse_model_spec
 from animalposetracker.training.checkpoint import load_model_weights
 from animalposetracker.training.cli import _resolve_project_pretrained_path
@@ -234,6 +234,17 @@ class SimCCTrainingTests(unittest.TestCase):
         self.assertEqual(tuple(features.shape), (1, 32, 2, 2))
         self.assertEqual(model.out_indices, [1])
 
+    def test_vit_ffn_residual_is_added_once(self):
+        layer = ViTEncoderLayer(8, 2, 16)
+        with torch.no_grad():
+            for parameter in layer.attn.parameters():
+                parameter.zero_()
+            for parameter in layer.ffn.parameters():
+                parameter.zero_()
+        inputs = torch.randn(2, 3, 8)
+
+        torch.testing.assert_close(layer(inputs), inputs)
+
     def test_mae_position_embedding_drops_cls_token_and_resizes(self):
         resized = resize_pos_embed(torch.randn(1, 197, 32), 256, num_extra_tokens=0)
         self.assertEqual(tuple(resized.shape), (1, 256, 32))
@@ -411,6 +422,24 @@ class SimCCTrainingTests(unittest.TestCase):
                     "keypoints": [20, 20, 2, 44, 44, 2],
                     "num_keypoints": 2,
                     "iscrowd": 0,
+                }, {
+                    "id": 2,
+                    "image_id": 1,
+                    "category_id": 1,
+                    "bbox": [8, 8, 48, 48],
+                    "area": 2304,
+                    "keypoints": [20, 20, 2, 44, 44, 2],
+                    "num_keypoints": 2,
+                    "iscrowd": 1,
+                }, {
+                    "id": 3,
+                    "image_id": 1,
+                    "category_id": 1,
+                    "bbox": [8, 8, 48, 48],
+                    "area": 2304,
+                    "keypoints": [0, 0, 0, 0, 0, 0],
+                    "num_keypoints": 0,
+                    "iscrowd": 0,
                 }],
                 "categories": [{
                     "id": 1,
@@ -450,6 +479,7 @@ class SimCCTrainingTests(unittest.TestCase):
             self.assertEqual(tuple(sample["targets"]["simcc_x"].shape), (2, 64))
             self.assertEqual(tuple(sample["targets"]["simcc_y"].shape), (2, 64))
             self.assertEqual(sample["targets"]["image_id"], 1)
+            self.assertTrue(torch.equal(sample["targets"]["bbox_scale"], torch.tensor([60.0, 60.0])))
             self.assertTrue(torch.equal(sample["targets"]["keypoint_weights"], torch.ones(2)))
             self.assertTrue(np.allclose(dataset.kpt_oks_sigmas, [0.08, 0.14]))
 

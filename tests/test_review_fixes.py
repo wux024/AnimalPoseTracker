@@ -77,6 +77,10 @@ class ReviewFixTests(unittest.TestCase):
             stride=torch.tensor([8.0, 16.0, 32.0]),
         )
         criterion = PoseDetectionLoss(head, image_size=640, kpt_oks_sigmas=[0.1])
+        self.assertEqual(criterion.assigner.stride_val, 16.0)
+        tiny_box = torch.tensor([[[10.0, 10.0, 12.0, 12.0]]])
+        nearby_anchor = torch.tensor([[4.0, 11.0]])
+        self.assertTrue(criterion.assigner._centers_in_boxes(nearby_anchor, tiny_box)[0, 0, 0])
         targets = {
             "batch_indices": torch.tensor([0]),
             "classes": torch.tensor([0]),
@@ -119,7 +123,7 @@ class ReviewFixTests(unittest.TestCase):
         self.assertEqual(weights.tolist(), [0.0])
         self.assertEqual(float(labels_x[0].sum()), 0.0)
 
-    def test_simcc_oks_nms_keeps_overlapping_different_categories(self):
+    def test_simcc_oks_nms_groups_instances_by_image_like_mmpose(self):
         validator = object.__new__(SimCCPoseValidator)
         validator.kpt_oks_sigmas = np.asarray([0.1], dtype=np.float32)
         first = {
@@ -137,7 +141,7 @@ class ReviewFixTests(unittest.TestCase):
             "area": 100.0,
         }
 
-        self.assertEqual(validator._oks_nms([first, second], threshold=0.5), [first, second])
+        self.assertEqual(validator._oks_nms([first, second], threshold=0.5), [first])
 
     def test_prediction_records_can_be_tracked_and_filtered_by_track(self):
         tracker = create_tracker("bytetrack")

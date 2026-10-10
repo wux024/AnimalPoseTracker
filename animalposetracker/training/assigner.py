@@ -49,12 +49,14 @@ class TaskAlignedAssigner(nn.Module):
         alpha: float = 0.5,
         beta: float = 6.0,
         eps: float = 1e-9,
+        stride_val: float = 16.0,
     ) -> None:
         super().__init__()
         self.topk = int(topk)
         self.num_classes = int(num_classes)
         self.alpha = float(alpha)
         self.beta = float(beta)
+        self.stride_val = float(stride_val)
         self.eps = float(eps)
 
     @torch.no_grad()
@@ -87,10 +89,12 @@ class TaskAlignedAssigner(nn.Module):
         scores = scores * quality
         return labels, boxes, scores, foreground.bool(), target_gt_index
 
-    @staticmethod
-    def _centers_in_boxes(anchor_centers, gt_boxes):
-        left_top = gt_boxes[..., :2].unsqueeze(2)
-        right_bottom = gt_boxes[..., 2:].unsqueeze(2)
+    def _centers_in_boxes(self, anchor_centers, gt_boxes):
+        center = (gt_boxes[..., :2] + gt_boxes[..., 2:]) * 0.5
+        size = (gt_boxes[..., 2:] - gt_boxes[..., :2]).clamp_min(0)
+        size = size.clamp_min(self.stride_val)
+        left_top = (center - size * 0.5).unsqueeze(2)
+        right_bottom = (center + size * 0.5).unsqueeze(2)
         deltas = torch.cat(
             (anchor_centers[None, None, :, :] - left_top, right_bottom - anchor_centers[None, None, :, :]),
             dim=-1,

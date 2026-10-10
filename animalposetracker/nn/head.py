@@ -205,7 +205,7 @@ class YOLOPoseHead(nn.Module):
     def bias_init(self):
         """Initialize biases to suppress the high-confidence prediction storm early in training."""
         for a, b, s in zip(self.cv2, self.cv3, self.stride):
-            a[-1].bias.data[:] = 1.0  # box
+            a[-1].bias.data[:] = 2.0  # box
             b[-1].bias.data[: self.nc] = math.log(5 / self.nc / (640 / s) ** 2)  # cls
 
     def decode_bboxes(self, bboxes, anchors, xywh=True):

@@ -117,7 +117,11 @@ class PoseDetectionLoss(nn.Module):
         self.visibility_weight = float(visibility_weight)
         self.register_buffer("strides", torch.as_tensor(head.stride, dtype=torch.float32).detach().clone())
         self.register_buffer("projection", torch.arange(self.reg_max, dtype=torch.float32))
-        self.assigner = TaskAlignedAssigner(self.top_k, self.num_classes, alpha=0.5, beta=6.0)
+        stride_values = torch.as_tensor(head.stride, dtype=torch.float32).flatten()
+        stride_val = float(stride_values[1 if stride_values.numel() > 1 else 0])
+        self.assigner = TaskAlignedAssigner(
+            self.top_k, self.num_classes, alpha=0.5, beta=6.0, stride_val=stride_val
+        )
         self.distribution_loss = DistributionFocalLoss(self.reg_max)
         self.keypoint_loss = KeypointOKSLoss(kpt_oks_sigmas)
         self.visibility_loss = nn.BCEWithLogitsLoss()

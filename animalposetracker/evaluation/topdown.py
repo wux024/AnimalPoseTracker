@@ -84,9 +84,9 @@ class SimCCPoseValidator:
                 gt_coords = targets["keypoints"].numpy()
                 visible = targets["keypoints_visible"].numpy() > 0
                 boxes = targets["bbox_xyxy"].numpy()
+                bbox_scales = targets["bbox_scale"].numpy()
                 ids = targets["image_id"].numpy().tolist()
                 categories = targets["category_id"].numpy().tolist()
-                areas = targets["area"].numpy().tolist()
 
                 for sample_index in range(len(source_coords)):
                     sample_visible = visible[sample_index]
@@ -111,7 +111,7 @@ class SimCCPoseValidator:
                             "category_id": int(categories[sample_index]),
                             "keypoints": keypoint_array.reshape(-1).tolist(),
                             "score": confidence,
-                            "area": float(areas[sample_index]),
+                            "area": float(np.prod(bbox_scales[sample_index])),
                         })
 
         if not errors:
@@ -143,10 +143,7 @@ class SimCCPoseValidator:
         """Match MMPose CocoMetric's default hard OKS NMS for top-down predictions."""
         grouped = {}
         for detection in detections:
-            group_key = (
-                int(detection["image_id"]),
-                int(detection.get("category_id", 1)),
-            )
+            group_key = int(detection["image_id"])
             grouped.setdefault(group_key, []).append(detection)
         kept = []
         variances = (self.kpt_oks_sigmas * 2.0) ** 2

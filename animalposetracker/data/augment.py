@@ -38,14 +38,12 @@ class PoseAugment:
         allow_mosaic: bool = True,
     ) -> Dict[str, np.ndarray]:
         """Augment one base sample and, when configured, blend it with a second sample."""
-        current = self._apply_geometry_and_color(
-            sample, sample_loader, sample_count, allow_mosaic=allow_mosaic
-        )
-        mixup = float(self.settings.get("mixup", 0.0))
+        current = self._apply_geometry(sample, sample_loader, sample_count, allow_mosaic)
+        mixup = float(self.settings.get("mixup", 0.0)) if allow_mosaic else 0.0
         if mixup > 0 and np.random.random() < mixup and sample_count > 1:
             second_index = int(np.random.randint(sample_count))
-            second = self._apply_geometry_and_color(
-                sample_loader(second_index), sample_loader, sample_count, allow_mosaic=allow_mosaic
+            second = self._apply_geometry(
+                sample_loader(second_index), sample_loader, sample_count, allow_mosaic
             )
             blend = float(np.random.beta(32.0, 32.0))
             current["image"] = np.clip(
@@ -58,9 +56,19 @@ class PoseAugment:
             current["boxes"] = np.concatenate((current["boxes"], second["boxes"]))
             current["keypoints"] = np.concatenate((current["keypoints"], second["keypoints"]))
             current["paths"] = [*current["paths"], *second["paths"]]
-        return current
+        image = self._hsv(current["image"])
+        image, boxes, keypoints = self._flips(image, current["boxes"], current["keypoints"])
+        if float(self.settings.get("bgr", 0.0)) > 0 and np.random.random() < float(self.settings["bgr"]):
+            image = image[..., ::-1]
+        return {
+            "image": np.ascontiguousarray(image),
+            "classes": current["classes"].astype(np.int64, copy=False),
+            "boxes": _box_xyxy_to_xywh(boxes, self.image_size),
+            "keypoints": self._normalize_keypoints(keypoints),
+            "paths": current["paths"],
+        }
 
-    def _apply_geometry_and_color(
+    def _apply_geometry(
         self,
         sample: Dict[str, np.ndarray],
         sample_loader: Callable[[int], Dict[str, np.ndarray]],
@@ -81,16 +89,13 @@ class PoseAugment:
                 keypoints[..., 1] *= self.image_size
             paths = [sample["path"]]
 
-        image, boxes, keypoints = self._random_perspective(image, boxes, keypoints)
-        image = self._hsv(image)
-        image, boxes, keypoints = self._flips(image, boxes, keypoints)
-        if float(self.settings.get("bgr", 0.0)) > 0 and np.random.random() < float(self.settings["bgr"]):
-            image = image[..., ::-1]
+        image, boxes, keypoints, keep = self._random_perspective(image, boxes, keypoints)
+        classes = classes[keep]
         return {
             "image": np.ascontiguousarray(image),
             "classes": classes.astype(np.int64, copy=False),
-            "boxes": _box_xyxy_to_xywh(boxes, self.image_size),
-            "keypoints": self._normalize_keypoints(keypoints),
+            "boxes": boxes,
+            "keypoints": keypoints,
             "paths": paths,
         }
 
@@ -100,27 +105,37 @@ class PoseAugment:
         center_y = int(np.random.uniform(size * 0.5, size * 1.5))
         canvas = np.full((size * 2, size * 2, 3), 114, dtype=np.uint8)
         all_classes, all_boxes, all_keypoints, paths = [], [], [], []
+        for index, sample in enumerate(samples):
+            height, width = sample["image"].shape[:2]
+            if index == 0:
+                x1a, y1a, x2a, y2a = max(center_x - width, 0), max(center_y - height, 0), center_x, center_y
+                x1b, y1b, x2b, y2b = width - (x2a - x1a), height - (y2a - y1a), width, height
+            elif index == 1:
+                x1a, y1a, x2a, y2a = center_x, max(center_y - height, 0), min(center_x + width, size * 2), center_y
+                x1b, y1b, x2b, y2b = 0, height - (y2a - y1a), x2a - x1a, height
+            elif index == 2:
+                x1a, y1a, x2a, y2a = max(center_x - width, 0), center_y, center_x, min(center_y + height, size * 2)
+                x1b, y1b, x2b, y2b = width - (x2a - x1a), 0, width, y2a - y1a
+            else:
+                x1a, y1a, x2a, y2a = center_x, center_y, min(center_x + width, size * 2), min(center_y + height, size * 2)
+                x1b, y1b, x2b, y2b = 0, 0, x2a - x1a, y2a - y1a
 
-        placements = (
-            (max(center_x - size, 0), max(center_y - size, 0), center_x, center_y,
-             size - (center_x - max(center_x - size, 0)), size - (center_y - max(center_y - size, 0)), size, size),
-            (center_x, max(center_y - size, 0), min(center_x + size, size * 2), center_y,
-             0, size - (center_y - max(center_y - size, 0)), min(size, size * 2 - center_x), size),
-            (max(center_x - size, 0), center_y, center_x, min(center_y + size, size * 2),
-             size - (center_x - max(center_x - size, 0)), 0, size, min(size, size * 2 - center_y)),
-            (center_x, center_y, min(center_x + size, size * 2), min(center_y + size, size * 2),
-             0, 0, min(size, size * 2 - center_x), min(size, size * 2 - center_y)),
-        )
-        for sample, placement in zip(samples, placements):
-            x1a, y1a, x2a, y2a, x1b, y1b, x2b, y2b = placement
             canvas[y1a:y2a, x1a:x2a] = sample["image"][y1b:y2b, x1b:x2b]
             boxes = _box_xywh_to_xyxy(sample["boxes"], size)
-            boxes[:, [0, 2]] += x1a - x1b
-            boxes[:, [1, 3]] += y1a - y1b
+            boxes[:, [0, 2]] = np.clip(boxes[:, [0, 2]] + x1a - x1b, x1a, x2a)
+            boxes[:, [1, 3]] = np.clip(boxes[:, [1, 3]] + y1a - y1b, y1a, y2a)
             keypoints = sample["keypoints"].copy()
             if keypoints.size:
                 keypoints[..., 0] = keypoints[..., 0] * size + x1a - x1b
                 keypoints[..., 1] = keypoints[..., 1] * size + y1a - y1b
+                outside = (
+                    (keypoints[..., 0] < x1a) | (keypoints[..., 0] > x2a)
+                    | (keypoints[..., 1] < y1a) | (keypoints[..., 1] > y2a)
+                )
+                keypoints[..., 0] = keypoints[..., 0].clip(x1a, x2a)
+                keypoints[..., 1] = keypoints[..., 1].clip(y1a, y2a)
+                if keypoints.shape[-1] == 3:
+                    keypoints[..., 2][outside] = 0
             all_classes.append(sample["classes"])
             all_boxes.append(boxes)
             all_keypoints.append(keypoints)
@@ -129,32 +144,20 @@ class PoseAugment:
         boxes = np.concatenate(all_boxes, axis=0) if all_boxes else np.zeros((0, 4), np.float32)
         keypoints = np.concatenate(all_keypoints, axis=0) if all_keypoints else np.zeros((0, 0, 3), np.float32)
         classes = np.concatenate(all_classes, axis=0) if all_classes else np.zeros((0,), np.int64)
-        crop = size // 2
-        canvas = canvas[crop:crop + size, crop:crop + size]
-        if boxes.size:
-            boxes[:, [0, 2]] -= crop
-            boxes[:, [1, 3]] -= crop
-        if keypoints.size:
-            keypoints[..., 0] -= crop
-            keypoints[..., 1] -= crop
-        boxes, keypoints, keep = self._clip_and_filter(boxes, keypoints)
-        return canvas, classes[keep], boxes, keypoints, paths
+        return canvas, classes, boxes, keypoints, paths
 
     def _random_perspective(self, image, boxes, keypoints):
         size = self.image_size
+        input_height, input_width = image.shape[:2]
         center = np.eye(3, dtype=np.float32)
-        center[0, 2], center[1, 2] = -size / 2, -size / 2
+        center[0, 2], center[1, 2] = -input_width / 2, -input_height / 2
         perspective = np.eye(3, dtype=np.float32)
         perspective[2, 0] = np.random.uniform(-float(self.settings.get("perspective", 0.0)), float(self.settings.get("perspective", 0.0)))
         perspective[2, 1] = np.random.uniform(-float(self.settings.get("perspective", 0.0)), float(self.settings.get("perspective", 0.0)))
         rotation = np.eye(3, dtype=np.float32)
         angle = np.random.uniform(-float(self.settings.get("degrees", 0.0)), float(self.settings.get("degrees", 0.0)))
         scale = np.random.uniform(1.0 - float(self.settings.get("scale", 0.0)), 1.0 + float(self.settings.get("scale", 0.0)))
-        radians = np.deg2rad(angle)
-        rotation[0, 0] = np.cos(radians) * scale
-        rotation[0, 1] = -np.sin(radians) * scale
-        rotation[1, 0] = np.sin(radians) * scale
-        rotation[1, 1] = np.cos(radians) * scale
+        rotation[:2] = cv2.getRotationMatrix2D((0, 0), angle, scale)
         shear = np.eye(3, dtype=np.float32)
         shear_x = np.random.uniform(-float(self.settings.get("shear", 0.0)), float(self.settings.get("shear", 0.0)))
         shear_y = np.random.uniform(-float(self.settings.get("shear", 0.0)), float(self.settings.get("shear", 0.0)))
@@ -169,7 +172,7 @@ class PoseAugment:
         else:
             image = cv2.warpAffine(image, matrix[:2], dsize=(size, size), borderValue=(114, 114, 114))
         if not boxes.size:
-            return image, boxes.reshape(0, 4), keypoints
+            return image, boxes.reshape(0, 4), keypoints, np.zeros((0,), dtype=bool)
 
         original = boxes.copy()
         corners = np.ones((boxes.shape[0] * 4, 3), dtype=np.float32)
@@ -193,10 +196,12 @@ class PoseAugment:
             else:
                 keypoint_transformed = keypoint_transformed[..., :2]
             keypoints[..., :2] = keypoint_transformed
-        boxes, keypoints, keep = self._clip_and_filter(candidate_boxes, keypoints)
-        return image, boxes, keypoints
+        boxes, keypoints, keep = self._clip_and_filter(
+            candidate_boxes, keypoints, original_boxes=original * scale
+        )
+        return image, boxes, keypoints, keep
 
-    def _clip_and_filter(self, boxes, keypoints):
+    def _clip_and_filter(self, boxes, keypoints, original_boxes=None):
         size = self.image_size
         if not boxes.size:
             return boxes.reshape(0, 4), keypoints, np.zeros((0,), dtype=bool)
@@ -205,11 +210,12 @@ class PoseAugment:
         boxes[:, [1, 3]] = boxes[:, [1, 3]].clip(0, size)
         width = boxes[:, 2] - boxes[:, 0]
         height = boxes[:, 3] - boxes[:, 1]
-        old_width = np.maximum(before_clip[:, 2] - before_clip[:, 0], 1e-6)
-        old_height = np.maximum(before_clip[:, 3] - before_clip[:, 1], 1e-6)
-        area_ratio = width * height / (old_width * old_height)
-        aspect = np.maximum(width / np.maximum(height, 1e-6), height / np.maximum(width, 1e-6))
-        keep = (width >= 2) & (height >= 2) & (area_ratio > 0.1) & (aspect < 100)
+        reference_boxes = before_clip if original_boxes is None else original_boxes
+        reference_width = reference_boxes[:, 2] - reference_boxes[:, 0]
+        reference_height = reference_boxes[:, 3] - reference_boxes[:, 1]
+        area_ratio = width * height / (reference_width * reference_height + 1e-16)
+        aspect = np.maximum(width / (height + 1e-16), height / (width + 1e-16))
+        keep = (width > 2) & (height > 2) & (area_ratio > 0.1) & (aspect < 100)
         if keypoints.size:
             outside = (
                 (keypoints[..., 0] < 0) | (keypoints[..., 0] > size)
@@ -227,20 +233,21 @@ class PoseAugment:
         )
         if not (hue or saturation or value):
             return image
-        gains = np.random.uniform(-1.0, 1.0, 3).astype(np.float32) * np.array(
-            [hue, saturation, value], dtype=np.float32
-        ) + 1.0
-        hsv = cv2.cvtColor(image, cv2.COLOR_RGB2HSV)
-        x = np.arange(256, dtype=np.float32)
-        lut_hue = ((x * gains[0]) % 180).astype(np.uint8)
-        lut_sat = np.clip(x * gains[1], 0, 255).astype(np.uint8)
-        lut_val = np.clip(x * gains[2], 0, 255).astype(np.uint8)
+        random_gains = np.random.uniform(-1.0, 1.0, 3) * np.asarray(
+            [hue, saturation, value], dtype=np.float64
+        )
+        hsv = cv2.cvtColor(image, cv2.COLOR_BGR2HSV)
+        x = np.arange(256, dtype=random_gains.dtype)
+        lut_hue = ((x + random_gains[0] * 180) % 180).astype(np.uint8)
+        lut_sat = np.clip(x * (random_gains[1] + 1.0), 0, 255).astype(np.uint8)
+        lut_sat[0] = 0
+        lut_val = np.clip(x * (random_gains[2] + 1.0), 0, 255).astype(np.uint8)
         hsv = cv2.merge((
             cv2.LUT(hsv[:, :, 0], lut_hue),
             cv2.LUT(hsv[:, :, 1], lut_sat),
             cv2.LUT(hsv[:, :, 2], lut_val),
         ))
-        return cv2.cvtColor(hsv, cv2.COLOR_HSV2RGB)
+        return cv2.cvtColor(hsv, cv2.COLOR_HSV2BGR)
 
     def _flips(self, image, boxes, keypoints):
         size = self.image_size

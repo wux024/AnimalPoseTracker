@@ -339,6 +339,7 @@ class ViTEncoderLayer(nn.Module):
             num_fcs=num_fcs,
             act=nn.GELU(),
             ffn_drop=drop_rate,
+            add_identity=False,
         )
         self.drop_path = DropPath(drop_path_rate) if drop_path_rate > 0.0 else nn.Identity()
 

@@ -1,6 +1,7 @@
 """AnimalPoseTracker pose-data reader for existing project image/label folders."""
 
 import hashlib
+import math
 import multiprocessing
 import os
 import tempfile
@@ -108,6 +109,17 @@ def _letterbox(image: np.ndarray, size: int) -> Tuple[np.ndarray, float, float, 
     return canvas, scale, float(left), float(top)
 
 
+def _resize_long_side(image: np.ndarray, size: int) -> Tuple[np.ndarray, float, float]:
+    """Resize the long image side to ``size`` without adding padding."""
+    height, width = image.shape[:2]
+    scale = size / max(height, width)
+    resized_width = min(size, max(1, int(math.ceil(width * scale))))
+    resized_height = min(size, max(1, int(math.ceil(height * scale))))
+    if (resized_width, resized_height) != (width, height):
+        image = cv2.resize(image, (resized_width, resized_height), interpolation=cv2.INTER_LINEAR)
+    return image, resized_width / width, resized_height / height
+
+
 class PoseTextDataset(Dataset):
     """Read YOLO Pose TXT or COCO Keypoints JSON into normalized image batches.
 
@@ -141,6 +153,7 @@ class PoseTextDataset(Dataset):
         self.close_mosaic = int(close_mosaic)
         self.single_cls = bool(single_cls)
         self.augmentation = dict(augmentation or {}) if split == "train" else {}
+        self._resize_mode = "train_aspect" if self.augmentation else "letterbox"
         if self.image_size < 1:
             raise ValueError("image_size must be at least 1")
         if not 0 < float(fraction) <= 1:
@@ -318,7 +331,7 @@ class PoseTextDataset(Dataset):
             self.image_paths = [self.image_paths[int(index)] for index in chosen]
         if self.cache_mode == "disk":
             self.disk_cache_dir = Path(tempfile.gettempdir()) / "AnimalPoseTracker" / "cache" / hashlib.sha1(
-                f"{self.config_path}|{self.split}|{self.image_size}".encode("utf-8")
+                f"{self.config_path}|{self.split}|{self.image_size}|channels=bgr-v1".encode("utf-8")
             ).hexdigest()[:16]
             self.disk_cache_dir.mkdir(parents=True, exist_ok=True)
         elif self.cache_mode not in ("none", "ram"):
@@ -345,6 +358,7 @@ class PoseTextDataset(Dataset):
                 sample["image"], sample["classes"], sample["boxes"], sample["keypoints"]
             )
             image_paths = sample["path"]
+        image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
         image_tensor = torch.from_numpy(np.ascontiguousarray(image.transpose(2, 0, 1))).float().div_(255.0)
 
         return {
@@ -382,7 +396,8 @@ class PoseTextDataset(Dataset):
             f"{label_path}|{label_stat.st_size if label_stat else 0}|"
             f"{label_stat.st_mtime_ns if label_stat else 0}|"
             f"{annotation_stat.st_size if annotation_stat else 0}|"
-            f"{annotation_stat.st_mtime_ns if annotation_stat else 0}|{self.image_size}"
+            f"{annotation_stat.st_mtime_ns if annotation_stat else 0}|"
+            f"{self.image_size}|{self._resize_mode}"
         )
         return self.disk_cache_dir / (hashlib.sha1(fingerprint.encode("utf-8")).hexdigest() + ".npz")
 
@@ -411,18 +426,22 @@ class PoseTextDataset(Dataset):
         if image is None:
             raise ValueError(f"Could not read image: {path}")
         source_height, source_width = image.shape[:2]
-        image, scale, pad_x, pad_y = _letterbox(image, self.image_size)
-        image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
+        if self._resize_mode == "train_aspect":
+            image, scale_x, scale_y = _resize_long_side(image, self.image_size)
+            pad_x = pad_y = 0.0
+        else:
+            image, scale, pad_x, pad_y = _letterbox(image, self.image_size)
+            scale_x = scale_y = scale
         classes, boxes, keypoints = self._read_targets(path, source_width, source_height)
         if len(boxes):
             boxes = boxes.copy()
-            boxes[:, 0] = (boxes[:, 0] * source_width * scale + pad_x) / self.image_size
-            boxes[:, 1] = (boxes[:, 1] * source_height * scale + pad_y) / self.image_size
-            boxes[:, 2] *= source_width * scale / self.image_size
-            boxes[:, 3] *= source_height * scale / self.image_size
+            boxes[:, 0] = (boxes[:, 0] * source_width * scale_x + pad_x) / self.image_size
+            boxes[:, 1] = (boxes[:, 1] * source_height * scale_y + pad_y) / self.image_size
+            boxes[:, 2] *= source_width * scale_x / self.image_size
+            boxes[:, 3] *= source_height * scale_y / self.image_size
             keypoints = keypoints.copy()
-            keypoints[:, :, 0] = (keypoints[:, :, 0] * source_width * scale + pad_x) / self.image_size
-            keypoints[:, :, 1] = (keypoints[:, :, 1] * source_height * scale + pad_y) / self.image_size
+            keypoints[:, :, 0] = (keypoints[:, :, 0] * source_width * scale_x + pad_x) / self.image_size
+            keypoints[:, :, 1] = (keypoints[:, :, 1] * source_height * scale_y + pad_y) / self.image_size
         sample = {"image": image, "classes": classes, "boxes": boxes, "keypoints": keypoints, "path": str(path)}
         if self.cache_mode == "ram":
             self._ram_cache[index] = sample
