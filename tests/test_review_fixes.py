@@ -33,6 +33,98 @@ from animalposetracker.project.model_context import unique_output_directory
 
 
 class ReviewFixTests(unittest.TestCase):
+    def test_gradient_accumulation_carries_across_epoch_boundary(self):
+        class CountingSGD(torch.optim.SGD):
+            def __init__(self, parameters, lr):
+                super().__init__(parameters, lr=lr)
+                self.step_calls = 0
+
+            def step(self, closure=None):
+                self.step_calls += 1
+                return super().step(closure)
+
+        class SumCriterion:
+            loss_is_batch_sum = True
+
+            def __call__(self, predictions, _targets):
+                loss = predictions.square().mean()
+                return {"loss": loss, "metrics": {"loss": loss.detach()}}
+
+        class NoOpScheduler:
+            def step(self):
+                pass
+
+        with tempfile.TemporaryDirectory() as temporary:
+            default_config = TrainingConfig.from_mapping(
+                {"epochs": 1, "gradient_clip_norm": None}, project_dir=temporary
+            )
+            self.assertEqual(default_config.gradient_clip_norm, 10.0)
+            config = TrainingConfig.from_mapping({
+                "epochs": 2,
+                "batch": 1,
+                "nbs": 2,
+                "gradient_accumulation_steps": 2,
+                "gradient_clip_norm": False,
+                "optimizer": "SGD",
+                "learning_rate": 0.1,
+                "warmup_epochs": 0.0,
+                "amp": False,
+                "ema": False,
+                "save": False,
+                "plots": False,
+                "verbose": False,
+                "project": temporary,
+                "name": "accumulation-test",
+                "device": "cpu",
+            }, project_dir=temporary)
+            model = torch.nn.Linear(1, 1, bias=False)
+            optimizer = CountingSGD(model.parameters(), lr=config.learning_rate)
+            trainer = Trainer(model, config, optimizer=optimizer)
+            loader = [
+                {"images": torch.ones((1, 1)), "targets": {}}
+                for _ in range(3)
+            ]
+
+            trainer.fit(loader, SumCriterion())
+
+        self.assertEqual(optimizer.step_calls, 3)
+        self.assertEqual(trainer.global_step, 3)
+
+        with tempfile.TemporaryDirectory() as temporary:
+            config = TrainingConfig.from_mapping({
+                "epochs": 2,
+                "batch": 1,
+                "nbs": 2,
+                "warmup_epochs": 3.0,
+                "optimizer": "SGD",
+                "amp": False,
+                "ema": False,
+                "save": False,
+                "plots": False,
+                "verbose": False,
+                "project": temporary,
+                "name": "warmup-test",
+                "device": "cpu",
+            }, project_dir=temporary)
+            warmup_model = torch.nn.Linear(1, 1)
+            warmup_optimizer = torch.optim.SGD(warmup_model.parameters(), lr=0.1)
+            warmup_trainer = Trainer(
+                warmup_model,
+                config,
+                optimizer=warmup_optimizer,
+                scheduler=NoOpScheduler(),
+            )
+            observed_warmup = []
+
+            def record_warmup(_loader, _criterion, _epoch):
+                observed_warmup.append(warmup_trainer._warmup_steps)
+                return {"loss": 1.0}, False
+
+            warmup_trainer._train_epoch = record_warmup
+            warmup_trainer.fit([None, None, None], None)
+
+        self.assertEqual(observed_warmup, [3, 3])
+
     def test_public_model_and_dataset_maps_resolve_to_files(self):
         self.assertEqual(MODEL_YAML_PATHS, NN_MODEL_YAML_PATHS)
         self.assertTrue(all(path.is_file() for path in MODEL_YAML_PATHS.values()))

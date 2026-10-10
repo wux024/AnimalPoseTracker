@@ -53,7 +53,7 @@ models:
       warmup_bias_lr: 0.1
       nominal_batch_size: 64
       gradient_accumulation_steps:
-      gradient_clip_norm:
+      gradient_clip_norm: 10.0
       layer_decay_rate:
       lr_milestones:
       early_stopping_patience: 300

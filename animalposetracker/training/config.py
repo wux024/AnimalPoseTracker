@@ -53,7 +53,7 @@ class TrainingConfig:
     warmup_bias_lr: float = 0.1
     nominal_batch_size: int = 64
     gradient_accumulation_steps: int = 1
-    gradient_clip_norm: Optional[float] = None
+    gradient_clip_norm: Optional[float] = 10.0
     layer_decay_rate: Optional[float] = None
     lr_milestones: Optional[list] = None
     lr_gamma: float = 0.1
@@ -302,7 +302,11 @@ class TrainingConfig:
             "warmup_bias_lr": values.get("warmup_bias_lr", 0.1),
             "nominal_batch_size": nominal_batch_size,
             "gradient_accumulation_steps": accumulation,
-            "gradient_clip_norm": values.get("gradient_clip_norm"),
+            "gradient_clip_norm": (
+                None if values.get("gradient_clip_norm") is False
+                else 10.0 if values.get("gradient_clip_norm") is None
+                else float(values["gradient_clip_norm"])
+            ),
             "layer_decay_rate": (
                 None if values.get("layer_decay_rate") is None
                 else float(values["layer_decay_rate"])

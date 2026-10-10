@@ -392,6 +392,8 @@ class Trainer:
         self.best_metric = None
         self._best_epochs_without_improvement = 0
         self._warmup_steps = -1
+        self._last_opt_step = -1
+        self._iteration_count = 0
         self._history = []
         self._time_deadline = None
         self._time_limit_reached = False
@@ -492,14 +494,21 @@ class Trainer:
         try:
             total_batches = len(train_loader)
         except TypeError:
-            total_batches = 0
+            total_batches = None
         if self.config.warmup_iters is not None:
-            self._warmup_steps = int(self.config.warmup_iters)
-        else:
-            self._warmup_steps = (
-                max(round(self.config.warmup_epochs * total_batches), 100)
-                if self.config.warmup_epochs > 0 and total_batches > 0 else -1
+            self._warmup_steps = max(int(self.config.warmup_iters), 0)
+        elif total_batches and total_batches > 0 and self.config.warmup_epochs > 0:
+            warmup_epochs = min(
+                float(self.config.warmup_epochs), max(self.config.epochs - 1, 0)
             )
+            self._warmup_steps = int(round(warmup_epochs * total_batches))
+        else:
+            self._warmup_steps = 0
+        self.optimizer.zero_grad(set_to_none=True)
+        self._last_opt_step = -1
+        self._iteration_count = (
+            self.start_epoch * total_batches if total_batches and total_batches > 0 else 0
+        )
 
         try:
             for epoch_index in range(self.start_epoch, self.config.epochs):
@@ -670,10 +679,8 @@ class Trainer:
         self._model_train()
         if hasattr(criterion, "train"):
             criterion.train()
-        self.optimizer.zero_grad(set_to_none=True)
         totals: Dict[str, float] = {}
         batches = 0
-        accumulated_batches = 0
         profiling = bool(self.config.profile)
         profile_totals = {
             "data_wait_ms": 0.0,
@@ -691,6 +698,8 @@ class Trainer:
             total_batches = len(loader)
         except TypeError:
             total_batches = None
+        if total_batches is not None and total_batches < 1:
+            total_batches = None
 
         for batch_index, batch in enumerate(loader):
             if self._stop_requested.is_set() and not self.distributed:
@@ -699,18 +708,14 @@ class Trainer:
                 synchronize_for_profile()
                 forward_started = time.perf_counter()
                 profile_totals["data_wait_ms"] += (forward_started - wait_started) * 1000.0
-            iteration = (
-                batch_index + (epoch_number - 1) * total_batches
-                if total_batches is not None else batch_index
-            )
+            if total_batches is not None:
+                iteration = batch_index + (epoch_number - 1) * total_batches
+            else:
+                iteration = self._iteration_count
+                self._iteration_count += 1
             accumulation = self.config.gradient_accumulation_steps
             if self._warmup_steps > 0 and iteration < self._warmup_steps:
-                warmup_denominator = (
-                    max(self._warmup_steps - 1, 1)
-                    if self.config.warmup_iters is not None
-                    else self._warmup_steps
-                )
-                progress = min(max(iteration / warmup_denominator, 0.0), 1.0)
+                progress = min(max(iteration / self._warmup_steps, 0.0), 1.0)
                 target_accumulation = (
                     self.config.nominal_batch_size / self.config.batch_size
                 )
@@ -771,8 +776,7 @@ class Trainer:
             if profiling:
                 backward_started = time.perf_counter()
             self.scaler.scale(scaled_loss).backward()
-            accumulated_batches += 1
-            should_step = accumulated_batches >= accumulation
+            should_step = iteration - self._last_opt_step >= accumulation
             if should_step:
                 if self.config.gradient_clip_norm is not None:
                     self.scaler.unscale_(self.optimizer)
@@ -784,7 +788,7 @@ class Trainer:
                 self.ema.update(self.raw_model)
                 self.optimizer.zero_grad(set_to_none=True)
                 self.global_step += 1
-                accumulated_batches = 0
+                self._last_opt_step = iteration
             if profiling:
                 synchronize_for_profile()
                 profile_totals["backward_step_ms"] += (time.perf_counter() - backward_started) * 1000.0
@@ -818,28 +822,6 @@ class Trainer:
                     self._stop_requested.set()
                     self._time_limit_reached = int(stop_value.item()) == 2
                     break
-
-        if accumulated_batches:
-            if profiling:
-                backward_started = time.perf_counter()
-            self.scaler.unscale_(self.optimizer)
-            if not getattr(criterion, "loss_is_batch_sum", False):
-                gradient_scale = self.config.gradient_accumulation_steps / accumulated_batches
-                for parameter in self.model.parameters():
-                    if parameter.grad is not None:
-                        parameter.grad.mul_(gradient_scale)
-            if self.config.gradient_clip_norm is not None:
-                torch.nn.utils.clip_grad_norm_(
-                    self.model.parameters(), self.config.gradient_clip_norm
-                )
-            self.scaler.step(self.optimizer)
-            self.scaler.update()
-            self.ema.update(self.raw_model)
-            self.optimizer.zero_grad(set_to_none=True)
-            self.global_step += 1
-            if profiling:
-                synchronize_for_profile()
-                profile_totals["backward_step_ms"] += (time.perf_counter() - backward_started) * 1000.0
 
         if batches == 0 and not self._stop_requested.is_set():
             raise ValueError("The training data loader produced no batches")
