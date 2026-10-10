@@ -56,6 +56,7 @@ class PoseDetectionValidator:
         self.coco_max_detections = int(coco_max_detections)
 
     def __call__(self, model, loader, device) -> Dict[str, float]:
+        validation_started = time.perf_counter()
         totals: Dict[str, float] = {}
         batches = 0
         image_count = 0
@@ -64,6 +65,7 @@ class PoseDetectionValidator:
             "inference": 0.0,
             "loss": 0.0,
             "postprocess": 0.0,
+            "coco_eval": 0.0,
         }
         coco_detections = []
         if hasattr(self.criterion, "to"):
@@ -119,13 +121,11 @@ class PoseDetectionValidator:
         if batches == 0:
             raise ValueError("The validation data loader produced no batches")
         result = {name: value / batches for name, value in totals.items()}
-        for stage, seconds in speed_seconds.items():
-            result[f"speed/{stage}_ms"] = seconds * 1000.0 / max(image_count, 1)
-        result["speed/inference_fps"] = image_count / max(speed_seconds["inference"], 1e-9)
         image_ids = list(image_ids_by_path.values())
         active_category_ids = (
             list(category_ids_by_class.values()) if category_ids_by_class else None
         )
+        coco_eval_started = time.perf_counter()
         coco_metrics, matched_pairs = evaluate_coco_keypoints(
             coco_gt,
             coco_detections,
@@ -144,6 +144,14 @@ class PoseDetectionValidator:
             auc_norm_factor=self.keypoint_auc_norm_factor,
             auc_thresholds=self.keypoint_auc_thresholds,
         ))
+        speed_seconds["coco_eval"] = time.perf_counter() - coco_eval_started
+        self._synchronize(device)
+        elapsed = max(time.perf_counter() - validation_started, 1e-9)
+        for stage, seconds in speed_seconds.items():
+            result[f"speed/{stage}_ms"] = seconds * 1000.0 / max(image_count, 1)
+        result["speed/inference_fps"] = image_count / max(speed_seconds["inference"], 1e-9)
+        result["speed/validation_ms"] = elapsed * 1000.0 / max(image_count, 1)
+        result["speed/validation_fps"] = image_count / elapsed
         return result
 
     @staticmethod

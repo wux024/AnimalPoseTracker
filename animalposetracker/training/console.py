@@ -59,10 +59,11 @@ def _fmt(value: float) -> str:
 
 def _speed_text(metrics, prefix: str = "") -> str:
     stages = (
-        ("preprocess", "preprocess"),
-        ("inference", "inference"),
-        ("loss", "loss"),
-        ("postprocess", "postprocess"),
+        ("preprocess", "input transfer"),
+        ("inference", "model forward"),
+        ("loss", "validation loss"),
+        ("postprocess", "NMS/COCO prep"),
+        ("coco_eval", "COCO evaluation"),
     )
     values = [
         f"{label}={float(metrics[f'{prefix}speed/{key}_ms']):.1f}ms/im"
@@ -71,8 +72,11 @@ def _speed_text(metrics, prefix: str = "") -> str:
     ]
     fps = metrics.get(f"{prefix}speed/inference_fps")
     if fps is not None:
-        values.append(f"infer_FPS={float(fps):.1f}")
-    return "Speed: " + ", ".join(values) if values else ""
+        values.append(f"model_forward_FPS={float(fps):.1f}")
+    validation_fps = metrics.get(f"{prefix}speed/validation_fps")
+    if validation_fps is not None:
+        values.append(f"validation_FPS={float(validation_fps):.1f}")
+    return " | ".join(values)
 
 
 def format_progress_bar(current: int, total: int, width: int = 16) -> str:
@@ -149,20 +153,14 @@ class PrettyTrainingRenderer:
             self._line("[best] " + self._metrics(metrics, _VAL_KEYS))
             speed = _speed_text(metrics)
             if speed:
-                self._line("[best] " + speed)
+                self._line("[best speed] " + speed)
             return
 
         if name == "evaluation":
             self._line("[val] " + self._metrics(metrics, _VAL_KEYS))
             speed = _speed_text(metrics)
             if speed:
-                self._line("[val] " + speed)
-            if event.message:
-                self._line(str(event.message))
-            return
-
-        if name == "evaluation":
-            self._line("[val] " + self._metrics(metrics, _VAL_KEYS))
+                self._line("[val speed] " + speed)
             if event.message:
                 self._line(str(event.message))
             return
@@ -175,15 +173,15 @@ class PrettyTrainingRenderer:
             if train_loss is not None:
                 parts.append(f"train_loss={_fmt(float(train_loss))}")
             if ap is not None:
-                parts.append(f"AP={_fmt(float(ap))}")
+                parts.append(f"val_AP={_fmt(float(ap))}")
             for key, label in (
                 ("val_loss", "val_loss"),
-                ("val_coco/AP50", "AP50"),
-                ("val_coco/AP75", "AP75"),
-                ("val_coco/AR", "AR"),
-                ("val_PCK", "PCK"),
-                ("val_AUC", "AUC"),
-                ("val_EPE", "EPE"),
+                ("val_coco/AP50", "val_AP50"),
+                ("val_coco/AP75", "val_AP75"),
+                ("val_coco/AR", "val_AR"),
+                ("val_PCK", "val_PCK"),
+                ("val_AUC", "val_AUC"),
+                ("val_EPE", "val_EPE"),
             ):
                 value = metrics.get(key)
                 if value is not None:
@@ -191,7 +189,7 @@ class PrettyTrainingRenderer:
             self._line(" ".join(parts))
             speed = _speed_text(metrics, prefix="val_")
             if speed:
-                self._line("[val] " + speed)
+                self._line("[val speed] " + speed)
             return
 
         if name in {"started", "finished", "plot", "profile"}:
