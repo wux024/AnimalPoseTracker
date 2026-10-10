@@ -2,7 +2,7 @@
 
 # Build system requirements
 [build-system]
-requires = ["setuptools>=70.0.0", "wheel"]
+requires = ["setuptools>=70.0.0"]
 build-backend = "setuptools.build_meta"
 
 # Project information
@@ -37,7 +37,7 @@ classifiers = [
 # Main dependencies (aligned with your pip list)
 dependencies = [
     "PySide6>=6.8.0",
-    "PyCameraList>=1.0.0",
+    "PyCameraList>=1.0.0; platform_system == 'Windows'",
     "numpy>=1.23.0",
     "matplotlib>=3.3.0",
     "opencv-contrib-python>=4.6.0",
