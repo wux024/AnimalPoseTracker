@@ -953,7 +953,7 @@ class Trainer:
                 charts = (
                     ("Loss", ("train_loss", "val_loss")),
                     ("Box loss", ("train_box", "val_box")),
-                    ("Class loss", ("train_cls", "val_cls")),
+                    ("Class loss", ("train_class", "val_class")),
                     ("Pose loss", ("train_pose", "val_pose")),
                     ("COCO keypoint AP", ("val_coco/AP", "val_coco/AP50", "val_coco/AP75")),
                     ("COCO keypoint AR", ("val_coco/AR",)),
