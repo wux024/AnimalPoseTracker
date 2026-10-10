@@ -196,6 +196,17 @@ def build_model(
     head.legacy = True  # matches the training-side checkpoints (traditional structure)
     head.end2end = False
 
+    # Match Ultralytics initialize_weights() for the AnimalRTPose graph. These
+    # attributes are not included in state_dict, so pretrained tensors do not set them.
+    if isinstance(head, _head_mod.YOLOPoseHead):
+        for module in model.modules():
+            module_type = type(module)
+            if module_type is nn.BatchNorm2d:
+                module.eps = 1e-3
+                module.momentum = 0.03
+            elif module_type in {nn.Hardswish, nn.LeakyReLU, nn.ReLU, nn.ReLU6, nn.SiLU}:
+                module.inplace = True
+
     if stride_check and hasattr(head, "stride"):
         _compute_strides(model, head, ch)
 

@@ -38,10 +38,22 @@ def seed_everything(seed: int, deterministic: bool = True) -> None:
     torch = _require_torch()
     torch.manual_seed(seed)
     if torch.cuda.is_available():
+        torch.cuda.manual_seed(seed)
         torch.cuda.manual_seed_all(seed)
-    if hasattr(torch.backends, "cudnn"):
-        torch.backends.cudnn.deterministic = bool(deterministic)
-        torch.backends.cudnn.benchmark = not bool(deterministic)
+    if deterministic:
+        if hasattr(torch, "use_deterministic_algorithms"):
+            torch.use_deterministic_algorithms(True, warn_only=True)
+            if hasattr(torch.backends, "cudnn"):
+                torch.backends.cudnn.deterministic = True
+            os.environ["CUBLAS_WORKSPACE_CONFIG"] = ":4096:8"
+            os.environ["PYTHONHASHSEED"] = str(int(seed))
+    else:
+        if hasattr(torch, "use_deterministic_algorithms"):
+            torch.use_deterministic_algorithms(False)
+        if hasattr(torch.backends, "cudnn"):
+            torch.backends.cudnn.deterministic = False
+        os.environ.pop("CUBLAS_WORKSPACE_CONFIG", None)
+        os.environ.pop("PYTHONHASHSEED", None)
 
 
 def initialize_distributed(requested_device: str = "auto") -> Tuple[int, int, int]:
@@ -363,7 +375,8 @@ class Trainer:
         self.rank = torch.distributed.get_rank() if self.distributed else 0
         self.world_size = torch.distributed.get_world_size() if self.distributed else 1
         self.local_rank = int(os.environ.get("LOCAL_RANK", "0"))
-        seed_everything(config.seed + self.rank, config.deterministic)
+        rank_seed = config.seed + (1 + self.rank if self.distributed else 0)
+        seed_everything(rank_seed, config.deterministic)
         self.device = _resolve_device(
             torch, config.device, local_rank=self.local_rank, distributed=self.distributed
         )
@@ -379,6 +392,7 @@ class Trainer:
                 self.raw_model,
                 device_ids=[self.device.index] if self.device.type == "cuda" else None,
                 output_device=self.device.index if self.device.type == "cuda" else None,
+                find_unused_parameters=True,
             )
             if self.distributed else self.raw_model
         )
@@ -448,10 +462,13 @@ class Trainer:
             scaler=self.scaler,
             map_location=self.device,
             ema_model=self.ema.model if self.config.ema else None,
+            prefer_ema_for_model=True,
         )
         self.start_epoch = metadata["epoch"]
         self.completed_epochs = metadata["epoch"]
         self.global_step = metadata["global_step"]
+        if self.config.ema:
+            self.ema.updates = metadata["ema_updates"]
         self.best_metric = metadata["best_metric"]
         self._best_epochs_without_improvement = metadata["epochs_without_improvement"]
 
@@ -497,11 +514,10 @@ class Trainer:
             total_batches = None
         if self.config.warmup_iters is not None:
             self._warmup_steps = max(int(self.config.warmup_iters), 0)
-        elif total_batches and total_batches > 0 and self.config.warmup_epochs > 0:
-            warmup_epochs = min(
-                float(self.config.warmup_epochs), max(self.config.epochs - 1, 0)
+        elif total_batches and total_batches > 0:
+            self._warmup_steps = max(
+                int(round(float(self.config.warmup_epochs) * total_batches)), 100
             )
-            self._warmup_steps = int(round(warmup_epochs * total_batches))
         else:
             self._warmup_steps = 0
         self.optimizer.zero_grad(set_to_none=True)
@@ -512,7 +528,19 @@ class Trainer:
 
         try:
             for epoch_index in range(self.start_epoch, self.config.epochs):
-                if self._time_deadline is not None and time.monotonic() >= self._time_deadline:
+                reached_time_limit = (
+                    self._time_deadline is not None
+                    and time.monotonic() >= self._time_deadline
+                )
+                if self.distributed:
+                    stop_value = self.torch.tensor(
+                        [int(reached_time_limit)], dtype=self.torch.int32, device=self.device
+                    )
+                    self.torch.distributed.all_reduce(
+                        stop_value, op=self.torch.distributed.ReduceOp.MAX
+                    )
+                    reached_time_limit = bool(stop_value.item())
+                if reached_time_limit:
                     self._time_limit_reached = True
                     stopped = True
                     break
@@ -562,7 +590,10 @@ class Trainer:
                             ema_model=self.ema.model if self.config.ema else None,
                         )
                     else:
-                        self._best_epochs_without_improvement += 1
+                        if float(monitored) == 0.0:
+                            self._best_epochs_without_improvement = 0
+                        else:
+                            self._best_epochs_without_improvement += 1
                 elif validation_loader is None:
                     monitored = train_metrics.get("loss")
                     if monitored is not None and self._is_improved(float(monitored), mode="min"):
@@ -620,12 +651,18 @@ class Trainer:
                     stopped = True
                     break
 
+            final_validation_metrics = None
+            if validation_loader is not None and self.completed_epochs > 0:
+                final_validation_metrics = self._final_validate_best(
+                    best_path, validation_loader, validator, self.completed_epochs
+                )
             succeeded = True
             return {
                 "epoch": self.completed_epochs,
                 "global_step": self.global_step,
                 "best_metric": self.best_metric,
                 "metrics": final_metrics,
+                "final_validation_metrics": final_validation_metrics,
                 "stopped": stopped and not self._time_limit_reached,
                 "time_limit_reached": self._time_limit_reached,
             }
@@ -714,7 +751,7 @@ class Trainer:
                 iteration = self._iteration_count
                 self._iteration_count += 1
             accumulation = self.config.gradient_accumulation_steps
-            if self._warmup_steps > 0 and iteration < self._warmup_steps:
+            if self._warmup_steps > 0 and iteration <= self._warmup_steps:
                 progress = min(max(iteration / self._warmup_steps, 0.0), 1.0)
                 target_accumulation = (
                     self.config.nominal_batch_size / self.config.batch_size
@@ -848,16 +885,43 @@ class Trainer:
         return average_metrics, self._stop_requested.is_set()
 
     def _validate(self, loader, validator: Callable, epoch_number: int) -> Dict[str, float]:
-        self.ema.model.eval()
-        if hasattr(validator, "eval"):
-            validator.eval()
-        with self.torch.inference_mode():
-            result = validator(self.ema.model, loader, self.device)
-        if not isinstance(result, Mapping):
-            raise TypeError("validator must return a mapping of metric names to scalar values")
-        metrics = {str(key): float(value) for key, value in result.items()}
-        if any(not math.isfinite(value) for value in metrics.values()):
-            raise FloatingPointError(f"Validation returned a non-finite metric at epoch {epoch_number}")
+        metrics = None
+        error = None
+        if self.rank == 0:
+            model = self.ema.model if self.config.ema else self.raw_model
+            original_dtype = next(model.parameters()).dtype
+            use_half = self.amp_enabled
+            try:
+                model.eval()
+                if use_half:
+                    model.half()
+                if hasattr(validator, "eval"):
+                    validator.eval()
+                with self.torch.inference_mode():
+                    result = validator(model, loader, self.device)
+                if not isinstance(result, Mapping):
+                    raise TypeError("validator must return a mapping of metric names to scalar values")
+                metrics = {str(key): float(value) for key, value in result.items()}
+                if any(not math.isfinite(value) for value in metrics.values()):
+                    raise FloatingPointError(
+                        f"Validation returned a non-finite metric at epoch {epoch_number}"
+                    )
+            except Exception as exc:
+                error = (type(exc).__name__, str(exc))
+            finally:
+                if use_half and original_dtype != self.torch.float16:
+                    model.float()
+
+        if self.distributed:
+            payload = [(metrics, error) if self.rank == 0 else None]
+            self.torch.distributed.broadcast_object_list(payload, src=0)
+            metrics, error = payload[0]
+        if error is not None:
+            if self.rank == 0:
+                raise RuntimeError(f"Validation failed at epoch {epoch_number}: {error[0]}: {error[1]}")
+            raise RuntimeError(f"Validation failed on rank 0 at epoch {epoch_number}: {error[0]}: {error[1]}")
+        if metrics is None:
+            raise RuntimeError("Rank 0 did not return validation metrics")
         self.events.emit(TrainingEvent(
             event="validation",
             epoch=epoch_number,
@@ -865,6 +929,50 @@ class Trainer:
             metrics=metrics,
         ))
         return metrics
+
+    def _final_validate_best(self, best_path, loader, validator, epoch_number):
+        """Run the final Ultralytics-style validation on the selected best checkpoint."""
+        ready = bool(self.rank == 0 and best_path.is_file())
+        state = None
+        load_error = None
+        model = self.ema.model if self.config.ema else self.raw_model
+        backup = None
+        if self.rank == 0 and ready:
+            try:
+                try:
+                    payload = self.torch.load(
+                        str(best_path), map_location=self.device, weights_only=False
+                    )
+                except TypeError:
+                    payload = self.torch.load(str(best_path), map_location=self.device)
+                state = payload.get("ema_state_dict") if self.config.ema else None
+                if not isinstance(state, Mapping):
+                    state = payload.get("model_state_dict")
+                if not isinstance(state, Mapping):
+                    raise ValueError(f"Best checkpoint has no model weights: {best_path}")
+                backup = {
+                    name: value.detach().clone()
+                    for name, value in model.state_dict().items()
+                }
+                model.load_state_dict(state)
+            except Exception as exc:
+                load_error = (type(exc).__name__, str(exc))
+
+        if self.distributed:
+            control = [(ready, load_error) if self.rank == 0 else None]
+            self.torch.distributed.broadcast_object_list(control, src=0)
+            ready, load_error = control[0]
+        if load_error is not None:
+            raise RuntimeError(
+                f"Could not load best checkpoint for final validation: {load_error[0]}: {load_error[1]}"
+            )
+        if not ready:
+            return None
+        try:
+            return self._validate(loader, validator, epoch_number)
+        finally:
+            if self.rank == 0 and backup is not None:
+                model.load_state_dict(backup)
 
     def _is_improved(self, value: float, mode: Optional[str] = None) -> bool:
         if self.best_metric is None:
@@ -900,6 +1008,7 @@ class Trainer:
             epochs_without_improvement,
             config,
             ema_model=ema_model,
+            ema_updates=self.ema.updates if self.config.ema else None,
         )
 
     @staticmethod

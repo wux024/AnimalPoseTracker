@@ -1,5 +1,6 @@
 """Pose-aware image augmentation used by the local training data pipeline."""
 
+import random
 from typing import Callable, Dict, Optional, Sequence, Tuple
 
 import cv2
@@ -36,14 +37,18 @@ class PoseAugment:
         sample_loader: Callable[[int], Dict[str, np.ndarray]],
         sample_count: int,
         allow_mosaic: bool = True,
+        mosaic_indices: Optional[Sequence[int]] = None,
     ) -> Dict[str, np.ndarray]:
         """Augment one base sample and, when configured, blend it with a second sample."""
-        current = self._apply_geometry(sample, sample_loader, sample_count, allow_mosaic)
+        current = self._apply_geometry(
+            sample, sample_loader, sample_count, allow_mosaic, mosaic_indices
+        )
         mixup = float(self.settings.get("mixup", 0.0)) if allow_mosaic else 0.0
         if mixup > 0 and np.random.random() < mixup and sample_count > 1:
-            second_index = int(np.random.randint(sample_count))
+            second_index = random.randint(0, sample_count - 1)
             second = self._apply_geometry(
-                sample_loader(second_index), sample_loader, sample_count, allow_mosaic
+                sample_loader(second_index), sample_loader, sample_count, allow_mosaic,
+                mosaic_indices,
             )
             blend = float(np.random.beta(32.0, 32.0))
             current["image"] = np.clip(
@@ -74,10 +79,12 @@ class PoseAugment:
         sample_loader: Callable[[int], Dict[str, np.ndarray]],
         sample_count: int,
         allow_mosaic: bool,
+        mosaic_indices: Optional[Sequence[int]],
     ) -> Dict[str, np.ndarray]:
         mosaic_probability = float(self.settings.get("mosaic", 0.0))
-        if allow_mosaic and mosaic_probability > 0 and sample_count > 1 and np.random.random() < mosaic_probability:
-            others = [sample_loader(int(np.random.randint(sample_count))) for _ in range(3)]
+        if allow_mosaic and mosaic_probability > 0 and sample_count > 1 and random.random() < mosaic_probability:
+            candidates = list(mosaic_indices) if mosaic_indices is not None else list(range(sample_count))
+            others = [sample_loader(index) for index in random.choices(candidates, k=3)]
             image, classes, boxes, keypoints, paths = self._mosaic([sample, *others])
         else:
             image = sample["image"].copy()

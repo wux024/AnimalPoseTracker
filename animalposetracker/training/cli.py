@@ -394,6 +394,38 @@ def run(argv=None) -> int:
                     args.resume,
                     output_dir=values.get("output_dir"),
                 )
+        resume_config = None
+        if args.resume:
+            values["resume_from"] = args.resume
+            values["output_dir"] = str(Path(args.resume).expanduser().resolve().parent.parent)
+            values["pretrained_weights"] = None
+            values["pretrained"] = False
+            from dataclasses import fields
+            from .checkpoint import read_checkpoint_config
+
+            saved_values = read_checkpoint_config(args.resume)
+            if saved_values is not None:
+                current_config = TrainingConfig.from_mapping(values, project_dir=project_dir)
+                allowed_fields = {field.name for field in fields(TrainingConfig)}
+                saved_config = TrainingConfig(**{
+                    key: value for key, value in saved_values.items()
+                    if key in allowed_fields
+                })
+                # Ultralytics restores the checkpoint's arguments and allows these
+                # runtime overrides when resuming.
+                for name in ("image_size", "batch_size", "device", "close_mosaic"):
+                    setattr(saved_config, name, getattr(current_config, name))
+                saved_config.output_dir = current_config.output_dir
+                saved_config.resume_from = current_config.resume_from
+                saved_config.pretrained_weights = None
+                saved_config.project_dir = current_config.project_dir
+                if saved_config.model is None or not saved_config.model.is_file():
+                    saved_config.model = current_config.model
+                if saved_config.data is None or not saved_config.data.is_file():
+                    saved_config.data = current_config.data
+                resume_config = saved_config
+                values["model"] = str(saved_config.model) if saved_config.model else None
+                values["data"] = str(saved_config.data) if saved_config.data else None
         scale = str(project_values.get("model_scale") or "n").lower()
         model_spec = None
         head_name = None
@@ -415,11 +447,6 @@ def run(argv=None) -> int:
         distributed_initialized = world_size > 1
         if rank != 0:
             emitter = EventEmitter()
-        if args.resume:
-            values["resume_from"] = args.resume
-            values["output_dir"] = str(Path(args.resume).expanduser().resolve().parent.parent)
-            values["pretrained_weights"] = None
-            values["pretrained"] = False
         if (
             values.get("pretrained") is True
             and not values.get("pretrained_weights")
@@ -428,7 +455,8 @@ def run(argv=None) -> int:
             values["pretrained_weights"] = str(
                 _resolve_project_default_pretrained(project_dir, project_values)
             )
-        config = TrainingConfig.from_mapping(values, project_dir=project_dir)
+        config = resume_config or TrainingConfig.from_mapping(values, project_dir=project_dir)
+        rank_seed = config.seed + (1 + rank if world_size > 1 else 0)
         config.output_dir.mkdir(parents=True, exist_ok=True)
         if rank == 0:
             event_stream = (config.output_dir / "training.jsonl").open("a", encoding="utf-8")
@@ -470,7 +498,7 @@ def run(argv=None) -> int:
         from .losses import PoseDetectionLoss
         from animalposetracker.evaluation.animalrtpose import PoseDetectionValidator
 
-        seed_everything(config.seed, config.deterministic)
+        seed_everything(rank_seed, config.deterministic)
         if config.single_cls:
             model_spec["nc"] = 1
 
@@ -487,7 +515,7 @@ def run(argv=None) -> int:
                 f"by world_size={world_size}"
             )
         # Start each process's data-loader RNG stream at a distinct seed.
-        seed_everything(config.seed + rank, config.deterministic)
+        seed_everything(rank_seed, config.deterministic)
         simcc_input_size = None
         simcc_split_ratio = 2.0
         if head_name == "SimCCHead":
@@ -710,7 +738,7 @@ def run(argv=None) -> int:
                 ),
             ))
 
-        seed_everything(config.seed + rank, config.deterministic)
+        seed_everything(rank_seed, config.deterministic)
 
         trainer = Trainer(model, config, events=emitter)
         if args.validate_only:

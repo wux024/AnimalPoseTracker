@@ -92,7 +92,6 @@ class TaskAlignedAssigner(nn.Module):
     def _centers_in_boxes(self, anchor_centers, gt_boxes):
         center = (gt_boxes[..., :2] + gt_boxes[..., 2:]) * 0.5
         size = (gt_boxes[..., 2:] - gt_boxes[..., :2]).clamp_min(0)
-        size = size.clamp_min(self.stride_val)
         left_top = (center - size * 0.5).unsqueeze(2)
         right_bottom = (center + size * 0.5).unsqueeze(2)
         deltas = torch.cat(

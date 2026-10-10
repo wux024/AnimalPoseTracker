@@ -70,7 +70,7 @@ class PoseDetectionValidator:
         try:
             with torch.inference_mode():
                 for batch in loader:
-                    images, targets = self._move_batch(batch, device)
+                    images, targets = self._move_batch(batch, device, next(model.parameters()).dtype)
                     output = model(images)
                     if not isinstance(output, (tuple, list)) or len(output) != 2:
                         raise TypeError("Pose validation expects model output (decoded predictions, raw predictions)")
@@ -164,11 +164,18 @@ class PoseDetectionValidator:
                     raise ValueError(f"Could not read image dimensions for {image_path}")
                 image_height, image_width = source.shape[:2]
 
-            scale = min(width / image_width, height / image_height)
-            resized_width = max(1, int(round(image_width * scale)))
-            resized_height = max(1, int(round(image_height * scale)))
-            pad_x = (width - resized_width) // 2
-            pad_y = (height - resized_height) // 2
+            rect_geometry = getattr(
+                self.validation_dataset, "_rect_geometry_by_path", {}
+            ).get(image_path)
+            if rect_geometry is not None:
+                scale_x, scale_y, pad_x, pad_y = rect_geometry
+            else:
+                scale = min(width / image_width, height / image_height)
+                resized_width = max(1, int(round(image_width * scale)))
+                resized_height = max(1, int(round(image_height * scale)))
+                pad_x = (width - resized_width) // 2
+                pad_y = (height - resized_height) // 2
+                scale_x = scale_y = scale
             pred_boxes, pred_scores, pred_classes, pred_keypoints = prediction
             for score, class_id, keypoints in zip(pred_scores, pred_classes, pred_keypoints):
                 class_index = int(class_id)
@@ -181,8 +188,8 @@ class PoseDetectionValidator:
                     self.criterion.keypoint_dimensions,
                 )
                 points_xy = points[:, :2].copy()
-                points_xy[:, 0] = (points_xy[:, 0] - pad_x) / scale
-                points_xy[:, 1] = (points_xy[:, 1] - pad_y) / scale
+                points_xy[:, 0] = (points_xy[:, 0] - pad_x) / scale_x
+                points_xy[:, 1] = (points_xy[:, 1] - pad_y) / scale_y
                 if self.criterion.keypoint_dimensions == 3:
                     point_scores = points[:, 2]
                 else:
@@ -196,10 +203,12 @@ class PoseDetectionValidator:
                 })
 
     @staticmethod
-    def _move_batch(batch, device):
+    def _move_batch(batch, device, dtype=torch.float32):
         if not isinstance(batch, Mapping) or "images" not in batch or "targets" not in batch:
             raise TypeError("Validation batches must contain 'images' and 'targets'")
-        images = batch["images"].to(device, non_blocking=device.type == "cuda")
+        images = batch["images"].to(
+            device, dtype=dtype, non_blocking=device.type == "cuda"
+        )
         targets = {
             key: value.to(device, non_blocking=device.type == "cuda") if torch.is_tensor(value) else value
             for key, value in batch["targets"].items()

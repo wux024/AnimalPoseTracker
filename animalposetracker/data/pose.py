@@ -109,6 +109,31 @@ def _letterbox(image: np.ndarray, size: int) -> Tuple[np.ndarray, float, float, 
     return canvas, scale, float(left), float(top)
 
 
+def _letterbox_to_shape(
+    image: np.ndarray, shape: Tuple[int, int], scaleup: bool = False
+) -> Tuple[np.ndarray, float, float, float, int, int]:
+    """Letterbox to an explicit (height, width), using Ultralytics rounding."""
+    height, width = image.shape[:2]
+    target_height, target_width = map(int, shape)
+    scale = min(target_height / height, target_width / width)
+    if not scaleup:
+        scale = min(scale, 1.0)
+    resized_width = max(1, int(round(width * scale)))
+    resized_height = max(1, int(round(height * scale)))
+    pad_width = (target_width - resized_width) / 2
+    pad_height = (target_height - resized_height) / 2
+    left = int(round(pad_width - 0.1))
+    right = int(round(pad_width + 0.1))
+    top = int(round(pad_height - 0.1))
+    bottom = int(round(pad_height + 0.1))
+    if (resized_width, resized_height) != (width, height):
+        image = cv2.resize(image, (resized_width, resized_height), interpolation=cv2.INTER_LINEAR)
+    image = cv2.copyMakeBorder(
+        image, top, bottom, left, right, cv2.BORDER_CONSTANT, value=(114, 114, 114)
+    )
+    return image, scale, float(left), float(top), resized_width, resized_height
+
+
 def _resize_long_side(image: np.ndarray, size: int) -> Tuple[np.ndarray, float, float]:
     """Resize the long image side to ``size`` without adding padding."""
     height, width = image.shape[:2]
@@ -140,6 +165,9 @@ class PoseTextDataset(Dataset):
         epochs: int = 100,
         close_mosaic: int = 10,
         single_cls: bool = False,
+        rect: bool = False,
+        batch_size: Optional[int] = None,
+        stride: int = 32,
     ) -> None:
         self.config_path = Path(data_yaml).expanduser().resolve()
         self.data_config = _read_yaml(self.config_path)
@@ -153,7 +181,18 @@ class PoseTextDataset(Dataset):
         self.close_mosaic = int(close_mosaic)
         self.single_cls = bool(single_cls)
         self.augmentation = dict(augmentation or {}) if split == "train" else {}
-        self._resize_mode = "train_aspect" if self.augmentation else "letterbox"
+        self.rect = bool(rect and split == "val")
+        self.rect_batch_size = max(int(batch_size or 1), 1)
+        self.rect_stride = max(int(stride), 1)
+        self._resize_mode = (
+            "rect" if self.rect else "train_aspect" if self.augmentation else "letterbox"
+        )
+        self.rect_shapes = np.empty((0, 2), dtype=np.int64)
+        self._rect_geometry_by_path = {}
+        self.mosaic_batch_size = max(int(batch_size or 1), 1)
+        self._mosaic_buffer = []
+        self._mosaic_buffer_members = set()
+        self._mosaic_buffer_limit = 0
         if self.image_size < 1:
             raise ValueError("image_size must be at least 1")
         if not 0 < float(fraction) <= 1:
@@ -329,6 +368,12 @@ class PoseTextDataset(Dataset):
             rng = np.random.default_rng(int(seed))
             chosen = np.sort(rng.choice(len(self.image_paths), size=count, replace=False))
             self.image_paths = [self.image_paths[int(index)] for index in chosen]
+        if split == "train":
+            self._mosaic_buffer_limit = min(
+                len(self.image_paths), self.mosaic_batch_size * 8, 1000
+            )
+        if self.rect:
+            self._configure_rectangles()
         if self.cache_mode == "disk":
             self.disk_cache_dir = Path(tempfile.gettempdir()) / "AnimalPoseTracker" / "cache" / hashlib.sha1(
                 f"{self.config_path}|{self.split}|{self.image_size}|channels=bgr-v1".encode("utf-8")
@@ -348,6 +393,9 @@ class PoseTextDataset(Dataset):
                 self._load_base_item,
                 len(self.image_paths),
                 allow_mosaic=self._mosaic_enabled(),
+                mosaic_indices=(
+                    None if self.cache_mode == "ram" else self._mosaic_buffer
+                ),
             )
             image, classes, boxes, keypoints = (
                 sample["image"], sample["classes"], sample["boxes"], sample["keypoints"]
@@ -397,9 +445,64 @@ class PoseTextDataset(Dataset):
             f"{label_stat.st_mtime_ns if label_stat else 0}|"
             f"{annotation_stat.st_size if annotation_stat else 0}|"
             f"{annotation_stat.st_mtime_ns if annotation_stat else 0}|"
-            f"{self.image_size}|{self._resize_mode}"
+            f"{self.image_size}|{self._resize_mode}|"
+            f"{self.rect_batch_size}|{self.rect_stride}|"
+            f"{tuple(self.rect_shapes[index // self.rect_batch_size]) if self.rect else ''}"
         )
         return self.disk_cache_dir / (hashlib.sha1(fingerprint.encode("utf-8")).hexdigest() + ".npz")
+
+    def _configure_rectangles(self) -> None:
+        """Sort validation images by aspect ratio and calculate stride-aligned batch shapes."""
+        image_shapes = []
+        for image_path in self.image_paths:
+            image = cv2.imread(str(image_path), cv2.IMREAD_COLOR)
+            if image is None:
+                raise ValueError(f"Could not read image: {image_path}")
+            image_shapes.append(image.shape[:2])
+        image_shapes = np.asarray(image_shapes, dtype=np.float64)
+        aspect_ratios = image_shapes[:, 0] / image_shapes[:, 1]
+        order = np.argsort(aspect_ratios)
+        self.image_paths = [self.image_paths[int(index)] for index in order]
+        image_shapes = image_shapes[order]
+        aspect_ratios = aspect_ratios[order]
+
+        batch_indices = np.floor(np.arange(len(self.image_paths)) / self.rect_batch_size).astype(int)
+        batch_count = int(batch_indices[-1]) + 1
+        shapes = np.ones((batch_count, 2), dtype=np.float64)
+        for batch_index in range(batch_count):
+            batch_ratios = aspect_ratios[batch_indices == batch_index]
+            minimum, maximum = float(batch_ratios.min()), float(batch_ratios.max())
+            if maximum < 1.0:
+                shapes[batch_index] = (maximum, 1.0)
+            elif minimum > 1.0:
+                shapes[batch_index] = (1.0, 1.0 / minimum)
+        self.rect_shapes = (
+            np.ceil(shapes * self.image_size / self.rect_stride + 0.5).astype(np.int64)
+            * self.rect_stride
+        )
+
+        for index, (source_height, source_width) in enumerate(image_shapes.astype(np.int64)):
+            resized_width = min(
+                self.image_size,
+                max(1, int(math.ceil(source_width * self.image_size / max(source_height, source_width)))),
+            )
+            resized_height = min(
+                self.image_size,
+                max(1, int(math.ceil(source_height * self.image_size / max(source_height, source_width)))),
+            )
+            target_height, target_width = map(int, self.rect_shapes[batch_indices[index]])
+            scale = min(target_height / resized_height, target_width / resized_width, 1.0)
+            final_width = max(1, int(round(resized_width * scale)))
+            final_height = max(1, int(round(resized_height * scale)))
+            pad_x = int(round((target_width - final_width) / 2 - 0.1))
+            pad_y = int(round((target_height - final_height) / 2 - 0.1))
+            path_key = str(self.image_paths[index].resolve())
+            self._rect_geometry_by_path[path_key] = (
+                final_width / float(source_width),
+                final_height / float(source_height),
+                float(pad_x),
+                float(pad_y),
+            )
 
     def _load_base_item(self, index: int) -> Dict[str, np.ndarray]:
         index = int(index) % len(self.image_paths)
@@ -417,6 +520,7 @@ class PoseTextDataset(Dataset):
                         "keypoints": cached["keypoints"].copy(),
                         "path": str(self.image_paths[index]),
                     }
+                self._remember_mosaic_index(index)
                 return sample
             except (OSError, ValueError, KeyError):
                 cache_path.unlink(missing_ok=True)
@@ -429,19 +533,33 @@ class PoseTextDataset(Dataset):
         if self._resize_mode == "train_aspect":
             image, scale_x, scale_y = _resize_long_side(image, self.image_size)
             pad_x = pad_y = 0.0
+        elif self._resize_mode == "rect":
+            image, _, _ = _resize_long_side(image, self.image_size)
+            target_shape = self.rect_shapes[index // self.rect_batch_size]
+            image, _, pad_x, pad_y, resized_width, resized_height = _letterbox_to_shape(
+                image, tuple(map(int, target_shape)), scaleup=False
+            )
+            scale_x = resized_width / source_width
+            scale_y = resized_height / source_height
+            norm_width, norm_height = map(float, target_shape[::-1])
         else:
             image, scale, pad_x, pad_y = _letterbox(image, self.image_size)
             scale_x = scale_y = scale
+            norm_width = norm_height = float(self.image_size)
         classes, boxes, keypoints = self._read_targets(path, source_width, source_height)
         if len(boxes):
             boxes = boxes.copy()
-            boxes[:, 0] = (boxes[:, 0] * source_width * scale_x + pad_x) / self.image_size
-            boxes[:, 1] = (boxes[:, 1] * source_height * scale_y + pad_y) / self.image_size
-            boxes[:, 2] *= source_width * scale_x / self.image_size
-            boxes[:, 3] *= source_height * scale_y / self.image_size
+            boxes[:, 0] = (boxes[:, 0] * source_width * scale_x + pad_x) / norm_width
+            boxes[:, 1] = (boxes[:, 1] * source_height * scale_y + pad_y) / norm_height
+            boxes[:, 2] *= source_width * scale_x / norm_width
+            boxes[:, 3] *= source_height * scale_y / norm_height
             keypoints = keypoints.copy()
-            keypoints[:, :, 0] = (keypoints[:, :, 0] * source_width * scale_x + pad_x) / self.image_size
-            keypoints[:, :, 1] = (keypoints[:, :, 1] * source_height * scale_y + pad_y) / self.image_size
+            keypoints[:, :, 0] = (
+                keypoints[:, :, 0] * source_width * scale_x + pad_x
+            ) / norm_width
+            keypoints[:, :, 1] = (
+                keypoints[:, :, 1] * source_height * scale_y + pad_y
+            ) / norm_height
         sample = {"image": image, "classes": classes, "boxes": boxes, "keypoints": keypoints, "path": str(path)}
         if self.cache_mode == "ram":
             self._ram_cache[index] = sample
@@ -452,7 +570,17 @@ class PoseTextDataset(Dataset):
                 os.replace(temporary, cache_path)
             finally:
                 temporary.unlink(missing_ok=True)
+        self._remember_mosaic_index(index)
         return {key: value.copy() if isinstance(value, np.ndarray) else value for key, value in sample.items()}
+
+    def _remember_mosaic_index(self, index: int) -> None:
+        if self._mosaic_buffer_limit <= 0 or index in self._mosaic_buffer_members:
+            return
+        self._mosaic_buffer.append(index)
+        self._mosaic_buffer_members.add(index)
+        if 1 < len(self._mosaic_buffer) >= self._mosaic_buffer_limit:
+            removed = self._mosaic_buffer.pop(0)
+            self._mosaic_buffer_members.discard(removed)
 
     def _read_targets(self, image_path: Path, image_width: int, image_height: int):
         if self._coco_annotations_by_path is not None:
@@ -633,6 +761,7 @@ def build_pose_dataloaders(
         epochs=epochs,
         close_mosaic=close_mosaic,
         single_cls=single_cls,
+        batch_size=batch_size,
     )
     data_config = _read_yaml(config_path)
     validation_value = data_config.get("val") or data_config.get("val_annotations")
@@ -640,7 +769,14 @@ def build_pose_dataloaders(
         validation_value = data_config["annotations"].get("val")
     validation_dataset = (
         PoseTextDataset(
-            config_path, "val", image_size, cache=cache, single_cls=single_cls
+            config_path,
+            "val",
+            image_size,
+            cache=cache,
+            single_cls=single_cls,
+            rect=True,
+            batch_size=int(validation_batch_size or batch_size),
+            stride=32,
         ) if validation_value else None
     ) if include_validation else None
     generator = torch.Generator()

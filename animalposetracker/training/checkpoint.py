@@ -25,6 +25,24 @@ def _torch():
     return torch
 
 
+def read_checkpoint_config(path) -> Optional[Dict[str, Any]]:
+    """Read saved training arguments before building a resumed training run."""
+    torch = _torch()
+    try:
+        payload = torch.load(str(path), map_location="meta", weights_only=False)
+    except TypeError:
+        try:
+            payload = torch.load(str(path), map_location="meta")
+        except (TypeError, RuntimeError, ValueError):
+            payload = torch.load(str(path), map_location="cpu")
+    except (RuntimeError, ValueError):
+        payload = torch.load(str(path), map_location="cpu", weights_only=False)
+    if not isinstance(payload, Mapping):
+        return None
+    config = payload.get("config")
+    return dict(config) if isinstance(config, Mapping) else None
+
+
 def resolve_checkpoint_path(source, cache_dir=None) -> Path:
     """Resolve a local checkpoint or download a remote pretrained file into the user cache."""
     source_text = str(source)
@@ -232,6 +250,7 @@ def save_checkpoint(
     epochs_without_improvement=0,
     config=None,
     ema_model=None,
+    ema_updates=None,
 ) -> None:
     """Atomically save training state so an interrupted write cannot replace a checkpoint."""
     torch = _torch()
@@ -241,6 +260,7 @@ def save_checkpoint(
         "format_version": CHECKPOINT_FORMAT_VERSION,
         "model_state_dict": model.state_dict(),
         "ema_state_dict": ema_model.state_dict() if ema_model is not None else None,
+        "ema_updates": int(ema_updates) if ema_updates is not None else None,
         "optimizer_state_dict": optimizer.state_dict() if optimizer is not None else None,
         "scheduler_state_dict": scheduler.state_dict() if scheduler is not None else None,
         "scaler_state_dict": scaler.state_dict() if scaler is not None else None,
@@ -271,6 +291,7 @@ def load_checkpoint(
     map_location="cpu",
     restore_rng=True,
     ema_model=None,
+    prefer_ema_for_model=False,
 ) -> Dict[str, Any]:
     """Restore a framework checkpoint and return its resume metadata."""
     torch = _torch()
@@ -287,7 +308,10 @@ def load_checkpoint(
             "Use load_model_weights() to initialize from a weights-only file."
         )
 
-    model.load_state_dict(payload["model_state_dict"])
+    model_state = payload.get("ema_state_dict") if prefer_ema_for_model else None
+    if not isinstance(model_state, Mapping):
+        model_state = payload["model_state_dict"]
+    model.load_state_dict(model_state)
     if ema_model is not None:
         ema_model.load_state_dict(payload.get("ema_state_dict") or payload["model_state_dict"])
     if optimizer is not None and payload.get("optimizer_state_dict") is not None:
@@ -298,9 +322,13 @@ def load_checkpoint(
         scaler.load_state_dict(payload["scaler_state_dict"])
     if restore_rng:
         _restore_rng_state(payload.get("rng_state"))
+    ema_updates = payload.get("ema_updates")
+    if ema_updates is None:
+        ema_updates = payload.get("global_step", 0)
     return {
         "epoch": int(payload.get("epoch", 0)),
         "global_step": int(payload.get("global_step", 0)),
+        "ema_updates": int(ema_updates),
         "best_metric": payload.get("best_metric"),
         "epochs_without_improvement": int(payload.get("epochs_without_improvement", 0)),
         "config": payload.get("config"),

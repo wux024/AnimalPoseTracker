@@ -78,9 +78,8 @@ def match_predictions(
 
 def _compute_ap(recall: np.ndarray, precision: np.ndarray) -> float:
     """Integrate the precision envelope with the COCO-style 101 point rule."""
-    final_recall = recall[-1] if recall.size else 1.0
-    modified_recall = np.concatenate(([0.0], recall, [final_recall], [1.0]))
-    modified_precision = np.concatenate(([1.0], precision, [0.0], [0.0]))
+    modified_recall = np.concatenate(([0.0], recall, [1.0]))
+    modified_precision = np.concatenate(([1.0], precision, [0.0]))
     modified_precision = np.flip(np.maximum.accumulate(np.flip(modified_precision)))
     points = np.linspace(0.0, 1.0, 101)
     return float(np.trapz(np.interp(points, modified_recall, modified_precision), points))
@@ -436,10 +435,8 @@ def _ultralytics_ap_from_coco_eval(evaluator, image_ids, category_ids, use_categ
     def compute_ap(recall, precision):
         recall = np.asarray(recall, dtype=np.float64)
         precision = np.asarray(precision, dtype=np.float64)
-        modified_recall = np.concatenate(
-            ([0.0], recall, [recall[-1] if recall.size else 1.0], [1.0])
-        )
-        modified_precision = np.concatenate(([1.0], precision, [0.0], [0.0]))
+        modified_recall = np.concatenate(([0.0], recall, [1.0]))
+        modified_precision = np.concatenate(([1.0], precision, [0.0]))
         modified_precision = np.flip(
             np.maximum.accumulate(np.flip(modified_precision))
         )
