@@ -12,6 +12,8 @@ import sys
 import time
 from pathlib import Path
 
+from tqdm import tqdm
+
 
 _ENGINE_NAMES = {
     "onnx": "ONNX",
@@ -205,26 +207,6 @@ def _print_infer_banner(rows) -> None:
     print()
 
 
-def _progress(text: str) -> None:
-    if sys.stdout.isatty():
-        sys.stdout.write("\r" + text.ljust(110))
-        sys.stdout.flush()
-
-
-def _progress_bar(current: int, total: int, width: int = 16) -> str:
-    if total <= 0:
-        return "░" * width
-    progress = min(max(float(current) / total, 0.0), 1.0)
-    filled = int(round(progress * width))
-    return "█" * filled + "░" * (width - filled)
-
-
-def _end_progress() -> None:
-    if sys.stdout.isatty():
-        sys.stdout.write("\n")
-        sys.stdout.flush()
-
-
 def run(argv=None) -> int:
     args = _make_argument_parser().parse_args(argv)
     weights_path = Path(args.weights).expanduser().resolve()
@@ -364,6 +346,12 @@ def run(argv=None) -> int:
     records = []
     frame_index = 0
     started_at = time.time()
+    frame_progress = tqdm(
+        total=frame_total or None,
+        desc="infer",
+        unit="frame",
+        dynamic_ncols=True,
+    )
     try:
         while True:
             ok, frame = capture.read()
@@ -395,14 +383,10 @@ def run(argv=None) -> int:
                         break
             elapsed = max(time.time() - started_at, 1e-6)
             current_frame = frame_index + 1
-            progress = (
-                f"[{_progress_bar(current_frame, frame_total)}] "
-                if frame_total > 0 else ""
+            frame_progress.set_postfix(
+                poses=len(detections), fps=f"{current_frame / elapsed:.1f}", refresh=False
             )
-            _progress(
-                f"infer {progress}frame {current_frame} · {len(detections)} poses · "
-                f"{current_frame / elapsed:.1f} fps"
-            )
+            frame_progress.update(1)
             frame_index += 1
             if args.max_frames and frame_index >= args.max_frames:
                 break
@@ -412,7 +396,7 @@ def run(argv=None) -> int:
             writer.release()
         if args.show:
             cv2.destroyAllWindows()
-    _end_progress()
+        frame_progress.close()
 
     if args.records:
         payload = records

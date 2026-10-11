@@ -8,6 +8,7 @@ from typing import Any, Dict, Mapping, Optional, Sequence
 
 import numpy as np
 import torch
+from tqdm import tqdm
 
 from animalposetracker.evaluation.metrics import (
     build_coco_ground_truth, evaluate_coco_keypoints,
@@ -84,7 +85,7 @@ class PoseDetectionValidator:
         model.eval()
         try:
             with torch.inference_mode():
-                for batch in loader:
+                for batch in tqdm(loader, desc="val", unit="batch", dynamic_ncols=True, leave=False):
                     self._synchronize(device)
                     stage_started = time.perf_counter()
                     images, targets = self._move_batch(batch, device, next(model.parameters()).dtype)

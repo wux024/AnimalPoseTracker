@@ -4,6 +4,7 @@ from typing import Optional, Sequence, Tuple
 
 import numpy as np
 import torch
+from tqdm import tqdm
 
 from animalposetracker.evaluation.metrics import (
     build_coco_ground_truth,
@@ -61,7 +62,7 @@ class SimCCPoseValidator:
         )
 
         with torch.inference_mode():
-            for batch in loader:
+            for batch in tqdm(loader, desc="val", unit="batch", dynamic_ncols=True, leave=False):
                 images = batch["images"].to(device, non_blocking=device.type == "cuda")
                 targets = batch["targets"]
                 pred_x, pred_y = model(images)

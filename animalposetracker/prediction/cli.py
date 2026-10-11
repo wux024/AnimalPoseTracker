@@ -12,8 +12,7 @@ from typing import Any, Dict, List, Tuple
 
 import cv2
 import numpy as np
-
-from animalposetracker.training.console import format_progress_bar
+from tqdm import tqdm
 
 from animalposetracker.project.model_context import (
     configure_project_model_spec,
@@ -760,26 +759,6 @@ def _print_predict_banner(
     print()
 
 
-def _print_progress(text: str) -> None:
-    if sys.stdout.isatty():
-        sys.stdout.write("\r" + text.ljust(110))
-        sys.stdout.flush()
-
-
-def _progress_text(label: str, current: int, total: int, item: str) -> str:
-    if total > 0:
-        return f"{label} [{format_progress_bar(current, total)}] {item}"
-    if label == "video":
-        return f"{label} frame {current} · {item}"
-    return f"{label} · {item}"
-
-
-def _end_progress() -> None:
-    if sys.stdout.isatty():
-        sys.stdout.write("\n")
-        sys.stdout.flush()
-
-
 def run(argv=None, box_provider: InstanceBoxProvider = None) -> int:
     import torch
 
@@ -1071,10 +1050,16 @@ def run(argv=None, box_provider: InstanceBoxProvider = None) -> int:
 
     external_backend = artifact_format != "pt"
     started_at = time.time()
-    image_total = len(image_paths)
+    image_progress = tqdm(
+        image_paths,
+        desc="images",
+        unit="image",
+        dynamic_ncols=True,
+        disable=not image_paths,
+    )
     if head_name == "YOLOPoseHead":
-        for image_index, image_path in enumerate(image_paths, 1):
-            _print_progress(_progress_text("images", image_index, image_total, image_path.name))
+        for image_path in image_progress:
+            image_progress.set_postfix_str(image_path.name)
             image = _read_image(image_path)
             rendered, records = _predict_frame(
                 image, model, config, context, settings, external_backend=external_backend
@@ -1087,8 +1072,8 @@ def run(argv=None, box_provider: InstanceBoxProvider = None) -> int:
 
     else:
         provider = context["box_provider"]
-        for image_index, image_path in enumerate(image_paths, 1):
-            _print_progress(_progress_text("images", image_index, image_total, image_path.name))
+        for image_path in image_progress:
+            image_progress.set_postfix_str(image_path.name)
             image = _read_image(image_path)
             boxes = provider.boxes_for_image(image, image_path)
             rendered, records = _predict_topdown_image(
@@ -1106,11 +1091,9 @@ def run(argv=None, box_provider: InstanceBoxProvider = None) -> int:
                 raise RuntimeError(f"Could not save prediction image {output_path}")
             results.append({"source": str(image_path), "output": str(output_path), "predictions": records})
 
-    if image_paths and videos:
-        _end_progress()
+    image_progress.close()
 
     for video_path in videos:
-        _print_progress(f"video {video_path.name}")
         output_path = output_dir / "videos" / f"{_output_stem(video_path, videos)}.mp4"
         if head_name == "YOLOPoseHead":
             frame_predictor = lambda frame: _predict_frame(
@@ -1134,6 +1117,26 @@ def run(argv=None, box_provider: InstanceBoxProvider = None) -> int:
             from animalposetracker.tracking import create_tracker
 
             tracker = create_tracker({**tracking_settings, "algorithm": tracker_name})
+
+        video_progress = {"bar": None}
+
+        def update_video_progress(current, total, name=video_path.name):
+            bar = video_progress["bar"]
+            if bar is None:
+                bar = tqdm(
+                    total=total if total > 0 else None,
+                    desc=f"video {name}",
+                    unit="frame",
+                    dynamic_ncols=True,
+                    leave=False,
+                )
+                video_progress["bar"] = bar
+            elif total > 0 and bar.total != total:
+                bar.total = total
+                bar.refresh()
+            if current > bar.n:
+                bar.update(current - bar.n)
+
         frame_count, processed_records = _write_video(
             video_path,
             output_path,
@@ -1141,11 +1144,10 @@ def run(argv=None, box_provider: InstanceBoxProvider = None) -> int:
             results,
             tracker=tracker,
             class_names=context["class_names"],
-            progress_callback=lambda current, total, name=video_path.name: _print_progress(
-                _progress_text("video", current, total, name)
-            ),
+            progress_callback=update_video_progress,
         )
-        _end_progress()
+        if video_progress["bar"] is not None:
+            video_progress["bar"].close()
         video_summary = {
             "source": str(video_path),
             "output": str(output_path),
@@ -1204,7 +1206,6 @@ def run(argv=None, box_provider: InstanceBoxProvider = None) -> int:
         }, ensure_ascii=False, indent=2, allow_nan=False) + "\n",
         encoding="utf-8",
     )
-    _end_progress()
     video_frames = sum(int(result.get("frames", 0)) for result in results)
     elapsed = max(time.time() - started_at, 1e-6)
     print(
