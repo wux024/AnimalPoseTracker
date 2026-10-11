@@ -68,8 +68,10 @@ class StreamTrackingTests(unittest.TestCase):
         self.assertEqual(first[0]["class_name"], "mouse")
         self.assertEqual(first[0]["class_id"], 0)
         keypoints = np.asarray(first[0]["keypoints"], dtype=np.float32)
-        self.assertEqual(keypoints.shape, (1, 2))
-        np.testing.assert_allclose(keypoints[0], [20, 20], atol=1e-5)
+        # Records carry (x, y, score) per keypoint, the same three-column layout
+        # `_instance_to_record` and the shared renderer expect.
+        self.assertEqual(keypoints.shape, (1, 3))
+        np.testing.assert_allclose(keypoints[0], [20, 20, 1.0], atol=1e-5)
 
     def test_tracker_accepts_config_mapping(self):
         pipeline = self._make_pipeline({"algorithm": "ocsort", "track_buffer": 45})

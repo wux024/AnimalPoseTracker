@@ -579,6 +579,12 @@ class SimCCTrainingTests(unittest.TestCase):
                     return {"metrics": {"val_loss": torch.tensor(0.1)}}
 
             class FakeModel(torch.nn.Module):
+                def __init__(self):
+                    super().__init__()
+                    # The validator takes its working dtype from the model, so the double needs
+                    # a parameter; a parameter-free nn.Module stops next(model.parameters()).
+                    self.anchor = torch.nn.Parameter(torch.zeros(1))
+
                 def forward(self, images):
                     decoded = images.new_tensor(
                         [[16], [16], [16], [16], [0.99], [8], [8], [0.9], [24], [24], [0.9]]
@@ -599,7 +605,9 @@ class SimCCTrainingTests(unittest.TestCase):
                 criterion.keypoint_loss.kpt_oks_sigmas.device, validation_device
             )
             self.assertAlmostEqual(validation_result["coco/AP"], 1.0)
-            self.assertAlmostEqual(validation_result["fitness"], validation_result["coco/AP"])
+            # `coco/AP` is the checkpoint criterion. The `fitness` alias was removed on
+            # purpose, so assert it stays gone rather than reading it back.
+            self.assertNotIn("fitness", validation_result)
             self.assertAlmostEqual(validation_result["PCK"], 1.0)
             self.assertAlmostEqual(validation_result["AUC"], 0.95)
             self.assertAlmostEqual(validation_result["EPE"], 0.0)

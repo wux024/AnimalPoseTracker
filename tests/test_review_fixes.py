@@ -198,7 +198,12 @@ class ReviewFixTests(unittest.TestCase):
             }), encoding="utf-8")
 
             dataset = PoseTextDataset(data_path, split="train", image_size=32)
-            with self.assertRaisesRegex(ValueError, "no visibility mask"):
+            # A box-only row carries no keypoints at all, and with kpt_shape=[1, 2] a row
+            # must hold 5 + 1*2 = 7 values, so the dataset refuses it outright rather than
+            # padding the missing keypoints and supervising the origin. (The
+            # "no visibility mask" wording belongs to the COCO branch, which reaches this
+            # decision from an annotation that has a box but no keypoints.)
+            with self.assertRaisesRegex(ValueError, "Expected 7 values"):
                 dataset[0]
 
     def test_multiscale_targets_use_actual_input_width_and_height(self):
@@ -212,7 +217,8 @@ class ReviewFixTests(unittest.TestCase):
         self.assertEqual(criterion.assigner.stride_val, 16.0)
         tiny_box = torch.tensor([[[10.0, 10.0, 12.0, 12.0]]])
         nearby_anchor = torch.tensor([[4.0, 11.0]])
-        self.assertTrue(criterion.assigner._centers_in_boxes(nearby_anchor, tiny_box)[0, 0, 0])
+        gt_mask = torch.ones((1, 1), dtype=torch.bool)
+        self.assertTrue(criterion.assigner._centers_in_boxes(nearby_anchor, tiny_box, gt_mask)[0, 0, 0])
         targets = {
             "batch_indices": torch.tensor([0]),
             "classes": torch.tensor([0]),

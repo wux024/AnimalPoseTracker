@@ -209,12 +209,18 @@ class PrettyTrainingRendererTests(unittest.TestCase):
                 metrics={"loss": 22.5, "box": 0.41, "pose": 0.9},
             ),
         ])
-        self.assertTrue(output.startswith("\r"))
-        self.assertIn("epoch 1/2", output)
-        self.assertIn("step 1/9", output)
-        self.assertIn("loss=22.5", output)
+        header, _, body = output.partition("\n")
+        # The column header is printed once for the epoch...
+        self.assertIn("Epoch", header)
+        self.assertIn("GPU_mem", header)
+        self.assertIn("box_loss", header)
+        # ...and nothing after it starts a new line: every batch rewinds the same row.
+        self.assertEqual(output.count("\n"), 1)
+        self.assertIn("\r", body)
+        self.assertRegex(body, r"1/2\s+0G\s+22\.5\s+0\.41\s+0\.9")
+        self.assertIn("1/9", body)
 
-    def test_known_events_render_compact_lines(self):
+    def test_known_events_render_tagged_lines_and_a_validation_table(self):
         output = self._render([
             TrainingEvent(
                 event="pretrained",
@@ -233,10 +239,15 @@ class PrettyTrainingRendererTests(unittest.TestCase):
         ])
         self.assertIn("[pretrained] loaded 423 tensors (42 incompatible shapes skipped)", output)
         self.assertIn("[started] device=cuda", output)
-        self.assertIn("[val] epoch 1/2", output)
-        self.assertIn("[epoch 1/2] train_loss=22.4 val_loss=20.6 AP=0.7", output)
+        self.assertIn("[epoch 1/2] train_loss=22.4", output)
         self.assertIn("[finished]", output)
         self.assertNotIn('"event"', output)
+        # A validation event has no line of its own: the epoch's metrics are collected and
+        # rendered as one table when the epoch ends, which is what the training loop emits.
+        self.assertNotIn("[val]", output)
+        self.assertRegex(output, r"Class\s+Images\s+Instances\s+Loss\s+AP\s")
+        # The "all" row is where the epoch's validation loss and AP land.
+        self.assertRegex(output, r"all\s+-\s+-\s+20\.6\s+0\.7\s")
 
     def test_unknown_event_falls_back_to_tagged_line(self):
         output = self._render([
