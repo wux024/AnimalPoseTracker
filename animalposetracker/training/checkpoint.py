@@ -174,12 +174,11 @@ def _legacy_pose_globals():
 
 
 def _numpy_checkpoint_globals():
-    """Allow only NumPy's array/dtype primitives used by the saved RNG state."""
+    """Allow the NumPy array globals found in legacy PyTorch checkpoints."""
     try:
         import numpy as np
     except ImportError:
         return []
-
     core = getattr(np, "_core", None)
     if core is None:
         core = np.core

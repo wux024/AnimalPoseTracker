@@ -56,7 +56,6 @@ gui = [
 ]
 training = [
     "torch>=2.0.0",
-    "numpy<2; python_version < '3.12'",
     "pycocotools>=2.0.7",
 ]
 export = ["onnx>=1.14.0", "onnxsim>=0.4.0"]
