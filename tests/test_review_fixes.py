@@ -125,6 +125,46 @@ class ReviewFixTests(unittest.TestCase):
 
         self.assertEqual(observed_warmup, [3, 3])
 
+    def test_validation_keeps_ema_weights_fp32_under_amp(self):
+        model = torch.nn.Linear(2, 1)
+        with torch.no_grad():
+            model.weight.fill_(1.0001)
+            model.bias.fill_(0.12345)
+        original_state = {
+            name: value.detach().clone() for name, value in model.state_dict().items()
+        }
+        trainer = Trainer.__new__(Trainer)
+        trainer.rank = 0
+        trainer.config = SimpleNamespace(ema=True, epochs=1)
+        trainer.ema = SimpleNamespace(model=model)
+        trainer.raw_model = model
+        trainer.amp_enabled = True
+        trainer.torch = torch
+        trainer.device = torch.device("cuda")
+        trainer.distributed = False
+        trainer.events = SimpleNamespace(emit=lambda _event: None)
+
+        observed_dtypes = []
+
+        class Validator:
+            def eval(self):
+                pass
+
+            def __call__(self, current_model, _loader, _device):
+                observed_dtypes.append(next(current_model.parameters()).dtype)
+                return {"loss": 1.0}
+
+        from contextlib import nullcontext
+
+        with patch("torch.autocast", return_value=nullcontext()) as autocast:
+            result = trainer._validate([], Validator(), epoch_number=1)
+
+        autocast.assert_called_once_with(device_type="cuda", enabled=True)
+        self.assertEqual(result["loss"], 1.0)
+        self.assertEqual(observed_dtypes, [torch.float32])
+        for name, value in model.state_dict().items():
+            self.assertTrue(torch.equal(value, original_state[name]))
+
     def test_public_model_and_dataset_maps_resolve_to_files(self):
         self.assertEqual(MODEL_YAML_PATHS, NN_MODEL_YAML_PATHS)
         self.assertTrue(all(path.is_file() for path in MODEL_YAML_PATHS.values()))
@@ -210,6 +250,27 @@ class ReviewFixTests(unittest.TestCase):
         result = criterion((features, keypoint_predictions), targets)
 
         self.assertTrue(all(torch.isfinite(value).all() for value in result["metrics"].values()))
+
+    def test_fp16_pose_classification_sum_stays_finite(self):
+        head = SimpleNamespace(
+            nc=3,
+            kpt_shape=(1, 3),
+            reg_max=16,
+            stride=torch.tensor([8.0]),
+        )
+        criterion = PoseDetectionLoss(head, image_size=640, kpt_oks_sigmas=[0.1])
+        features = [torch.ones((1, 67, 280, 250), dtype=torch.float16)]
+        keypoint_predictions = torch.ones((1, 3, 70000), dtype=torch.float16)
+        targets = {
+            "batch_indices": torch.empty(0, dtype=torch.long),
+            "classes": torch.empty(0, dtype=torch.long),
+            "boxes": torch.empty((0, 4)),
+            "keypoints": torch.empty((0, 1, 3)),
+        }
+
+        result = criterion((features, keypoint_predictions), targets)
+
+        self.assertTrue(torch.isfinite(result["metrics"]["class"]))
 
     def test_pose_head_rebuilds_cached_anchors_after_device_move(self):
         head = YOLOPoseHead(nc=1, kpt_shape=(1, 3), ch=(16, 32, 64)).eval()

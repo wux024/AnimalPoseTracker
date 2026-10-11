@@ -189,10 +189,10 @@ class PoseDetectionLoss(nn.Module):
         del target_labels
         target_score_sum = target_scores.sum().clamp_min(1.0)
         class_loss = F.binary_cross_entropy_with_logits(
-            pred_classes, target_scores.to(pred_classes.dtype), reduction="sum"
-        ) / target_score_sum
+            pred_classes.float(), target_scores.float(), reduction="sum"
+        ) / target_score_sum.float()
 
-        # Validation converts the model to FP16. Reduce in FP32 before scaling by
+        # Autocast may produce FP16 predictions. Reduce in FP32 before scaling by
         # zero so a no-foreground batch cannot overflow its FP16 sum into NaN.
         zero = pred_distribution.sum(dtype=torch.float32) * 0.0
         box_loss = zero

@@ -996,15 +996,19 @@ class Trainer:
         error = None
         if self.rank == 0:
             model = self.ema.model if self.config.ema else self.raw_model
-            original_dtype = next(model.parameters()).dtype
             use_half = self.amp_enabled
             try:
+                # Keep EMA weights in FP32. Casting them to half in place and
+                # back permanently rounds the stored weights at every validation.
+                model.float()
                 model.eval()
-                if use_half:
-                    model.half()
                 if hasattr(validator, "eval"):
                     validator.eval()
-                with self.torch.inference_mode():
+                amp_context = (
+                    self.torch.autocast(device_type=self.device.type, enabled=True)
+                    if use_half else nullcontext()
+                )
+                with self.torch.inference_mode(), amp_context:
                     result = validator(model, loader, self.device)
                 if not isinstance(result, Mapping):
                     raise TypeError("validator must return a mapping of metric names to scalar values")
@@ -1022,9 +1026,6 @@ class Trainer:
                     )
             except Exception as exc:
                 error = (type(exc).__name__, str(exc))
-            finally:
-                if use_half and original_dtype != self.torch.float16:
-                    model.float()
 
         if self.distributed:
             payload = [(metrics, error) if self.rank == 0 else None]
