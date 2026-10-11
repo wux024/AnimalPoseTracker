@@ -775,6 +775,11 @@ def run(argv=None, box_provider: InstanceBoxProvider = None) -> int:
         model, config, context = load_project_model(
             config_path, weights_path, device=args.device
         )
+        # Fold Conv + BatchNorm for inference, matching ultralytics' PyTorch inference
+        # backend (its predictor passes fuse=True to AutoBackend, which fuses on load).
+        # Weights are restored above, so folding here cannot change what was loaded, and
+        # prediction never writes a checkpoint back out.
+        model.fuse()
         context["device"] = model.device if hasattr(model, "device") else next(model.parameters()).device
         context["model_nc"] = int(model.nc)
         context["kpt_shape"] = tuple(model.kpt_shape)
