@@ -179,10 +179,14 @@ def _numpy_checkpoint_globals():
         import numpy as np
     except ImportError:
         return []
-    core = getattr(np, "_core", None)
-    if core is None:
-        core = np.core
-    multiarray = core.multiarray
+    for module_name in ("numpy._core.multiarray", "numpy.core.multiarray"):
+        try:
+            multiarray = importlib.import_module(module_name)
+            break
+        except (ImportError, AttributeError):
+            continue
+    else:
+        return []
     return [
         multiarray._reconstruct,
         multiarray.scalar,
