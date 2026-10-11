@@ -611,10 +611,17 @@ class Trainer:
         if self.config.warmup_iters is not None:
             self._warmup_steps = max(int(self.config.warmup_iters), 0)
         elif total_batches and total_batches > 0:
-            warmup_epochs = float(self.config.warmup_epochs)
+            # Mirrors ultralytics' Trainer._get_warmup_iterations: clamp to the epochs
+            # actually available, and never apply an iteration floor. A floor of 100 on a
+            # small dataset (fewer than 34 batches/epoch) stretches a 3-epoch warmup past
+            # 10 epochs, and optimizer=auto pins warmup_bias_lr to 0, so every parameter
+            # group then creeps up from lr=0 instead of starting at the target lr.
+            warmup_epochs = min(
+                float(self.config.warmup_epochs),
+                float(max(self.config.epochs - 1, 0)),
+            )
             self._warmup_steps = (
-                max(int(round(warmup_epochs * total_batches)), 100)
-                if warmup_epochs > 0 else 0
+                int(round(warmup_epochs * total_batches)) if warmup_epochs > 0 else 0
             )
         else:
             self._warmup_steps = 0
