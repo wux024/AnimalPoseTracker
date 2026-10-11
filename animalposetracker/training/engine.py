@@ -494,6 +494,7 @@ class Trainer:
         self.completed_epochs = 0
         self.global_step = 0
         self.best_metric = None
+        self._best_epoch: Optional[int] = None
         self._best_epochs_without_improvement = 0
         self._warmup_steps = -1
         self._last_opt_step = -1
@@ -690,6 +691,7 @@ class Trainer:
                     improved = self._is_improved(float(monitored))
                     if improved:
                         self.best_metric = float(monitored)
+                        self._best_epoch = epoch_number
                         self._best_epochs_without_improvement = 0
                         self._save_checkpoint(
                             best_path, self.optimizer, self.scheduler, self.scaler,
@@ -703,6 +705,7 @@ class Trainer:
                     monitored = train_metrics.get("loss")
                     if monitored is not None and self._is_improved(float(monitored), mode="min"):
                         self.best_metric = float(monitored)
+                        self._best_epoch = epoch_number
                         self._best_epochs_without_improvement = 0
                         self._save_checkpoint(
                             best_path, self.optimizer, self.scheduler, self.scaler,
@@ -803,25 +806,40 @@ class Trainer:
                     self._best_epochs_without_improvement, self.config,
                     ema_model=self.ema.model if self.config.ema else None,
                 )
+                # _best_epochs_without_improvement counts validation rounds, not epochs, so
+                # it must not be subtracted from an epoch number: with validation_interval > 1
+                # that would understate the best epoch by a factor of the interval.
+                early_stopping = self._stop_reason == "patience"
+                if early_stopping:
+                    stopped_metrics = {
+                        "patience": float(self.config.early_stopping_patience),
+                        "validation_interval": float(self.config.validation_interval),
+                        "validations_without_improvement": float(
+                            self._best_epochs_without_improvement
+                        ),
+                    }
+                    if self._best_epoch is not None:
+                        stopped_metrics["best_epoch"] = float(self._best_epoch)
+                    stopped_message = (
+                        f"Early stopping: no improvement over the last "
+                        f"{self._best_epochs_without_improvement} validation rounds "
+                        f"(patience {self.config.early_stopping_patience})"
+                        + (
+                            f"; best epoch {self._best_epoch}."
+                            if self._best_epoch is not None
+                            else "."
+                        )
+                        + " Training completed successfully."
+                    )
+                else:
+                    stopped_metrics = {}
+                    stopped_message = "Training stopped at the requested safe point."
                 self.events.emit(TrainingEvent(
                     event="stopped",
                     epoch=self.completed_epochs,
                     epochs=self.config.epochs,
-                    metrics={
-                        "patience": float(self.config.early_stopping_patience),
-                        "epochs_without_improvement": float(self._best_epochs_without_improvement),
-                        "best_epoch": float(
-                            self.completed_epochs - self._best_epochs_without_improvement
-                        ),
-                    } if self._stop_reason == "patience" else {},
-                    message=(
-                        f"Early stopping: no improvement for {self._best_epochs_without_improvement} "
-                        f"epochs (patience {self.config.early_stopping_patience}); "
-                        f"best epoch {self.completed_epochs - self._best_epochs_without_improvement}. "
-                        "Training completed successfully."
-                        if self._stop_reason == "patience"
-                        else "Training stopped at the requested safe point."
-                    ),
+                    metrics=stopped_metrics,
+                    message=stopped_message,
                 ))
             elif succeeded:
                 self.events.emit(TrainingEvent(
