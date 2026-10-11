@@ -8,6 +8,8 @@ interactive terminal.
 import sys
 from typing import Optional, Sequence, TextIO, Tuple
 
+from tqdm import tqdm
+
 from .events import TrainingEvent
 
 _TRAIN_COLUMNS = (
@@ -122,32 +124,23 @@ def _validation_table(metrics, prefix: str = "") -> Tuple[str, str]:
     return header, row
 
 
-def format_progress_bar(current: int, total: int, width: int = 16) -> str:
-    """Return a compact fixed-width progress bar for finite workloads."""
-    if total <= 0:
-        return "-" * width
-    progress = min(max(float(current) / total, 0.0), 1.0)
-    filled = int(round(progress * width))
-    return "#" * filled + "-" * (width - filled)
-
-
 class PrettyTrainingRenderer:
-    """Render :class:`TrainingEvent` objects as compact readable lines."""
+    """Render training batches with a terminal progress bar like Ultralytics."""
 
     def __init__(self, stream: Optional[TextIO] = None) -> None:
         self.stream = stream if stream is not None else sys.stdout
-        self._batch_open = False
         self._header_epoch = None
+        self._progress = None
 
-    def _write(self, text: str) -> None:
-        self.stream.write(text)
-        self.stream.flush()
+    def _close_progress(self) -> None:
+        if self._progress is not None:
+            self._progress.close()
+            self._progress = None
 
     def _line(self, text: str) -> None:
-        if self._batch_open:
-            self._write("\n")
-            self._batch_open = False
-        self._write(text + "\n")
+        self._close_progress()
+        self.stream.write(text + "\n")
+        self.stream.flush()
 
     def emit(self, event: TrainingEvent) -> None:
         metrics = event.metrics or {}
@@ -155,28 +148,41 @@ class PrettyTrainingRenderer:
 
         if name == "batch":
             if self._header_epoch != event.epoch:
+                self._close_progress()
                 headers = (
                     "Epoch", "GPU_mem", *(label for _, label in _TRAIN_COLUMNS), "Instances", "Size"
                 )
                 self._line("".join(f"{label:>11s}" for label in headers))
                 self._header_epoch = event.epoch
             total_steps = max(int(event.steps or 0), 1)
-            progress_bar = format_progress_bar(event.step or 0, total_steps)
-            values = [
+            if self._progress is None:
+                self._progress = tqdm(
+                    total=total_steps,
+                    file=self.stream,
+                    dynamic_ncols=True,
+                    leave=True,
+                    unit="it",
+                    mininterval=0,
+                    disable=False,
+                )
+            description_values = [
                 f"{event.epoch}/{event.epochs}",
                 f"{float(metrics.get('gpu_mem', 0.0)):.3g}G",
             ]
-            values.extend(
+            description_values.extend(
                 _fmt(float(metrics[key])) if key in metrics else "-"
                 for key, _ in _TRAIN_COLUMNS
             )
-            values.extend((
+            description_values.extend((
                 str(int(metrics.get("instances", 0))),
                 str(int(metrics.get("size", 0))),
             ))
-            text = progress_bar + " " + "".join(f"{value:>11s}" for value in values)
-            self._write("\r" + text.ljust(145))
-            self._batch_open = True
+            description = "".join(f"{value:>11s}" for value in description_values)
+            self._progress.set_description(description, refresh=False)
+            step = min(max(int(event.step or 0), 0), total_steps)
+            self._progress.update(max(step - self._progress.n, 0))
+            if self._progress.n >= total_steps:
+                self._close_progress()
             return
 
         if name == "pretrained":
