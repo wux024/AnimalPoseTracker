@@ -256,6 +256,11 @@ class PoseDetectionValidator:
         images = batch["images"].to(
             device, dtype=dtype, non_blocking=device.type == "cuda"
         )
+        # The trainer feeds models pixels in [0, 1] (see engine._prepare_batch),
+        # while the dataset emits uint8 [0, 255]. Scale here too or the model sees
+        # an input distribution it never trained on and validation metrics collapse.
+        if batch["images"].dtype == torch.uint8:
+            images = images.div_(255)
         targets = {
             key: value.to(device, non_blocking=device.type == "cuda") if torch.is_tensor(value) else value
             for key, value in batch["targets"].items()

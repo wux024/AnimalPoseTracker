@@ -63,7 +63,11 @@ class SimCCPoseValidator:
 
         with torch.inference_mode():
             for batch in tqdm(loader, desc="val", unit="batch", dynamic_ncols=True, leave=False):
-                images = batch["images"].to(device, non_blocking=device.type == "cuda")
+                raw_images = batch["images"]
+                images = raw_images.to(device, non_blocking=device.type == "cuda")
+                # Match the trainer's uint8 -> [0, 1] scaling (engine._prepare_batch).
+                if raw_images.dtype == torch.uint8:
+                    images = images.float().div_(255)
                 targets = batch["targets"]
                 pred_x, pred_y = model(images)
                 if self.flip_indices is not None:
