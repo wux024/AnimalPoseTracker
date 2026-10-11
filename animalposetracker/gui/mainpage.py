@@ -884,7 +884,9 @@ class AnimalPoseTrackerPage(QMainWindow, Ui_AnimalPoseTracker):
             elif kind == "pretrained":
                 self.statusBar().showMessage(event.get("message", "Pretrained weights loaded."))
             elif kind == "stopped":
-                self.statusBar().showMessage("Training stopped; checkpoint saved.")
+                self.statusBar().showMessage(
+                    event.get("message") or "Training stopped; checkpoint saved."
+                )
             elif kind == "failed":
                 self.statusBar().showMessage(f"Training failed: {event.get('message', 'unknown error')}")
             elif kind == "finished":

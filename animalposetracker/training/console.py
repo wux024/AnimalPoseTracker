@@ -236,7 +236,7 @@ class PrettyTrainingRenderer:
             self._line(row)
             return
 
-        if name in {"started", "finished", "plot", "profile"}:
+        if name in {"started", "finished", "stopped", "plot", "profile"}:
             suffix = f" {event.message}" if event.message else ""
             self._line(f"[{name}]{suffix}")
             return

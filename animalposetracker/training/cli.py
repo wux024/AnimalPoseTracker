@@ -1025,6 +1025,12 @@ def run(argv=None) -> int:
             stop_watcher.join(timeout=1.0)
             if rank == 0 and stop_marker.exists():
                 stop_marker.unlink()
+        # Early stopping is a normal, successful end of training, so it exits 0; only an
+        # external stop request (SIGINT/SIGTERM or the stop marker) reports 130. Returning
+        # 130 for an exhausted patience budget used to abort `set -e` pipelines right after
+        # `train`, so the val/export steps chained behind it never ran.
+        if result.get("early_stopped"):
+            return 0
         return 0 if not result["stopped"] else 130
     except Exception as exc:
         if trainer is None:

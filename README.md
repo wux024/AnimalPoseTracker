@@ -121,6 +121,8 @@ Use `animalpose-cli <command> --help` to see a workflow's options. For train, va
 
 `create` accepts the training settings supported by `train` and saves only explicitly supplied values into the new project's `configs/other.yaml`; omitted options retain the selected model's defaults. `load` accepts a project directory, `project.yaml`, or `configs/other.yaml`, validates the project and its model/data config paths, and prints a summary without opening the GUI or modifying files.
 
+`train` exit codes: `0` when training reaches `epochs` **and** when early stopping ends it (an exhausted `early_stopping_patience` is a normal completion — `best.pt` is final), `130` only when the run was interrupted by an external request (`SIGINT`/`SIGTERM` or the `.animalposetracker_training_stop` marker), and `1` on error. Chain `val`/`export` behind `train` in a `set -e` script: early stopping no longer aborts the pipeline.
+
 # Usage: How to use AnimalPoseTracker to train and test a model
 
 1. Open the command prompt or terminal and activate the conda environment:

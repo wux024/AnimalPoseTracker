@@ -501,12 +501,19 @@ class Trainer:
         self._history = []
         self._time_deadline = None
         self._time_limit_reached = False
+        # Why the loop stopped early: "patience" (early stopping) or "requested"
+        # (SIGINT/SIGTERM or the stop marker). None while nothing has been decided.
+        # The distinction matters downstream: an exhausted patience budget is a
+        # normal, successful end of training, while an external request is not.
+        self._stop_reason: Optional[str] = None
 
         if config.resume_from is not None:
             self.resume(config.resume_from)
 
     def request_stop(self) -> None:
         """Ask the loop to stop after its current optimizer step and save state."""
+        if self._stop_reason is None:
+            self._stop_reason = "requested"
         self._stop_requested.set()
 
     def _model_train(self) -> None:
@@ -747,6 +754,7 @@ class Trainer:
                     and self._best_epochs_without_improvement >= self.config.early_stopping_patience
                 ):
                     stopped = True
+                    self._stop_reason = "patience"
                     break
 
             final_validation_metrics = None
@@ -762,6 +770,7 @@ class Trainer:
                 "metrics": final_metrics,
                 "final_validation_metrics": final_validation_metrics,
                 "stopped": stopped and not self._time_limit_reached,
+                "early_stopped": self._stop_reason == "patience",
                 "time_limit_reached": self._time_limit_reached,
             }
         except Exception as exc:
@@ -798,7 +807,21 @@ class Trainer:
                     event="stopped",
                     epoch=self.completed_epochs,
                     epochs=self.config.epochs,
-                    message="Training stopped at the requested safe point.",
+                    metrics={
+                        "patience": float(self.config.early_stopping_patience),
+                        "epochs_without_improvement": float(self._best_epochs_without_improvement),
+                        "best_epoch": float(
+                            self.completed_epochs - self._best_epochs_without_improvement
+                        ),
+                    } if self._stop_reason == "patience" else {},
+                    message=(
+                        f"Early stopping: no improvement for {self._best_epochs_without_improvement} "
+                        f"epochs (patience {self.config.early_stopping_patience}); "
+                        f"best epoch {self.completed_epochs - self._best_epochs_without_improvement}. "
+                        "Training completed successfully."
+                        if self._stop_reason == "patience"
+                        else "Training stopped at the requested safe point."
+                    ),
                 ))
             elif succeeded:
                 self.events.emit(TrainingEvent(
