@@ -1,10 +1,14 @@
 """Ultralytics-compatible NMS for AnimalRTPose detections."""
 
 import logging
-import sys
 import time
 
 import torch
+
+try:
+    import torchvision
+except (ImportError, RuntimeError):
+    torchvision = None
 
 
 LOGGER = logging.getLogger(__name__)
@@ -71,7 +75,7 @@ def pose_non_max_suppression(
     class_offset = 7680
     time_limit = 2.0 + 0.05 * batch_size
     start_time = time.time()
-    use_torchvision = predictions.device.type != "xpu" and "torchvision" in sys.modules
+    use_torchvision = predictions.device.type != "xpu" and torchvision is not None
     outputs = [(
         predictions.new_zeros((0, 4)),
         predictions.new_zeros((0,)),
@@ -112,8 +116,6 @@ def pose_non_max_suppression(
         nms_boxes = image_prediction[:, :4] + class_ids
         scores = image_prediction[:, 4]
         if use_torchvision:
-            import torchvision
-
             keep = torchvision.ops.nms(nms_boxes, scores, iou_threshold)
         else:
             keep = _nms_indices(nms_boxes, scores, iou_threshold)
