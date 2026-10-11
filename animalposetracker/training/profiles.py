@@ -112,6 +112,11 @@ def training_profile_defaults(model_type: str) -> Dict[str, Any]:
     key = "AnimalViTPose" if model_name == "animalvitpose" else "AnimalRTPose"
     profile = _MODEL_PROFILES.get(key, {})
     values = _shared_profile_values(TRAINING_PROFILES)
+    values.update({
+        "oks_area_mode": (TRAINING_PROFILES.get("metrics", {}) or {}).get(
+            "oks_area_mode", "annotation"
+        )
+    })
     sections = ["training", "loss", "augmentation"]
     if key == "AnimalRTPose":
         sections.append("validation")

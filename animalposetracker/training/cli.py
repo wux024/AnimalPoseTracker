@@ -632,6 +632,7 @@ def run(argv=None) -> int:
                     auc_thresholds=int(values.get(
                         "auc_thresholds", KEYPOINT_METRICS.get("auc_thresholds", 20)
                     )),
+                    oks_area_mode=config.oks_area_mode,
                 )
                 if validation_loader is not None else None
             )
@@ -706,6 +707,7 @@ def run(argv=None) -> int:
                     keypoint_auc_norm_factor=float(KEYPOINT_METRICS.get("auc_norm_factor", 30.0)),
                     keypoint_auc_thresholds=int(KEYPOINT_METRICS.get("auc_thresholds", 20)),
                     coco_max_detections=config.max_detections,
+                    oks_area_mode=config.oks_area_mode,
                 )
                 if validation_loader is not None else None
             )

@@ -142,16 +142,16 @@ def summarize_ap(
     )
 
 def _coco_keypoint_api():
-    """Return the COCO API, preferring the extended API used by MMPose."""
+    """Return the COCO API implementation and whether it supports xtcocotools options."""
     try:
         from xtcocotools.coco import COCO
         from xtcocotools.cocoeval import COCOeval
-        return COCO, COCOeval
-    except ImportError:
+        return COCO, COCOeval, True
+    except (ImportError, OSError, ValueError):
         try:
             from pycocotools.coco import COCO
             from pycocotools.cocoeval import COCOeval
-            return COCO, COCOeval
+            return COCO, COCOeval, False
         except ImportError as exc:
             raise ImportError(
                 "COCO keypoint validation requires xtcocotools or pycocotools; "
@@ -165,7 +165,7 @@ def build_coco_ground_truth(dataset):
     and image IDs retain their standard meaning. YOLO pose labels are converted to
     an in-memory COCO dataset with stable IDs for the validation images.
     """
-    COCO, _COCOeval = _coco_keypoint_api()
+    COCO, _COCOeval, _is_xtcocotools = _coco_keypoint_api()
     image_ids_by_path = dict(getattr(dataset, "image_id_by_path", {}))
     category_ids_by_class = dict(getattr(dataset, "category_id_by_class", {}))
     annotation_path = getattr(dataset, "annotation_path", None)
@@ -244,289 +244,6 @@ def build_coco_ground_truth(dataset):
     return coco_gt, image_ids_by_path, category_ids_by_class
 
 
-def _ultralytics_coco_eval_type(COCOeval):
-    """Build a COCOeval adapter with Ultralytics OKS matching semantics."""
-
-    class UltralyticsCOCOeval(COCOeval):
-        def computeOks(self, imgId, catId):
-            params = self.params
-            if params.useCats:
-                ground_truth = self._gts[imgId, catId]
-                detections = self._dts[imgId, catId]
-            else:
-                ground_truth = [
-                    instance
-                    for category_id in params.catIds
-                    for instance in self._gts[imgId, category_id]
-                ]
-                detections = [
-                    instance
-                    for category_id in params.catIds
-                    for instance in self._dts[imgId, category_id]
-                ]
-            order = np.argsort(
-                [-float(instance["score"]) for instance in detections],
-                kind="mergesort",
-            )
-            detections = [detections[index] for index in order[:params.maxDets[-1]]]
-            if not ground_truth or not detections:
-                return []
-
-            sigmas = np.asarray(params.kpt_oks_sigmas, dtype=np.float32)
-            variances = (2.0 * sigmas) ** 2
-            similarities = np.zeros(
-                (len(detections), len(ground_truth)), dtype=np.float64
-            )
-            for gt_index, target in enumerate(ground_truth):
-                target_points = np.asarray(
-                    target["keypoints"], dtype=np.float32
-                ).reshape(-1, 3)
-                visible = target_points[:, 2] != 0
-                target_area = np.float32(target["area"])
-                for detection_index, detection in enumerate(detections):
-                    predicted_points = np.asarray(
-                        detection["keypoints"], dtype=np.float32
-                    ).reshape(-1, 3)
-                    delta = predicted_points[:, :2] - target_points[:, :2]
-                    squared_distance = np.square(delta).sum(axis=1)
-                    exponent = squared_distance / (
-                        variances * (target_area + np.float32(1e-7)) * 2.0
-                    )
-                    similarities[detection_index, gt_index] = (
-                        float(np.exp(-exponent[visible]).sum() / (visible.sum() + 1e-9))
-                        if visible.any()
-                        else 0.0
-                    )
-            return similarities
-
-        def evaluateImg(self, imgId, catId, aRng, maxDet):
-            params = self.params
-            if params.useCats:
-                ground_truth = list(self._gts[imgId, catId])
-                detections = list(self._dts[imgId, catId])
-            else:
-                ground_truth = [
-                    instance
-                    for category_id in params.catIds
-                    for instance in self._gts[imgId, category_id]
-                ]
-                detections = [
-                    instance
-                    for category_id in params.catIds
-                    for instance in self._dts[imgId, category_id]
-                ]
-            if not ground_truth and not detections:
-                return None
-
-            for target in ground_truth:
-                area = float(target.get("area", 0.0))
-                target["_ignore"] = int(area < aRng[0] or area > aRng[1])
-            gt_order = np.argsort(
-                [target["_ignore"] for target in ground_truth], kind="mergesort"
-            )
-            ground_truth = [ground_truth[index] for index in gt_order]
-            detection_order = np.argsort(
-                [-float(detection["score"]) for detection in detections],
-                kind="mergesort",
-            )
-            detections = [detections[index] for index in detection_order[:maxDet]]
-
-            overlaps = self.ious[(imgId, catId)]
-            if len(overlaps):
-                overlaps = np.asarray(overlaps)[detection_order[:maxDet]][:, gt_order]
-            else:
-                overlaps = np.zeros(
-                    (len(detections), len(ground_truth)), dtype=np.float32
-                )
-            threshold_count = len(params.iouThrs)
-            target_count = len(ground_truth)
-            detection_count = len(detections)
-            gt_matches = np.zeros((threshold_count, target_count), dtype=np.float64)
-            dt_matches = np.zeros((threshold_count, detection_count), dtype=np.float64)
-            gt_ignore = np.asarray(
-                [target["_ignore"] for target in ground_truth], dtype=bool
-            )
-            dt_ignore = np.zeros((threshold_count, detection_count), dtype=bool)
-
-            if overlaps.size:
-                # Ultralytics matches candidate pairs by descending OKS, then keeps
-                # one match per prediction and one per target at each threshold.
-                overlaps_gt_dt = overlaps.T
-                for threshold_index, threshold in enumerate(params.iouThrs):
-                    matches = np.argwhere(overlaps_gt_dt >= threshold)
-                    if matches.shape[0] > 1:
-                        pair_scores = overlaps_gt_dt[matches[:, 0], matches[:, 1]]
-                        matches = matches[np.argsort(pair_scores)[::-1]]
-                        matches = matches[
-                            np.unique(matches[:, 1], return_index=True)[1]
-                        ]
-                        matches = matches[
-                            np.unique(matches[:, 0], return_index=True)[1]
-                        ]
-                    for target_index, detection_index in matches:
-                        dt_matches[threshold_index, detection_index] = ground_truth[
-                            target_index
-                        ]["id"]
-                        gt_matches[threshold_index, target_index] = detections[
-                            detection_index
-                        ]["id"]
-                        dt_ignore[threshold_index, detection_index] = gt_ignore[
-                            target_index
-                        ]
-
-            detection_areas = np.asarray(
-                [float(detection.get("area", 0.0)) for detection in detections],
-                dtype=np.float64,
-            )
-            outside_area = (detection_areas < aRng[0]) | (detection_areas > aRng[1])
-            if detection_count:
-                dt_ignore |= (dt_matches == 0) & outside_area[None, :]
-
-            return {
-                "image_id": imgId,
-                "category_id": catId,
-                "aRng": aRng,
-                "maxDet": maxDet,
-                "dtIds": [detection["id"] for detection in detections],
-                "gtIds": [target["id"] for target in ground_truth],
-                "dtMatches": dt_matches,
-                "gtMatches": gt_matches,
-                "dtScores": [float(detection["score"]) for detection in detections],
-                "gtIgnore": gt_ignore,
-                "dtIgnore": dt_ignore,
-            }
-
-    return UltralyticsCOCOeval
-
-
-def _ultralytics_ap_from_coco_eval(evaluator, image_ids, category_ids, use_categories, max_detections):
-    """Aggregate COCOeval image matches with Ultralytics' 101-point AP rule."""
-    iou_thresholds = np.asarray(evaluator.params.iouThrs, dtype=np.float64)
-    available_categories = sorted(
-        int(category["id"])
-        for category in evaluator.cocoGt.dataset.get("categories", [])
-    )
-    requested_categories = sorted(
-        {int(value) for value in category_ids}
-        if category_ids is not None
-        else set(available_categories)
-    )
-    if use_categories:
-        categories = requested_categories or sorted(
-            int(value) for value in available_categories
-        )
-        eval_category_ids = categories
-    else:
-        categories = [None]
-        eval_category_ids = [-1]
-
-    annotations = evaluator.cocoGt.dataset.get("annotations", [])
-    selected_images = {int(value) for value in image_ids}
-    areas = np.asarray(evaluator.params.areaRng[0], dtype=np.float64)
-    eval_images = [
-        item for item in (evaluator.evalImgs or [])
-        if item is not None
-        and int(item.get("maxDet", -1)) == int(max_detections)
-        and np.allclose(np.asarray(item.get("aRng", []), dtype=np.float64), areas)
-    ]
-    class_aps = []
-    class_recalls = []
-
-    def compute_ap(recall, precision):
-        recall = np.asarray(recall, dtype=np.float64)
-        precision = np.asarray(precision, dtype=np.float64)
-        modified_recall = np.concatenate(([0.0], recall, [1.0]))
-        modified_precision = np.concatenate(([1.0], precision, [0.0]))
-        modified_precision = np.flip(
-            np.maximum.accumulate(np.flip(modified_precision))
-        )
-        recall_grid = np.linspace(0.0, 1.0, 101)
-        return float(
-            np.trapezoid(
-                np.interp(recall_grid, modified_recall, modified_precision),
-                recall_grid,
-            )
-            if hasattr(np, "trapezoid")
-            else np.trapz(
-                np.interp(recall_grid, modified_recall, modified_precision),
-                recall_grid,
-            )
-        )
-
-    for category, eval_category_id in zip(categories, eval_category_ids):
-        if category is None:
-            target_annotations = [
-                annotation for annotation in annotations
-                if int(annotation["image_id"]) in selected_images
-                and int(annotation["category_id"]) in set(requested_categories)
-            ]
-        else:
-            target_annotations = [
-                annotation for annotation in annotations
-                if int(annotation["image_id"]) in selected_images
-                and int(annotation["category_id"]) == category
-            ]
-        target_count = len(target_annotations)
-        if target_count == 0:
-            continue
-
-        class_eval_images = [
-            item for item in eval_images
-            if int(item["category_id"]) == int(eval_category_id)
-            and int(item["image_id"]) in selected_images
-        ]
-        scores = []
-        true_positive_parts = []
-        false_positive_parts = []
-        for item in class_eval_images:
-            item_scores = np.asarray(item["dtScores"], dtype=np.float64)
-            matches = np.asarray(item["dtMatches"], dtype=np.float64)
-            ignored = np.asarray(item["dtIgnore"], dtype=bool)
-            if matches.ndim == 1:
-                matches = matches.reshape(1, -1)
-            if ignored.ndim == 1:
-                ignored = ignored.reshape(1, -1)
-            if matches.shape[1] != item_scores.size:
-                continue
-            scores.append(item_scores)
-            true_positive_parts.append((matches > 0) & ~ignored)
-            false_positive_parts.append((matches == 0) & ~ignored)
-
-        confidences = np.concatenate(scores) if scores else np.zeros((0,), dtype=np.float64)
-        if confidences.size:
-            true_positives = np.concatenate(true_positive_parts, axis=1).T
-            false_positives = np.concatenate(false_positive_parts, axis=1).T
-            order = np.argsort(-confidences)
-            confidences = confidences[order]
-            true_positives = true_positives[order]
-            false_positives = false_positives[order]
-            tp_cumulative = np.cumsum(true_positives, axis=0, dtype=np.float64)
-            fp_cumulative = np.cumsum(false_positives, axis=0, dtype=np.float64)
-            recall = tp_cumulative / (target_count + 1e-16)
-            precision = tp_cumulative / (tp_cumulative + fp_cumulative + 1e-16)
-            class_aps.append(
-                [compute_ap(recall[:, index], precision[:, index])
-                 for index in range(recall.shape[1])]
-            )
-            class_recalls.append(recall[-1])
-        else:
-            class_aps.append([0.0] * len(iou_thresholds))
-            class_recalls.append(np.zeros_like(iou_thresholds))
-
-    if not class_aps:
-        return {"coco/AP": 0.0, "coco/AP50": 0.0, "coco/AP75": 0.0, "coco/AR": 0.0}
-    ap = np.asarray(class_aps, dtype=np.float64)
-    recalls = np.asarray(class_recalls, dtype=np.float64)
-    threshold_50 = int(np.argmin(np.abs(iou_thresholds - 0.50)))
-    threshold_75 = int(np.argmin(np.abs(iou_thresholds - 0.75)))
-    return {
-        "coco/AP": float(ap.mean()),
-        "coco/AP50": float(ap[:, threshold_50].mean()),
-        "coco/AP75": float(ap[:, threshold_75].mean()),
-        "coco/AR": float(recalls.mean()),
-    }
-
-
 def evaluate_coco_keypoints(
     coco_gt,
     detections: Sequence[Dict[str, Any]],
@@ -542,14 +259,12 @@ def evaluate_coco_keypoints(
 
     When requested, also return the ground-truth/detection pairs COCOeval matched
     at OKS 0.50. These pairs support localization diagnostics such as PCK/AUC/EPE.
-    ``ultralytics_bbox`` uses an evaluator-only GT copy with 0.53 * bbox area and
-    Ultralytics-compatible matching/AP while retaining COCO API data handling.
+    ``annotation`` uses the annotated GT area. ``bbox`` uses xtcocotools' built-in
+    0.53 * bbox area rule (or an equivalent evaluator-only area copy with pycocotools).
     """
-    COCO, COCOeval = _coco_keypoint_api()
-    if oks_area_mode not in {"annotation", "ultralytics_bbox"}:
-        raise ValueError(
-            "oks_area_mode must be 'annotation' or 'ultralytics_bbox'"
-        )
+    COCO, COCOeval, is_xtcocotools = _coco_keypoint_api()
+    if oks_area_mode not in {"annotation", "bbox"}:
+        raise ValueError("oks_area_mode must be 'annotation' or 'bbox'")
     if int(max_detections) < 1:
         raise ValueError("max_detections must be at least 1")
     sigma_values = np.asarray(kpt_oks_sigmas, dtype=np.float32).reshape(-1)
@@ -557,15 +272,14 @@ def evaluate_coco_keypoints(
         raise ValueError("COCO keypoint evaluation needs one finite positive OKS sigma per keypoint")
     with contextlib.redirect_stdout(io.StringIO()):
         eval_coco_gt = coco_gt
-        if oks_area_mode == "ultralytics_bbox":
-            # Ultralytics PoseValidator computes the GT OKS area as 0.53 * bbox area.
-            # Work on an evaluator-only copy so the source COCO annotations are untouched.
+        if oks_area_mode == "bbox" and not is_xtcocotools:
+            # pycocotools has no use_area option, so prepare an evaluator-only GT copy.
             dataset = copy.deepcopy(coco_gt.dataset)
             for annotation in dataset.get("annotations", []):
                 bbox = np.asarray(annotation.get("bbox", ()), dtype=np.float32).reshape(-1)
                 if bbox.shape != (4,) or not np.isfinite(bbox).all():
                     raise ValueError(
-                        "Ultralytics-aligned OKS evaluation requires finite COCO xywh bboxes"
+                        "BBox-area OKS evaluation requires finite COCO xywh bboxes"
                     )
                 width = max(np.float32(bbox[2]), np.float32(0.0))
                 height = max(np.float32(bbox[3]), np.float32(0.0))
@@ -586,16 +300,18 @@ def evaluate_coco_keypoints(
             }
             coco_dt.createIndex()
 
-        evaluator_type = (
-            _ultralytics_coco_eval_type(COCOeval)
-            if oks_area_mode == "ultralytics_bbox"
-            else COCOeval
-        )
-        evaluator = evaluator_type(eval_coco_gt, coco_dt, "keypoints")
-        # COCOeval's built-in vector is the human COCO-17 vector. Always replace it.
-        evaluator.params.kpt_oks_sigmas = sigma_values
-        if oks_area_mode == "ultralytics_bbox":
-            evaluator.params.iouThrs = IOU_THRESHOLDS.cpu().numpy().astype(np.float64)
+        if is_xtcocotools:
+            evaluator = COCOeval(
+                eval_coco_gt,
+                coco_dt,
+                "keypoints",
+                sigmas=sigma_values,
+                use_area=oks_area_mode == "annotation",
+            )
+        else:
+            evaluator = COCOeval(eval_coco_gt, coco_dt, "keypoints")
+            evaluator.params.kpt_oks_sigmas = sigma_values
+        evaluator.params.iouThrs = IOU_THRESHOLDS.cpu().numpy().astype(np.float64)
         # Keep the COCO keypoint default (20) so stock summarize() remains valid,
         # and accumulate the requested cap as an additional operating point.
         evaluator.params.maxDets = sorted({20, int(max_detections)})
@@ -605,61 +321,27 @@ def evaluate_coco_keypoints(
             evaluator.params.catIds = sorted({int(category_id) for category_id in category_ids})
         evaluator.params.useCats = int(bool(use_categories))
         evaluator.evaluate()
-        if oks_area_mode == "ultralytics_bbox":
-            metrics = _ultralytics_ap_from_coco_eval(
-                evaluator,
-                image_ids=evaluator.params.imgIds,
-                category_ids=category_ids,
-                use_categories=use_categories,
-                max_detections=int(max_detections),
-            )
-        else:
-            evaluator.accumulate()
-            evaluator.summarize()
-            if int(max_detections) == 20:
-                stats = np.asarray(evaluator.stats, dtype=np.float64)
-            else:
-                precision = np.asarray(evaluator.eval["precision"], dtype=np.float64)
-                recall = np.asarray(evaluator.eval["recall"], dtype=np.float64)
-                area_index = evaluator.params.areaRngLbl.index("all")
-                max_det_index = evaluator.params.maxDets.index(int(max_detections))
+        evaluator.accumulate()
+        precision = np.asarray(evaluator.eval["precision"], dtype=np.float64)
+        recall = np.asarray(evaluator.eval["recall"], dtype=np.float64)
+        area_index = evaluator.params.areaRngLbl.index("all")
+        max_det_index = evaluator.params.maxDets.index(int(max_detections))
+        iou_thresholds = np.asarray(evaluator.params.iouThrs, dtype=np.float64)
 
-                def _mean_valid(values):
-                    valid = values[values > -1]
-                    return float(valid.mean()) if valid.size else 0.0
+        def _mean_valid(values):
+            valid = values[values > -1]
+            return float(valid.mean()) if valid.size else 0.0
 
-                iou_thresholds = np.asarray(evaluator.params.iouThrs, dtype=np.float64)
-
-                def _ap_at(threshold=None):
-                    values = precision[:, :, :, area_index, max_det_index]
-                    if threshold is not None:
-                        indices = np.flatnonzero(np.isclose(iou_thresholds, threshold))
-                        values = values[indices]
-                    return _mean_valid(values)
-
-                recall_values = recall[:, :, area_index, max_det_index]
-                stats = np.asarray(
-                    [
-                        _ap_at(),
-                        _ap_at(0.50),
-                        _ap_at(0.75),
-                        0.0,
-                        0.0,
-                        _mean_valid(recall_values),
-                        0.0,
-                        0.0,
-                        0.0,
-                        0.0,
-                    ],
-                    dtype=np.float64,
-                )
-            stats = np.where(np.isfinite(stats) & (stats >= 0), stats, 0.0)
-            metrics = {
-                "coco/AP": float(stats[0]),
-                "coco/AP50": float(stats[1]),
-                "coco/AP75": float(stats[2]),
-                "coco/AR": float(stats[5]),
-            }
+        precision = precision[:, :, :, area_index, max_det_index]
+        recall = recall[:, :, area_index, max_det_index]
+        threshold_50 = int(np.argmin(np.abs(iou_thresholds - 0.50)))
+        threshold_75 = int(np.argmin(np.abs(iou_thresholds - 0.75)))
+        metrics = {
+            "coco/AP": _mean_valid(precision),
+            "coco/AP50": _mean_valid(precision[threshold_50]),
+            "coco/AP75": _mean_valid(precision[threshold_75]),
+            "coco/AR": _mean_valid(recall),
+        }
     if not return_matches:
         return metrics
 
@@ -674,7 +356,8 @@ def evaluate_coco_keypoints(
         gt_ids = np.asarray(eval_image.get("dtMatches", []))[0]
         ignored = np.asarray(eval_image.get("dtIgnore", []))[0]
         for detection_id, ground_truth_id, is_ignored in zip(dt_ids, gt_ids, ignored):
-            if int(ground_truth_id) <= 0 or bool(is_ignored):
+            unmatched = int(ground_truth_id) < 0 if is_xtcocotools else int(ground_truth_id) == 0
+            if unmatched or bool(is_ignored):
                 continue
             matched_pairs.append((
                 eval_coco_gt.anns[int(ground_truth_id)],

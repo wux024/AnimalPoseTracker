@@ -11,7 +11,7 @@ Version: 1.1
 Overview:
     Two heads live here. They are alternatives, not siblings -- a model picks one:
 
-        1. YOLOPoseHead  anchor-based regression head, used by AnimalRTPose / SPIPose
+        1. YOLOPoseHead  anchor-based regression head, used by AnimalRTPose
         2. SimCCHead     1D coordinate classification head, used by AnimalViTPose
 
     ============================ 1. YOLOPoseHead ===========================

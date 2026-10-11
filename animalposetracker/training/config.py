@@ -67,6 +67,7 @@ class TrainingConfig:
     validation_confidence: float = 0.001
     validation_iou: float = 0.7
     max_detections: int = 300
+    oks_area_mode: str = "annotation"
     agnostic_nms: bool = False
     best_metric: str = "coco/AP"
     best_metric_mode: str = "max"
@@ -162,6 +163,9 @@ class TrainingConfig:
             raise ValueError("validation_iou must be between 0 and 1")
         if self.max_detections < 1:
             raise ValueError("max_detections must be at least 1")
+        self.oks_area_mode = str(self.oks_area_mode).strip().lower()
+        if self.oks_area_mode not in {"annotation", "bbox"}:
+            raise ValueError("oks_area_mode must be 'annotation' or 'bbox'")
         if self.close_mosaic < 0:
             raise ValueError("close_mosaic cannot be negative")
         if self.save_period < 0:
@@ -324,6 +328,7 @@ class TrainingConfig:
             ),
             "validation_iou": float(values.get("iou", 0.7)),
             "max_detections": int(values.get("max_det", 300)),
+            "oks_area_mode": values.get("oks_area_mode", "annotation"),
             "agnostic_nms": values.get("agnostic_nms", False),
             "best_metric": values.get("best_metric", "coco/AP"),
             "best_metric_mode": values.get(

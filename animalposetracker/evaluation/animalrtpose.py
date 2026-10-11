@@ -34,6 +34,7 @@ class PoseDetectionValidator:
         keypoint_auc_norm_factor: float = 30.0,
         keypoint_auc_thresholds: int = 20,
         coco_max_detections: int = 300,
+        oks_area_mode: str = "annotation",
     ) -> None:
         if not 0.0 <= confidence_threshold <= 1.0:
             raise ValueError("validation confidence threshold must be between 0 and 1")
@@ -54,6 +55,7 @@ class PoseDetectionValidator:
         self.keypoint_auc_norm_factor = float(keypoint_auc_norm_factor)
         self.keypoint_auc_thresholds = int(keypoint_auc_thresholds)
         self.coco_max_detections = int(coco_max_detections)
+        self.oks_area_mode = str(oks_area_mode).strip().lower()
 
     def __call__(self, model, loader, device) -> Dict[str, float]:
         totals: Dict[str, float] = {}
@@ -136,7 +138,7 @@ class PoseDetectionValidator:
             use_categories=not bool(getattr(self.validation_dataset, "single_cls", False)),
             max_detections=self.coco_max_detections,
             return_matches=True,
-            oks_area_mode="ultralytics_bbox",
+            oks_area_mode=self.oks_area_mode,
         )
         result.update(coco_metrics)
         result.update(keypoint_error_metrics_from_coco_matches(

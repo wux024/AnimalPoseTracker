@@ -52,7 +52,12 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-training = ["torch>=2.0.0", "pycocotools>=2.0.7"]
+training = [
+    "torch>=2.0.0",
+    "numpy<2; python_version < '3.12'",
+    "xtcocotools>=1.14.3; python_version < '3.12'",
+    "pycocotools>=2.0.7; python_version >= '3.12'",
+]
 export = ["onnx>=1.14.0", "onnxsim>=0.4.0"]
 export-openvino = ["openvino>=2024.0.0"]
 export-coreml = ["coremltools>=8.0"]

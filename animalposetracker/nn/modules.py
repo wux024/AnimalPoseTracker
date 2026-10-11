@@ -13,7 +13,7 @@ Overview:
 
     Provides every nn.Module needed to build pose estimation networks:
       - generic base layers: Conv / DWConv / DWConvTranspose2d / ConvTranspose / Concat / SPPF / DFL
-      - custom modules     : STEM / CSPNeXtBottleneck / CSPNeXtBlock / SPIUpResolution
+      - custom modules     : STEM / CSPNeXtBottleneck / CSPNeXtBlock
       - structural helper  : Index
       - ChannelAttention now lives in attention.py (all attention in one place) and is
         re-exported from here so existing imports keep working
@@ -118,9 +118,21 @@ class Index(nn.Module):
 
 
 class SPPF(nn.Module):
-    """Spatial Pyramid Pooling - Fast, equivalent to SPP(k=(5, 9, 13))."""
+    """Spatial Pyramid Pooling - Fast (SPPF) layer for YOLOv5 by Glenn Jocher."""
 
-    def __init__(self, c1, c2, k=5, n=3, shortcut=False):
+    def __init__(self, c1: int, c2: int, k: int = 5, n: int = 3, shortcut: bool = False):
+        """Initialize the SPPF layer with given input/output channels and kernel size.
+
+        Args:
+            c1 (int): Input channels.
+            c2 (int): Output channels.
+            k (int): Kernel size.
+            n (int): Number of pooling iterations.
+            shortcut (bool): Whether to use shortcut connection.
+
+        Notes:
+            With the default k=5 and n=3, this module is equivalent to SPP(k=(5, 9, 13)).
+        """
         super().__init__()
         c_ = c1 // 2  # hidden channels
         self.cv1 = Conv(c1, c_, 1, 1)
@@ -129,11 +141,12 @@ class SPPF(nn.Module):
         self.n = n
         self.add = shortcut and c1 == c2
 
-    def forward(self, x):
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        """Apply sequential pooling operations and concatenate the feature maps."""
         y = [self.cv1(x)]
-        y.extend(self.m(y[-1]) for _ in range(self.n))
+        y.extend(self.m(y[-1]) for _ in range(getattr(self, "n", 3)))
         y = self.cv2(torch.cat(y, 1))
-        return y + x if self.add else y
+        return y + x if getattr(self, "add", False) else y
 
 
 class DWConvTranspose2d(nn.ConvTranspose2d):
@@ -167,7 +180,7 @@ class DFL(nn.Module):
 
 
 # --------------------------------------------------------------------------------------------
-# Custom modules (from the AnimalRTPose / SPIPose papers)
+# Custom modules (from the AnimalRTPose)
 # Channel rules must stay in sync with their entries in registry.py
 # --------------------------------------------------------------------------------------------
 
@@ -263,27 +276,6 @@ class CSPNeXtBlock(nn.Module):
         return self.final_conv(x_final)
 
 
-class SPIUpResolution(nn.Module):
-    """SPIPose upsampling module: two transposed convolutions upsampling by 4.
-
-    Args:
-        c1 (int): Input channels
-        c2 (int): Output channels
-    """
-
-    def __init__(self, c1, c2):
-        super().__init__()
-        self.deconv1 = ConvTranspose(c1, 64, k=4, s=2, p=1)
-        self.conv1 = Conv(64, 64, k=3, s=1, p=1)
-        self.deconv2 = ConvTranspose(64, c2, k=4, s=2, p=1)
-
-    def forward(self, x):
-        x = self.deconv1(x)
-        x = self.conv1(x)
-        x = self.deconv2(x)
-        return x
-
-
 class RealNVP(nn.Module):
     """RealNVP: a flow-based generative model.
 
@@ -357,5 +349,4 @@ __all__ = [
     "STEM",
     "CSPNeXtBottleneck",
     "CSPNeXtBlock",
-    "SPIUpResolution",
 ]

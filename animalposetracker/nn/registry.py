@@ -110,11 +110,6 @@ def _cspnext_block(args, n, ch_in, ctx):
     return [ch_in, c2, n, *args[1:]], 1, c2, 1.0
 
 
-def _spi_upresolution(args, n, ch_in, ctx):
-    """SPIUpResolution: channels are not width-scaled; two transposed convs upsample by 4 in total."""
-    return [ch_in, args[0]], n, args[0], 0.25
-
-
 def _passthrough(args, n, ch_in, ctx):
     """Layers that keep channels and spatial size (channel part of nn.Upsample is handled separately)."""
     return list(args), n, ch_in, 1.0
@@ -304,7 +299,6 @@ register(Rule("nn.Upsample", "nn.Upsample", _upsample, repeatable=False,
 register(Rule("STEM", "STEM", _stem, note="Custom: Spatial-Channel Excitation"))
 register(Rule("CSPNeXtBottleneck", "CSPNeXtBottleneck", _passthrough, note="Custom: CSPNeXt bottleneck"))
 register(Rule("CSPNeXtBlock", "CSPNeXtBlock", _cspnext_block, note="Custom: repeats move into args"))
-register(Rule("SPIUpResolution", "SPIUpResolution", _spi_upresolution, note="Custom: SPIPose upsampling"))
 register(Rule("YOLOPoseHead", "YOLOPoseHead", _pose_head, multi_input=True, repeatable=False, is_head=True,
               note="Anchor-based pose head (boxes + classes + keypoints)"))
 register(Rule("ViT", "VisionTransformer", _vit, repeatable=False,

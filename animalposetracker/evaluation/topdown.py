@@ -27,6 +27,7 @@ class SimCCPoseValidator:
         pck_threshold: float = 0.05,
         auc_norm_factor: float = 30.0,
         auc_thresholds: int = 20,
+        oks_area_mode: str = "annotation",
     ) -> None:
         self.input_size = tuple(map(int, input_size))
         self.split_ratio = float(split_ratio)
@@ -41,6 +42,7 @@ class SimCCPoseValidator:
         self.pck_threshold = float(pck_threshold)
         self.auc_norm_factor = float(auc_norm_factor)
         self.auc_thresholds = int(auc_thresholds)
+        self.oks_area_mode = str(oks_area_mode).strip().lower()
 
     def __call__(self, model, loader, device):
         predictions_for_coco = []
@@ -137,6 +139,7 @@ class SimCCPoseValidator:
             detections,
             self.kpt_oks_sigmas,
             max_detections=self.coco_max_detections,
+            oks_area_mode=self.oks_area_mode,
         )
 
     def _oks_nms(self, detections, threshold: float):
