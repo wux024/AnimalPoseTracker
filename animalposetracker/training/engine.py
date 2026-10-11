@@ -1008,9 +1008,16 @@ class Trainer:
                 if not isinstance(result, Mapping):
                     raise TypeError("validator must return a mapping of metric names to scalar values")
                 metrics = {str(key): float(value) for key, value in result.items()}
-                if any(not math.isfinite(value) for value in metrics.values()):
+                non_finite = {
+                    key: value for key, value in metrics.items()
+                    if not math.isfinite(value)
+                }
+                if non_finite:
+                    details = ", ".join(
+                        f"{key}={value!r}" for key, value in non_finite.items()
+                    )
                     raise FloatingPointError(
-                        f"Validation returned a non-finite metric at epoch {epoch_number}"
+                        f"Validation returned non-finite metrics at epoch {epoch_number}: {details}"
                     )
             except Exception as exc:
                 error = (type(exc).__name__, str(exc))
