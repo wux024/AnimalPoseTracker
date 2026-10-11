@@ -8,7 +8,6 @@ import torch.nn.functional as F
 
 from animalposetracker.nn.tal import dist2bbox, make_anchors
 from .assigner import TaskAlignedAssigner, aligned_complete_iou
-from animalposetracker.postprocessing.nms import pose_non_max_suppression
 
 
 def _xywh_to_xyxy(boxes: torch.Tensor) -> torch.Tensor:

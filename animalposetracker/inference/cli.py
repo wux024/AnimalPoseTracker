@@ -10,6 +10,7 @@ import argparse
 import json
 import sys
 import time
+import warnings
 from pathlib import Path
 
 from tqdm import tqdm
@@ -33,6 +34,10 @@ _FORMAT_TO_ENGINE = {
 
 
 def _make_argument_parser() -> argparse.ArgumentParser:
+    # Imported lazily: this package loads its backends on demand (see
+    # inference/__init__.py), and the decoder module pulls in cv2/numpy.
+    from animalposetracker.inference.schema_resolution import SUPPORTED_YOLO_SCHEMAS
+
     parser = argparse.ArgumentParser(
         prog="animalpose-cli infer",
         description="Run live pose inference on a camera, video file, or stream URL.",
@@ -41,6 +46,9 @@ def _make_argument_parser() -> argparse.ArgumentParser:
                         help="Exported model artifact (.onnx, .engine, .mlpackage, ...)")
     parser.add_argument("--config",
                         help="Dataset or project YAML providing class names, skeleton and kpt_shape")
+    parser.add_argument("--schema", default="auto", choices=("auto",) + SUPPORTED_YOLO_SCHEMAS,
+                        help="Pose output schema of the artifact; 'auto' resolves it from the "
+                             "config yaml, sidecar metadata, then the runtime output shapes")
     parser.add_argument("--engine", choices=sorted(_ENGINE_NAMES),
                         help="Inference backend; defaults to the artifact format")
     parser.add_argument("--device", default="CPU", help="Backend device string (default: CPU)")
@@ -90,12 +98,30 @@ def _make_argument_parser() -> argparse.ArgumentParser:
     return parser
 
 
-def _resolve_num_classes(engine, kpt_shape, default: int = 1) -> int:
+def _resolve_num_classes(engine, kpt_shape, default: int = 1, schema: str = None) -> int:
     """Infer the class count from the runtime output tensor width.
 
-    The exported YOLO pose head emits ``4 + nc + K * dims`` channels per
-    anchor, so ``nc`` falls out of the runtime shape without extra metadata.
+    Valid for :data:`~animalposetracker.postprocessing.output_decoders.YOLO_POSE_RAW`
+    only: that layout emits ``4 + nc + K * dims`` channels per anchor, so ``nc``
+    falls out of the runtime shape without extra metadata.
+
+    Post-NMS and end-to-end layouts have a fixed ``6 + K * dims`` channel count and
+    put the *detection count* on the axis read here, so the arithmetic would return
+    a meaningless number -- 300 detections over 17x3 keypoints would report 245
+    classes. Callers must pass ``schema`` so those layouts take ``nc`` from the
+    configured class names instead; ``schema=None`` keeps the historical behaviour
+    for callers that predate the parameter.
     """
+    if schema is not None:
+        from animalposetracker.postprocessing.output_decoders import YOLO_POSE_RAW
+
+        if schema != YOLO_POSE_RAW:
+            warnings.warn(
+                f"Slot width does not encode the class count for schema {schema!r}; "
+                "keeping the supplied default instead of deriving one.",
+                stacklevel=2,
+            )
+            return default
     per_anchor = int(kpt_shape[0]) * int(kpt_shape[1])
     shapes = getattr(engine, "_runtime_output_shapes", {}) or {}
     for shape in shapes.values():
@@ -106,11 +132,17 @@ def _resolve_num_classes(engine, kpt_shape, default: int = 1) -> int:
 
 
 def _load_dataset_config(config_arg):
+    """Read the infer-relevant keys from a dataset or project yaml.
+
+    Returns ``(names, skeleton, kpt_shape, schema)``; ``schema`` is ``None`` when
+    the file does not declare one, which lets the caller fall through to the
+    artifact metadata and then to shape inference.
+    """
     import yaml
 
-    names, skeleton, kpt_shape = [], [], None
+    names, skeleton, kpt_shape, schema = [], [], None, None
     if config_arg is None:
-        return names, skeleton, kpt_shape
+        return names, skeleton, kpt_shape, schema
     config_path = Path(config_arg).expanduser().resolve()
     mapping = yaml.safe_load(config_path.read_text(encoding="utf-8")) or {}
     raw_names = mapping.get("names") or {}
@@ -121,7 +153,10 @@ def _load_dataset_config(config_arg):
     skeleton = [list(map(int, pair)) for pair in (mapping.get("skeleton") or [])]
     if mapping.get("kpt_shape"):
         kpt_shape = tuple(map(int, mapping["kpt_shape"]))
-    return names, skeleton, kpt_shape
+    raw_schema = mapping.get("schema") or mapping.get("output_schema")
+    if raw_schema:
+        schema = str(raw_schema).strip().lower()
+    return names, skeleton, kpt_shape, schema
 
 
 def _instance_to_record(instance, class_names) -> dict:
@@ -147,6 +182,33 @@ def _instance_to_record(instance, class_names) -> dict:
     }
 
 
+def _pixel_points(keypoints):
+    """Integer pixel coordinate per keypoint, ``None`` where not scorable.
+
+    A keypoint whose score is not positive carries no position, so it is
+    neither drawn nor connected to an edge.
+    """
+    points = []
+    for point in keypoints:
+        if len(point) >= 3 and float(point[2]) <= 0.0:
+            points.append(None)
+            continue
+        points.append((int(round(point[0])), int(round(point[1]))))
+    return points
+
+
+def _detection_label(detection) -> str:
+    """``#track class score`` label for one detection, in that order."""
+    label = detection.get("class_name") or str(detection.get("class_id", 0))
+    score = detection.get("score")
+    if score is not None:
+        label = f"{label} {float(score):.2f}"
+    track_id = detection.get("track_id")
+    if track_id is not None:
+        label = f"#{track_id} {label}"
+    return label
+
+
 def _render(
     frame,
     detections,
@@ -159,46 +221,33 @@ def _render(
     line_width=2,
     point_radius=4,
 ):
-    import cv2
+    # Imported here rather than at module scope: this package loads its drawing
+    # dependency on demand, so plain `infer --help` stays cheap.
+    from animalposetracker.rendering import INFERENCE_STYLE, draw_instance, pixel_box
 
     rendered = frame.copy()
     for detection in detections:
-        keypoints = detection.get("keypoints") or []
-        label = detection.get("class_name") or str(detection.get("class_id", 0))
-        score = detection.get("score")
-        if score is not None:
-            label = f"{label} {float(score):.2f}"
-        track_id = detection.get("track_id")
-        if track_id is not None:
-            label = f"#{track_id} {label}"
-        bbox = detection.get("bbox_xyxy")
-        if show_bbox and bbox:
-            x1, y1, x2, y2 = [int(round(v)) for v in bbox]
-            cv2.rectangle(rendered, (x1, y1), (x2, y2), (60, 180, 75), line_width)
-            if show_labels:
-                cv2.putText(rendered, label, (x1, max(0, y1 - 6)),
-                            cv2.FONT_HERSHEY_SIMPLEX, 0.6, (60, 180, 75), line_width, cv2.LINE_AA)
-        points = []
-        for point in keypoints:
-            if len(point) >= 3 and float(point[2]) <= 0.0:
-                points.append(None)
-                continue
-            points.append((int(round(point[0])), int(round(point[1]))))
-        if show_skeletons:
-            for start, end in skeleton:
-                if start < len(points) and end < len(points) and points[start] and points[end]:
-                    cv2.line(rendered, points[start], points[end], (220, 160, 60), line_width, cv2.LINE_AA)
-        if show_keypoints:
-            for point in points:
-                if point:
-                    cv2.circle(rendered, point, point_radius, (80, 80, 230), -1, cv2.LINE_AA)
+        draw_instance(
+            rendered,
+            pixel_box(detection.get("bbox_xyxy")),
+            _detection_label(detection),
+            _pixel_points(detection.get("keypoints") or []),
+            skeleton,
+            style=INFERENCE_STYLE,
+            show_box=show_bbox,
+            show_label=show_labels,
+            show_keypoints=show_keypoints,
+            show_skeleton=show_skeletons,
+            line_width=line_width,
+            point_radius=point_radius,
+        )
     return rendered
 
 
 def _print_infer_banner(rows) -> None:
     if not sys.stdout.isatty():
         return
-    from animalposetracker.training.console import environment_line, format_summary_block
+    from animalposetracker.console import environment_line, format_summary_block
 
     print()
     print(environment_line())
@@ -225,15 +274,15 @@ def run(argv=None) -> int:
         StreamInputConfig,
     )
     from animalposetracker.postprocessing.output_decoders import (
-        RTMPOSE_SIMCC,
         YOLO_POSE_RAW,
         PoseOutputConfig,
     )
+    from animalposetracker.inference.schema_resolution import resolve_output_schema
 
     metadata = read_artifact_metadata(weights_path)
     artifact_format = detect_artifact_format(weights_path, metadata)
     engine_key = args.engine or _FORMAT_TO_ENGINE.get(artifact_format, "onnx")
-    class_names, skeleton, kpt_shape = _load_dataset_config(args.config)
+    class_names, skeleton, kpt_shape, config_schema = _load_dataset_config(args.config)
     if kpt_shape is None and metadata.get("kpt_shape"):
         kpt_shape = tuple(map(int, metadata["kpt_shape"]))
     if kpt_shape is None:
@@ -261,51 +310,61 @@ def run(argv=None) -> int:
     if not head:
         head = "SimCCHead" if "simcc_x" in tuple(metadata.get("outputs") or ()) else "YOLOPoseHead"
     if head == "SimCCHead":
-        output_config = PoseOutputConfig(
-            schema=RTMPOSE_SIMCC,
-            num_keypoints=kpt_shape[0],
-            keypoint_dims=kpt_shape[1],
-            confidence_threshold=args.conf,
-            simcc_split_ratio=float(metadata.get("simcc_split_ratio", 2.0)),
+        raise ValueError(
+            f"{weights_path} holds a SimCCHead (AnimalViTPose) model, and the "
+            "`infer` command cannot run one: top-down decoding needs a separate "
+            "detector, which this command has no way to supply. Run it through "
+            "`animalposetracker predict` instead."
         )
-        input_config = StreamInputConfig(
-            input_size=input_size,
-            color_order=str(metadata.get("color_order", "RGB")),
-            pixel_mean=tuple(metadata.get("pixel_mean", (123.675, 116.28, 103.53))),
-            pixel_std=tuple(metadata.get("pixel_std", (58.395, 57.12, 57.375))),
-            bbox_padding=float(metadata.get("bbox_padding", 1.25)),
-        )
-        pipeline = StreamInferencePipeline(
-            engine,
-            output_config,
-            input_mode="topdown",
-            input_config=input_config,
-            tracker=args.tracker,
-            class_names=class_names,
-        )
+
+    # A YOLOPoseHead artifact can emit any of the three ultralytics layouts.
+    # The CLI flag wins over the config yaml, which wins over the sidecar,
+    # which wins over the runtime shape; see schema_resolution for the rules.
+    schema, inferred_num_classes = resolve_output_schema(
+        explicit_schema=args.schema if args.schema != "auto" else config_schema,
+        metadata=metadata,
+        output_shapes=getattr(engine, "_runtime_output_shapes", {}) or {},
+        num_keypoints=kpt_shape[0],
+        keypoint_dims=kpt_shape[1],
+    )
+    if inferred_num_classes is not None:
+        num_classes = inferred_num_classes
+    elif schema == YOLO_POSE_RAW:
+        num_classes = _resolve_num_classes(engine, kpt_shape, schema=schema)
     else:
-        output_config = PoseOutputConfig(
-            schema=YOLO_POSE_RAW,
-            num_classes=_resolve_num_classes(engine, kpt_shape),
-            num_keypoints=kpt_shape[0],
-            keypoint_dims=kpt_shape[1],
-            confidence_threshold=args.conf,
-            iou_threshold=args.iou,
-            class_agnostic_nms=args.agnostic_nms,
-        )
-        input_config = StreamInputConfig(
-            input_size=input_size,
-            preprocess_mode="engine",
-            color_order=str(metadata.get("color_order", "RGB")),
-        )
-        pipeline = StreamInferencePipeline(
-            engine,
-            output_config,
-            input_mode="full_frame",
-            input_config=input_config,
-            tracker=args.tracker,
-            class_names=class_names,
-        )
+        # Post-NMS and end-to-end rows carry the class id directly, so the
+        # only thing num_classes feeds is the class-name lookup in the
+        # rendered records. The configured names are the right source.
+        num_classes = max(1, len(class_names))
+    output_config = PoseOutputConfig(
+        schema=schema,
+        num_classes=num_classes,
+        num_keypoints=kpt_shape[0],
+        keypoint_dims=kpt_shape[1],
+        # The decoder looks tensors up by name, and the engine already asked the
+        # backend which names exist. Handing them over keeps the two in step:
+        # a foreign artifact names its output "output0" (ultralytics) rather
+        # than the "predictions" default, so without this an artifact that
+        # carries no sidecar could not be decoded at all. An empty tuple here
+        # falls back to the schema default, exactly as before.
+        output_names=tuple(engine.output_names or ()),
+        confidence_threshold=args.conf,
+        iou_threshold=args.iou,
+        class_agnostic_nms=args.agnostic_nms,
+    )
+    input_config = StreamInputConfig(
+        input_size=input_size,
+        preprocess_mode="engine",
+        color_order=str(metadata.get("color_order", "RGB")),
+    )
+    pipeline = StreamInferencePipeline(
+        engine,
+        output_config,
+        input_mode="full_frame",
+        input_config=input_config,
+        tracker=args.tracker,
+        class_names=class_names,
+    )
 
     source_text = str(args.source)
     capture_source = int(source_text) if source_text.isdigit() else source_text
@@ -337,6 +396,9 @@ def run(argv=None) -> int:
         ("Weights", str(weights_path)),
         ("Engine", f"{_ENGINE_NAMES[engine_key]} ({args.bits}, {args.device})"),
         ("Head", head),
+        # Surfaced because 'auto' resolution can settle on a schema the caller did
+        # not state, and the banner is the only place that decision becomes visible.
+        ("Schema", output_config.schema),
         ("Source", source_text),
         ("Thresholds", f"conf={args.conf} iou={args.iou}"),
         ("Tracking", tracking_desc),

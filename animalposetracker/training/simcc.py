@@ -43,8 +43,20 @@ class SimCCKLLoss:
 
         loss_x = axis_loss(pred_x, target_x)
         loss_y = axis_loss(pred_y, target_y)
+        total = loss_x + loss_y
+        # MMPose's KLDiscretLoss sums over the batch and divides by K, so `total` is a batch sum:
+        # it grows with batch_size and cannot be compared against a per-sample loss. Declare the
+        # ``metrics`` mapping explicitly (engine._loss_components prefers it over the whole
+        # result) so the logged numbers no longer depend on whether the criterion happened to
+        # supply one, and report the per-sample figure alongside it so the SimCC and
+        # PoseDetection heads can be compared on the same scale.
+        instances = max(int(pred_x.shape[0]), 1)
         return {
-            "loss": loss_x + loss_y,
-            "loss_simcc_x": loss_x,
-            "loss_simcc_y": loss_y,
+            "loss": total,
+            "metrics": {
+                "loss": total,
+                "loss_simcc_x": loss_x,
+                "loss_simcc_y": loss_y,
+                "loss_simcc_per_sample": total / instances,
+            },
         }

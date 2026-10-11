@@ -136,6 +136,30 @@ class TopDownPoseDataset(Dataset):
             self.data_config.get("lower_body_ids", self.data_config.get("lower_body", inferred_lower))
         )
 
+        # Both augmentations below degrade to a silent no-op when their inputs are missing, which
+        # is indistinguishable from "the config was never applied". Warn once, at construction,
+        # instead of quietly training without them.
+        if self.training:
+            if self.flip_indices is None and float(
+                self.augmentation_config.get("horizontal_flip_probability", 0.5)
+            ) > 0.0:
+                warnings.warn(
+                    "horizontal_flip_probability is set but the dataset defines no flip_idx, so "
+                    "horizontal flip augmentation and flip test-time augmentation are disabled",
+                    stacklevel=2,
+                )
+            if (
+                not self.upper_body_ids
+                and not self.lower_body_ids
+                and float(self.augmentation_config.get("half_body_probability", 0.3)) > 0.0
+            ):
+                warnings.warn(
+                    "half_body_probability is set but no upper/lower body groups are defined "
+                    "(keypoint types, upper_body_ids/lower_body_ids), so half-body augmentation "
+                    "is disabled",
+                    stacklevel=2,
+                )
+
         self.cache_mode = "ram" if cache is True else str(cache).strip().lower() if cache else "none"
         if self.cache_mode not in {"none", "ram", "disk"}:
             raise ValueError("cache must be false, true, 'ram' or 'disk'")

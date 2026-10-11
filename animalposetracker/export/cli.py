@@ -239,7 +239,7 @@ def run(argv=None) -> int:
     output_path = output_dir / path_suffixes[export_format]
 
     if sys.stdout.isatty():
-        from animalposetracker.training.console import environment_line, format_summary_block
+        from animalposetracker.console import environment_line, format_summary_block
 
         project = context.get("project") or {}
         model_type = str(project.get("model_type") or "model")

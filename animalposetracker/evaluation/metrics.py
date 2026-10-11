@@ -14,6 +14,12 @@ import torch
 
 IOU_THRESHOLDS = torch.linspace(0.50, 0.95, 10)
 
+# COCO's ``bbox`` area convention for the OKS normaliser: the annotation rectangle scaled by
+# the average fraction of it a person/animal silhouette actually covers. Used by
+# ``oks_area_mode == "bbox"`` in the evaluator and by the AnimalViTPose OKS-NMS, so that the
+# NMS threshold and the reported AP sit on one OKS scale.
+OKS_BBOX_AREA_FACTOR = 0.53
+
 
 def box_iou(boxes1: torch.Tensor, boxes2: torch.Tensor, eps: float = 1e-7) -> torch.Tensor:
     """Pairwise IoU for xyxy boxes, returning a ``(len(boxes1), len(boxes2))`` matrix."""
@@ -33,7 +39,7 @@ def keypoint_oks(
     kpt_oks_sigmas: Sequence[float],
     eps: float = 1e-7,
 ) -> torch.Tensor:
-    """Pairwise OKS using visible GT keypoints and the reference ``0.53 * box area``."""
+    """Pairwise OKS over the visible GT keypoints, normalised by the supplied object area."""
     if not ground_truth.numel() or not prediction.numel():
         return ground_truth.new_zeros((ground_truth.shape[0], prediction.shape[0]))
     squared_distance = (
@@ -136,6 +142,13 @@ def summarize_ap(
 
     f1_curve = 2.0 * precision_curves * recall_curves / (
         precision_curves + recall_curves + 1e-16
+    )
+    best_index = int(_smooth(f1_curve.mean(axis=0)).argmax())
+    return (
+        float(precision_curves[:, best_index].mean()),
+        float(recall_curves[:, best_index].mean()),
+        float(ap[:, 0].mean()),
+        float(ap.mean()),
     )
 
 def _coco_keypoint_api():
@@ -359,7 +372,7 @@ def _ultralytics_pose_ap(
                 [item["bbox"] for item in ground_truth], dtype=torch.float32
             )
             if oks_area_mode == "bbox":
-                area = boxes[:, 2] * boxes[:, 3] * 0.53
+                area = boxes[:, 2] * boxes[:, 3] * OKS_BBOX_AREA_FACTOR
             else:
                 area = torch.as_tensor(
                     [item["area"] for item in ground_truth], dtype=torch.float32
@@ -513,7 +526,7 @@ def evaluate_coco_keypoints(
                     )
                 width = max(np.float32(bbox[2]), np.float32(0.0))
                 height = max(np.float32(bbox[3]), np.float32(0.0))
-                annotation["area"] = float(np.float32(0.53) * width * height)
+                annotation["area"] = float(np.float32(OKS_BBOX_AREA_FACTOR) * width * height)
             eval_coco_gt = COCO()
             eval_coco_gt.dataset = dataset
             eval_coco_gt.createIndex()
@@ -658,13 +671,6 @@ def keypoint_error_metrics_from_coco_matches(
         pck_threshold=pck_threshold,
         auc_norm_factor=auc_norm_factor,
         auc_thresholds=auc_thresholds,
-    )
-    best_index = int(_smooth(f1_curve.mean(axis=0)).argmax())
-    return (
-        float(precision_curves[:, best_index].mean()),
-        float(recall_curves[:, best_index].mean()),
-        float(ap[:, 0].mean()),
-        float(ap.mean()),
     )
 
 def update_confusion_matrix(

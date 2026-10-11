@@ -1,5 +1,6 @@
 """AnimalViTPose SimCC validation adapter."""
 
+import warnings
 from typing import Optional, Sequence, Tuple
 
 import numpy as np
@@ -7,6 +8,7 @@ import torch
 from tqdm import tqdm
 
 from animalposetracker.evaluation.metrics import (
+    OKS_BBOX_AREA_FACTOR,
     build_coco_ground_truth,
     evaluate_coco_keypoints,
     keypoint_error_metrics,
@@ -22,6 +24,7 @@ class SimCCPoseValidator:
         flip_indices: Optional[Sequence[int]],
         kpt_oks_sigmas: Sequence[float],
         validation_dataset,
+        flip_tta: bool = False,
         coco_max_detections: int = 20,
         oks_nms_threshold: float = 0.9,
         keypoint_score_threshold: float = 0.2,
@@ -37,6 +40,18 @@ class SimCCPoseValidator:
         self.flip_indices = (
             torch.as_tensor(flip_indices, dtype=torch.long) if flip_indices is not None else None
         )
+        # Flip TTA is wired into validation only. The deployed decoder
+        # (postprocessing/output_decoders.decode_simcc) receives already-computed output arrays
+        # and holds no reference to the model, so it cannot run the second forward pass that TTA
+        # needs. Leaving TTA on here would make every reported metric an optimistic number the
+        # shipped decode can never reproduce, so it is opt-in and off by default.
+        self.flip_tta = bool(flip_tta)
+        if self.flip_tta and self.flip_indices is None:
+            warnings.warn(
+                "flip_tta was requested but the dataset defines no flip_idx; "
+                "validation will run without test-time augmentation",
+                stacklevel=2,
+            )
         self.kpt_oks_sigmas = np.asarray(kpt_oks_sigmas, dtype=np.float32)
         self.validation_dataset = validation_dataset
         self.coco_max_detections = int(coco_max_detections)
@@ -70,7 +85,7 @@ class SimCCPoseValidator:
                     images = images.float().div_(255)
                 targets = batch["targets"]
                 pred_x, pred_y = model(images)
-                if self.flip_indices is not None:
+                if self.flip_tta and self.flip_indices is not None:
                     flipped_x, flipped_y = model(torch.flip(images, dims=(-1,)))
                     permutation = self.flip_indices.to(pred_x.device)
                     flipped_x = flipped_x.flip(dims=(-1,)).index_select(1, permutation)
@@ -96,7 +111,10 @@ class SimCCPoseValidator:
                 gt_coords = targets["keypoints"].numpy()
                 visible = targets["keypoints_visible"].numpy() > 0
                 boxes = targets["bbox_xyxy"].numpy()
-                bbox_scales = targets["bbox_scale"].numpy()
+                annotation_areas = targets["area"]
+                if torch.is_tensor(annotation_areas):
+                    annotation_areas = annotation_areas.detach().cpu().numpy()
+                annotation_areas = np.asarray(annotation_areas, dtype=np.float32).reshape(-1)
                 ids = targets["image_id"].numpy().tolist()
                 categories = targets["category_id"].numpy().tolist()
 
@@ -107,7 +125,24 @@ class SimCCPoseValidator:
                     errors.append(distance.astype(np.float32))
                     visibility_parts.append(sample_visible)
                     bbox = boxes[sample_index]
-                    bbox_sizes.append(max(float(bbox[2] - bbox[0]), float(bbox[3] - bbox[1])))
+                    box_width = max(float(bbox[2] - bbox[0]), 0.0)
+                    box_height = max(float(bbox[3] - bbox[1]), 0.0)
+                    bbox_sizes.append(max(box_width, box_height))
+                    # OKS-NMS needs an object area, and it must sit on the same scale as the AP we
+                    # report, so it follows the evaluator's own oks_area_mode switch:
+                    #   "annotation" -> the GT annotation's own area, which is literally the value
+                    #                   build_coco_ground_truth hands to pycocotools as gt['area'].
+                    #                   The dataset already carries it in targets["area"]; its
+                    #                   YOLO-label fallback equals the synthesised w*h.
+                    #   "bbox"       -> OKS_BBOX_AREA_FACTOR * w * h, matching the evaluator's
+                    #                   evaluator-only GT copy.
+                    # This used to be prod(bbox_scale) = (1.25*max(w, h))**2 -- the padded *crop*
+                    # area, which inflated the term by 1.5625x and over-suppressed boxes at 0.9.
+                    detection_area = (
+                        OKS_BBOX_AREA_FACTOR * box_width * box_height
+                        if self.oks_area_mode == "bbox"
+                        else float(annotation_areas[sample_index])
+                    )
 
                     if coco_gt is not None:
                         sample_scores = keypoint_scores[sample_index]
@@ -123,7 +158,7 @@ class SimCCPoseValidator:
                             "category_id": int(categories[sample_index]),
                             "keypoints": keypoint_array.reshape(-1).tolist(),
                             "score": confidence,
-                            "area": float(np.prod(bbox_scales[sample_index])),
+                            "area": detection_area,
                         })
 
         if not errors:
@@ -155,7 +190,20 @@ class SimCCPoseValidator:
         )
 
     def _oks_nms(self, detections, threshold: float):
-        """Match MMPose CocoMetric's default hard OKS NMS for top-down predictions."""
+        """Hard OKS suppression, validation-only, in the spirit of MMPose's ``oks_nms``.
+
+        Nothing on the deployment path suppresses for AnimalViTPose --
+        ``prediction.cli._predict_topdown_image`` decodes each supplied box independently -- and
+        MMPose's own ``CocoMetric`` runs no NMS either (``oks_nms`` there serves multi-instance
+        demo inference). A top-down crop yields exactly one detection per ground-truth instance,
+        so detections are inherently distinct and this threshold rarely fires; it guards against
+        duplicate/overlapping boxes handed in for the same animal.
+
+        Each detection carries the ``area`` computed in ``__call__`` under the evaluator's
+        ``oks_area_mode`` convention, so this threshold and the reported AP agree on the OKS
+        scale. AnimalRTPose has no OKS-NMS at all -- it suppresses on box IoU -- so the two heads
+        share no NMS area convention.
+        """
         grouped = {}
         for detection in detections:
             group_key = int(detection["image_id"])

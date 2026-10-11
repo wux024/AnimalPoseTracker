@@ -1,6 +1,7 @@
-from typing import Dict, Optional, Sequence, Union
+from typing import Dict, Optional, Sequence, Tuple, Union
 import cv2
 import numpy as np
+import operator
 import yaml
 import time
 from pathlib import Path
@@ -9,6 +10,48 @@ import os
 from .constant import ENGINEtoBackend, OpenCV_TARGETS, EP_PARAMS
 from .utils import measure_time
 
+
+def _static_shape(shape) -> Tuple[int, ...]:
+    """Normalise a backend-reported tensor shape to plain ints.
+
+    Only static, non-negative dimensions survive; anything else (ONNX Runtime's
+    symbolic dimension names, OpenVINO's dynamic markers, ``None``, negative
+    sentinels) becomes ``-1``. Consumers treat ``-1`` as "unknown, skip me" --
+    see ``inference.cli._resolve_num_classes`` and
+    ``inference.schema_resolution.resolve_output_schema`` -- so the sentinel has
+    to be uniform across engines rather than each backend's own convention.
+
+    Dimensions are converted through ``operator.index`` rather than ``int()`` so
+    that integer-like scalars a backend may hand back (``numpy.int64`` from a
+    descriptor, for instance) count as static. ``bool`` is rejected explicitly
+    because it is integer-like but is not a dimension.
+    """
+    normalised = []
+    for dimension in shape:
+        try:
+            value = operator.index(dimension) if not isinstance(dimension, bool) else None
+        except TypeError:
+            value = None
+        normalised.append(value if value is not None and value >= 0 else -1)
+    return tuple(normalised)
+
+
+def _partial_shape_to_static(partial) -> Tuple[int, ...]:
+    """Convert an OpenVINO partial shape into static ints, ``-1`` per dynamic dim.
+
+    Duck-typed on purpose: the caller passes whatever ``Output.get_partial_shape()``
+    returned, and this module never imports OpenVINO at import time. Returns an
+    empty tuple when the rank itself is dynamic, which callers read as "unknown".
+    """
+    try:
+        if not partial.rank.is_static:
+            return ()
+        return tuple(
+            int(dimension.get_length()) if dimension.is_static else -1
+            for dimension in partial
+        )
+    except Exception:
+        return ()
 
 
 class InferenceEngine:
@@ -231,8 +274,38 @@ class InferenceEngine:
         self._runtime_output_names = tuple(
             str(name) for name in self.model.getUnconnectedOutLayersNames()
         )
+        self._runtime_output_shapes = self._probe_opencv_output_shapes()
         self.model.setPreferableBackend(cv2_backend)
         self.model.setPreferableTarget(cv2_target)
+
+    def _probe_opencv_output_shapes(self) -> Dict[str, Tuple[int, ...]]:
+        """Ask the OpenCV DNN graph for its output shapes before any inference.
+
+        ``getLayersShapes`` runs a full shape-inference pass over the network,
+        which is not free, and it is not available on every build/target. It is
+        therefore best-effort: on any failure the mapping stays empty and the
+        shapes are backfilled from the first real forward pass instead (see
+        ``inference_named_outputs``). An empty mapping is a normal outcome, not
+        an error -- callers that need shapes before the first frame must supply
+        the schema through configuration.
+        """
+        try:
+            input_shape = (1, 3, int(self._input_height), int(self._input_width))
+            _, _, layer_shapes = self.model.getLayersShapes(input_shape)
+            probed: Dict[str, Tuple[int, ...]] = {}
+            for name in self._runtime_output_names:
+                layer_id = int(self.model.getLayerId(name))
+                if layer_id < 0:
+                    continue
+                outputs = layer_shapes[layer_id]
+                if not outputs:
+                    continue
+                probed[name] = _static_shape(outputs[0])
+            return probed
+        except Exception:
+            # Shape probing is optional; the decoder validates shapes itself, so
+            # a missing probe only costs the automatic schema detection path.
+            return {}
 
     def _get_backend_and_target(self, cv2_backends):
         """
@@ -333,10 +406,14 @@ class InferenceEngine:
             
             # Get input/output names
             self.input_name = self.model.get_inputs()[0].name
-            self._runtime_output_names = tuple(
-                output.name for output in self.model.get_outputs()
-            )
+            outputs = self.model.get_outputs()
+            self._runtime_output_names = tuple(output.name for output in outputs)
             self.output_name = self._runtime_output_names[0]
+            # ONNX Runtime reports a symbolic dimension as a str, which
+            # _static_shape turns into -1; the schema resolver then skips it.
+            self._runtime_output_shapes = {
+                output.name: _static_shape(output.shape) for output in outputs
+            }
 
             input_shape = self.model.get_inputs()[0].shape
 
@@ -433,6 +510,12 @@ class InferenceEngine:
             self._runtime_output_names = tuple(
                 output.get_any_name() for output in self.model.outputs
             )
+            # Compiled-model outputs always expose a partial shape, so unlike
+            # OpenCV this probe cannot fail; dynamic dims become -1.
+            self._runtime_output_shapes = {
+                output.get_any_name(): _partial_shape_to_static(output.get_partial_shape())
+                for output in self.model.outputs
+            }
         except ImportError:
             raise ImportError("Please install openvino to use OpenVINO engine.")
 
@@ -442,6 +525,37 @@ class InferenceEngine:
             self.model = InferSession(0, self._weights_path)
         except ImportError:
             raise ImportError("Please install ais_bench to use CANN engine.")
+        self._probe_cann_output_shapes()
+
+    def _probe_cann_output_shapes(self) -> None:
+        """Best-effort output probe for the Ascend backend.
+
+        ``ais_bench``'s session API differs between releases, and a missing probe
+        only costs the automatic schema-detection path -- the decoder validates
+        shapes itself at decode time -- so every failure is swallowed.
+
+        Names are recorded too, but only when nothing was configured: the
+        ``output_names`` property prefers the artifact metadata, so a sidecar
+        mapping still wins. Without this, an artifact that carries no sidecar
+        would leave the decoder looking for its default tensor name in a mapping
+        keyed by whatever the backend calls it.
+        """
+        try:
+            outputs = list(self.model.get_outputs())
+        except Exception:
+            return
+        shapes: Dict[str, Tuple[int, ...]] = {}
+        names = []
+        for index, output in enumerate(outputs):
+            name = getattr(output, "name", None) or f"output_{index}"
+            names.append(str(name))
+            shape = getattr(output, "shape", None)
+            if shape is not None:
+                shapes[str(name)] = _static_shape(shape)
+        if shapes:
+            self._runtime_output_shapes = shapes
+        if names and not self._configured_output_names:
+            self._runtime_output_names = tuple(names)
     
     def _init_tensorrt(self):
         try:
@@ -529,6 +643,14 @@ class InferenceEngine:
             self._runtime_output_names = tuple(
                 output.name for output in self.model.get_spec().description.output
             )
+            self._runtime_output_shapes = {}
+            for output in self.model.get_spec().description.output:
+                multi_array = getattr(output.type, "multiArrayType", None)
+                if multi_array is None or not multi_array.shape:
+                    continue
+                self._runtime_output_shapes[output.name] = tuple(
+                    int(dimension) for dimension in multi_array.shape
+                )
             input_type = input_description.type
             if hasattr(input_type, 'imageType'):
                 shape = input_type.imageType
@@ -718,7 +840,16 @@ class InferenceEngine:
             raise ValueError(f"Unsupported inference engine: {self._engine!r}")
 
         names = requested_names or self._runtime_output_names
-        return normalize_output_tensors(raw_outputs, names)
+        normalized = normalize_output_tensors(raw_outputs, names)
+        if self._engine == 'OpenCV' and not self._runtime_output_shapes:
+            # Pre-forward shape probing is best-effort on OpenCV (see
+            # _probe_opencv_output_shapes). Backfill from what the graph actually
+            # produced, so the mapping is available from the second frame on.
+            self._runtime_output_shapes = {
+                str(name): tuple(int(dimension) for dimension in np.asarray(array).shape)
+                for name, array in normalized.items()
+            }
+        return normalized
     
     def inference_tensorrt(self, img):
         try:

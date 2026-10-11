@@ -249,7 +249,7 @@ def _create_project(args: argparse.Namespace) -> AnimalPoseTrackerProject:
 
 
 def _print_create_banner(args, project: AnimalPoseTrackerProject, dataset_root: Path) -> None:
-    from animalposetracker.training.console import (
+    from animalposetracker.console import (
         describe_pretrained,
         environment_line,
         format_summary_block,

@@ -132,3 +132,8 @@ models:
     validation:
       oks_nms_threshold: 0.9
       keypoint_score_threshold: 0.2
+      # MMPose evaluates with test_cfg.flip_test=True, but its flip runs inside the head so
+      # validation and inference share one path. Here flip TTA exists in the validator only:
+      # decode_simcc receives output arrays and has no model handle, so it cannot flip. Keeping
+      # TTA on would report numbers the shipped decoder cannot reproduce, so it defaults to off.
+      flip_tta: false

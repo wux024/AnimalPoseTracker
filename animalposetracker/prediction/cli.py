@@ -8,7 +8,7 @@ import sys
 import time
 from pathlib import Path
 from types import SimpleNamespace
-from typing import Any, Dict, List, Tuple
+from typing import Any, Dict, List, Optional, Tuple
 
 import cv2
 import numpy as np
@@ -26,6 +26,7 @@ from animalposetracker.preprocessing.letterbox import letterbox_image
 from animalposetracker.prediction.backends import (
     ModelArtifactBackend,
 )
+from animalposetracker.rendering import PREDICTION_STYLE, draw_instance, pixel_box
 
 
 VIDEO_SUFFIXES = {
@@ -241,6 +242,15 @@ def _read_image(path: Path):
         raise RuntimeError(f"Could not decode prediction image {path}: {exc}") from exc
 
 
+def _pixel_points(points_value, visible) -> List[Optional[Tuple[int, int]]]:
+    """Integer pixel coordinate per keypoint, ``None`` where not visible."""
+    rounded = np.rint(points_value[:, :2]).astype(int)
+    return [
+        tuple(int(value) for value in rounded[index]) if visible[index] else None
+        for index in range(points_value.shape[0])
+    ]
+
+
 def _render_pose(
     image: np.ndarray,
     detections,
@@ -257,64 +267,32 @@ def _render_pose(
 ):
     rendered = image.copy()
     records = []
-    colors = [
-        (0, 200, 255), (255, 120, 0), (80, 220, 80), (220, 80, 220),
-        (255, 220, 0), (80, 200, 220), (200, 120, 255), (80, 160, 255),
-        (180, 220, 80), (220, 180, 80), (120, 255, 180), (255, 140, 180),
-    ]
     boxes, scores, classes, keypoints = detections
     for box, score, class_id, points in zip(boxes, scores, classes, keypoints):
         box_value = _as_numpy(box).reshape(-1)
         score_value = float(_as_numpy(score).item())
         class_value = int(class_id)
         points_value = _as_numpy(points).astype(np.float32, copy=False)
-        x1, y1, x2, y2 = [int(round(float(value))) for value in box_value.tolist()]
-        if show_boxes:
-            cv2.rectangle(rendered, (x1, y1), (x2, y2), (0, 220, 0), line_width)
-        if show_labels:
-            class_name = class_names[class_value] if class_value < len(class_names) else str(class_value)
-            cv2.putText(
-                rendered,
-                f"{class_name} {score_value:.2f}" if show_confidence else class_name,
-                (x1, max(15, y1 - 5)),
-                cv2.FONT_HERSHEY_SIMPLEX,
-                0.5,
-                (0, 220, 0),
-                max(line_width, 1),
-                cv2.LINE_AA,
-            )
+        class_name = class_names[class_value] if class_value < len(class_names) else str(class_value)
         point_visible = (
             points_value[:, 2] >= confidence_threshold
             if points_value.shape[1] > 2
             else np.ones((points_value.shape[0],), dtype=bool)
         )
-        if show_skeletons:
-            for edge in skeleton:
-                if len(edge) != 2:
-                    continue
-                left, right = map(int, edge)
-                if (
-                    0 <= left < len(points_value)
-                    and 0 <= right < len(points_value)
-                    and point_visible[left]
-                    and point_visible[right]
-                ):
-                    p1 = tuple(np.rint(points_value[left, :2]).astype(int))
-                    p2 = tuple(np.rint(points_value[right, :2]).astype(int))
-                    cv2.line(rendered, p1, p2, (0, 220, 255), line_width, cv2.LINE_AA)
-        if show_keypoints:
-            for point_index, point in enumerate(points_value):
-                if not point_visible[point_index]:
-                    continue
-                center = tuple(np.rint(point[:2]).astype(int))
-                cv2.circle(
-                    rendered,
-                    center,
-                    point_radius,
-                    colors[point_index % len(colors)],
-                    thickness=-1,
-                    lineType=cv2.LINE_AA,
-                )
+        draw_instance(
+            rendered,
+            pixel_box(box_value.tolist()),
+            f"{class_name} {score_value:.2f}" if show_confidence else class_name,
+            _pixel_points(points_value, point_visible),
+            skeleton,
+            style=PREDICTION_STYLE,
+            show_box=show_boxes,
+            show_label=show_labels,
+            show_keypoints=show_keypoints,
+            show_skeleton=show_skeletons,
+            line_width=line_width,
+            point_radius=point_radius,
+        )
 
         records.append({
             "bbox_xyxy": [float(v) for v in box_value.tolist()],
@@ -372,7 +350,7 @@ def _predict_frame(image, model, config, context, settings, external_backend=Fal
         context["skeleton"],
         show_boxes=settings["show_boxes"],
         show_labels=settings["show_labels"],
-        show_confidence=settings["show_confidence"],
+        show_confidence=settings.get("show_confidence", True),
         show_keypoints=settings["show_keypoints"],
         show_skeletons=settings["show_skeletons"],
         confidence_threshold=settings["keypoint_confidence"],
@@ -500,7 +478,7 @@ def _predict_topdown_image(image, image_path, boxes, model, context, settings, e
             context["skeleton"],
             show_boxes=settings["show_boxes"],
             show_labels=settings["show_labels"],
-            show_confidence=settings["show_confidence"],
+            show_confidence=settings.get("show_confidence", True),
             show_keypoints=settings["show_keypoints"],
             show_skeletons=settings["show_skeletons"],
             confidence_threshold=settings["keypoint_confidence"],
@@ -728,7 +706,7 @@ def _print_predict_banner(
 ) -> None:
     if not sys.stdout.isatty():
         return
-    from animalposetracker.training.console import environment_line, format_summary_block
+    from animalposetracker.console import environment_line, format_summary_block
 
     project = context.get("project") or {}
     model_type = str(project.get("model_type") or "model")

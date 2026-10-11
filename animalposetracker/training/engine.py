@@ -751,14 +751,20 @@ class Trainer:
                 if self._stop_requested.is_set():
                     stopped = True
                     break
-                if (
-                    should_validate
-                    and self.config.early_stopping_patience > 0
-                    and self._best_epochs_without_improvement >= self.config.early_stopping_patience
-                ):
-                    stopped = True
-                    self._stop_reason = "patience"
-                    break
+                if should_validate and self.config.early_stopping_patience > 0:
+                    # Budget in epochs, not validation rounds. The counter above is a round count,
+                    # so at validation_interval > 1 it silently multiplied the budget by the
+                    # interval: patience 300 with interval 10 meant 3000 epochs, well past
+                    # max_epochs, i.e. early stopping never fired. The first validation always
+                    # improves (see _is_improved), so _best_epoch is set by the time we get here,
+                    # and at validation_interval == 1 this matches the previous behaviour exactly.
+                    epochs_without_improvement = epoch_number - (
+                        self._best_epoch if self._best_epoch is not None else epoch_number
+                    )
+                    if epochs_without_improvement >= self.config.early_stopping_patience:
+                        stopped = True
+                        self._stop_reason = "patience"
+                        break
 
             final_validation_metrics = None
             if validation_loader is not None and self.completed_epochs > 0:
@@ -806,24 +812,26 @@ class Trainer:
                     self._best_epochs_without_improvement, self.config,
                     ema_model=self.ema.model if self.config.ema else None,
                 )
-                # _best_epochs_without_improvement counts validation rounds, not epochs, so
-                # it must not be subtracted from an epoch number: with validation_interval > 1
-                # that would understate the best epoch by a factor of the interval.
+                # Early stopping is decided in epochs in the loop above; the round counter only
+                # feeds the checkpoint payload. Report the epoch figure here too, so the emitted
+                # number means the same thing as the one the decision used.
                 early_stopping = self._stop_reason == "patience"
                 if early_stopping:
+                    epochs_without_improvement = self.completed_epochs - (
+                        self._best_epoch
+                        if self._best_epoch is not None
+                        else self.completed_epochs
+                    )
                     stopped_metrics = {
                         "patience": float(self.config.early_stopping_patience),
                         "validation_interval": float(self.config.validation_interval),
-                        "validations_without_improvement": float(
-                            self._best_epochs_without_improvement
-                        ),
+                        "epochs_without_improvement": float(epochs_without_improvement),
                     }
                     if self._best_epoch is not None:
                         stopped_metrics["best_epoch"] = float(self._best_epoch)
                     stopped_message = (
-                        f"Early stopping: no improvement over the last "
-                        f"{self._best_epochs_without_improvement} validation rounds "
-                        f"(patience {self.config.early_stopping_patience})"
+                        f"Early stopping: no improvement for {epochs_without_improvement} "
+                        f"epochs (patience {self.config.early_stopping_patience})"
                         + (
                             f"; best epoch {self._best_epoch}."
                             if self._best_epoch is not None

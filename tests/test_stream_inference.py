@@ -7,6 +7,7 @@ from animalposetracker.postprocessing.output_decoders import (
     RTMO_MMDEPLOY,
     RTMPOSE_SIMCC,
     YOLO_POSE_END2END,
+    YOLO_POSE_NMS,
     YOLO_POSE_RAW,
     PoseOutputConfig,
     decode_pose_outputs,
@@ -248,6 +249,54 @@ class PoseOutputDecoderTests(unittest.TestCase):
         self.assertEqual(len(result), 2)
         nms.assert_not_called()
 
+    def test_yolo_nms_does_not_reapply_suppression(self):
+        # The post-NMS export already suppressed in-graph; running the boxes
+        # through NMSBoxes a second time would drop legitimate neighbours.
+        config = PoseOutputConfig(
+            schema=YOLO_POSE_NMS,
+            num_classes=1,
+            num_keypoints=1,
+            keypoint_dims=3,
+            confidence_threshold=0.0,
+        )
+        outputs = {"predictions": np.asarray([[[0, 0, 10, 10, 0.9, 0, 4, 5, 0.8],
+                                                  [0, 0, 10, 10, 0.8, 0, 5, 6, 0.7]]], dtype=np.float32)}
+
+        with patch("animalposetracker.postprocessing.output_decoders.cv2.dnn.NMSBoxes") as nms:
+            result = decode_pose_outputs(outputs, config)
+
+        self.assertEqual(len(result), 2)
+        nms.assert_not_called()
+
+    def test_nms_and_end2end_layouts_decode_identically(self):
+        # They are different export mechanisms with byte-for-byte identical rows,
+        # which is why the schema resolver cannot tell them apart by shape and why
+        # collapsing them into one decoder is safe.
+        rows = np.asarray([[[1, 2, 11, 12, 0.9, 0, 4, 5, 0.8],
+                            [20, 21, 30, 31, 0.7, 1, 6, 7, 0.6]]], dtype=np.float32)
+        inverse = np.asarray([[2, 0, 1], [0, 2, 3]], dtype=np.float32)
+
+        decoded = {}
+        for schema in (YOLO_POSE_NMS, YOLO_POSE_END2END):
+            config = PoseOutputConfig(
+                schema=schema,
+                num_classes=2,
+                num_keypoints=1,
+                keypoint_dims=3,
+                confidence_threshold=0.0,
+            )
+            decoded[schema] = decode_pose_outputs(
+                {"predictions": rows}, config, inverse_affine=inverse
+            )
+
+        left, right = decoded[YOLO_POSE_NMS], decoded[YOLO_POSE_END2END]
+        self.assertEqual(len(left), len(right))
+        for a, b in zip(left, right):
+            np.testing.assert_allclose(a.bbox_xyxy, b.bbox_xyxy)
+            np.testing.assert_allclose(a.keypoints_xy, b.keypoints_xy)
+            self.assertEqual(a.class_id, b.class_id)
+            self.assertEqual(a.score, b.score)
+
     def test_rtmo_mmdeploy_decodes_dets_and_keypoints_as_a_pair(self):
         config = PoseOutputConfig(
             schema=RTMO_MMDEPLOY,
@@ -315,6 +364,11 @@ class StreamPipelineTests(unittest.TestCase):
         def inference_named_outputs(self, model_input, output_names=None):
             self.calls.append(np.asarray(model_input).copy())
             return self._outputs
+
+        def preprocess(self, frame):
+            """Identity affine, so decoded coordinates stay in frame space."""
+            tensor = np.asarray(frame, dtype=np.float32).transpose(2, 0, 1)[None]
+            return tensor, np.asarray([[1, 0, 0], [0, 1, 0]], dtype=np.float32)
 
     class FakeDetector:
         def __init__(self, boxes):
@@ -388,6 +442,40 @@ class StreamPipelineTests(unittest.TestCase):
 
         self.assertEqual(pipeline.process_frame(np.zeros((40, 40, 3), dtype=np.uint8)), [])
         self.assertEqual(engine.calls, [])
+
+    def test_full_frame_pipeline_runs_a_post_nms_artifact(self):
+        # The NMS layout has no CLI entry point of its own; what matters is that
+        # the pipeline accepts it and decodes through the engine-preprocess path.
+        config = PoseOutputConfig(
+            schema=YOLO_POSE_NMS,
+            num_classes=1,
+            num_keypoints=1,
+            keypoint_dims=3,
+        )
+        engine = self.FakePoseEngine({
+            "predictions": np.asarray(
+                [[[0, 0, 8, 8, 0.9, 0, 4, 4, 0.8]]], dtype=np.float32
+            ),
+        })
+        pipeline = StreamInferencePipeline(
+            engine,
+            config,
+            input_mode="full_frame",
+            input_config=StreamInputConfig(
+                input_size=(8, 8),
+                color_order="BGR",
+                input_scale=1.0,
+                pixel_mean=(0, 0, 0),
+                pixel_std=(1, 1, 1),
+            ),
+        )
+
+        result = pipeline.process_frame(np.zeros((8, 8, 3), dtype=np.uint8))
+
+        self.assertEqual(len(result), 1)
+        np.testing.assert_allclose(result[0].bbox_xyxy, [0, 0, 8, 8])
+        np.testing.assert_allclose(result[0].keypoints_xy, [[4, 4]], atol=1e-5)
+        self.assertEqual(len(engine.calls), 1)
 
     def test_rtmo_pipeline_uses_mmpose_bottomup_preprocessing(self):
         config = PoseOutputConfig(

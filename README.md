@@ -123,6 +123,10 @@ Use `animalpose-cli <command> --help` to see a workflow's options. For train, va
 
 `train` exit codes: `0` when training reaches `epochs` **and** when early stopping ends it (an exhausted `early_stopping_patience` is a normal completion — `best.pt` is final), `130` only when the run was interrupted by an external request (`SIGINT`/`SIGTERM` or the `.animalposetracker_training_stop` marker), and `1` on error. Chain `val`/`export` behind `train` in a `set -e` script: early stopping no longer aborts the pipeline.
 
+`early_stopping_patience` is counted in **epochs** since the best validation (`epoch - best_epoch`), so it means the same thing at any `validation_interval`; `0` disables early stopping. The `stopped` event reports `epochs_without_improvement`, `best_epoch`, `patience` and `validation_interval`.
+
+AnimalViTPose validation does **not** use flip test-time augmentation by default, so the reported `coco/AP`, `PCK`, `AUC` and `EPE` match what the shipped decoder (`postprocessing/output_decoders.decode_simcc`) produces. TTA only exists inside the validator — `decode_simcc` receives already-computed output arrays and has no model handle, so it could only ever be a validation-side number. Set `validation.flip_tta: true` in the model preset (`animalposetracker/cfg/training.yaml`) to re-enable it, and expect the metrics to read higher than the deployment path. Any run started before this change that reported numbers with TTA on will therefore look slightly worse afterwards; that is the size of the previous optimism, not a regression.
+
 # Usage: How to use AnimalPoseTracker to train and test a model
 
 1. Open the command prompt or terminal and activate the conda environment:

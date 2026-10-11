@@ -101,7 +101,7 @@ def _resolve_project_default_pretrained(project_dir: Path, project_values: Dict[
 
 def _print_train_banner(config, project_values: Dict[str, Any], validate_only: bool) -> None:
     """Ultralytics-style startup banner for interactive terminals."""
-    from .console import environment_line, format_summary_block
+    from ..console import environment_line, format_summary_block
 
     model_type = str(project_values.get("model_type") or "model")
     model_scale = str(project_values.get("model_scale") or "")
@@ -812,6 +812,10 @@ def run(argv=None) -> int:
                     flip_indices=metadata["flip_idx"],
                     kpt_oks_sigmas=metadata["kpt_oks_sigmas"],
                     validation_dataset=validation_loader.dataset,
+                    # Validation-only flip TTA, off by default so the reported metrics match what
+                    # the shipped decoder (decode_simcc) actually produces. Opt in with
+                    # `validation.flip_tta: true` in the model preset.
+                    flip_tta=bool(validation_config.get("flip_tta", False)),
                     coco_max_detections=int(values.get(
                         "coco_max_detections",
                         validation_config.get("coco_max_detections", 20),

@@ -1,6 +1,7 @@
 import io
 import unittest
 import tempfile
+import warnings
 from pathlib import Path
 from types import ModuleType, SimpleNamespace
 from unittest.mock import Mock, patch
@@ -253,6 +254,67 @@ class InferCliTests(unittest.TestCase):
         empty = SimpleNamespace(_runtime_output_shapes={})
         self.assertEqual(_resolve_num_classes(empty, (12, 3)), 1)
 
+    def test_resolve_num_classes_is_raw_only(self):
+        from animalposetracker.inference.cli import _resolve_num_classes
+        from animalposetracker.postprocessing.output_decoders import YOLO_POSE_NMS
+
+        # 300 detections over 17x3 keypoints would otherwise be read as 245 classes.
+        engine = SimpleNamespace(_runtime_output_shapes={"predictions": (1, 300, 57)})
+        with warnings.catch_warnings(record=True) as recorded:
+            warnings.simplefilter("always")
+            resolved = _resolve_num_classes(engine, (17, 3), default=2, schema=YOLO_POSE_NMS)
+        self.assertEqual(resolved, 2)
+        self.assertEqual(len(recorded), 1)
+        self.assertIn("does not encode the class count", str(recorded[0].message))
+
+    def test_resolve_num_classes_still_derives_for_raw(self):
+        from animalposetracker.inference.cli import _resolve_num_classes
+        from animalposetracker.postprocessing.output_decoders import YOLO_POSE_RAW
+
+        engine = SimpleNamespace(_runtime_output_shapes={"predictions": (1, 57, 8400)})
+        self.assertEqual(_resolve_num_classes(engine, (17, 3), schema=YOLO_POSE_RAW), 2)
+
+    def test_resolve_num_classes_keeps_legacy_behaviour_without_schema(self):
+        from animalposetracker.inference.cli import _resolve_num_classes
+
+        engine = SimpleNamespace(_runtime_output_shapes={"predictions": (1, 43, 8400)})
+        with warnings.catch_warnings(record=True) as recorded:
+            warnings.simplefilter("always")
+            self.assertEqual(_resolve_num_classes(engine, (12, 3)), 3)
+        self.assertEqual(recorded, [])
+
+    def test_load_dataset_config_returns_the_schema(self):
+        from animalposetracker.inference.cli import _load_dataset_config
+
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            root = Path(temporary_directory)
+            dataset_yaml = _write_minimal_dataset_yaml(root)
+            names, skeleton, kpt_shape, schema = _load_dataset_config(str(dataset_yaml))
+        self.assertEqual(names, ["mouse"])
+        self.assertEqual(skeleton, [[0, 1]])
+        self.assertEqual(kpt_shape, (2, 3))
+        self.assertIsNone(schema)
+
+    def test_load_dataset_config_reads_schema_aliases(self):
+        from animalposetracker.inference.cli import _load_dataset_config
+
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            root = Path(temporary_directory)
+            for key in ("schema", "output_schema"):
+                with self.subTest(key=key):
+                    dataset_yaml = root / f"{key}.yaml"
+                    dataset_yaml.write_text(yaml.safe_dump({
+                        "kpt_shape": [17, 3],
+                        key: "Ultralytics_YOLO_Pose_NMS",
+                    }), encoding="utf-8")
+                    *_, schema = _load_dataset_config(str(dataset_yaml))
+                    self.assertEqual(schema, "ultralytics_yolo_pose_nms")
+
+    def test_load_dataset_config_without_a_path(self):
+        from animalposetracker.inference.cli import _load_dataset_config
+
+        self.assertEqual(_load_dataset_config(None), ([], [], None, None))
+
     def test_infer_parser_defaults(self):
         from animalposetracker.inference.cli import _make_argument_parser
 
@@ -260,20 +322,42 @@ class InferCliTests(unittest.TestCase):
         self.assertEqual(args.conf, 0.25)
         self.assertEqual(args.iou, 0.45)
         self.assertEqual(args.pose_filter, "none")
+        self.assertEqual(args.schema, "auto")
         self.assertFalse(args.show)
         self.assertIsNone(args.tracker)
+
+    def test_infer_parser_accepts_ultralytics_schemas(self):
+        from animalposetracker.inference.cli import _make_argument_parser
+        from animalposetracker.inference.schema_resolution import SUPPORTED_YOLO_SCHEMAS
+
+        for schema in SUPPORTED_YOLO_SCHEMAS:
+            with self.subTest(schema=schema):
+                args = _make_argument_parser().parse_args([
+                    "--weights", "m.onnx", "--source", "0", "--schema", schema,
+                ])
+                self.assertEqual(args.schema, schema)
+
+    def test_infer_parser_rejects_reserved_and_unknown_schemas(self):
+        from animalposetracker.inference.cli import _make_argument_parser
+
+        for schema in ("mmpose_rtmpose_simcc", "resnet_heatmap"):
+            with self.subTest(schema=schema):
+                with self.assertRaises(SystemExit):
+                    _make_argument_parser().parse_args([
+                        "--weights", "m.onnx", "--source", "0", "--schema", schema,
+                    ])
 
 
 class ConsoleBannerTests(unittest.TestCase):
     def test_environment_line_mentions_package_and_python(self):
-        from animalposetracker.training.console import environment_line
+        from animalposetracker.console import environment_line
 
         line = environment_line()
         self.assertIn("AnimalPoseTracker", line)
         self.assertIn("Python-", line)
 
     def test_summary_block_aligns_values(self):
-        from animalposetracker.training.console import format_summary_block
+        from animalposetracker.console import format_summary_block
 
         block = format_summary_block([("Model", "A"), ("Dataset", "B")])
         lines = block.splitlines()
