@@ -90,6 +90,52 @@ class ConvTranspose(nn.Module):
         return self.act(self.conv_transpose(x))
 
 
+def fuse_conv_and_bn(conv, bn):
+    """Fold a BatchNorm2d into the Conv2d that feeds it.
+
+    Ports ultralytics' `fuse_conv_and_bn`; the arithmetic itself is PyTorch's own
+    `torch.nn.utils.fusion.fuse_conv_bn_weights`, which is also what upstream calls.
+    The convolution output is unchanged up to float rounding, so an exported graph gets
+    the same numbers with no BatchNorm nodes left -- which matters for inference backends
+    that do not fold BN themselves (ncnn / rknn / tflite).
+
+    Args:
+        conv (nn.Conv2d): Convolution whose output feeds ``bn`` directly.
+        bn (nn.BatchNorm2d): BatchNorm applied immediately after that convolution.
+
+    Returns:
+        (nn.Conv2d): The same module, now holding the folded weights, gradients off.
+    """
+    from torch.nn.utils.fusion import fuse_conv_bn_weights
+
+    if isinstance(bn, nn.Identity):
+        return conv.requires_grad_(False)
+    conv.weight, conv.bias = fuse_conv_bn_weights(
+        conv.weight, conv.bias, bn.running_mean, bn.running_var, bn.eps, bn.weight, bn.bias
+    )
+    return conv.requires_grad_(False)
+
+
+def fuse_deconv_and_bn(deconv, bn):
+    """ConvTranspose2d counterpart of :func:`fuse_conv_and_bn`.
+
+    BatchNorm normalizes output channels, but a ConvTranspose2d weight is laid out as
+    ``[in, out // groups, kH, kW]``, so the weight is viewed in Conv2d's
+    ``[out, in // groups, kH, kW]`` layout for the fold and restored afterwards.
+    """
+    from torch.nn.utils.fusion import fuse_conv_bn_weights
+
+    if isinstance(bn, nn.Identity):
+        return deconv.requires_grad_(False)
+    g, (ci, co, *k) = deconv.groups, deconv.weight.shape
+    weight = deconv.weight.view(g, ci // g, co, *k).transpose(1, 2).reshape(g * co, ci // g, *k)
+    weight, deconv.bias = fuse_conv_bn_weights(
+        weight, deconv.bias, bn.running_mean, bn.running_var, bn.eps, bn.weight, bn.bias
+    )
+    deconv.weight = nn.Parameter(weight.view(g, co, ci // g, *k).transpose(1, 2).reshape(ci, co, *k))
+    return deconv.requires_grad_(False)
+
+
 class Concat(nn.Module):
     """Concatenate multiple inputs along the given dimension."""
 

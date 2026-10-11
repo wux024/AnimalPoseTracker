@@ -115,6 +115,43 @@ class GraphSequential(nn.Module):
             y.append(x if m.i in self.save else None)
         return x, {m.i: y[m.i] for m in self.model if y[m.i] is not None}
 
+    def is_fused(self):
+        """Return True once no Conv / ConvTranspose layer still carries a BatchNorm.
+
+        Mirrors ultralytics' `BaseModel.is_fused`, which guards against folding twice.
+        """
+        return not any(
+            isinstance(m, (_modules.Conv, _modules.ConvTranspose)) and hasattr(m, "bn")
+            for m in self.model.modules()
+        )
+
+    def fuse(self):
+        """Fold every Conv / ConvTranspose + BatchNorm pair so inference needs no BN.
+
+        Mirrors ultralytics' `BaseModel.fuse`, which its exporter always calls before
+        tracing; the exported graph then carries no BatchNorm nodes. Layers are mutated in
+        place -- the ``bn`` submodule is dropped and the layer's forward switches to
+        ``forward_fuse`` -- so a fused model must not be saved back as a checkpoint: its
+        state_dict no longer matches the training keys. Modules this pass does not
+        recognise are left untouched (the SimCC head builds its deconvolution stack from
+        raw nn.ConvTranspose2d + nn.BatchNorm2d rather than the wrapped layers here).
+
+        Returns:
+            (GraphSequential): self, so the call can be chained.
+        """
+        if self.is_fused():
+            return self
+        for m in self.model.modules():
+            if isinstance(m, _modules.ConvTranspose) and hasattr(m, "bn"):
+                m.conv_transpose = _modules.fuse_deconv_and_bn(m.conv_transpose, m.bn)
+                delattr(m, "bn")
+                m.forward = m.forward_fuse
+            elif isinstance(m, _modules.Conv) and hasattr(m, "bn"):
+                m.conv = _modules.fuse_conv_and_bn(m.conv, m.bn)
+                delattr(m, "bn")
+                m.forward = m.forward_fuse
+        return self
+
 
 def _instantiate(cls, args):
     """Instantiate a module from a rule's resolved arguments.

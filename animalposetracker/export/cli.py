@@ -263,6 +263,11 @@ def run(argv=None) -> int:
         raise ValueError(f"half=true requires a CUDA export device for {export_format}")
     dtype = torch.float16 if half and context["device"].type == "cuda" else torch.float32
     model = model.to(device=context["device"], dtype=dtype).eval()
+    # Fold Conv + BatchNorm before tracing, exactly as ultralytics' Exporter does, so the
+    # exported graph carries no BN nodes. Numerically identical (BN folding is exact up to
+    # float rounding) but fewer nodes, and backends that do not fold BN themselves --
+    # ncnn / rknn / tflite -- see the improvement directly.
+    model.fuse()
     head = model.model[-1]
     if isinstance(head, YOLOPoseHead):
         head.export = True
