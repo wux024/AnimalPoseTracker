@@ -17,16 +17,19 @@ conda create -n animalposetracker python=3.10
 pip install torch==2.5.0 torchvision==0.20.0 torchaudio==2.5.0 --index-url https://download.pytorch.org/whl/cu118
 ```
 
-3. Install AnimalPoseTracker with its optional training dependencies:
+3. Install AnimalPoseTracker with the optional dependencies for your environment.
 Clone the repository:
 ```
 git clone https://github.com/wux024/AnimalPoseTracker.git
 cd AnimalPoseTracker
+```
+For a desktop environment with the GUI and built-in training:
+```
+pip install -v -e ".[training,gui]"
+```
+For a headless server that uses the CLI and built-in training, omit the GUI dependencies:
+```
 pip install -v -e ".[training]"
-```
-or 
-```
-pip install git+https://github.com/wux024/AnimalPoseTracker.git
 ```
 
 Project training, validation, prediction, and model export use AnimalPoseTracker's own workflows; they do not require the YOLO training framework or CLI. Install `.[training]` for PyTorch and COCO evaluation support. Export targets include TorchScript, ONNX, OpenVINO, TensorRT, CoreML, TensorFlow SavedModel/GraphDef/Lite/Edge TPU/JS, PaddlePaddle, MNN, NCNN, IMX500, and RKNN. Project prediction also accepts a remote Triton model URL; TensorFlow.js is export-only, matching the Ultralytics AutoBackend baseline. Each target needs its optional runtime or vendor SDK; see [deployment format support](docs/deployment_formats.md) for the matrix and installation extras.
@@ -92,13 +95,31 @@ AnimalPoseTracker provides unified `train`, `val`, `predict`, and `export` comma
 
 ```bash
 animalpose-cli --help
+animalpose-cli create --dataset trimouse --workspace projects --name smoke --worker user --model AnimalRTPose --scale N --date demo --epochs 100 --batch 8 --imgsz 640 --optimizer AdamW --lr0 0.001 --no-amp
+animalpose-cli load projects/smoke-user-AnimalRTPose-N-demo
 animalpose-cli train --config configs/other.yaml
 animalpose-cli val --config configs/other.yaml --weights runs/train/weights/best.pt
-animalpose-cli predict --config configs/other.yaml --weights runs/train/weights/best.pt --split test
-animalpose-cli export --config configs/other.yaml --weights runs/train/weights/best.pt --format onnx
+animalpose-cli predict --config configs/other.yaml --weights runs/train/weights/best.pt --split test --conf 0.25 --iou 0.7 --max-det 300
+animalpose-cli export --config configs/other.yaml --weights runs/train/weights/best.pt --format onnx --dynamic --opset 17 --simplify
 ```
 
-Use `animalpose-cli <command> --help` to see a workflow's options. The existing `animalposetracker` command continues to launch the GUI.
+Training options can be overridden for one run without editing `other.yaml`:
+
+```bash
+animalpose-cli train --config configs/other.yaml --epochs 1000 --batch 8 --imgsz 640 --device 0 --workers 8
+```
+
+Prediction options such as confidence/IoU thresholds, maximum detections, drawing, tracking and smoothing can also be passed on the command line. Export options such as precision, dynamic input, opset and simplification can be passed the same way. For example:
+
+```bash
+animalpose-cli predict --config configs/other.yaml --weights runs/train/weights/best.pt --source images/ --conf 0.4 --no-show-boxes --tracker bytetrack --track-buffer 45
+animalpose-cli export --config configs/other.yaml --weights runs/train/weights/best.pt --format onnx --imgsz 640 --dynamic --opset 17 --no-simplify
+animalpose-cli val --config configs/other.yaml --weights runs/train/weights/best.pt --batch 8 --imgsz 640 --conf 0.001 --iou 0.7
+```
+
+Use `animalpose-cli <command> --help` to see a workflow's options. For train, val, predict and export, command-line values take precedence over `other.yaml` for that run and are not written back to the file. Omitted values continue to come from the project config or the command's documented default. The `animalpose-cli` commands work without GUI dependencies; install `.[gui]` to use the `animalposetracker` GUI command.
+
+`create` accepts the training settings supported by `train` and saves only explicitly supplied values into the new project's `configs/other.yaml`; omitted options retain the selected model's defaults. `load` accepts a project directory, `project.yaml`, or `configs/other.yaml`, validates the project and its model/data config paths, and prints a summary without opening the GUI or modifying files.
 
 # Usage: How to use AnimalPoseTracker to train and test a model
 

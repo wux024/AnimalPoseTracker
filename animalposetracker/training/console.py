@@ -23,6 +23,11 @@ _VAL_COLUMNS = (
     ("coco/AP", "AP"),
     ("coco/AP50", "AP50"),
     ("coco/AP75", "AP75"),
+    ("ultralytics/AP", "UltraAP"),
+    ("ultralytics/AP50", "UltraAP50"),
+    ("ultralytics/AP75", "UltraAP75"),
+    ("ultralytics/P", "P"),
+    ("ultralytics/R", "R"),
     ("coco/AR", "AR"),
     ("PCK", "PCK"),
     ("AUC", "AUC"),
@@ -87,7 +92,21 @@ def _speed_text(metrics, prefix: str = "") -> str:
 
 
 def _validation_table(metrics, prefix: str = "") -> Tuple[str, str]:
-    headers = ("Images", "Instances", *(label for _, label in _VAL_COLUMNS))
+    selected_ap_prefix = (
+        "ultralytics" if f"{prefix}ultralytics/AP" in metrics else "coco"
+    )
+    columns = []
+    for key, label in _VAL_COLUMNS:
+        if key.startswith("coco/"):
+            if selected_ap_prefix == "coco":
+                columns.append((key, label))
+        elif key.startswith("ultralytics/"):
+            if selected_ap_prefix == "ultralytics":
+                columns.append((key, label))
+        else:
+            columns.append((key, label))
+    columns = tuple(columns)
+    headers = ("Images", "Instances", *(label for _, label in columns))
     header = f"{'Class':>22s}" + "".join(f"{label:>11s}" for label in headers)
     image_count = metrics.get(f"{prefix}images")
     instance_count = metrics.get(f"{prefix}instances")
@@ -96,7 +115,7 @@ def _validation_table(metrics, prefix: str = "") -> Tuple[str, str]:
         str(int(image_count)) if image_count is not None else "-",
         str(int(instance_count)) if instance_count is not None else "-",
     ]
-    for key, _ in _VAL_COLUMNS:
+    for key, _ in columns:
         value = metrics.get(f"{prefix}{key}")
         values.append(_fmt(float(value)) if value is not None else "-")
     row = f"{values[0]:>22s}" + "".join(f"{value:>11s}" for value in values[1:])

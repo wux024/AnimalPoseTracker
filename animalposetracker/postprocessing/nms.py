@@ -1,28 +1,46 @@
-"""Pose candidate non-maximum suppression."""
+"""Ultralytics-compatible NMS for AnimalRTPose detections."""
+
+import logging
+import sys
+import time
 
 import torch
 
 
-def _nms_indices(boxes: torch.Tensor, scores: torch.Tensor, threshold: float, limit: int):
-    """Small dependency-free NMS equivalent for one class of xyxy boxes."""
-    order = scores.argsort(descending=True)
-    kept = []
-    x1, y1, x2, y2 = boxes.unbind(dim=1)
-    areas = (x2 - x1).clamp_(min=0) * (y2 - y1).clamp_(min=0)
-    while order.numel() and len(kept) < limit:
+LOGGER = logging.getLogger(__name__)
+
+
+def _nms_indices(boxes: torch.Tensor, scores: torch.Tensor, threshold: float):
+    """Port Ultralytics' TorchNMS.nms greedy suppression loop."""
+    if boxes.numel() == 0:
+        return torch.empty((0,), dtype=torch.int64, device=boxes.device)
+
+    x1, y1, x2, y2 = boxes.unbind(1)
+    areas = (x2 - x1) * (y2 - y1)
+    order = scores.argsort(0, descending=True)
+    keep = torch.zeros(order.numel(), dtype=torch.int64, device=boxes.device)
+    keep_count = 0
+    while order.numel() > 0:
         current = order[0]
-        kept.append(current)
-        order = order[1:]
-        if not order.numel():
+        keep[keep_count] = current
+        keep_count += 1
+        if order.numel() == 1:
             break
-        xx1 = torch.maximum(x1[current], x1[order])
-        yy1 = torch.maximum(y1[current], y1[order])
-        xx2 = torch.minimum(x2[current], x2[order])
-        yy2 = torch.minimum(y2[current], y2[order])
+
+        remaining = order[1:]
+        xx1 = torch.maximum(x1[current], x1[remaining])
+        yy1 = torch.maximum(y1[current], y1[remaining])
+        xx2 = torch.minimum(x2[current], x2[remaining])
+        yy2 = torch.minimum(y2[current], y2[remaining])
         intersection = (xx2 - xx1).clamp_(min=0) * (yy2 - yy1).clamp_(min=0)
-        overlap = intersection / (areas[current] + areas[order] - intersection + 1e-7)
-        order = order[overlap <= threshold]
-    return torch.stack(kept) if kept else order.new_zeros((0,), dtype=torch.long)
+        if intersection.sum() == 0:
+            order = remaining
+            continue
+        overlap = intersection / (areas[current] + areas[remaining] - intersection)
+        order = remaining[overlap <= threshold]
+
+    return keep[:keep_count]
+
 
 def pose_non_max_suppression(
     predictions: torch.Tensor,
@@ -34,49 +52,87 @@ def pose_non_max_suppression(
     max_detections: int = 300,
     agnostic: bool = False,
 ):
-    """Decode multi-label pose candidates and apply class-aware box NMS."""
-    outputs = []
-    for image_prediction in predictions.transpose(1, 2):
-        boxes = image_prediction[:, :4]
-        class_scores = image_prediction[:, 4:4 + num_classes]
-        keypoints = image_prediction[:, 4 + num_classes:].reshape(
-            -1, num_keypoints, keypoint_dimensions
-        )
-        anchor_indices, classes = torch.where(class_scores > confidence_threshold)
-        if not anchor_indices.numel():
-            outputs.append((
-                boxes.new_zeros((0, 4)),
-                boxes.new_zeros((0,)),
-                classes,
-                keypoints.new_zeros((0, num_keypoints, keypoint_dimensions)),
-            ))
+    """Apply Ultralytics PoseValidator's multi-label box NMS to pose predictions."""
+    if not 0.0 <= confidence_threshold <= 1.0:
+        raise ValueError("confidence_threshold must be between 0 and 1")
+    if not 0.0 <= iou_threshold <= 1.0:
+        raise ValueError("iou_threshold must be between 0 and 1")
+    if max_detections < 1:
+        raise ValueError("max_detections must be at least 1")
+    if predictions.ndim != 3:
+        raise ValueError("pose predictions must have shape (batch, channels, candidates)")
+
+    batch_size = predictions.shape[0]
+    class_end = 4 + int(num_classes)
+    extra_size = predictions.shape[1] - class_end
+    candidates = predictions[:, 4:class_end].amax(1) > confidence_threshold
+    multi_label = num_classes > 1
+    max_candidates = 30000
+    class_offset = 7680
+    time_limit = 2.0 + 0.05 * batch_size
+    start_time = time.time()
+    use_torchvision = predictions.device.type != "xpu" and "torchvision" in sys.modules
+    outputs = [(
+        predictions.new_zeros((0, 4)),
+        predictions.new_zeros((0,)),
+        torch.zeros((0,), dtype=torch.long, device=predictions.device),
+        predictions.new_zeros((0, num_keypoints, keypoint_dimensions)),
+    ) for _ in range(batch_size)]
+
+    for image_index, image_prediction in enumerate(predictions.transpose(-1, -2)):
+        image_prediction = image_prediction[candidates[image_index]]
+        if not image_prediction.shape[0]:
             continue
 
-        boxes = boxes[anchor_indices]
-        boxes_xyxy = torch.cat(
-            (boxes[:, :2] - boxes[:, 2:] / 2, boxes[:, :2] + boxes[:, 2:] / 2), dim=1
+        xywh = image_prediction[:, :4].clone()
+        image_prediction[:, :2] = xywh[:, :2] - xywh[:, 2:] / 2
+        image_prediction[:, 2:4] = xywh[:, :2] + xywh[:, 2:] / 2
+        boxes, class_scores, extra = image_prediction.split(
+            (4, num_classes, extra_size), dim=1
         )
-        scores = class_scores[anchor_indices, classes]
-        keypoints = keypoints[anchor_indices]
-        if anchor_indices.numel() > 30000:
-            selected = scores.argsort(descending=True)[:30000]
-            boxes_xyxy, scores, classes, keypoints = (
-                boxes_xyxy[selected], scores[selected], classes[selected], keypoints[selected]
-            )
 
-        nms_classes = classes.new_zeros(classes.shape) if agnostic else classes
-        kept_by_class = []
-        for class_id in torch.unique(nms_classes):
-            indices = torch.nonzero(nms_classes == class_id, as_tuple=False).flatten()
-            kept_by_class.append(
-                indices[_nms_indices(boxes_xyxy[indices], scores[indices], iou_threshold, max_detections)]
-            )
-        kept = (
-            torch.cat(kept_by_class)
-            if kept_by_class else classes.new_zeros((0,), dtype=torch.long)
+        if multi_label:
+            anchor_indices, class_indices = torch.where(class_scores > confidence_threshold)
+            image_prediction = torch.cat((
+                boxes[anchor_indices],
+                class_scores[anchor_indices, class_indices, None],
+                class_indices[:, None].to(boxes.dtype),
+                extra[anchor_indices],
+            ), dim=1)
+        else:
+            scores, class_indices = class_scores.max(1, keepdim=True)
+            keep = scores.view(-1) > confidence_threshold
+            image_prediction = torch.cat((boxes, scores, class_indices.to(boxes.dtype), extra), dim=1)[keep]
+
+        if image_prediction.shape[0] > max_candidates:
+            order = image_prediction[:, 4].argsort(descending=True)[:max_candidates]
+            image_prediction = image_prediction[order]
+
+        class_ids = image_prediction[:, 5:6] * (0 if agnostic else class_offset)
+        nms_boxes = image_prediction[:, :4] + class_ids
+        scores = image_prediction[:, 4]
+        if use_torchvision:
+            import torchvision
+
+            keep = torchvision.ops.nms(nms_boxes, scores, iou_threshold)
+        else:
+            keep = _nms_indices(nms_boxes, scores, iou_threshold)
+        image_prediction = image_prediction[keep[:max_detections]]
+
+        keypoints = image_prediction[:, 6:].reshape(
+            -1, num_keypoints, keypoint_dimensions
         )
-        kept = kept[scores[kept].argsort(descending=True)[:max_detections]]
-        outputs.append((boxes_xyxy[kept], scores[kept], classes[kept], keypoints[kept]))
+        outputs[image_index] = (
+            image_prediction[:, :4],
+            image_prediction[:, 4],
+            image_prediction[:, 5].long(),
+            keypoints,
+        )
+        if time.time() - start_time > time_limit:
+            LOGGER.warning("NMS time limit %.3fs exceeded", time_limit)
+            break
+
     return outputs
+
 
 __all__ = ["pose_non_max_suppression"]

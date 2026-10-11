@@ -2,7 +2,7 @@
 
 # Build system requirements
 [build-system]
-requires = ["setuptools>=70.0.0"]
+requires = ["setuptools>=70.3.0"]
 build-backend = "setuptools.build_meta"
 
 # Project information
@@ -34,10 +34,8 @@ classifiers = [
     "Operating System :: Microsoft :: Windows",
 ]
 
-# Main dependencies (aligned with your pip list)
+# Core dependencies for CLI and non-GUI workflows
 dependencies = [
-    "PySide6>=6.8.0",
-    "PyCameraList>=1.0.0; platform_system == 'Windows'",
     "numpy>=1.23.0",
     "matplotlib>=3.3.0",
     "opencv-contrib-python>=4.6.0",
@@ -52,11 +50,14 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
+gui = [
+    "PySide6>=6.2.4",
+    "PyCameraList>=1.0.0; platform_system == 'Windows'",
+]
 training = [
     "torch>=2.0.0",
     "numpy<2; python_version < '3.12'",
-    "xtcocotools>=1.14.3; python_version < '3.12'",
-    "pycocotools>=2.0.7; python_version >= '3.12'",
+    "pycocotools>=2.0.7",
 ]
 export = ["onnx>=1.14.0", "onnxsim>=0.4.0"]
 export-openvino = ["openvino>=2024.0.0"]
@@ -101,8 +102,8 @@ version = { attr = "animalposetracker.__version__" }
 
 [tool.setuptools.exclude-package-data]
 animalposetracker = [
-    "​**​/*.ui",              
-    "​**​/__pycache__/*"
+    "**/*.ui",
+    "**/__pycache__/*"
 ]
 
 # Entry points (if creating CLI tools)

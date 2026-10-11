@@ -1,6 +1,7 @@
 """Pose-aware image augmentation used by the local training data pipeline."""
 
 import random
+import math
 from typing import Callable, Dict, Optional, Sequence, Tuple
 
 import cv2
@@ -30,6 +31,33 @@ class PoseAugment:
         self.image_size = int(image_size)
         self.settings = dict(settings)
         self.flip_idx = tuple(map(int, flip_idx)) if flip_idx is not None else None
+        self.albumentations = None
+        try:
+            import albumentations as A
+            import torch
+
+            version_parts = str(A.__version__).split(".")
+            version = tuple(
+                int("".join(char for char in part if char.isdigit()) or 0)
+                for part in version_parts[:3]
+            )
+            if version >= (1, 0, 3):
+                self.albumentations = A.Compose(
+                    [
+                        A.Blur(p=0.01),
+                        A.MedianBlur(p=0.01),
+                        A.ToGray(p=0.01),
+                        A.CLAHE(p=0.01),
+                        A.RandomBrightnessContrast(p=0.0),
+                        A.RandomGamma(p=0.0),
+                        A.ImageCompression(quality_range=(75, 100), p=0.0),
+                    ]
+                )
+                if hasattr(self.albumentations, "set_random_seed"):
+                    self.albumentations.set_random_seed(torch.initial_seed())
+        except Exception:
+            # Ultralytics treats Albumentations as optional and skips it when unavailable.
+            self.albumentations = None
 
     def apply(
         self,
@@ -44,26 +72,28 @@ class PoseAugment:
             sample, sample_loader, sample_count, allow_mosaic, mosaic_indices
         )
         mixup = float(self.settings.get("mixup", 0.0)) if allow_mosaic else 0.0
-        if mixup > 0 and np.random.random() < mixup and sample_count > 1:
+        if random.uniform(0.0, 1.0) <= mixup:
             second_index = random.randint(0, sample_count - 1)
             second = self._apply_geometry(
                 sample_loader(second_index), sample_loader, sample_count, allow_mosaic,
                 mosaic_indices,
             )
             blend = float(np.random.beta(32.0, 32.0))
-            current["image"] = np.clip(
-                current["image"].astype(np.float32) * blend
-                + second["image"].astype(np.float32) * (1.0 - blend),
-                0,
-                255,
+            current["image"] = (
+                current["image"] * blend + second["image"] * (1.0 - blend)
             ).astype(np.uint8)
             current["classes"] = np.concatenate((current["classes"], second["classes"]))
             current["boxes"] = np.concatenate((current["boxes"], second["boxes"]))
             current["keypoints"] = np.concatenate((current["keypoints"], second["keypoints"]))
             current["paths"] = [*current["paths"], *second["paths"]]
+        # Ultralytics evaluates its default zero-probability CutMix gate here.
+        random.uniform(0.0, 1.0)
+        if self.albumentations is not None:
+            random.random()  # Ultralytics' Albumentations wrapper has p=1.0.
+            current["image"] = self.albumentations(image=current["image"])["image"]
         image = self._hsv(current["image"])
         image, boxes, keypoints = self._flips(image, current["boxes"], current["keypoints"])
-        if float(self.settings.get("bgr", 0.0)) > 0 and np.random.random() < float(self.settings["bgr"]):
+        if random.uniform(0.0, 1.0) <= float(self.settings.get("bgr", 0.0)):
             image = image[..., ::-1]
         return {
             "image": np.ascontiguousarray(image),
@@ -82,7 +112,8 @@ class PoseAugment:
         mosaic_indices: Optional[Sequence[int]],
     ) -> Dict[str, np.ndarray]:
         mosaic_probability = float(self.settings.get("mosaic", 0.0))
-        if allow_mosaic and mosaic_probability > 0 and sample_count > 1 and random.random() < mosaic_probability:
+        mosaic_probability = mosaic_probability if allow_mosaic else 0.0
+        if random.uniform(0.0, 1.0) <= mosaic_probability:
             candidates = list(mosaic_indices) if mosaic_indices is not None else list(range(sample_count))
             others = [sample_loader(index) for index in random.choices(candidates, k=3)]
             image, classes, boxes, keypoints, paths = self._mosaic([sample, *others])
@@ -96,6 +127,8 @@ class PoseAugment:
                 keypoints[..., 1] *= self.image_size
             paths = [sample["path"]]
 
+        # Ultralytics inserts a zero-probability flip CopyPaste before affine.
+        random.uniform(0.0, 1.0)
         image, boxes, keypoints, keep = self._random_perspective(image, boxes, keypoints)
         classes = classes[keep]
         return {
@@ -108,8 +141,8 @@ class PoseAugment:
 
     def _mosaic(self, samples):
         size = self.image_size
-        center_x = int(np.random.uniform(size * 0.5, size * 1.5))
-        center_y = int(np.random.uniform(size * 0.5, size * 1.5))
+        center_x = int(random.uniform(size * 0.5, size * 1.5))
+        center_y = int(random.uniform(size * 0.5, size * 1.5))
         canvas = np.full((size * 2, size * 2, 3), 114, dtype=np.uint8)
         all_classes, all_boxes, all_keypoints, paths = [], [], [], []
         for index, sample in enumerate(samples):
@@ -129,20 +162,12 @@ class PoseAugment:
 
             canvas[y1a:y2a, x1a:x2a] = sample["image"][y1b:y2b, x1b:x2b]
             boxes = _box_xywh_to_xyxy(sample["boxes"], size)
-            boxes[:, [0, 2]] = np.clip(boxes[:, [0, 2]] + x1a - x1b, x1a, x2a)
-            boxes[:, [1, 3]] = np.clip(boxes[:, [1, 3]] + y1a - y1b, y1a, y2a)
+            boxes[:, [0, 2]] += x1a - x1b
+            boxes[:, [1, 3]] += y1a - y1b
             keypoints = sample["keypoints"].copy()
             if keypoints.size:
                 keypoints[..., 0] = keypoints[..., 0] * size + x1a - x1b
                 keypoints[..., 1] = keypoints[..., 1] * size + y1a - y1b
-                outside = (
-                    (keypoints[..., 0] < x1a) | (keypoints[..., 0] > x2a)
-                    | (keypoints[..., 1] < y1a) | (keypoints[..., 1] > y2a)
-                )
-                keypoints[..., 0] = keypoints[..., 0].clip(x1a, x2a)
-                keypoints[..., 1] = keypoints[..., 1].clip(y1a, y2a)
-                if keypoints.shape[-1] == 3:
-                    keypoints[..., 2][outside] = 0
             all_classes.append(sample["classes"])
             all_boxes.append(boxes)
             all_keypoints.append(keypoints)
@@ -151,6 +176,19 @@ class PoseAugment:
         boxes = np.concatenate(all_boxes, axis=0) if all_boxes else np.zeros((0, 4), np.float32)
         keypoints = np.concatenate(all_keypoints, axis=0) if all_keypoints else np.zeros((0, 0, 3), np.float32)
         classes = np.concatenate(all_classes, axis=0) if all_classes else np.zeros((0,), np.int64)
+        boxes[:, [0, 2]] = boxes[:, [0, 2]].clip(0, size * 2)
+        boxes[:, [1, 3]] = boxes[:, [1, 3]].clip(0, size * 2)
+        keep = (boxes[:, 2] - boxes[:, 0]) * (boxes[:, 3] - boxes[:, 1]) > 0
+        boxes, classes, keypoints = boxes[keep], classes[keep], keypoints[keep]
+        if keypoints.size:
+            outside = (
+                (keypoints[..., 0] < 0) | (keypoints[..., 0] > size * 2)
+                | (keypoints[..., 1] < 0) | (keypoints[..., 1] > size * 2)
+            )
+            if keypoints.shape[-1] == 3:
+                keypoints[..., 2][outside] = 0
+            keypoints[..., 0] = keypoints[..., 0].clip(0, size * 2)
+            keypoints[..., 1] = keypoints[..., 1].clip(0, size * 2)
         return canvas, classes, boxes, keypoints, paths
 
     def _random_perspective(self, image, boxes, keypoints):
@@ -159,20 +197,20 @@ class PoseAugment:
         center = np.eye(3, dtype=np.float32)
         center[0, 2], center[1, 2] = -input_width / 2, -input_height / 2
         perspective = np.eye(3, dtype=np.float32)
-        perspective[2, 0] = np.random.uniform(-float(self.settings.get("perspective", 0.0)), float(self.settings.get("perspective", 0.0)))
-        perspective[2, 1] = np.random.uniform(-float(self.settings.get("perspective", 0.0)), float(self.settings.get("perspective", 0.0)))
+        perspective[2, 0] = random.uniform(-float(self.settings.get("perspective", 0.0)), float(self.settings.get("perspective", 0.0)))
+        perspective[2, 1] = random.uniform(-float(self.settings.get("perspective", 0.0)), float(self.settings.get("perspective", 0.0)))
         rotation = np.eye(3, dtype=np.float32)
-        angle = np.random.uniform(-float(self.settings.get("degrees", 0.0)), float(self.settings.get("degrees", 0.0)))
-        scale = np.random.uniform(1.0 - float(self.settings.get("scale", 0.0)), 1.0 + float(self.settings.get("scale", 0.0)))
+        angle = random.uniform(-float(self.settings.get("degrees", 0.0)), float(self.settings.get("degrees", 0.0)))
+        scale = random.uniform(1.0 - float(self.settings.get("scale", 0.0)), 1.0 + float(self.settings.get("scale", 0.0)))
         rotation[:2] = cv2.getRotationMatrix2D((0, 0), angle, scale)
         shear = np.eye(3, dtype=np.float32)
-        shear_x = np.random.uniform(-float(self.settings.get("shear", 0.0)), float(self.settings.get("shear", 0.0)))
-        shear_y = np.random.uniform(-float(self.settings.get("shear", 0.0)), float(self.settings.get("shear", 0.0)))
-        shear[0, 1] = np.tan(np.deg2rad(shear_x))
-        shear[1, 0] = np.tan(np.deg2rad(shear_y))
+        shear_x = random.uniform(-float(self.settings.get("shear", 0.0)), float(self.settings.get("shear", 0.0)))
+        shear_y = random.uniform(-float(self.settings.get("shear", 0.0)), float(self.settings.get("shear", 0.0)))
+        shear[0, 1] = math.tan(shear_x * math.pi / 180)
+        shear[1, 0] = math.tan(shear_y * math.pi / 180)
         translate = np.eye(3, dtype=np.float32)
-        translate[0, 2] = np.random.uniform(0.5 - float(self.settings.get("translate", 0.0)), 0.5 + float(self.settings.get("translate", 0.0))) * size
-        translate[1, 2] = np.random.uniform(0.5 - float(self.settings.get("translate", 0.0)), 0.5 + float(self.settings.get("translate", 0.0))) * size
+        translate[0, 2] = random.uniform(0.5 - float(self.settings.get("translate", 0.0)), 0.5 + float(self.settings.get("translate", 0.0))) * size
+        translate[1, 2] = random.uniform(0.5 - float(self.settings.get("translate", 0.0)), 0.5 + float(self.settings.get("translate", 0.0))) * size
         matrix = translate @ shear @ rotation @ perspective @ center
         if float(self.settings.get("perspective", 0.0)):
             image = cv2.warpPerspective(image, matrix, dsize=(size, size), borderValue=(114, 114, 114))
@@ -189,7 +227,7 @@ class PoseAugment:
         corners[3::4, :2] = boxes[:, [0, 3]]
         transformed = corners @ matrix.T
         if float(self.settings.get("perspective", 0.0)):
-            transformed = transformed[:, :2] / transformed[:, 2:3].clip(min=1e-6)
+            transformed = transformed[:, :2] / transformed[:, 2:3]
         else:
             transformed = transformed[:, :2]
         transformed = transformed.reshape(-1, 4, 2)
@@ -199,7 +237,7 @@ class PoseAugment:
             homogeneous = np.concatenate((keypoint_xy, np.ones((*keypoint_xy.shape[:-1], 1), np.float32)), axis=-1)
             keypoint_transformed = homogeneous @ matrix.T
             if float(self.settings.get("perspective", 0.0)):
-                keypoint_transformed = keypoint_transformed[..., :2] / keypoint_transformed[..., 2:3].clip(min=1e-6)
+                keypoint_transformed = keypoint_transformed[..., :2] / keypoint_transformed[..., 2:3]
             else:
                 keypoint_transformed = keypoint_transformed[..., :2]
             keypoints[..., :2] = keypoint_transformed
@@ -258,7 +296,14 @@ class PoseAugment:
 
     def _flips(self, image, boxes, keypoints):
         size = self.image_size
-        if np.random.random() < float(self.settings.get("fliplr", 0.0)):
+        if random.random() < float(self.settings.get("flipud", 0.0)):
+            image = np.ascontiguousarray(image[::-1])
+            if boxes.size:
+                y1 = boxes[:, 1].copy()
+                boxes[:, 1], boxes[:, 3] = size - boxes[:, 3], size - y1
+            if keypoints.size:
+                keypoints[..., 1] = size - keypoints[..., 1]
+        if random.random() < float(self.settings.get("fliplr", 0.0)):
             image = np.ascontiguousarray(image[:, ::-1])
             if boxes.size:
                 x1 = boxes[:, 0].copy()
@@ -267,13 +312,6 @@ class PoseAugment:
                 keypoints[..., 0] = size - keypoints[..., 0]
                 if self.flip_idx is not None:
                     keypoints = keypoints[:, self.flip_idx, :]
-        if np.random.random() < float(self.settings.get("flipud", 0.0)):
-            image = np.ascontiguousarray(image[::-1])
-            if boxes.size:
-                y1 = boxes[:, 1].copy()
-                boxes[:, 1], boxes[:, 3] = size - boxes[:, 3], size - y1
-            if keypoints.size:
-                keypoints[..., 1] = size - keypoints[..., 1]
         return image, boxes, keypoints
 
     def _normalize_keypoints(self, keypoints):

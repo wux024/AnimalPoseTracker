@@ -37,9 +37,12 @@ class DistributionFocalLoss(nn.Module):
         upper = lower + 1
         lower_weight = upper.to(target.dtype) - target
         upper_weight = 1.0 - lower_weight
-        lower_loss = F.cross_entropy(logits, lower.reshape(-1), reduction="none").reshape_as(target)
-        upper_loss = F.cross_entropy(logits, upper.reshape(-1), reduction="none").reshape_as(target)
-        return (lower_loss * lower_weight + upper_loss * upper_weight).mean(-1, keepdim=True)
+        log_probabilities = F.log_softmax(logits, dim=1)
+        lower_loss = log_probabilities.gather(1, lower.reshape(-1, 1)).reshape_as(target)
+        upper_loss = log_probabilities.gather(1, upper.reshape(-1, 1)).reshape_as(target)
+        return -(
+            lower_loss * lower_weight + upper_loss * upper_weight
+        ).mean(-1, keepdim=True)
 
 class KeypointOKSLoss(nn.Module):
     """OKS-shaped keypoint localization loss and per-instance visibility weighting."""
@@ -150,25 +153,22 @@ class PoseDetectionLoss(nn.Module):
         pred_distribution, pred_classes = flattened.split(
             (self.reg_max * 4, self.num_classes), dim=-1
         )
-        pred_distribution = pred_distribution.float().reshape(
-            batch_size, -1, 4, self.reg_max
-        )
-        pred_classes = pred_classes.float()
+        pred_distribution = pred_distribution.reshape(batch_size, -1, 4, self.reg_max)
         pred_keypoints = keypoint_predictions.transpose(1, 2).contiguous().reshape(
             batch_size, -1, self.num_keypoints, self.keypoint_dimensions
-        ).float()
+        )
         anchor_points, stride_per_anchor = make_anchors(
             feature_predictions, self.strides.to(feature_predictions[0].device), 0.5
         )
-        anchor_points = anchor_points.float()
-        stride_per_anchor = stride_per_anchor.float()
         first_stride = float(self.strides[0].item())
         input_height = int(feature_predictions[0].shape[-2] * first_stride)
         input_width = int(feature_predictions[0].shape[-1] * first_stride)
 
         distances = (
             pred_distribution.softmax(dim=-1)
-            * self.projection.to(pred_distribution.device)
+            * self.projection.to(
+                device=pred_distribution.device, dtype=pred_distribution.dtype
+            )
         ).sum(dim=-1)
         pred_boxes_grid = dist2bbox(
             distances, anchor_points.unsqueeze(0), xywh=False, dim=-1

@@ -41,11 +41,38 @@ def _make_argument_parser():
     parser.add_argument("--config", default="configs/other.yaml")
     parser.add_argument("--weights", required=True)
     parser.add_argument("--output-dir", help="Override the export directory")
+    parser.add_argument("--project", help="Run output root, relative to the project directory")
+    parser.add_argument("--name", help="Export run name inside the output root")
     parser.add_argument(
         "--format",
         help="Explicit deployment format; may also be set as application.format in the project config",
     )
+    parser.add_argument("--device", help="Export device; defaults to the project setting")
+    parser.add_argument("--imgsz", "--image-size", dest="image_size", type=int,
+                        help="YOLO pose export input size; defaults to the project setting")
+    parser.add_argument("--opset", type=int, help="ONNX opset version")
+    parser.add_argument("--workspace", type=float, help="TensorRT workspace size in GiB")
+    parser.add_argument("--rknn-target", dest="rknn_target", help="Rockchip NPU target (for example rk3588)")
+    for option in ("half", "dynamic", "simplify", "optimize", "int8", "nms", "keras", "exist-ok"):
+        dest = option.replace("-", "_")
+        parser.add_argument(
+            f"--{option}", dest=dest, nargs="?", const=True, type=_parse_bool_value,
+            default=None,
+        )
+        parser.add_argument(
+            f"--no-{option}", dest=dest, action="store_const", const=False,
+            default=None,
+        )
     return parser
+
+
+def _parse_bool_value(value: str) -> bool:
+    normalized = str(value).strip().lower()
+    if normalized in {"1", "true", "yes", "on"}:
+        return True
+    if normalized in {"0", "false", "no", "off"}:
+        return False
+    raise argparse.ArgumentTypeError("expected true or false")
 
 
 def _export_onnx(adapter, dummy, path, context, values):
@@ -106,9 +133,29 @@ def _resolve_export_format(requested, configured):
 def run(argv=None) -> int:
     args = _make_argument_parser().parse_args(argv)
     config_path = Path(args.config).expanduser().resolve()
-    model, config, context = load_project_model(config_path, args.weights)
+    model, config, context = load_project_model(
+        config_path, args.weights, device=args.device
+    )
     context["dataset_config_path"] = config.data
     values = context["other"]
+    for name in (
+        "opset", "workspace", "rknn_target", "half", "dynamic", "simplify",
+        "optimize", "int8", "nms", "keras", "exist_ok",
+    ):
+        value = getattr(args, name)
+        if value is not None:
+            values[name] = value
+    if args.image_size is not None:
+        requested_size = int(args.image_size)
+        head_name = context["head_name"]
+        if head_name == "SimCCHead" and tuple(map(int, model.model[-1].input_size)) != (
+            requested_size, requested_size
+        ):
+            raise ValueError(
+                "--imgsz cannot change the fixed AnimalViTPose SimCC input size; "
+                "change the model configuration instead"
+            )
+        config.image_size = requested_size
     export_format = _resolve_export_format(args.format, values.get("format"))
     if export_format in {"tensorrt", "trt"}:
         export_format = "engine"
@@ -156,6 +203,11 @@ def run(argv=None) -> int:
             output_dir if output_dir.is_absolute()
             else context["project_dir"] / output_dir
         ).resolve()
+    elif args.project or args.name:
+        output_root = Path(args.project or "runs").expanduser()
+        if not output_root.is_absolute():
+            output_root = context["project_dir"] / output_root
+        config.output_dir = output_root / (args.name or "export")
     else:
         # Export runs get their own namespace instead of inheriting the
         # training run name (project/name = runs/train) from other.yaml.
@@ -236,6 +288,7 @@ def run(argv=None) -> int:
         "model_scale": context["scale"],
         "head": context["head_name"],
         "input_size": [size, size],
+        "dynamic": bool(values.get("dynamic", False)),
         "input_name": "images",
         "input_tensor": "images:0",
         "input_layout": "NCHW",

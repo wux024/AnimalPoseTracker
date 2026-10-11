@@ -249,6 +249,7 @@ def _render_pose(
     skeleton: List[List[int]],
     show_boxes: bool,
     show_labels: bool,
+    show_confidence: bool,
     show_keypoints: bool,
     show_skeletons: bool,
     confidence_threshold: float,
@@ -275,7 +276,7 @@ def _render_pose(
             class_name = class_names[class_value] if class_value < len(class_names) else str(class_value)
             cv2.putText(
                 rendered,
-                f"{class_name} {score_value:.2f}",
+                f"{class_name} {score_value:.2f}" if show_confidence else class_name,
                 (x1, max(15, y1 - 5)),
                 cv2.FONT_HERSHEY_SIMPLEX,
                 0.5,
@@ -372,6 +373,7 @@ def _predict_frame(image, model, config, context, settings, external_backend=Fal
         context["skeleton"],
         show_boxes=settings["show_boxes"],
         show_labels=settings["show_labels"],
+        show_confidence=settings["show_confidence"],
         show_keypoints=settings["show_keypoints"],
         show_skeletons=settings["show_skeletons"],
         confidence_threshold=settings["keypoint_confidence"],
@@ -499,6 +501,7 @@ def _predict_topdown_image(image, image_path, boxes, model, context, settings, e
             context["skeleton"],
             show_boxes=settings["show_boxes"],
             show_labels=settings["show_labels"],
+            show_confidence=settings["show_confidence"],
             show_keypoints=settings["show_keypoints"],
             show_skeletons=settings["show_skeletons"],
             confidence_threshold=settings["keypoint_confidence"],
@@ -590,7 +593,9 @@ def _write_video(
 
 
 def _make_argument_parser():
-    from animalposetracker.tracking.config import ALGORITHMS
+    from dataclasses import fields
+
+    from animalposetracker.tracking.config import ALGORITHMS, TrackerConfig
 
     parser = argparse.ArgumentParser(
         prog="animalpose-cli predict",
@@ -610,6 +615,13 @@ def _make_argument_parser():
         help="Dataset split used by default; auto prefers test and falls back to val",
     )
     parser.add_argument("--output-dir", help="Override the prediction output directory")
+    parser.add_argument("--project", help="Run output root, relative to the project directory")
+    parser.add_argument("--name", help="Prediction run name inside the output root")
+    parser.add_argument("--device", help="Inference device; defaults to the project setting")
+    parser.add_argument(
+        "--imgsz", "--image-size", dest="image_size", type=int,
+        help="Square input size for YOLO pose models; defaults to the project or artifact size",
+    )
     parser.add_argument(
         "--conf",
         type=float,
@@ -620,11 +632,48 @@ def _make_argument_parser():
         type=float,
         help="Prediction NMS IoU threshold (default: 0.7)",
     )
+    parser.add_argument("--max-det", "--max-detections", dest="max_det", type=int,
+                        help="Maximum detections per image")
     parser.add_argument(
+        "--keypoint-score-threshold", type=float,
+        help="Hide keypoints below this confidence threshold",
+    )
+    parser.add_argument("--agnostic-nms", nargs="?", const=True, type=_parse_bool_value,
+                        default=None)
+    parser.add_argument("--no-agnostic-nms", dest="agnostic_nms", action="store_const",
+                        const=False, default=None)
+    for option, config_key in (
+        ("show-boxes", "show_boxes"),
+        ("show-labels", "show_labels"),
+        ("show-conf", "show_confidence"),
+        ("show-keypoints", "show_keypoints"),
+        ("show-skeletons", "show_skeletons"),
+    ):
+        parser.add_argument(
+            f"--{option}", dest=config_key, nargs="?", const=True, type=_parse_bool_value,
+            default=None,
+        )
+        parser.add_argument(
+            f"--no-{option}", dest=config_key, action="store_const", const=False,
+            default=None,
+        )
+    parser.add_argument("--kpt-line", dest="show_skeletons", nargs="?", const=True,
+                        type=_parse_bool_value, default=None)
+    parser.add_argument("--no-kpt-line", dest="show_skeletons", action="store_const",
+                        const=False, default=None)
+    parser.add_argument("--line-width", type=int)
+    parser.add_argument("--kpt-radius", "--point-radius", dest="point_radius", type=int)
+    parser.add_argument("--exist-ok", nargs="?", const=True, type=_parse_bool_value, default=None)
+    parser.add_argument("--no-exist-ok", dest="exist_ok", action="store_const", const=False,
+                        default=None)
+    tracker_group = parser.add_mutually_exclusive_group()
+    tracker_group.add_argument(
         "--tracker",
         choices=ALGORITHMS,
         help="Optionally track video detections with this AnimalPoseTracker algorithm",
     )
+    tracker_group.add_argument("--no-tracker", dest="disable_tracker", action="store_true",
+                               help="Disable a tracker enabled in other.yaml")
     parser.add_argument(
         "--pose-filter",
         choices=("none", "median", "savgol"),
@@ -632,7 +681,38 @@ def _make_argument_parser():
     )
     parser.add_argument("--filter-window", type=int, help="Temporal filter window length")
     parser.add_argument("--filter-polyorder", type=int, help="Savitzky-Golay polynomial order")
+    parser.add_argument("--filter-confidence", type=float, help="Keypoint confidence for temporal filtering")
+    parser.add_argument("--filter-max-gap", type=int, help="Maximum missing-frame gap to interpolate")
+    for item in fields(TrackerConfig):
+        name = item.name
+        if name == "algorithm":
+            continue
+        flag = f"--track-{name.replace('_', '-')}"
+        value_type = _parse_float_list if name == "kpt_oks_sigmas" else type(item.default)
+        if value_type is bool:
+            parser.add_argument(flag, dest=f"track_{name}", nargs="?", const=True,
+                                type=_parse_bool_value, default=None)
+            parser.add_argument(f"--no-{flag[2:]}", dest=f"track_{name}", action="store_const",
+                                const=False, default=None)
+        else:
+            parser.add_argument(flag, dest=f"track_{name}", type=value_type, default=None)
     return parser
+
+
+def _parse_bool_value(value: str) -> bool:
+    normalized = str(value).strip().lower()
+    if normalized in {"1", "true", "yes", "on"}:
+        return True
+    if normalized in {"0", "false", "no", "off"}:
+        return False
+    raise argparse.ArgumentTypeError("expected true or false")
+
+
+def _parse_float_list(value: str) -> Tuple[float, ...]:
+    try:
+        return tuple(float(item.strip()) for item in str(value).split(",") if item.strip())
+    except ValueError as exc:
+        raise argparse.ArgumentTypeError("use comma-separated numbers") from exc
 
 
 def _print_predict_banner(
@@ -713,7 +793,9 @@ def run(argv=None, box_provider: InstanceBoxProvider = None) -> int:
     artifact_format = detect_artifact_format(weights_path, artifact_metadata)
 
     if artifact_format == "pt":
-        model, config, context = load_project_model(config_path, weights_path)
+        model, config, context = load_project_model(
+            config_path, weights_path, device=args.device
+        )
         context["device"] = model.device if hasattr(model, "device") else next(model.parameters()).device
         context["model_nc"] = int(model.nc)
         context["kpt_shape"] = tuple(model.kpt_shape)
@@ -732,7 +814,7 @@ def run(argv=None, box_provider: InstanceBoxProvider = None) -> int:
             "model_nc": int(model_spec.get("nc", 1)),
             "kpt_shape": tuple(model_spec.get("kpt_shape") or context["dataset"].get("kpt_shape")),
             "device": __import__("animalposetracker.project.model_context", fromlist=["resolve_device"])
-            .resolve_device(torch, config.device),
+            .resolve_device(torch, args.device or config.device),
         })
         model = ModelArtifactBackend(
             weights_path,
@@ -758,6 +840,22 @@ def run(argv=None, box_provider: InstanceBoxProvider = None) -> int:
         config.image_size = int(metadata_input_size[0])
     elif head_name == "SimCCHead" and metadata_input_size:
         context["topdown_input_size"] = tuple(map(int, metadata_input_size[:2]))
+    if args.image_size is not None:
+        requested_size = int(args.image_size)
+        if head_name == "SimCCHead":
+            if tuple(context["topdown_input_size"]) != (requested_size, requested_size):
+                raise ValueError(
+                    "--imgsz cannot change the fixed AnimalViTPose SimCC input size; "
+                    "change the model configuration instead"
+                )
+        elif artifact_format != "pt" and not artifact_metadata.get("dynamic", False):
+            exported_size = tuple(map(int, metadata_input_size or (config.image_size, config.image_size)))
+            if exported_size[:2] != (requested_size, requested_size):
+                raise ValueError(
+                    "--imgsz cannot change a fixed-size exported artifact; export with "
+                    "--dynamic to use a different input size"
+                )
+        config.image_size = requested_size
     if head_name == "SimCCHead":
         context["preprocessing"] = dict(context["model_spec"].get("preprocessing") or {})
 
@@ -845,13 +943,21 @@ def run(argv=None, box_provider: InstanceBoxProvider = None) -> int:
             output_dir if output_dir.is_absolute()
             else context["project_dir"] / output_dir
         ).resolve()
+    elif args.project or args.name:
+        output_root = Path(args.project or "runs").expanduser()
+        if not output_root.is_absolute():
+            output_root = context["project_dir"] / output_root
+        config.output_dir = output_root / (args.name or "predict")
     else:
         # Prediction runs get their own namespace instead of inheriting the
         # training run name (project/name = runs/train) from other.yaml.
         config.output_dir = context["project_dir"] / "runs" / "predict"
     config.output_dir = unique_output_directory(
         config.output_dir,
-        exist_ok=bool(context["other"].get("exist_ok", False)),
+        exist_ok=bool(
+            context["other"].get("exist_ok", False)
+            if args.exist_ok is None else args.exist_ok
+        ),
     )
 
     settings_values = context["other"]
@@ -877,18 +983,40 @@ def run(argv=None, box_provider: InstanceBoxProvider = None) -> int:
         "agnostic_nms": bool(settings_values.get("agnostic_nms", False)),
         "show_boxes": bool(settings_values.get("show_boxes", True)),
         "show_labels": bool(settings_values.get("show_labels", True)),
+        "show_confidence": bool(settings_values.get("show_conf", True)),
         "show_keypoints": bool(settings_values.get("show_keypoints", True)),
         "show_skeletons": bool(settings_values.get("kpt_line", False)),
         "point_radius": int(settings_values.get("kpt_radius") or 4),
         "line_width": int(settings_values.get("line_width") or 2),
     }
+    cli_settings = {
+        "confidence": args.conf,
+        "iou": args.iou,
+        "max_detections": args.max_det,
+        "keypoint_confidence": args.keypoint_score_threshold,
+        "agnostic_nms": args.agnostic_nms,
+        "show_boxes": args.show_boxes,
+        "show_labels": args.show_labels,
+        "show_confidence": args.show_confidence,
+        "show_keypoints": args.show_keypoints,
+        "show_skeletons": args.show_skeletons,
+        "point_radius": args.point_radius,
+        "line_width": args.line_width,
+    }
+    settings.update({key: value for key, value in cli_settings.items() if value is not None})
     tracking_value = settings_values.get("tracking") or {}
     if not isinstance(tracking_value, dict):
         raise TypeError("other.yaml tracking settings must be a mapping")
     tracking_settings = dict(tracking_value)
     tracking_enabled = bool(tracking_settings.pop("enabled", False))
     configured_tracker = tracking_settings.pop("algorithm", None)
-    tracker_name = args.tracker or (
+    tracker_cli_settings = {
+        name[6:]: value
+        for name, value in vars(args).items()
+        if name.startswith("track_") and value is not None
+    }
+    tracking_settings.update(tracker_cli_settings)
+    tracker_name = None if args.disable_tracker else args.tracker or (
         configured_tracker if tracking_enabled else None
     )
     filter_value = settings_values.get("pose_filter") or {}
@@ -902,6 +1030,8 @@ def run(argv=None, box_provider: InstanceBoxProvider = None) -> int:
     ).lower()
     if filter_method not in {"none", "median", "savgol"}:
         raise ValueError("pose_filter.method must be one of: none, median, savgol")
+    if args.disable_tracker and filter_method != "none":
+        raise ValueError("--no-tracker cannot be combined with temporal pose filtering")
     if filter_method != "none" and tracker_name is None:
         tracker_name = "bytetrack"
     filter_window = int(
@@ -916,6 +1046,10 @@ def run(argv=None, box_provider: InstanceBoxProvider = None) -> int:
         "confidence_threshold", settings["keypoint_confidence"]
     )
     filter_max_gap = int(pose_filter_settings.get("max_gap", 0))
+    if args.filter_confidence is not None:
+        filter_confidence = args.filter_confidence
+    if args.filter_max_gap is not None:
+        filter_max_gap = args.filter_max_gap
     if tracker_name and not videos:
         raise ValueError("Video tracking requires at least one video source")
     output_dir = config.output_dir

@@ -30,6 +30,7 @@ class TrainingConfig:
     image_size: int = 640
     num_workers: int = 0
     device: str = "auto"
+    channels_last: Optional[bool] = None
     cache: Union[bool, str] = False
     fraction: float = 1.0
     profile: bool = False
@@ -37,7 +38,7 @@ class TrainingConfig:
     save: bool = True
     verbose: bool = True
     single_cls: bool = False
-    multi_scale: bool = False
+    multi_scale: float = 0.0
     freeze: Optional[Union[int, list]] = None
 
     optimizer: str = "auto"
@@ -279,6 +280,9 @@ class TrainingConfig:
                 if isinstance(values.get("device"), (list, tuple))
                 else str(values.get("device") or "auto")
             ),
+            "channels_last": (
+                None if values.get("channels_last") is None else bool(values["channels_last"])
+            ),
             "cache": values.get("cache", False),
             "fraction": float(values.get("fraction", 1.0)),
             "profile": bool(values.get("profile", False)),
@@ -286,7 +290,7 @@ class TrainingConfig:
             "save": bool(values.get("save", True)),
             "verbose": bool(values.get("verbose", True)),
             "single_cls": bool(values.get("single_cls", False)),
-            "multi_scale": bool(values.get("multi_scale", False)),
+            "multi_scale": float(values.get("multi_scale", 0.0) or 0.0),
             "freeze": values.get("freeze"),
             "optimizer": str(optimizer),
             "learning_rate": values.get("learning_rate", values.get("lr0", 1e-2)),

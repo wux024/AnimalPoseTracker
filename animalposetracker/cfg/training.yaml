@@ -27,7 +27,7 @@ shared:
     single_cls: false
     multi_scale: false
     freeze:
-    best_metric: coco/AP
+    best_metric: coco/AP # coco/AP or ultralytics/AP
     best_metric_mode: max
 
 metrics:

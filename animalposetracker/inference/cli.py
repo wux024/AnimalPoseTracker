@@ -57,6 +57,28 @@ def _make_argument_parser() -> argparse.ArgumentParser:
                         help="Smooth tracked records after the stream ends")
     parser.add_argument("--filter-window", type=int, help="Temporal filter window length")
     parser.add_argument("--filter-polyorder", type=int, help="Savitzky-Golay polynomial order")
+    parser.add_argument("--filter-confidence", type=float,
+                        help="Keypoint confidence threshold for temporal filtering")
+    parser.add_argument("--filter-max-gap", type=int,
+                        help="Maximum missing-frame gap to interpolate when filtering")
+    parser.add_argument("--agnostic-nms", dest="agnostic_nms", action="store_true",
+                        help="Use class-agnostic NMS")
+    parser.add_argument("--class-aware-nms", dest="agnostic_nms", action="store_false",
+                        help="Apply NMS separately for each class")
+    parser.set_defaults(agnostic_nms=True)
+    parser.add_argument("--show-boxes", dest="show_boxes", action="store_true")
+    parser.add_argument("--no-show-boxes", dest="show_boxes", action="store_false")
+    parser.add_argument("--show-labels", dest="show_labels", action="store_true")
+    parser.add_argument("--no-show-labels", dest="show_labels", action="store_false")
+    parser.add_argument("--show-keypoints", dest="show_keypoints", action="store_true")
+    parser.add_argument("--no-show-keypoints", dest="show_keypoints", action="store_false")
+    parser.add_argument("--show-skeletons", dest="show_skeletons", action="store_true")
+    parser.add_argument("--no-show-skeletons", dest="show_skeletons", action="store_false")
+    parser.add_argument("--line-width", type=int, default=2,
+                        help="Rendered bounding box and skeleton line width")
+    parser.add_argument("--point-radius", "--kpt-radius", dest="point_radius", type=int, default=4,
+                        help="Rendered keypoint radius")
+    parser.set_defaults(show_boxes=True, show_labels=True, show_keypoints=True, show_skeletons=True)
     parser.add_argument("--show", action="store_true",
                         help="Display the rendered stream in a window")
     parser.add_argument("--output", help="Write the rendered stream to this video file")
@@ -123,7 +145,18 @@ def _instance_to_record(instance, class_names) -> dict:
     }
 
 
-def _render(frame, detections, skeleton, show_bbox=True):
+def _render(
+    frame,
+    detections,
+    skeleton,
+    *,
+    show_bbox=True,
+    show_labels=True,
+    show_keypoints=True,
+    show_skeletons=True,
+    line_width=2,
+    point_radius=4,
+):
     import cv2
 
     rendered = frame.copy()
@@ -139,21 +172,24 @@ def _render(frame, detections, skeleton, show_bbox=True):
         bbox = detection.get("bbox_xyxy")
         if show_bbox and bbox:
             x1, y1, x2, y2 = [int(round(v)) for v in bbox]
-            cv2.rectangle(rendered, (x1, y1), (x2, y2), (60, 180, 75), 2)
-            cv2.putText(rendered, label, (x1, max(0, y1 - 6)),
-                        cv2.FONT_HERSHEY_SIMPLEX, 0.6, (60, 180, 75), 2, cv2.LINE_AA)
+            cv2.rectangle(rendered, (x1, y1), (x2, y2), (60, 180, 75), line_width)
+            if show_labels:
+                cv2.putText(rendered, label, (x1, max(0, y1 - 6)),
+                            cv2.FONT_HERSHEY_SIMPLEX, 0.6, (60, 180, 75), line_width, cv2.LINE_AA)
         points = []
         for point in keypoints:
             if len(point) >= 3 and float(point[2]) <= 0.0:
                 points.append(None)
                 continue
             points.append((int(round(point[0])), int(round(point[1]))))
-        for start, end in skeleton:
-            if start < len(points) and end < len(points) and points[start] and points[end]:
-                cv2.line(rendered, points[start], points[end], (220, 160, 60), 2, cv2.LINE_AA)
-        for point in points:
-            if point:
-                cv2.circle(rendered, point, 4, (80, 80, 230), -1, cv2.LINE_AA)
+        if show_skeletons:
+            for start, end in skeleton:
+                if start < len(points) and end < len(points) and points[start] and points[end]:
+                    cv2.line(rendered, points[start], points[end], (220, 160, 60), line_width, cv2.LINE_AA)
+        if show_keypoints:
+            for point in points:
+                if point:
+                    cv2.circle(rendered, point, point_radius, (80, 80, 230), -1, cv2.LINE_AA)
     return rendered
 
 
@@ -273,6 +309,7 @@ def run(argv=None) -> int:
             keypoint_dims=kpt_shape[1],
             confidence_threshold=args.conf,
             iou_threshold=args.iou,
+            class_agnostic_nms=args.agnostic_nms,
         )
         input_config = StreamInputConfig(
             input_size=input_size,
@@ -339,7 +376,17 @@ def run(argv=None) -> int:
                 detections = [_instance_to_record(instance, class_names) for instance in instances]
             records.append({"frame": frame_index, "predictions": detections})
             if writer is not None or args.show:
-                rendered = _render(frame, detections, skeleton)
+                rendered = _render(
+                    frame,
+                    detections,
+                    skeleton,
+                    show_bbox=args.show_boxes,
+                    show_labels=args.show_labels,
+                    show_keypoints=args.show_keypoints,
+                    show_skeletons=args.show_skeletons,
+                    line_width=args.line_width,
+                    point_radius=args.point_radius,
+                )
                 if writer is not None:
                     writer.write(rendered)
                 if args.show:
@@ -379,6 +426,10 @@ def run(argv=None) -> int:
                 method=args.pose_filter,
                 window_length=args.filter_window or 5,
                 polyorder=args.filter_polyorder or 2,
+                confidence_threshold=(
+                    0.25 if args.filter_confidence is None else args.filter_confidence
+                ),
+                max_gap=0 if args.filter_max_gap is None else args.filter_max_gap,
             )
         records_path = Path(args.records).expanduser().resolve()
         records_path.parent.mkdir(parents=True, exist_ok=True)

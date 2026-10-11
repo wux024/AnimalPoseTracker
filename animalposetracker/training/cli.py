@@ -11,8 +11,9 @@ import shutil
 import time
 import threading
 import traceback
+from dataclasses import fields as dataclass_fields
 from pathlib import Path
-from typing import Any, Dict
+from typing import Any, Dict, List
 from urllib.parse import urlparse
 
 from .config import TrainingConfig
@@ -183,6 +184,8 @@ def _launch_distributed(
     config_path: Path,
     resume_path: str = None,
     output_dir: str = None,
+    device=None,
+    cli_overrides=None,
 ) -> int:
     """Launch one local training process per selected GPU with torch.distributed."""
     import torch
@@ -194,7 +197,7 @@ def _launch_distributed(
         _read_mapping(config_path),
         model_type=project_values.get("model_type"),
     )
-    device_ids = _device_ids(config_values.get("device"))
+    device_ids = _device_ids(device if device is not None else config_values.get("device"))
     if not torch.cuda.is_available():
         raise RuntimeError("Multiple GPU devices were selected, but this PyTorch environment has no CUDA")
     if len(device_ids) > torch.cuda.device_count():
@@ -219,6 +222,7 @@ def _launch_distributed(
             "MASTER_ADDR": "127.0.0.1",
             "MASTER_PORT": str(master_port),
         })
+        worker_environment[_CLI_OVERRIDE_ENV] = json.dumps(cli_overrides or {})
         command = [
             sys.executable,
             "-m",
@@ -254,18 +258,183 @@ def _launch_distributed(
         return 130
 
 
+_CLI_OVERRIDE_ENV = "ANIMALPOSE_TRAIN_OVERRIDES"
+
+
+def _parse_cache_value(value: str):
+    normalized = str(value).strip().lower()
+    if normalized in {"1", "true", "yes", "on"}:
+        return True
+    if normalized in {"0", "false", "no", "off", "none"}:
+        return False
+    if normalized in {"ram", "disk"}:
+        return normalized
+    raise argparse.ArgumentTypeError("cache must be false, true, 'ram', or 'disk'")
+
+
+def _parse_bool_value(value: str) -> bool:
+    normalized = str(value).strip().lower()
+    if normalized in {"1", "true", "yes", "on"}:
+        return True
+    if normalized in {"0", "false", "no", "off"}:
+        return False
+    raise argparse.ArgumentTypeError("expected true or false")
+
+
+def _parse_pretrained_value(value: str):
+    normalized = str(value).strip().lower()
+    if normalized in {"1", "true", "yes", "on"}:
+        return True
+    if normalized in {"0", "false", "no", "off"}:
+        return False
+    return value
+
+
+def _parse_multi_scale(value: str) -> float:
+    normalized = str(value).strip().lower()
+    if normalized in {"true", "yes", "on"}:
+        return 1.0
+    if normalized in {"false", "no", "off"}:
+        return 0.0
+    try:
+        return float(value)
+    except ValueError as exc:
+        raise argparse.ArgumentTypeError("multi_scale must be a number from 0 to 1") from exc
+
+
+def _parse_freeze(value: str):
+    try:
+        items = [int(item.strip()) for item in str(value).split(",") if item.strip()]
+    except ValueError as exc:
+        raise argparse.ArgumentTypeError("freeze must be a layer count or comma-separated indices") from exc
+    if len(items) == 1:
+        return items[0]
+    if items:
+        return items
+    raise argparse.ArgumentTypeError("freeze must be a layer count or comma-separated indices")
+
+
+def _parse_int_list(value: str) -> List[int]:
+    try:
+        return [int(item.strip()) for item in str(value).split(",") if item.strip()]
+    except ValueError as exc:
+        raise argparse.ArgumentTypeError("use comma-separated integers") from exc
+
+_CLI_ALIASES = {
+    "batch_size": ("--batch",),
+    "image_size": ("--imgsz",),
+    "num_workers": ("--workers",),
+    "time_hours": ("--time",),
+    "learning_rate": ("--lr0",),
+    "final_lr_factor": ("--lrf",),
+    "cosine_schedule": ("--cos-lr",),
+    "nominal_batch_size": ("--nbs",),
+    "validation_batch_size": ("--val-batch",),
+    "validation_confidence": ("--conf",),
+    "validation_iou": ("--iou",),
+    "max_detections": ("--max-det",),
+    "early_stopping_patience": ("--patience",),
+    "box_loss_weight": ("--box",),
+    "class_loss_weight": ("--cls",),
+    "distribution_loss_weight": ("--dfl",),
+    "keypoint_loss_weight": ("--pose",),
+    "visibility_loss_weight": ("--kobj",),
+    "scale": ("--augment-scale",),
+}
+
+_CLI_CONFIG_KEY_ALIASES = {
+    "time_hours": "time",
+    "validation_enabled": "val",
+    "validation_confidence": "conf",
+    "validation_iou": "iou",
+    "max_detections": "max_det",
+}
+
+_CLI_INTERNAL_FIELDS = {
+    "project_dir", "output_dir", "resume_from", "train_dataset_size",
+    "resolved_optimizer", "resolved_learning_rate", "resolved_momentum", "resolved_weight_decay",
+}
+_CLI_COMMAND_FIELDS = tuple(
+    item.name for item in dataclass_fields(TrainingConfig)
+    if item.name not in _CLI_INTERNAL_FIELDS
+)
+_CLI_FIELD_TO_KEY = {
+    name: _CLI_CONFIG_KEY_ALIASES.get(name, name)
+    for name in _CLI_COMMAND_FIELDS
+}
+_CLI_SPECIAL_TYPES = {
+    "model": str,
+    "data": str,
+    "pretrained_weights": str,
+    "time_hours": float,
+    "validation_batch_size": int,
+    "channels_last": bool,
+    "cache": _parse_cache_value,
+    "multi_scale": _parse_multi_scale,
+    "freeze": _parse_freeze,
+    "warmup_iters": int,
+    "warmup_start_factor": float,
+    "gradient_clip_norm": float,
+    "layer_decay_rate": float,
+    "lr_milestones": _parse_int_list,
+}
+
+
+def _add_bool_options(parser: argparse.ArgumentParser, flags, dest: str) -> None:
+    for flag in flags:
+        parser.add_argument(
+            flag, dest=dest, nargs="?", const=True, type=_parse_bool_value,
+            default=argparse.SUPPRESS,
+        )
+        negative = "--no-" + flag[2:]
+        parser.add_argument(negative, dest=dest, action="store_const", const=False, default=argparse.SUPPRESS)
+
+
+def _collect_cli_overrides(args):
+    values = {}
+    for field_name in _CLI_COMMAND_FIELDS:
+        if hasattr(args, field_name):
+            values[_CLI_FIELD_TO_KEY[field_name]] = getattr(args, field_name)
+    for key in ("project", "name", "exist_ok"):
+        if hasattr(args, key):
+            values[key] = getattr(args, key)
+    if hasattr(args, "pretrained"):
+        values["pretrained"] = getattr(args, "pretrained")
+        if args.pretrained is False:
+            values["pretrained_weights"] = None
+        elif isinstance(args.pretrained, str):
+            values["pretrained_weights"] = args.pretrained
+    if hasattr(args, "pretrained_weights"):
+        values["pretrained_weights"] = args.pretrained_weights
+
+    inherited = os.environ.get(_CLI_OVERRIDE_ENV)
+    if inherited:
+        inherited_values = json.loads(inherited)
+        if not isinstance(inherited_values, dict):
+            raise ValueError(f"{_CLI_OVERRIDE_ENV} must contain a JSON mapping")
+        inherited_values.update(values)
+        values = inherited_values
+    fields = {
+        field_name: values[key]
+        for field_name, key in _CLI_FIELD_TO_KEY.items()
+        if key in values
+    }
+    return values, fields
+
+
 def _make_argument_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="animalpose-cli train",
         description="Train a pose model with AnimalPoseTracker's PyTorch training engine.",
+        formatter_class=argparse.ArgumentDefaultsHelpFormatter,
     )
     parser.add_argument(
         "--config",
         default="configs/other.yaml",
-        help="Path to the project's training configuration (default: configs/other.yaml)",
+        help="Path to the project's training configuration.",
     )
     parser.add_argument(
-        "--resume",
+        "--resume", "--resume-from", dest="resume",
         help="Resume from an AnimalPoseTracker full training checkpoint.",
     )
     parser.add_argument(
@@ -273,28 +442,43 @@ def _make_argument_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="Run the configured validation split without training.",
     )
-    parser.add_argument(
-        "--weights",
-        help="Checkpoint or weights-only file used by --validate-only.",
+    parser.add_argument("--weights", help="Checkpoint or weights-only file used by --validate-only.")
+    parser.add_argument("--output-dir", "--save-dir", dest="output_dir")
+    parser.add_argument("--json", action="store_true", help="Emit JSON-lines events on stdout.")
+    parser.add_argument("--project", default=argparse.SUPPRESS, help="Run output root (project setting).")
+    parser.add_argument("--name", default=argparse.SUPPRESS, help="Run name.")
+    parser.add_argument("--exist-ok", dest="exist_ok", action="store_const", const=True, default=argparse.SUPPRESS)
+    parser.add_argument("--no-exist-ok", dest="exist_ok", action="store_const", const=False, default=argparse.SUPPRESS)
+
+    for item in dataclass_fields(TrainingConfig):
+        name = item.name
+        if name in _CLI_INTERNAL_FIELDS or name in {"cache", "pretrained_weights"}:
+            continue
+        flags = tuple(dict.fromkeys((f"--{name.replace('_', '-')}", *_CLI_ALIASES.get(name, ()))))
+        value_type = _CLI_SPECIAL_TYPES.get(name, type(item.default))
+        if value_type is bool:
+            _add_bool_options(parser, flags, name)
+        else:
+            parser.add_argument(*flags, dest=name, type=value_type, default=argparse.SUPPRESS)
+
+    parser.add_argument("--cache", nargs="?", const=True, type=_parse_cache_value, default=argparse.SUPPRESS)
+    parser.add_argument("--no-cache", dest="cache", action="store_const", const=False, default=argparse.SUPPRESS)
+    pretrained = parser.add_mutually_exclusive_group()
+    pretrained.add_argument(
+        "--pretrained", nargs="?", const=True, type=_parse_pretrained_value,
+        default=argparse.SUPPRESS, metavar="PATH",
+        help="Use pretrained weights, optionally naming a local checkpoint.",
     )
-    parser.add_argument(
-        "--output-dir",
-        help="Override the run output directory without editing other.yaml.",
-    )
-    parser.add_argument(
-        "--json",
-        action="store_true",
-        help=(
-            "Emit machine-readable JSON-lines events on stdout. "
-            "By default interactive terminals get a human-readable renderer "
-            "while piped output stays JSON-lines."
-        ),
-    )
+    pretrained.add_argument("--no-pretrained", dest="pretrained", action="store_const", const=False, default=argparse.SUPPRESS)
+    pretrained.add_argument("--pretrained-weights", dest="pretrained_weights", default=argparse.SUPPRESS)
+    parser.add_argument("--no-gradient-clip", dest="gradient_clip_norm", action="store_const", const=None, default=argparse.SUPPRESS)
+    parser.add_argument("--quiet", dest="verbose", action="store_const", const=False, default=argparse.SUPPRESS)
     return parser
 
 
 def run(argv=None) -> int:
     args = _make_argument_parser().parse_args(argv)
+    cli_override_values, cli_override_fields = _collect_cli_overrides(args)
     pretty_console = not (args.json or not sys.stdout.isatty())
     if pretty_console:
         from .console import PrettyTrainingRenderer
@@ -315,6 +499,7 @@ def run(argv=None) -> int:
             _read_mapping(config_path),
             model_type=project_values.get("model_type"),
         )
+        values.update(cli_override_values)
         if args.validate_only:
             if args.resume:
                 raise ValueError("--resume cannot be combined with --validate-only")
@@ -393,6 +578,8 @@ def run(argv=None) -> int:
                     config_path,
                     args.resume,
                     output_dir=values.get("output_dir"),
+                    device=values.get("device"),
+                    cli_overrides=cli_override_values,
                 )
         resume_config = None
         if args.resume:
@@ -415,6 +602,9 @@ def run(argv=None) -> int:
                 # runtime overrides when resuming.
                 for name in ("image_size", "batch_size", "device", "close_mosaic"):
                     setattr(saved_config, name, getattr(current_config, name))
+                for name in cli_override_fields:
+                    if hasattr(saved_config, name):
+                        setattr(saved_config, name, getattr(current_config, name))
                 saved_config.output_dir = current_config.output_dir
                 saved_config.resume_from = current_config.resume_from
                 saved_config.pretrained_weights = None
@@ -441,6 +631,13 @@ def run(argv=None) -> int:
                         model_scale=scale,
                         model_config=model_spec,
                     )
+                    values.update(cli_override_values)
+        if args.validate_only:
+            values["val"] = True
+            values["pretrained"] = False
+            values["pretrained_weights"] = None
+            values["resume"] = False
+            values["resume_from"] = None
         from .engine import initialize_distributed, seed_everything
 
         rank, world_size, _local_rank = initialize_distributed(values.get("device") or "auto")
@@ -633,6 +830,12 @@ def run(argv=None) -> int:
                         "auc_thresholds", KEYPOINT_METRICS.get("auc_thresholds", 20)
                     )),
                     oks_area_mode=config.oks_area_mode,
+                    ap_metric=(
+                        config.best_metric
+                        if config.best_metric in {"coco/AP", "ultralytics/AP"}
+                        else "coco/AP"
+                    ),
+                    ultralytics_max_detections=config.max_detections,
                 )
                 if validation_loader is not None else None
             )
@@ -668,6 +871,7 @@ def run(argv=None) -> int:
                 epochs=config.epochs,
                 close_mosaic=config.close_mosaic,
                 single_cls=config.single_cls,
+                device=config.device,
             )
             model = build_model(model_spec, scale=scale)
             head = model.model[-1]
@@ -708,6 +912,11 @@ def run(argv=None) -> int:
                     keypoint_auc_thresholds=int(KEYPOINT_METRICS.get("auc_thresholds", 20)),
                     coco_max_detections=config.max_detections,
                     oks_area_mode=config.oks_area_mode,
+                    ap_metric=(
+                        config.best_metric
+                        if config.best_metric in {"coco/AP", "ultralytics/AP"}
+                        else "coco/AP"
+                    ),
                 )
                 if validation_loader is not None else None
             )

@@ -1,5 +1,7 @@
 """Local task-aligned target assignment for AnimalPoseTracker pose training."""
 
+import math
+
 import torch
 import torch.nn as nn
 
@@ -8,30 +10,29 @@ def aligned_complete_iou(boxes_a: torch.Tensor, boxes_b: torch.Tensor) -> torch.
     """Return CIoU for broadcastable xyxy box tensors."""
     a = boxes_a
     b = boxes_b
-    top_left = torch.maximum(a[..., :2], b[..., :2])
-    bottom_right = torch.minimum(a[..., 2:], b[..., 2:])
-    intersection = (bottom_right - top_left).clamp_min(0).prod(dim=-1)
-    size_a = (a[..., 2:] - a[..., :2]).clamp_min(0)
-    size_b = (b[..., 2:] - b[..., :2]).clamp_min(0)
-    area_a = size_a.prod(dim=-1)
-    area_b = size_b.prod(dim=-1)
-    iou = intersection / (area_a + area_b - intersection).clamp_min(1e-9)
-
-    center_a = (a[..., :2] + a[..., 2:]) * 0.5
-    center_b = (b[..., :2] + b[..., 2:]) * 0.5
-    center_distance = (center_a - center_b).square().sum(dim=-1)
-    outer_min = torch.minimum(a[..., :2], b[..., :2])
-    outer_max = torch.maximum(a[..., 2:], b[..., 2:])
-    outer_diagonal = (outer_max - outer_min).square().sum(dim=-1).clamp_min(1e-9)
-    safe_a = size_a.clamp_min(1e-7)
-    safe_b = size_b.clamp_min(1e-7)
-    aspect = (4.0 / (torch.pi ** 2)) * (
-        torch.atan(safe_a[..., 0] / safe_a[..., 1])
-        - torch.atan(safe_b[..., 0] / safe_b[..., 1])
+    x1_a, y1_a, x2_a, y2_a = a.unbind(dim=-1)
+    x1_b, y1_b, x2_b, y2_b = b.unbind(dim=-1)
+    width_a, height_a = x2_a - x1_a, y2_a - y1_a + 1e-7
+    width_b, height_b = x2_b - x1_b, y2_b - y1_b + 1e-7
+    intersection = (
+        (x2_a.minimum(x2_b) - x1_a.maximum(x1_b)).clamp_min(0)
+        * (y2_a.minimum(y2_b) - y1_a.maximum(y1_b)).clamp_min(0)
+    )
+    union = width_a * height_a + width_b * height_b - intersection + 1e-7
+    iou = intersection / union
+    outer_width = x2_a.maximum(x2_b) - x1_a.minimum(x1_b)
+    outer_height = y2_a.maximum(y2_b) - y1_a.minimum(y1_b)
+    outer_diagonal = outer_width.square() + outer_height.square() + 1e-7
+    center_distance = (
+        (x2_b + x1_b - x2_a - x1_a).square()
+        + (y2_b + y1_b - y2_a - y1_a).square()
+    ) / 4.0
+    aspect = (4.0 / math.pi**2) * (
+        torch.atan(width_b / height_b) - torch.atan(width_a / height_a)
     ).square()
     with torch.no_grad():
-        alpha = aspect / (1.0 - iou + aspect).clamp_min(1e-9)
-    return iou - center_distance / outer_diagonal - alpha * aspect
+        alpha = aspect / (1.0 - iou + aspect + 1e-7)
+    return iou - (center_distance / outer_diagonal + aspect * alpha)
 
 
 def pairwise_complete_iou(boxes_a: torch.Tensor, boxes_b: torch.Tensor) -> torch.Tensor:
@@ -72,7 +73,7 @@ class TaskAlignedAssigner(nn.Module):
                 torch.zeros((batch_size, anchor_count), dtype=torch.long, device=pred_scores.device),
             )
 
-        inside = self._centers_in_boxes(anchor_centers, gt_boxes)
+        inside = self._centers_in_boxes(anchor_centers, gt_boxes, gt_mask)
         align, overlaps = self._alignment_metrics(
             pred_scores, pred_boxes, gt_labels, gt_boxes, inside & gt_mask.bool()
         )
@@ -89,9 +90,12 @@ class TaskAlignedAssigner(nn.Module):
         scores = scores * quality
         return labels, boxes, scores, foreground.bool(), target_gt_index
 
-    def _centers_in_boxes(self, anchor_centers, gt_boxes):
+    def _centers_in_boxes(self, anchor_centers, gt_boxes, gt_mask):
+        """Select anchor centers inside boxes after Ultralytics' minimum-stride floor."""
         center = (gt_boxes[..., :2] + gt_boxes[..., 2:]) * 0.5
         size = (gt_boxes[..., 2:] - gt_boxes[..., :2]).clamp_min(0)
+        below_stride = (size < self.stride_val) & gt_mask.bool()
+        size = torch.where(below_stride, torch.full_like(size, self.stride_val), size)
         left_top = (center - size * 0.5).unsqueeze(2)
         right_bottom = (center + size * 0.5).unsqueeze(2)
         deltas = torch.cat(

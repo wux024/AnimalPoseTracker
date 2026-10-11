@@ -4,6 +4,7 @@ import hashlib
 import math
 import multiprocessing
 import os
+import random
 import tempfile
 import warnings
 from pathlib import Path
@@ -20,6 +21,14 @@ from .coco import annotation_source_for_split, load_coco_pose_index
 
 
 IMAGE_SUFFIXES = {".bmp", ".jpeg", ".jpg", ".png", ".tif", ".tiff", ".webp"}
+
+
+def _seed_pose_worker(worker_id: int) -> None:
+    """Seed Python and NumPy augmentation RNGs like Ultralytics' pose loader."""
+    del worker_id
+    worker_seed = torch.initial_seed() % 2**32
+    np.random.seed(worker_seed)
+    random.seed(worker_seed)
 
 
 def _read_yaml(path: Path) -> Dict[str, Any]:
@@ -365,9 +374,7 @@ class PoseTextDataset(Dataset):
         self.total_image_count = len(self.image_paths)
         if split == "train" and fraction < 1.0:
             count = max(1, int(round(len(self.image_paths) * float(fraction))))
-            rng = np.random.default_rng(int(seed))
-            chosen = np.sort(rng.choice(len(self.image_paths), size=count, replace=False))
-            self.image_paths = [self.image_paths[int(index)] for index in chosen]
+            self.image_paths = self.image_paths[:count]
         if split == "train":
             self._mosaic_buffer_limit = min(
                 len(self.image_paths), self.mosaic_batch_size * 8, 1000
@@ -407,7 +414,7 @@ class PoseTextDataset(Dataset):
             )
             image_paths = sample["path"]
         image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
-        image_tensor = torch.from_numpy(np.ascontiguousarray(image.transpose(2, 0, 1))).float().div_(255.0)
+        image_tensor = torch.from_numpy(np.ascontiguousarray(image.transpose(2, 0, 1)))
 
         return {
             "images": image_tensor,
@@ -428,9 +435,7 @@ class PoseTextDataset(Dataset):
     def _mosaic_enabled(self) -> bool:
         if self.close_mosaic <= 0 or self.epochs <= 0:
             return True
-        cutoff = self.epochs - self.close_mosaic
-        if cutoff < 0:
-            return True
+        cutoff = max(self.epochs - self.close_mosaic, 0)
         return int(self._epoch.value) < cutoff
 
     def _cache_path(self, index: int) -> Path:
@@ -594,60 +599,61 @@ class PoseTextDataset(Dataset):
                 np.empty((0, self.num_keypoints, self.keypoint_dimensions), dtype=np.float32),
             )
 
-        classes: List[int] = []
-        boxes: List[List[float]] = []
-        keypoints: List[List[List[float]]] = []
+        labels: List[List[float]] = []
         expected_keypoints = self.num_keypoints * self.keypoint_dimensions
         with label_path.open("r", encoding="utf-8-sig") as stream:
             for line_number, line in enumerate(stream, start=1):
                 fields = line.split()
                 if not fields:
                     continue
-                if len(fields) not in (5, 5 + expected_keypoints):
+                if len(fields) != 5 + expected_keypoints:
                     raise ValueError(
-                        f"Expected 5 or {5 + expected_keypoints} values at "
+                        f"Expected {5 + expected_keypoints} values at "
                         f"{label_path}:{line_number}, got {len(fields)}"
                     )
                 try:
-                    class_value = float(fields[0])
-                    box = [float(value) for value in fields[1:5]]
-                    values = [float(value) for value in fields[5:]]
+                    values = np.asarray(fields, dtype=np.float32)
                 except ValueError as exc:
                     raise ValueError(f"Non-numeric annotation at {label_path}:{line_number}") from exc
-                if not np.isfinite([class_value, *box, *values]).all():
+                if not np.isfinite(values).all():
                     raise ValueError(f"Non-finite annotation at {label_path}:{line_number}")
+                class_value = float(values[0])
                 class_id = int(class_value)
-                if class_id != class_value or class_id < 0 or class_id >= len(self.source_class_names):
+                if class_id != class_value or class_id < 0:
+                    raise ValueError(f"Invalid class id {fields[0]} at {label_path}:{line_number}")
+                if not self.single_cls and class_id >= len(self.source_class_names):
                     raise ValueError(f"Class id {fields[0]} is outside the configured class range at {label_path}:{line_number}")
-                if box[2] <= 0 or box[3] <= 0:
+                if values[3] <= 0 or values[4] <= 0:
                     raise ValueError(f"Bounding-box width and height must be positive at {label_path}:{line_number}")
+                labels.append(values.tolist())
 
-                points = np.zeros(
-                    (self.num_keypoints, self.keypoint_dimensions), dtype=np.float32
-                )
-                if values:
-                    points = np.asarray(values, dtype=np.float32).reshape(
-                        self.num_keypoints, self.keypoint_dimensions
-                    )
-                elif self.keypoint_dimensions == 3:
-                    # A box-only label has no supervised keypoints.
-                    points[:, 2] = 0.0
-                else:
-                    raise ValueError(
-                        f"A box-only annotation cannot be used with kpt_shape=[{self.num_keypoints}, 2] "
-                        f"because this format has no visibility mask: {label_path}:{line_number}"
-                    )
-                classes.append(0 if self.single_cls else class_id)
-                boxes.append(box)
-                keypoints.append(points.tolist())
+        if not labels:
+            return (
+                np.empty((0,), dtype=np.int64),
+                np.empty((0, 4), dtype=np.float32),
+                np.empty((0, self.num_keypoints, self.keypoint_dimensions), dtype=np.float32),
+            )
 
-        return (
-            np.asarray(classes, dtype=np.int64),
-            np.asarray(boxes, dtype=np.float32).reshape(-1, 4),
-            np.asarray(keypoints, dtype=np.float32).reshape(
-                -1, self.num_keypoints, self.keypoint_dimensions
-            ),
+        label_array = np.asarray(labels, dtype=np.float32)
+        keypoint_xy = label_array[:, 5:].reshape(-1, self.keypoint_dimensions)[:, :2]
+        if keypoint_xy.size and keypoint_xy.max() > 1.01:
+            raise ValueError(f"Keypoint coordinates exceed normalized bounds at {label_path}")
+        if label_array.min() < -0.01:
+            raise ValueError(f"Annotation coordinates or classes are below normalized bounds at {label_path}")
+        if not self.single_cls and label_array[:, 0].max() >= len(self.source_class_names):
+            raise ValueError(f"A class id is outside the configured class range at {label_path}")
+
+        _, unique_indices = np.unique(label_array, axis=0, return_index=True)
+        label_array = label_array[unique_indices]
+        classes = (
+            np.zeros(len(label_array), dtype=np.int64)
+            if self.single_cls else label_array[:, 0].astype(np.int64)
         )
+        boxes = label_array[:, 1:5].astype(np.float32, copy=False)
+        keypoints = label_array[:, 5:].reshape(
+            -1, self.num_keypoints, self.keypoint_dimensions
+        ).astype(np.float32, copy=False)
+        return classes, boxes, keypoints
 
     def _read_coco_targets(self, image_path: Path, image_width: int, image_height: int):
         classes: List[int] = []
@@ -748,6 +754,7 @@ def build_pose_dataloaders(
     epochs: int = 100,
     close_mosaic: int = 10,
     single_cls: bool = False,
+    device: str = "auto",
 ) -> Tuple[DataLoader, Optional[DataLoader], Dict[str, Any]]:
     """Construct project-owned training and validation loaders from dataset YAML."""
     config_path = Path(data_yaml).expanduser().resolve()
@@ -783,7 +790,9 @@ def build_pose_dataloaders(
     generator = torch.Generator()
     distributed = torch.distributed.is_available() and torch.distributed.is_initialized()
     rank = torch.distributed.get_rank() if distributed else 0
-    generator.manual_seed(int(seed) + rank)
+    process_rank = rank if distributed else -1
+    generator_seed = (6148914691236517205 + process_rank + int(seed)) % (1 << 64)
+    generator.manual_seed(generator_seed)
     train_sampler = (
         DistributedSampler(
             train_dataset,
@@ -795,25 +804,60 @@ def build_pose_dataloaders(
         )
         if distributed else None
     )
-    shared = {
-        "batch_size": int(batch_size),
-        "num_workers": int(num_workers),
-        "collate_fn": pose_collate,
-        "pin_memory": torch.cuda.is_available(),
-        "persistent_workers": num_workers > 0,
-    }
+    requested_device = str(device or "auto").strip().lower()
+    if requested_device == "auto":
+        device_type = "cuda" if torch.cuda.is_available() else "cpu"
+    elif requested_device.isdigit() or all(
+        item.strip().isdigit() for item in requested_device.split(",")
+    ):
+        device_type = "cuda"
+    else:
+        device_type = requested_device.split(":", 1)[0].split(",", 1)[0]
+    device_count = torch.cuda.device_count() if device_type == "cuda" else 0
+    pin_memory = device_count > 0 and device_type not in {"cpu", "mps"}
+    cpu_count = max(os.cpu_count() or 1, 1)
+
+    def loader_options(dataset, requested_batch: int, prefetch_factor: int, sample_count=None):
+        effective_batch = min(max(int(requested_batch), 1), max(len(dataset), 1))
+        sample_count = len(dataset) if sample_count is None else int(sample_count)
+        batch_count = math.ceil(sample_count / effective_batch) if sample_count else 0
+        workers = min(
+            cpu_count // max(device_count, 1),
+            max(int(num_workers), 0),
+            0 if batch_count <= 1 else batch_count,
+        )
+        options = {
+            "batch_size": effective_batch,
+            "num_workers": workers,
+            "collate_fn": pose_collate,
+            "pin_memory": pin_memory,
+            "persistent_workers": workers > 0,
+            "worker_init_fn": _seed_pose_worker,
+        }
+        if workers > 0:
+            options["prefetch_factor"] = prefetch_factor
+        return options
+
     train_loader = DataLoader(
         train_dataset,
         shuffle=train_sampler is None,
         sampler=train_sampler,
         generator=generator,
-        **shared,
+        **loader_options(
+            train_dataset,
+            batch_size,
+            4,
+            sample_count=len(train_sampler) if train_sampler is not None else None,
+        ),
     )
-    validation_options = dict(shared)
-    validation_options["batch_size"] = int(validation_batch_size or batch_size)
+    validation_options = loader_options(
+        validation_dataset,
+        int(validation_batch_size or batch_size),
+        2,
+    ) if validation_dataset is not None else None
     validation_loader = (
         DataLoader(validation_dataset, shuffle=False, **validation_options)
-        if validation_dataset is not None else None
+        if validation_options is not None else None
     )
     metadata = {
         "num_classes": len(train_dataset.class_names),

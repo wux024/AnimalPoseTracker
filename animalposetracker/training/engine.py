@@ -109,7 +109,7 @@ def _make_grad_scaler(torch, enabled: bool):
 
 
 def build_optimizer(model, config: TrainingConfig):
-    """Build the same optimizer groups and ``auto`` selection used by the pinned pose trainer."""
+    """Build Ultralytics-compatible optimizer groups and automatic selection."""
     torch = _require_torch()
     name = config.optimizer.strip().lower()
     if config.layer_decay_rate is not None:
@@ -204,10 +204,10 @@ def build_optimizer(model, config: TrainingConfig):
         class_count = int(getattr(model, "nc", 10))
         fitted_lr = round(0.002 * 5 / (4 + class_count), 6)
         if iterations > 10000:
-            name, learning_rate, momentum = "sgd", 0.01, 0.9
+            name, learning_rate, momentum = "musgd", 0.01, 0.9
         else:
             name, learning_rate, momentum = "adamw", fitted_lr, 0.9
-            config.warmup_bias_lr = 0.0
+        config.warmup_bias_lr = 0.0
 
     decay = (
         config.weight_decay
@@ -215,6 +215,72 @@ def build_optimizer(model, config: TrainingConfig):
         * config.gradient_accumulation_steps
         / config.nominal_batch_size
     )
+
+    if name == "musgd":
+        from .muon import MuSGD
+
+        groups = {"weight": {}, "norm": {}, "bias": {}, "muon": {}}
+        for module_name, module in model.named_modules():
+            for parameter_name, parameter in module.named_parameters(recurse=False):
+                if not parameter.requires_grad:
+                    continue
+                full_name = f"{module_name}.{parameter_name}" if module_name else parameter_name
+                if parameter.ndim in {2, 4}:
+                    groups["muon"][full_name] = parameter
+                elif "bias" in full_name:
+                    groups["bias"][full_name] = parameter
+                elif isinstance(module, norm_types) or "logit_scale" in full_name:
+                    groups["norm"][full_name] = parameter
+                else:
+                    groups["weight"][full_name] = parameter
+
+        target = getattr(model, "student_model", model)
+        graph = getattr(target, "model", None)
+        head = graph[-1] if graph is not None and len(graph) else None
+        heads = (getattr(head, "cv3", None), getattr(head, "one2one_cv3", None))
+        boosted = {
+            id(parameter)
+            for module in heads if module is not None
+            for parameter in module.parameters()
+        }
+        optimizer_groups = []
+        group_settings = (
+            ("weight", decay, False),
+            ("norm", 0.0, False),
+            ("bias", 0.0, False),
+            ("muon", decay, True),
+        )
+        for group_name, group_decay, use_muon in group_settings:
+            boosted_parameters, regular_parameters = [], []
+            for parameter_name, parameter in groups[group_name].items():
+                is_boosted = (
+                    id(parameter) in boosted
+                    or "proto.semseg" in parameter_name
+                    or "SemanticSegment" in parameter_name
+                )
+                (boosted_parameters if is_boosted else regular_parameters).append(parameter)
+            for parameters, lr_scale in ((boosted_parameters, 3.0), (regular_parameters, 1.0)):
+                if not parameters:
+                    continue
+                optimizer_groups.append({
+                    "params": parameters,
+                    "lr": float(learning_rate) * lr_scale,
+                    "momentum": float(momentum),
+                    "nesterov": True,
+                    "weight_decay": group_decay,
+                    "use_muon": use_muon,
+                    "param_group": group_name,
+                    "group_name": group_name,
+                })
+
+        if not optimizer_groups:
+            raise ValueError("The model has no trainable parameters")
+        config.resolved_optimizer = "MUSGD"
+        config.resolved_learning_rate = float(learning_rate)
+        config.resolved_momentum = float(momentum)
+        config.resolved_weight_decay = float(decay)
+        return MuSGD(optimizer_groups, lr=learning_rate, momentum=momentum, nesterov=True, muon=0.2, sgd=1.0)
+
     parameter_groups_list = []
     for group_name, group_decay in (("bias", 0.0), ("decay", decay), ("norm", 0.0)):
         if parameter_groups[group_name]:
@@ -233,9 +299,20 @@ def build_optimizer(model, config: TrainingConfig):
             parameter_groups_list, lr=learning_rate, momentum=momentum, nesterov=True
         )
     if name == "adam":
-        return torch.optim.Adam(parameter_groups_list, lr=learning_rate, betas=(momentum, 0.999))
+        optimizer = torch.optim.Adam
+        optimizer_kwargs = {"lr": learning_rate, "betas": (momentum, 0.999)}
+        first_parameter = next(model.parameters(), None)
+        torch_major = int(str(torch.__version__).split(".", 1)[0].split("+", 1)[0])
+        if first_parameter is not None and first_parameter.is_cuda and torch_major >= 2:
+            optimizer_kwargs["fused"] = True
+        return optimizer(parameter_groups_list, **optimizer_kwargs)
     if name == "adamw":
-        return torch.optim.AdamW(parameter_groups_list, lr=learning_rate, betas=(momentum, 0.999))
+        optimizer_kwargs = {"lr": learning_rate, "betas": (momentum, 0.999)}
+        first_parameter = next(model.parameters(), None)
+        torch_major = int(str(torch.__version__).split(".", 1)[0].split("+", 1)[0])
+        if first_parameter is not None and first_parameter.is_cuda and torch_major >= 2:
+            optimizer_kwargs["fused"] = True
+        return torch.optim.AdamW(parameter_groups_list, **optimizer_kwargs)
     if name == "adamax":
         return torch.optim.Adamax(parameter_groups_list, lr=learning_rate, betas=(momentum, 0.999))
     if name == "nadam":
@@ -244,7 +321,9 @@ def build_optimizer(model, config: TrainingConfig):
         return torch.optim.RAdam(parameter_groups_list, lr=learning_rate, betas=(momentum, 0.999))
     if name == "rmsprop":
         return torch.optim.RMSprop(parameter_groups_list, lr=learning_rate, momentum=momentum)
-    raise ValueError("optimizer must be one of: auto, SGD, Adam, Adamax, AdamW, NAdam, RAdam, RMSProp")
+    raise ValueError(
+        "optimizer must be one of: auto, SGD, MuSGD, Adam, Adamax, AdamW, NAdam, RAdam, RMSProp"
+    )
 
 
 def build_scheduler(optimizer, config: TrainingConfig):
@@ -327,7 +406,10 @@ def _split_batch(batch, device, torch) -> Tuple[Any, Any]:
         images, targets = batch
     else:
         raise TypeError("A training batch must be a mapping or an (images, targets) pair")
-    return _move_to_device(images, device, torch), _move_to_device(targets, device, torch)
+    images = _move_to_device(images, device, torch)
+    if torch.is_tensor(images) and images.dtype == torch.uint8:
+        images = images.float().div_(255)
+    return images, _move_to_device(targets, device, torch)
 
 
 def _loss_components(result, torch):
@@ -381,6 +463,14 @@ class Trainer:
             torch, config.device, local_rank=self.local_rank, distributed=self.distributed
         )
         self.raw_model = model.to(self.device)
+        channels_last = config.channels_last is True or (
+            config.channels_last is None
+            and self.device.type == "cuda"
+            and os.name != "nt"
+            and hasattr(torch, "channels_last")
+        )
+        if channels_last and self.device.type == "cuda":
+            self.raw_model = self.raw_model.to(memory_format=torch.channels_last)
         self.freeze_layer_names, self.frozen_parameter_count = freeze_model_layers(
             self.raw_model, config.freeze
         )
@@ -433,15 +523,21 @@ class Trainer:
 
     def _multi_scale(self, images):
         """Randomly rescale training batches using stride-aligned YOLO sizing."""
-        if not self.config.multi_scale:
+        scale_range = float(self.config.multi_scale)
+        if scale_range <= 0.0:
             return images
         head = getattr(self.raw_model, "model", None)
         head = head[-1] if head is not None and len(head) else None
         strides = getattr(head, "stride", None)
         stride = max(int(strides.max().item()), 1) if strides is not None else 32
-        size = random.randrange(
-            int(self.config.image_size * 0.5), int(self.config.image_size * 1.5 + stride)
-        ) // stride * stride
+        size = (
+            random.randrange(
+                max(stride, int(self.config.image_size * (1.0 - scale_range))),
+                int(self.config.image_size * (1.0 + scale_range) + stride),
+            )
+            // stride
+            * stride
+        )
         factor = size / max(images.shape[-2:])
         if factor == 1:
             return images
@@ -515,9 +611,10 @@ class Trainer:
         if self.config.warmup_iters is not None:
             self._warmup_steps = max(int(self.config.warmup_iters), 0)
         elif total_batches and total_batches > 0:
-            self._warmup_steps = max(
-                int(round(float(self.config.warmup_epochs) * total_batches)), 100
+            warmup_epochs = min(
+                float(self.config.warmup_epochs), max(self.config.epochs - 1, 0)
             )
+            self._warmup_steps = int(round(warmup_epochs * total_batches))
         else:
             self._warmup_steps = 0
         self.optimizer.zero_grad(set_to_none=True)
@@ -545,22 +642,18 @@ class Trainer:
                     stopped = True
                     break
                 epoch_number = epoch_index + 1
+                if self.scheduler is not None and not isinstance(
+                    self.scheduler, self.torch.optim.lr_scheduler.ReduceLROnPlateau
+                ):
+                    with warnings.catch_warnings():
+                        warnings.simplefilter("ignore")
+                        self.scheduler.step()
                 self._set_epoch(train_loader, epoch_index)
-                loader_generator = getattr(train_loader, "generator", None)
-                if loader_generator is not None:
-                    loader_generator.manual_seed(
-                        int(self.config.seed) + self.rank + int(epoch_index)
-                    )
                 train_metrics, interrupted = self._train_epoch(train_loader, criterion, epoch_number)
                 final_metrics = {f"train_{key}": value for key, value in train_metrics.items()}
                 if interrupted:
                     stopped = True
                     break
-
-                if self.scheduler is not None and not isinstance(
-                    self.scheduler, self.torch.optim.lr_scheduler.ReduceLROnPlateau
-                ):
-                    self.scheduler.step()
 
                 should_validate = (
                     validation_loader is not None
@@ -590,10 +683,7 @@ class Trainer:
                             ema_model=self.ema.model if self.config.ema else None,
                         )
                     else:
-                        if float(monitored) == 0.0:
-                            self._best_epochs_without_improvement = 0
-                        else:
-                            self._best_epochs_without_improvement += 1
+                        self._best_epochs_without_improvement += 1
                 elif validation_loader is None:
                     monitored = train_metrics.get("loss")
                     if monitored is not None and self._is_improved(float(monitored), mode="min"):
@@ -751,7 +841,7 @@ class Trainer:
                 iteration = self._iteration_count
                 self._iteration_count += 1
             accumulation = self.config.gradient_accumulation_steps
-            if self._warmup_steps > 0 and iteration <= self._warmup_steps:
+            if self._warmup_steps > 0 and iteration < self._warmup_steps:
                 progress = min(max(iteration / self._warmup_steps, 0.0), 1.0)
                 target_accumulation = (
                     self.config.nominal_batch_size / self.config.batch_size
@@ -1049,12 +1139,25 @@ class Trainer:
             import matplotlib.pyplot as plt
 
             epochs = [item["epoch"] for item in self._history]
+            if self.config.best_metric == "ultralytics/AP":
+                ap_chart = (
+                    "Ultralytics AP",
+                    ("val_ultralytics/AP", "val_ultralytics/AP50", "val_ultralytics/AP75"),
+                )
+                recall_chart = ("Ultralytics precision / recall", ("val_ultralytics/P", "val_ultralytics/R"))
+            else:
+                ap_chart = (
+                    "COCO AP",
+                    ("val_coco/AP", "val_coco/AP50", "val_coco/AP75"),
+                )
+                recall_chart = ("COCO keypoint AR", ("val_coco/AR",))
             if any("train_loss_simcc_x" in item for item in self._history):
                 charts = (
                     ("Loss", ("train_loss",)),
                     ("SimCC X loss", ("train_loss_simcc_x",)),
                     ("SimCC Y loss", ("train_loss_simcc_y",)),
-                    ("COCO AP", ("val_coco/AP", "val_coco/AP50", "val_coco/AP75")),
+                    ap_chart,
+                    recall_chart,
                     ("PCK / AUC", ("val_PCK", "val_AUC")),
                     ("EPE", ("val_EPE",)),
                 )
@@ -1064,8 +1167,8 @@ class Trainer:
                     ("Box loss", ("train_box", "val_box")),
                     ("Class loss", ("train_class", "val_class")),
                     ("Pose loss", ("train_pose", "val_pose")),
-                    ("COCO keypoint AP", ("val_coco/AP", "val_coco/AP50", "val_coco/AP75")),
-                    ("COCO keypoint AR", ("val_coco/AR",)),
+                    ap_chart,
+                    recall_chart,
                     ("PCK / AUC", ("val_PCK", "val_AUC")),
                     ("EPE", ("val_EPE",)),
                 )
