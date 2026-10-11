@@ -192,7 +192,9 @@ class PoseDetectionLoss(nn.Module):
             pred_classes, target_scores.to(pred_classes.dtype), reduction="sum"
         ) / target_score_sum
 
-        zero = pred_distribution.sum() * 0.0
+        # Validation converts the model to FP16. Reduce in FP32 before scaling by
+        # zero so a no-foreground batch cannot overflow its FP16 sum into NaN.
+        zero = pred_distribution.sum(dtype=torch.float32) * 0.0
         box_loss = zero
         dfl_loss = zero
         pose_loss = zero

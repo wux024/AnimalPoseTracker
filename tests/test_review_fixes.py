@@ -187,6 +187,30 @@ class ReviewFixTests(unittest.TestCase):
         torch.testing.assert_close(boxes[0, 0], torch.tensor([256.0, 96.0, 384.0, 224.0]))
         torch.testing.assert_close(keypoints[0, 0, 0], torch.tensor([160.0, 240.0, 1.0]))
 
+    def test_fp16_pose_loss_with_no_foreground_stays_finite(self):
+        head = SimpleNamespace(
+            nc=1,
+            kpt_shape=(1, 3),
+            reg_max=16,
+            stride=torch.tensor([8.0, 16.0, 32.0]),
+        )
+        criterion = PoseDetectionLoss(head, image_size=640, kpt_oks_sigmas=[0.1])
+        features = [
+            torch.ones((1, 65, height, width), dtype=torch.float16)
+            for height, width in ((80, 80), (40, 40), (20, 20))
+        ]
+        keypoint_predictions = torch.ones((1, 3, 8400), dtype=torch.float16)
+        targets = {
+            "batch_indices": torch.empty(0, dtype=torch.long),
+            "classes": torch.empty(0, dtype=torch.long),
+            "boxes": torch.empty((0, 4)),
+            "keypoints": torch.empty((0, 1, 3)),
+        }
+
+        result = criterion((features, keypoint_predictions), targets)
+
+        self.assertTrue(all(torch.isfinite(value).all() for value in result["metrics"].values()))
+
     def test_pose_head_rebuilds_cached_anchors_after_device_move(self):
         head = YOLOPoseHead(nc=1, kpt_shape=(1, 3), ch=(16, 32, 64)).eval()
         head.stride = torch.tensor([8.0, 16.0, 32.0])

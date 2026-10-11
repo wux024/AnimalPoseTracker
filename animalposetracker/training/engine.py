@@ -611,10 +611,11 @@ class Trainer:
         if self.config.warmup_iters is not None:
             self._warmup_steps = max(int(self.config.warmup_iters), 0)
         elif total_batches and total_batches > 0:
-            warmup_epochs = min(
-                float(self.config.warmup_epochs), max(self.config.epochs - 1, 0)
+            warmup_epochs = float(self.config.warmup_epochs)
+            self._warmup_steps = (
+                max(int(round(warmup_epochs * total_batches)), 100)
+                if warmup_epochs > 0 else 0
             )
-            self._warmup_steps = int(round(warmup_epochs * total_batches))
         else:
             self._warmup_steps = 0
         self.optimizer.zero_grad(set_to_none=True)
@@ -841,7 +842,7 @@ class Trainer:
                 iteration = self._iteration_count
                 self._iteration_count += 1
             accumulation = self.config.gradient_accumulation_steps
-            if self._warmup_steps > 0 and iteration < self._warmup_steps:
+            if self._warmup_steps > 0 and iteration <= self._warmup_steps:
                 progress = min(max(iteration / self._warmup_steps, 0.0), 1.0)
                 target_accumulation = (
                     self.config.nominal_batch_size / self.config.batch_size
