@@ -747,7 +747,8 @@ class InferencerPage(QWidget, Ui_Inferencer):
             save_path.mkdir(exist_ok=True, parents=True)
             self.videowriter_thread.save_path = save_path / "output.avi"
             self.videowriter_thread.fps = self.fps
-            self.videowriter_thread.frame_size = (self.width, self.height)
+            # The writer sizes itself from the frames it receives; the spin box values are only
+            # what the source was asked for, which a camera need not honour.
             self.write_frame_end = False
             self.videowriter_thread.finished.connect(self.write_end)
         else:

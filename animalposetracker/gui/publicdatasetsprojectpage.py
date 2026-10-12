@@ -50,7 +50,6 @@ class PublicDatasetProjectPage(QWidget, Ui_PublicDatasetProject):
         
         # Model selection
         self.ModelTypeSelection.currentTextChanged.connect(self.onModelTypeChanged)
-        self.ModelScaleSelection.currentTextChanged.connect(self.onModelScaleChanged)
         
         # Dataset selection
         self.DatasetSelection.currentTextChanged.connect(self.onDatasetChanged)
@@ -97,11 +96,8 @@ class PublicDatasetProjectPage(QWidget, Ui_PublicDatasetProject):
         else:
             self.ModelScaleSelection.clear()
             self.ModelScaleSelection.addItems(["N", "S", "M", "L", "X"])
-        self.project.update_config("model", {"model_type": model_type})
-        
-    def onModelScaleChanged(self, model_scale):
-        """Handler for model scale selection change"""
-        self.project.update_config("model", {"model_scale": model_scale})
+        # The model config holds nc/kpt_shape/backbone/head; model_type and model_scale reach the
+        # created project through project_config, which this form submits on creation.
         
     def onDatasetChanged(self, dataset):
         """Handler for public dataset selection change"""

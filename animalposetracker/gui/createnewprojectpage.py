@@ -93,7 +93,6 @@ class CreateNewProjectPage(QWidget, Ui_CreateNewProject):
         
         # Model selection
         self.ModelTypeSelection.currentTextChanged.connect(self.onModelTypeChanged)
-        self.ModelScaleSelection.currentTextChanged.connect(self.onModelScaleChanged)
 
     def onProjectTextEdited(self):
         """Handler for project configuration text edit"""
@@ -317,16 +316,14 @@ class CreateNewProjectPage(QWidget, Ui_CreateNewProject):
         else:
             self.ModelScaleSelection.clear()
             self.ModelScaleSelection.addItems(["N", "S", "M", "L", "X"])
-        self.project.update_config("model", {"model_type": model_type})
-        
-    def onModelScaleChanged(self, model_scale):
-        """Handler for model scale selection change"""
-        self.project.update_config("model", {"model_scale": model_scale})
+        # Nothing to write here: the model config carries nc/kpt_shape/backbone/head, and
+        # create_model_config picks the YAML from project_config["model_type"], which this form
+        # submits when the project is created. The scale lands the same way.
 
     def onKeypointChanged(self):
         """Handler for keypoint input change"""
         keypoint_names = self.keypoint_manager.get_list_data()
-        self.project.update_config("project", {"keypoints_names": keypoint_names})
+        self.project.update_config("project", {"keypoints_name": keypoint_names})
 
     def onClassChanged(self):
         """Handler for class input change"""

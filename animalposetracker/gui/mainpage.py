@@ -166,24 +166,29 @@ class AnimalPoseTrackerPage(QMainWindow, Ui_AnimalPoseTracker):
         self.StartModelWeights.clicked.connect(self.onSelectModelWeights)
         self.StartExport.clicked.connect(self.onStartExport)
 
+    def _open_sub_page(self, page_class):
+        """Replace the current tool window, closing the previous one first.
+
+        Every opener used to close the old window, build a new one, delete that one immediately
+        and then build another -- a throwaway window per click.
+        """
+        if self.sub_page is not None:
+            self.sub_page.close()
+            self.sub_page.deleteLater()
+        self.sub_page = WindowFactory.run(page_class)
+        return self.sub_page
+
     def onCreateNewProject(self):
         """Slot for creating a new project"""
-        if hasattr(self, 'sub_page') and self.sub_page is not None:
-            self.sub_page.close()
-            self.sub_page = WindowFactory.run(CreateNewProjectPage)
-            self.sub_page.deleteLater()
-        
-        self.sub_page = WindowFactory.run(CreateNewProjectPage)
-        self.sub_page.CreateProjectClicked.connect(self._OpenConfigureTabPage)
-    
+        self._open_sub_page(CreateNewProjectPage).CreateProjectClicked.connect(
+            self._OpenConfigureTabPage
+        )
+
     def onCreatePublicDatasetsProject(self):
         """Slot for opening public datasets"""
-        if hasattr(self, 'sub_page') and self.sub_page is not None:
-            self.sub_page.close()
-            self.sub_page = WindowFactory.run(PublicDatasetProjectPage)
-            self.sub_page.deleteLater()        
-        self.sub_page = WindowFactory.run(PublicDatasetProjectPage)
-        self.sub_page.CreateProjectClicked.connect(self._OpenConfigureTabPage)
+        self._open_sub_page(PublicDatasetProjectPage).CreateProjectClicked.connect(
+            self._OpenConfigureTabPage
+        )
     
     def _OpenConfigureTabPage(self):
         """Slot for handling the creation of a new project"""
@@ -331,20 +336,11 @@ class AnimalPoseTrackerPage(QMainWindow, Ui_AnimalPoseTracker):
 
     def onOpenAnnotator(self):
         """Slot for opening the annotator tool"""
-        if hasattr(self, 'sub_page') and self.sub_page is not None:
-            self.sub_page.close()
-            self.sub_page = WindowFactory.run(AnnotatorPage)
-            self.sub_page.deleteLater()
-        self.sub_page = WindowFactory.run(AnnotatorPage)
+        self._open_sub_page(AnnotatorPage)
 
     def onOpenInferencer(self):
         """Slot for opening the inferencer tool"""
-        # Add your implementation here
-        if hasattr(self, 'sub_page') and self.sub_page is not None:
-            self.sub_page.close()
-            self.sub_page = WindowFactory.run(InferencerPage)
-            self.sub_page.deleteLater()
-        self.sub_page = WindowFactory.run(InferencerPage)
+        self._open_sub_page(InferencerPage)
 
     def onOpenDocumentation(self):
         """Slot for opening documentation"""
@@ -605,11 +601,7 @@ class AnimalPoseTrackerPage(QMainWindow, Ui_AnimalPoseTracker):
 
     def onStartLabelFrames(self):
         """Slot for starting frame labeling"""
-        if hasattr(self, 'sub_page') and self.sub_page is not None:
-            self.sub_page.close()
-            self.sub_page = WindowFactory.run(AnnotatorPage)
-            self.sub_page.deleteLater()
-        self.sub_page = WindowFactory.run(AnnotatorPage)
+        self._open_sub_page(AnnotatorPage)
 
     def onCreateDatasets(self):
         """Slot for starting dataset creation"""
@@ -885,8 +877,8 @@ class AnimalPoseTrackerPage(QMainWindow, Ui_AnimalPoseTracker):
         Check if the current process is still running.
         If not, perform corresponding actions based on the current mode.
         """
-        if self.current_mode == "train":
-            self._display_training_events()
+        if self.current_mode in {"train", "evaluate"}:
+            self._display_project_events()
         if self.project.process.poll() is not None:
             if self.current_mode == "train":
                 self._toggle_buttons("train", start=True)
@@ -897,38 +889,59 @@ class AnimalPoseTrackerPage(QMainWindow, Ui_AnimalPoseTracker):
             self.project.stop()
             self._stop_check_thread()
 
-    def _display_training_events(self):
-        """Show the latest structured training status in the application status bar."""
+    @staticmethod
+    def _displayed_loss(metrics):
+        """The loss worth showing, on the same scale the console uses.
+
+        The SimCC head's ``loss`` is a batch sum that grows with batch size, so it cannot be read
+        as a training curve; its per-image average is the comparable figure, exactly as the
+        training console already reports it.
+        """
+        if "loss_simcc_per_sample" in metrics:
+            return metrics["loss_simcc_per_sample"]
+        return metrics.get("loss")
+
+    @staticmethod
+    def _metric_details(metrics) -> str:
+        """The one-line metric summary both validation and evaluation events use.
+
+        The validators fill one AP namespace or the other depending on the project's
+        best_metric, and the SimCC validator reports no loss at all.
+        """
+        entries = (
+            ("loss", AnimalPoseTrackerPage._displayed_loss(metrics), ".4g"),
+            ("pose mAP50-95", metrics.get("coco/AP", metrics.get("ultralytics/AP")), ".3f"),
+            ("pose mAP50", metrics.get("coco/AP50", metrics.get("ultralytics/AP50")), ".3f"),
+            ("PCK", metrics.get("PCK"), ".3f"),
+        )
+        return ", ".join(
+            f"{label}={value:{digits}}"
+            for label, value, digits in entries
+            if isinstance(value, (int, float))
+        )
+
+    def _display_project_events(self):
+        """Show the latest structured worker status in the application status bar."""
         for event in self.project.read_training_events():
             kind = event.get("event")
             epoch = event.get("epoch")
             epochs = event.get("epochs")
             if kind == "batch":
-                metrics = event.get("metrics", {})
-                loss = metrics.get("loss")
+                loss = self._displayed_loss(event.get("metrics", {}))
                 detail = f", loss={loss:.4g}" if isinstance(loss, (int, float)) else ""
                 self.statusBar().showMessage(
                     f"Training epoch {epoch}/{epochs}, batch {event.get('step')}/{event.get('steps')}{detail}"
                 )
             elif kind == "validation":
-                metrics = event.get("metrics", {})
-                loss = metrics.get("loss")
-                # The validators fill one AP namespace or the other depending on the project's
-                # best_metric, and neither one is a box mAP -- keypoint AP is all there is.
-                pose_map = metrics.get("coco/AP", metrics.get("ultralytics/AP"))
-                pose_map50 = metrics.get("coco/AP50", metrics.get("ultralytics/AP50"))
-                keypoint_pck = metrics.get("PCK")
-                details = []
-                if isinstance(loss, (int, float)):
-                    details.append(f"loss={loss:.4g}")
-                if isinstance(pose_map, (int, float)):
-                    details.append(f"pose mAP50-95={pose_map:.3f}")
-                if isinstance(pose_map50, (int, float)):
-                    details.append(f"pose mAP50={pose_map50:.3f}")
-                if isinstance(keypoint_pck, (int, float)):
-                    details.append(f"PCK={keypoint_pck:.3f}")
-                detail = f", {', '.join(details)}" if details else ""
+                details = self._metric_details(event.get("metrics", {}))
+                detail = f", {details}" if details else ""
                 self.statusBar().showMessage(f"Validation epoch {epoch}/{epochs}{detail}")
+            elif kind == "evaluation":
+                # The evaluate worker runs once and exits; its metrics are the whole point of
+                # the run, and they arrive as one event.
+                details = self._metric_details(event.get("metrics", {}))
+                summary = event.get("message") or "Evaluation complete."
+                self.statusBar().showMessage(f"{summary}{', ' + details if details else ''}")
             elif kind == "pretrained":
                 self.statusBar().showMessage(event.get("message", "Pretrained weights loaded."))
             elif kind == "stopped":

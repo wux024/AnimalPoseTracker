@@ -98,7 +98,21 @@ class ProjectJobsMixin:
 
     def evaluate(self) -> None:
         """Evaluate a project checkpoint with AnimalPoseTracker's validator."""
+        from animalposetracker.project.model_context import unique_output_directory
+
         weights_path = self._resolve_project_weights()
+        run_root = Path(self.other_config.get("project") or "runs").expanduser()
+        if not run_root.is_absolute():
+            run_root = self._project_path / run_root
+        # The validator reports through the same structured events the trainer emits, so point at
+        # the file it will write before launching it -- otherwise nobody can read the results.
+        # Handing over a path that does not exist yet keeps the CLI's own uniquifying pass from
+        # renaming it behind our back.
+        run_path = unique_output_directory(
+            run_root / "val", exist_ok=bool(self.other_config.get("exist_ok", False))
+        )
+        self.training_event_path = run_path / "training.jsonl"
+        self._training_event_offset = 0
         cmd = [
             sys.executable,
             "-m",
@@ -109,7 +123,7 @@ class ProjectJobsMixin:
             "--weights",
             str(weights_path.resolve()),
             "--output-dir",
-            "runs/val",
+            str(run_path),
         ]
         self._execute_command(cmd)
 

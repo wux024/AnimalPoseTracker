@@ -881,6 +881,13 @@ class SimCCTrainingTests(unittest.TestCase):
             self.assertIn("--validate-only", command)
             self.assertIn(str(checkpoint.resolve()), command)
             self.assertNotIn("yolo", command)
+            # The validator reports through the worker event stream, so the run has to point at
+            # the file it will write before it starts -- otherwise the metrics go unread.
+            self.assertEqual(
+                project.training_event_path,
+                project.project_path / "runs" / "val" / "training.jsonl",
+            )
+            self.assertIn(str((project.project_path / "runs" / "val").resolve()), command)
 
             project.other_config["model"] = str(checkpoint)
             with patch.object(project, "_execute_command") as execute:

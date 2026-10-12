@@ -386,22 +386,6 @@ class AnnotatorPage(QMainWindow, Ui_Annotator):
         ]
         self.SkeletonSelection.addItems(skeleton_links)
         
-    def _ConfigureDisplay(self):
-        """Copy all relevant properties between QGraphicsView instances"""
-        # Core properties
-        self.FrameDisplay.setAlignment(Qt.AlignCenter)
-        self.FrameDisplay.setTransformationAnchor(QGraphicsView.AnchorUnderMouse)
-        self.FrameDisplay.setResizeAnchor(QGraphicsView.AnchorViewCenter)
-        
-        # Enable high-quality rendering
-        self.FrameDisplay.setRenderHint(QPainter.Antialiasing)
-        self.FrameDisplay.setRenderHint(QPainter.SmoothPixmapTransform)
-        
-        # Initialize zoom parameters
-        self.zoom_factor = 1.0
-        self.min_zoom = 0.1
-        self.max_zoom = 10.0
-
     def _advance_image_index(self, step):
         """Safely advance image index with wrap-around handling."""
         if not self.images:
@@ -705,43 +689,6 @@ class AnnotatorPage(QMainWindow, Ui_Annotator):
                         self.project_config['skeleton'][key] = new_value
         finally:
             self._edit_lock = False
-
-    def convert_value(self, value):
-        """
-        Converts a string value to appropriate Python type.
-        Now also handles skeleton link format "X->Y".
-        """
-        # Return non-strings immediately
-        if not isinstance(value, str):
-            return value
-            
-        value = value.strip()  # Normalize input (don't lower() for skeleton links)
-        
-        # Handle empty/None cases
-        if not value or value.lower() in ("none", "null"):
-            return None
-            
-        # Handle booleans
-        if value.lower() in ("true", "false"):
-            return value.lower() == "true"
-        
-        # Handle skeleton links (format "X -> Y")
-        if '->' in value:
-            try:
-                parts = [x.strip() for x in value.split('->')]
-                return [int(parts[0]), int(parts[1])]
-            except (ValueError, IndexError):
-                return value  # Return original if conversion fails
-        
-        # Numeric conversion attempts
-        try:
-            return int(value)  # Try integer first
-        except ValueError:
-            try:
-                return float(value)  # Then try float
-            except ValueError:
-                return value  # Return original string if all conversions fail
-    
 
     def onChangeTheme(self, theme):
         """Change application theme/stylesheets"""

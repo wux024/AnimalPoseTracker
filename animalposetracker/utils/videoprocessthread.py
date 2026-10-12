@@ -228,15 +228,16 @@ class VisualizeThread(BaseThread):
 
 class VideoWriterThread(BaseThread):
     """Thread to run video writing"""
-    def __init__(self, save_path=None, fps=30, frame_size=(640, 480)):
+    def __init__(self, save_path=None, fps=30):
         super().__init__()
         self._save_path = save_path
         self._fps = fps
-        self._frame_size = frame_size
+        self._frame_size = None
         self.video_writer = None
         self.frames = queue.Queue(maxsize=1024)
         self._stop_flag = False
         self.frame_count = 0
+        self.skipped_frames = 0
 
     @property
     def save_path(self):
@@ -256,11 +257,8 @@ class VideoWriterThread(BaseThread):
 
     @property
     def frame_size(self):
+        """Pixel size of the video being written, taken from the frames themselves."""
         return self._frame_size
-
-    @frame_size.setter
-    def frame_size(self, value):
-        self._frame_size = value
     
     @property
     def stop_flag(self):
@@ -272,16 +270,30 @@ class VideoWriterThread(BaseThread):
 
     def run(self):
         fourcc = cv2.VideoWriter_fourcc(*'XVID')
-        self.video_writer = cv2.VideoWriter(self.save_path, fourcc, self.fps, self.frame_size)
         while True:
             try:
                 frame = self.frames.get(timeout=1, block=True)
-                self.video_writer.write(frame)
-                self.frame_count += 1
             except queue.Empty:
                 if self._stop_flag:
                     break
-        self.video_writer.release()
+                continue
+            # Size the writer from the frames themselves. The UI's width/height boxes are what it
+            # asked the source for, and a camera is free to hand back another size -- writing
+            # those frames into a writer opened at the requested size stretches all of them.
+            height, width = frame.shape[:2]
+            size = (width, height)
+            if self.video_writer is None:
+                self.video_writer = cv2.VideoWriter(self.save_path, fourcc, self.fps, size)
+            elif size != self._frame_size:
+                # A mid-stream size change cannot be written into an open writer; drop it and
+                # keep the count so the loss is visible rather than silent.
+                self.skipped_frames += 1
+                continue
+            self.video_writer.write(frame)
+            self._frame_size = size
+            self.frame_count += 1
+        if self.video_writer is not None:
+            self.video_writer.release()
         self.finished.emit()
 
     def add_frame(self, frame):
