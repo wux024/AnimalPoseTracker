@@ -588,6 +588,81 @@ class InferencerDecodeTests(unittest.TestCase):
             page._finalize_cleanup()
             self.assertEqual(json.loads(target.read_text(encoding="utf-8")), page.records)
 
+    def test_tracking_controls_offer_the_cli_algorithms(self):
+        from animalposetracker.tracking.config import ALGORITHMS
+
+        page = self._page()
+        self.assertEqual(
+            [page.TrackerAlgorithm.itemText(index) for index in range(page.TrackerAlgorithm.count())],
+            list(ALGORITHMS),
+        )
+
+    def test_the_tracking_controls_follow_the_start_stop_allow_lists(self):
+        page = self._page()
+
+        page.tools_disabled()
+        self.assertFalse(page.EnableTracking.isEnabled())
+        self.assertFalse(page.TrackerAlgorithm.isEnabled())
+
+        page.tools_enabled()
+        self.assertTrue(page.EnableTracking.isEnabled())
+        # The picker only means anything while tracking is on.
+        self.assertFalse(page.TrackerAlgorithm.isEnabled())
+        page.EnableTracking.setChecked(True)
+        self.assertTrue(page.TrackerAlgorithm.isEnabled())
+
+    def test_no_tracker_is_built_unless_the_switch_is_set(self):
+        page = self._page()
+        page._build_tracker()
+        self.assertIsNone(page.tracker)
+
+        page.tools_enabled()
+        page.EnableTracking.setChecked(True)
+        page.TrackerAlgorithm.setCurrentText("bytetrack")
+        page._build_tracker()
+        self.assertEqual(type(page.tracker).__name__, "ByteTrack")
+
+    def test_track_ids_stay_with_one_target_across_frames(self):
+        page = self._page()
+        page.tools_enabled()
+        page.EnableTracking.setChecked(True)
+        page._build_tracker()
+        page.SaveRecords.setChecked(True)
+
+        identifiers = []
+        for _ in range(3):
+            _rendered, results = page._present(
+                np.zeros((480, 640, 3), np.uint8), page._decode(self._tensor(), None)
+            )
+            identifiers.append(results["records"][0]["track_id"])
+
+        self.assertIsNotNone(identifiers[0])
+        self.assertEqual(len(set(identifiers)), 1)
+        self.assertEqual([entry["frame"] for entry in page.records], [0, 1, 2])
+        # Tracking adds a key to the record; the keypoints keep their score column, which is
+        # what the renderer decides visibility from.
+        self.assertEqual(len(results["records"][0]["keypoints"][0]), 3)
+
+    def test_the_label_carries_the_track_id(self):
+        page = self._page()
+        page.tools_enabled()
+        page.EnableTracking.setChecked(True)
+        page._build_tracker()
+        page.visualization_config.update({"show_classes": True})
+
+        labels = []
+        with patch(
+            "animalposetracker.gui.inferencerpage.draw_instance",
+            side_effect=lambda *arguments, **keywords: labels.append(arguments[2]),
+        ):
+            for _ in range(2):
+                page._present(np.zeros((480, 640, 3), np.uint8), page._decode(self._tensor(), None))
+
+        self.assertEqual(len(labels), 2)
+        self.assertTrue(labels[0].startswith("#"))
+        self.assertIn("mouse: 0.90", labels[0])
+        self.assertEqual(labels[0].split()[0], labels[1].split()[0])
+
 
 class _FakeCapture:
     """Minimal stand-in for a camera/video handle."""

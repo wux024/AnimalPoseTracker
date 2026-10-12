@@ -1,7 +1,7 @@
 from PySide6.QtCore import QMetaObject, Qt, Q_ARG, QTimer, QSize
 from PySide6.QtGui import QImage, QPixmap
 from PySide6.QtWidgets import  (QApplication, QFileDialog, QWidget, QMessageBox,
-                                QCheckBox)
+                                QCheckBox, QComboBox)
 from dataclasses import replace
 import json
 import os
@@ -68,7 +68,9 @@ class InferencerPage(QWidget, Ui_Inferencer):
         # One run's frame counter and record buffer, both reset by Start.
         self._frame_index = 0
         self.records = []
+        self.tracker = None
         self._add_record_switch()
+        self._add_tracker_controls()
 
         self.platform = self._detect_platform()
         self.device_check_results = self._detect_device_availability()
@@ -127,6 +129,7 @@ class InferencerPage(QWidget, Ui_Inferencer):
         self.ShowSkeletonsLineWidth.valueChanged.connect(self.onShowSkeletonsLineWidthChanged)
         self.ShowBBox.stateChanged.connect(self.onShowBBoxStateChanged)
         self.ShowBBoxWidth.valueChanged.connect(self.onShowBBoxWidthChanged)
+        self.EnableTracking.stateChanged.connect(self.onEnableTrackingStateChanged)
         self.FPSShow.stateChanged.connect(self.onFPSShowStateChanged)
         self.PreprocessTime.stateChanged.connect(self.onPreprocessTimeStateChanged)
         self.InferenceTime.stateChanged.connect(self.onInferenceTimeStateChanged)
@@ -157,6 +160,8 @@ class InferencerPage(QWidget, Ui_Inferencer):
         self.InferenceTime.setEnabled(True)
         self.PostprocessTime.setEnabled(True)
         self.SaveRecords.setEnabled(True)
+        self.EnableTracking.setEnabled(True)
+        self.TrackerAlgorithm.setEnabled(self.EnableTracking.isChecked())
 
     def tools_disabled(self):
         self.CheckCameraVideosConnect.setEnabled(False)
@@ -182,6 +187,8 @@ class InferencerPage(QWidget, Ui_Inferencer):
         self.InferenceTime.setEnabled(False)    
         self.PostprocessTime.setEnabled(False)
         self.SaveRecords.setEnabled(False)
+        self.EnableTracking.setEnabled(False)
+        self.TrackerAlgorithm.setEnabled(False)
 
     def _add_record_switch(self):
         """Add the "save records" switch to the display options.
@@ -199,6 +206,50 @@ class InferencerPage(QWidget, Ui_Inferencer):
             "把逐帧姿态记录写到 runs/inference/records.json，形状与命令行 `infer --records` 一致"
         )
         self.ShowToolsGroupVLayout.addWidget(self.SaveRecords)
+
+    def _add_tracker_controls(self):
+        """Add the online-tracking switch and its algorithm picker.
+
+        The list comes from the same tuple the `--tracker` command line validates against,
+        imported here rather than at module scope: the tracking package costs about a second to
+        import, and the page would pay it every time the window opens.
+        """
+        from animalposetracker.tracking.config import ALGORITHMS
+
+        self.EnableTracking = QCheckBox(self.BaseToolsGroup)
+        self.EnableTracking.setObjectName("EnableTracking")
+        self.EnableTracking.setText("Track")
+        self.EnableTracking.setToolTip(
+            "逐帧跟踪目标：画面标签会带上 track ID，保存的记录里也会带 track_id"
+        )
+        self.TrackerAlgorithm = QComboBox(self.BaseToolsGroup)
+        self.TrackerAlgorithm.setObjectName("TrackerAlgorithm")
+        self.TrackerAlgorithm.setMinimumSize(QSize(0, 25))
+        self.TrackerAlgorithm.setMaximumSize(QSize(16777215, 25))
+        self.TrackerAlgorithm.addItems(list(ALGORITHMS))
+        self.TrackerAlgorithm.setToolTip("跟踪算法，与命令行 `infer --tracker` 是同一份清单")
+        self.TrackerAlgorithm.setEnabled(False)
+
+        self.TrackerLayout.addWidget(self.EnableTracking)
+        self.TrackerLayout.addWidget(self.TrackerAlgorithm)
+
+    def _build_tracker(self):
+        """Create this run's tracker, or None when tracking is off.
+
+        Built through the same entry point the CLI uses, and reset per run so a new session
+        starts its track IDs from scratch instead of continuing the previous one's.
+        """
+        from animalposetracker.tracking import create_tracker
+
+        if not self.EnableTracking.isChecked():
+            self.tracker = None
+            return
+        self.tracker = create_tracker(self.TrackerAlgorithm.currentText())
+        self.tracker.reset()
+
+    def onEnableTrackingStateChanged(self, state):
+        """The algorithm picker only means anything while tracking is on."""
+        self.TrackerAlgorithm.setEnabled(bool(state) and self.EnableTracking.isEnabled())
 
     def _write_records(self):
         """Write this run's per-frame records, where the `infer` command line would put them."""
@@ -888,9 +939,21 @@ class InferencerPage(QWidget, Ui_Inferencer):
         frame = self._draw_background(frame)
         style = self._render_style(frame)
         instances = list(results.get("instances") or ())
-        records = [
-            instance_to_record(instance, list(self.session.class_names)) for instance in instances
-        ]
+        class_names = list(self.session.class_names)
+        records = [instance_to_record(instance, class_names) for instance in instances]
+        if self.tracker is not None:
+            # Tracking is a stage *on the records*, not on the pixels: the same shape comes out,
+            # each detection carrying a track_id. That is what lets the offline workbench replay
+            # the same records later with another tracker.
+            from animalposetracker.postprocessing.workflows import track_frame_predictions
+
+            records = track_frame_predictions(
+                records,
+                self.tracker,
+                self._frame_index,
+                frame=frame,
+                class_names=class_names,
+            )
         results["records"] = records
         # Only collected when the switch asks for it: a camera session can run for hours, and an
         # unbounded buffer is not worth carrying for a file nobody asked for.
@@ -903,7 +966,10 @@ class InferencerPage(QWidget, Ui_Inferencer):
         for record in records:
             label = None
             if config['show_classes']:
-                label = f"{record['class_name']}: {record['score']:.2f}"
+                label = f"{record['class_name']}: {float(record.get('score', 0.0)):.2f}"
+                track_id = record.get("track_id")
+                if track_id is not None:
+                    label = f"#{track_id} {label}"
             draw_instance(
                 frame,
                 pixel_box(record['bbox_xyxy']),
@@ -1221,6 +1287,7 @@ class InferencerPage(QWidget, Ui_Inferencer):
             # One run, one buffer: the frame indices the records carry start at zero again.
             self._frame_index = 0
             self.records = []
+            self._build_tracker()
             # init threads
             self._init_inference_threads()
             # start threads
