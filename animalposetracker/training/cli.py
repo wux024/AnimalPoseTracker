@@ -480,10 +480,12 @@ def run(argv=None) -> int:
     args = _make_argument_parser().parse_args(argv)
     cli_override_values, cli_override_fields = _collect_cli_overrides(args)
     pretty_console = not (args.json or not sys.stdout.isatty())
+    renderer = None
     if pretty_console:
-        from .console import PrettyTrainingRenderer
+        from .console import PrettyTrainingRenderer, loss_columns
 
-        emitter = EventEmitter(callback=PrettyTrainingRenderer().emit)
+        renderer = PrettyTrainingRenderer()
+        emitter = EventEmitter(callback=renderer.emit)
     else:
         emitter = EventEmitter.json_stdout()
     trainer = None
@@ -681,6 +683,11 @@ def run(argv=None) -> int:
         if model_spec is None:
             model_spec = _read_mapping(config.model)
             head_name, _head_entry = head_config(model_spec)
+
+        if renderer is not None:
+            # The progress row's loss columns follow the head: an AnimalViTPose run has no
+            # box/pose/kobj/cls/dfl components to show, and its SimCC losses instead.
+            renderer.columns = loss_columns(head_name)
 
         if float(values.get("copy_paste", 0.0) or 0.0) > 0:
             raise NotImplementedError(

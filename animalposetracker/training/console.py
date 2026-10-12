@@ -11,22 +11,16 @@ progress rendering.
 """
 
 import sys
-from typing import Optional, TextIO, Tuple
+from typing import NamedTuple, Optional, TextIO, Tuple
 
 from tqdm import tqdm
 
 from .events import TrainingEvent
 
-_TRAIN_COLUMNS = (
-    ("loss", "loss"),
-    ("box", "box_loss"),
-    ("pose", "pose_loss"),
-    ("kobj", "kobj_loss"),
-    ("class", "cls_loss"),
-    ("dfl", "dfl_loss"),
-)
-_VAL_COLUMNS = (
-    ("loss", "Loss"),
+# The keypoint metrics both heads report: PCK/AUC/EPE come straight from the
+# datasets, and the AP block is picked from whichever namespace the validator
+# filled in (see `_select_ap_namespace`).
+_KEYPOINT_VALIDATION_COLUMNS = (
     ("coco/AP", "AP"),
     ("coco/AP50", "AP50"),
     ("coco/AP75", "AP75"),
@@ -40,6 +34,50 @@ _VAL_COLUMNS = (
     ("AUC", "AUC"),
     ("EPE", "EPE"),
 )
+
+
+class LossColumns(NamedTuple):
+    """The loss columns a head reports, as ``(metric key, header label)`` pairs.
+
+    A layout is a translation table, not a filter. The keys are exactly the ones
+    the criterion hands to ``engine._loss_components`` (``YOLOPoseHead`` reports
+    ``loss/box/pose/kobj/class/dfl``, ``SimCCHead`` reports ``loss`` plus the two
+    SimCC axes), so a column that renders as ``-`` means the head structurally
+    never reports that key -- the row would print an empty slot every single step.
+    """
+
+    train: Tuple[Tuple[str, str], ...]
+    validation: Tuple[Tuple[str, str], ...]
+
+
+YOLO_POSE_COLUMNS = LossColumns(
+    train=(
+        ("loss", "loss"),
+        ("box", "box_loss"),
+        ("pose", "pose_loss"),
+        ("kobj", "kobj_loss"),
+        ("class", "cls_loss"),
+        ("dfl", "dfl_loss"),
+    ),
+    validation=(("loss", "Loss"), *_KEYPOINT_VALIDATION_COLUMNS),
+)
+
+SIMCC_COLUMNS = LossColumns(
+    # The KL head's `loss` is a batch sum (MMPose divides by the keypoint count, not
+    # by the batch), so it doubles when batch_size does and cannot be read as a
+    # training curve. Its per-image average is the comparable figure, and it is the
+    # only loss column worth a permanent slot; the x/y split and the raw sum stay in
+    # training.jsonl for anyone debugging which axis drifted.
+    train=(("loss_simcc_per_sample", "loss"),),
+    # The SimCC validator scores AP/PCK/AUC/EPE but computes no validation loss, so
+    # this table has no Loss column to leave empty.
+    validation=_KEYPOINT_VALIDATION_COLUMNS,
+)
+
+
+def loss_columns(head_name: Optional[str]) -> LossColumns:
+    """Pick the column layout for a detection head, defaulting to the YOLO-Pose one."""
+    return SIMCC_COLUMNS if head_name == "SimCCHead" else YOLO_POSE_COLUMNS
 
 
 def _fmt(value: float) -> str:
@@ -61,22 +99,25 @@ def _speed_text(metrics, prefix: str = "") -> str:
     return f"Speed: {', '.join(values)} per image" if values else ""
 
 
-def _validation_table(metrics, prefix: str = "") -> Tuple[str, str]:
-    selected_ap_prefix = (
-        "ultralytics" if f"{prefix}ultralytics/AP" in metrics else "coco"
-    )
-    columns = []
-    for key, label in _VAL_COLUMNS:
+def _select_ap_namespace(metrics, prefix: str) -> str:
+    """Which AP block the validator filled in; the other is absent, not zero."""
+    return "ultralytics" if f"{prefix}ultralytics/AP" in metrics else "coco"
+
+
+def _validation_table(metrics, columns, prefix: str = "") -> Tuple[str, str]:
+    selected_ap_prefix = _select_ap_namespace(metrics, prefix)
+    selected = []
+    for key, label in columns:
         if key.startswith("coco/"):
             if selected_ap_prefix == "coco":
-                columns.append((key, label))
+                selected.append((key, label))
         elif key.startswith("ultralytics/"):
             if selected_ap_prefix == "ultralytics":
-                columns.append((key, label))
+                selected.append((key, label))
         else:
-            columns.append((key, label))
-    columns = tuple(columns)
-    headers = ("Images", "Instances", *(label for _, label in columns))
+            selected.append((key, label))
+    selected = tuple(selected)
+    headers = ("Images", "Instances", *(label for _, label in selected))
     header = f"{'Class':>22s}" + "".join(f"{label:>11s}" for label in headers)
     image_count = metrics.get(f"{prefix}images")
     instance_count = metrics.get(f"{prefix}instances")
@@ -85,7 +126,7 @@ def _validation_table(metrics, prefix: str = "") -> Tuple[str, str]:
         str(int(image_count)) if image_count is not None else "-",
         str(int(instance_count)) if instance_count is not None else "-",
     ]
-    for key, _ in columns:
+    for key, _ in selected:
         value = metrics.get(f"{prefix}{key}")
         values.append(_fmt(float(value)) if value is not None else "-")
     row = f"{values[0]:>22s}" + "".join(f"{value:>11s}" for value in values[1:])
@@ -95,8 +136,15 @@ def _validation_table(metrics, prefix: str = "") -> Tuple[str, str]:
 class PrettyTrainingRenderer:
     """Render training batches with a terminal progress bar like Ultralytics."""
 
-    def __init__(self, stream: Optional[TextIO] = None) -> None:
+    def __init__(
+        self,
+        stream: Optional[TextIO] = None,
+        columns: LossColumns = YOLO_POSE_COLUMNS,
+    ) -> None:
         self.stream = stream if stream is not None else sys.stdout
+        # Which loss columns the progress row carries. The CLI swaps this once it knows
+        # which head the model holds (`loss_columns`), defaulting to the YOLO-Pose layout.
+        self.columns = columns
         self._header_epoch = None
         self._progress = None
 
@@ -115,10 +163,11 @@ class PrettyTrainingRenderer:
         name = event.event
 
         if name == "batch":
+            train_columns = self.columns.train
             if self._header_epoch != event.epoch:
                 self._close_progress()
                 headers = (
-                    "Epoch", "GPU_mem", *(label for _, label in _TRAIN_COLUMNS), "Instances", "Size"
+                    "Epoch", "GPU_mem", *(label for _, label in train_columns), "Instances", "Size"
                 )
                 self._line("".join(f"{label:>11s}" for label in headers))
                 self._header_epoch = event.epoch
@@ -139,7 +188,7 @@ class PrettyTrainingRenderer:
             ]
             description_values.extend(
                 _fmt(float(metrics[key])) if key in metrics else "-"
-                for key, _ in _TRAIN_COLUMNS
+                for key, _ in train_columns
             )
             description_values.extend((
                 str(int(metrics.get("instances", 0))),
@@ -174,7 +223,7 @@ class PrettyTrainingRenderer:
             return
 
         if name == "final_validation":
-            header, row = _validation_table(metrics)
+            header, row = _validation_table(metrics, self.columns.validation)
             self._line(header)
             self._line(row)
             speed = _speed_text(metrics)
@@ -183,7 +232,7 @@ class PrettyTrainingRenderer:
             return
 
         if name == "evaluation":
-            header, row = _validation_table(metrics)
+            header, row = _validation_table(metrics, self.columns.validation)
             self._line(header)
             self._line(row)
             speed = _speed_text(metrics)
@@ -199,7 +248,7 @@ class PrettyTrainingRenderer:
             if train_loss is not None:
                 parts.append(f"train_loss={_fmt(float(train_loss))}")
             self._line(" ".join(parts))
-            header, row = _validation_table(metrics, prefix="val_")
+            header, row = _validation_table(metrics, self.columns.validation, prefix="val_")
             self._line(header)
             self._line(row)
             return

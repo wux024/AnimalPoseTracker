@@ -11,7 +11,12 @@ import yaml
 from animalposetracker.cli import main
 from animalposetracker.project.api import AnimalPoseTrackerProject
 from animalposetracker.training.cli import _resolve_project_default_pretrained
-from animalposetracker.training.console import PrettyTrainingRenderer
+from animalposetracker.training.console import (
+    SIMCC_COLUMNS,
+    YOLO_POSE_COLUMNS,
+    PrettyTrainingRenderer,
+    loss_columns,
+)
 from animalposetracker.training.events import TrainingEvent
 
 
@@ -254,6 +259,50 @@ class PrettyTrainingRendererTests(unittest.TestCase):
             TrainingEvent(event="custom", message="hello", metrics={"x": 1.5}),
         ])
         self.assertIn("[custom] hello x=1.5", output)
+
+    def test_simcc_layout_prints_one_loss_instead_of_five_empty_columns(self):
+        stream = io.StringIO()
+        renderer = PrettyTrainingRenderer(stream=stream, columns=SIMCC_COLUMNS)
+        renderer.emit(TrainingEvent(
+            event="batch", epoch=1, epochs=2, step=1, steps=2,
+            # Exactly what SimCCKLLoss reports through engine._loss_components.
+            metrics={
+                "loss": 12.5, "loss_simcc_x": 6.2, "loss_simcc_y": 6.1,
+                "loss_simcc_per_sample": 1.5625, "instances": 8, "size": 256,
+            },
+        ))
+        output = stream.getvalue()
+        header, _, body = output.partition("\n")
+        self.assertIn("loss", header)
+        self.assertNotIn("box_loss", header)
+        # No column is reserved for a metric the head never reports.
+        self.assertNotIn("-", output)
+        # The one column is the per-image average, not the batch sum.
+        self.assertRegex(body, r"1/2\s+0G\s+1\.562\s+8\s+256")
+
+    def test_simcc_layout_has_no_validation_loss_column(self):
+        stream = io.StringIO()
+        renderer = PrettyTrainingRenderer(stream=stream, columns=SIMCC_COLUMNS)
+        renderer.emit(TrainingEvent(
+            event="epoch_end", epoch=1, epochs=2,
+            metrics={
+                "train_loss": 1.5625,
+                "val_images": 20, "val_instances": 31,
+                "val_coco/AP": 0.71, "val_PCK": 0.62,
+            },
+        ))
+        output = stream.getvalue()
+        # The SimCC validator scores AP/PCK/AUC/EPE and computes no validation loss.
+        self.assertRegex(output, r"Class\s+Images\s+Instances\s+AP\s")
+        self.assertIn("PCK", output)
+        self.assertNotIn("Loss", output)
+        self.assertRegex(output, r"all\s+20\s+31\s+0\.71")
+
+    def test_loss_columns_follow_the_head(self):
+        self.assertIs(loss_columns("SimCCHead"), SIMCC_COLUMNS)
+        self.assertIs(loss_columns("YOLOPoseHead"), YOLO_POSE_COLUMNS)
+        self.assertIs(loss_columns(None), YOLO_POSE_COLUMNS)
+        self.assertIs(PrettyTrainingRenderer().columns, YOLO_POSE_COLUMNS)
 
 
 class InferCliTests(unittest.TestCase):
