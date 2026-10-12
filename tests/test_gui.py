@@ -23,6 +23,7 @@ from animalposetracker.postprocessing.output_decoders import (
     PoseOutputConfig,
     decode_pose_outputs,
 )
+from animalposetracker.postprocessing.workflows import filter_tracked_video_records
 
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
@@ -662,6 +663,83 @@ class InferencerDecodeTests(unittest.TestCase):
         self.assertTrue(labels[0].startswith("#"))
         self.assertIn("mouse: 0.90", labels[0])
         self.assertEqual(labels[0].split()[0], labels[1].split()[0])
+
+    def _tracked_page(self, **config):
+        page = self._page(**config)
+        page.tools_enabled()
+        page.EnableTracking.setChecked(True)
+        page._build_tracker()
+        page.SaveRecords.setChecked(True)
+        return page
+
+    def _feed(self, page, frames=6):
+        """Feed jittered frames of one target, which is what tracking has to follow."""
+        for index in range(frames):
+            tensor = self._tensor()
+            tensor["predictions"][0, 0, 0] += 0.01 * (index % 2)
+            page._present(np.zeros((480, 640, 3), np.uint8), page._decode(tensor, None))
+
+    def test_the_filter_controls_match_the_command_line_defaults(self):
+        page = self._page()
+
+        self.assertEqual(
+            [page.FilterMethod.itemText(index) for index in range(page.FilterMethod.count())],
+            ["none", "median", "savgol"],
+        )
+        self.assertEqual(page.FilterWindow.value(), 5)
+        self.assertEqual(page.FilterPolyorder.value(), 2)
+        self.assertEqual(page.FilterConfidence.value(), 0.25)
+        self.assertEqual(page.FilterMaxGap.value(), 0)
+
+    def test_the_filter_controls_follow_tracking_and_the_method(self):
+        page = self._page()
+        page.tools_disabled()
+        self.assertFalse(page.FilterMethod.isEnabled())
+
+        page.tools_enabled()
+        # Filtering needs track ids, which only exist while tracking is on.
+        self.assertFalse(page.FilterMethod.isEnabled())
+        page.EnableTracking.setChecked(True)
+        self.assertTrue(page.FilterMethod.isEnabled())
+        # The polynomial order belongs to Savitzky-Golay.
+        self.assertFalse(page.FilterPolyorder.isEnabled())
+        page.FilterMethod.setCurrentText("median")
+        self.assertFalse(page.FilterPolyorder.isEnabled())
+        page.FilterMethod.setCurrentText("savgol")
+        self.assertTrue(page.FilterPolyorder.isEnabled())
+
+    def test_the_filter_produces_what_the_workflow_produces(self):
+        page = self._tracked_page()
+        page.FilterMethod.setCurrentText("savgol")
+        page.FilterWindow.setValue(3)
+        page.FilterConfidence.setValue(0.5)
+        self._feed(page)
+
+        expected = filter_tracked_video_records(
+            page.records,
+            method="savgol",
+            window_length=3,
+            polyorder=2,
+            confidence_threshold=0.5,
+            max_gap=0,
+        )
+        self.assertEqual(page._final_records(), expected)
+
+    def test_with_no_method_the_records_are_written_untouched(self):
+        page = self._tracked_page()
+        self._feed(page)
+
+        self.assertIs(page._final_records(), page.records)  # not even copied
+
+    def test_turning_the_filter_on_alone_is_not_enough_without_tracking(self):
+        page = self._page()
+        page.tools_enabled()
+        page.SaveRecords.setChecked(True)
+        page.FilterMethod.setCurrentText("median")
+        self._feed(page)
+
+        self.assertFalse(page._filter_is_on())
+        self.assertIs(page._final_records(), page.records)
 
 
 class _FakeCapture:

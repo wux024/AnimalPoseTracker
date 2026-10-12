@@ -1,7 +1,8 @@
 from PySide6.QtCore import QMetaObject, Qt, Q_ARG, QTimer, QSize
 from PySide6.QtGui import QImage, QPixmap
 from PySide6.QtWidgets import  (QApplication, QFileDialog, QWidget, QMessageBox,
-                                QCheckBox, QComboBox)
+                                QCheckBox, QComboBox, QDoubleSpinBox, QHBoxLayout,
+                                QSpinBox)
 from dataclasses import replace
 import json
 import os
@@ -71,6 +72,7 @@ class InferencerPage(QWidget, Ui_Inferencer):
         self.tracker = None
         self._add_record_switch()
         self._add_tracker_controls()
+        self._add_filter_controls()
 
         self.platform = self._detect_platform()
         self.device_check_results = self._detect_device_availability()
@@ -130,6 +132,7 @@ class InferencerPage(QWidget, Ui_Inferencer):
         self.ShowBBox.stateChanged.connect(self.onShowBBoxStateChanged)
         self.ShowBBoxWidth.valueChanged.connect(self.onShowBBoxWidthChanged)
         self.EnableTracking.stateChanged.connect(self.onEnableTrackingStateChanged)
+        self.FilterMethod.currentTextChanged.connect(self.onFilterMethodChanged)
         self.FPSShow.stateChanged.connect(self.onFPSShowStateChanged)
         self.PreprocessTime.stateChanged.connect(self.onPreprocessTimeStateChanged)
         self.InferenceTime.stateChanged.connect(self.onInferenceTimeStateChanged)
@@ -162,6 +165,7 @@ class InferencerPage(QWidget, Ui_Inferencer):
         self.SaveRecords.setEnabled(True)
         self.EnableTracking.setEnabled(True)
         self.TrackerAlgorithm.setEnabled(self.EnableTracking.isChecked())
+        self._refresh_filter_controls()
 
     def tools_disabled(self):
         self.CheckCameraVideosConnect.setEnabled(False)
@@ -189,6 +193,8 @@ class InferencerPage(QWidget, Ui_Inferencer):
         self.SaveRecords.setEnabled(False)
         self.EnableTracking.setEnabled(False)
         self.TrackerAlgorithm.setEnabled(False)
+        for widget in self._filter_controls():
+            widget.setEnabled(False)
 
     def _add_record_switch(self):
         """Add the "save records" switch to the display options.
@@ -233,6 +239,98 @@ class InferencerPage(QWidget, Ui_Inferencer):
         self.TrackerLayout.addWidget(self.EnableTracking)
         self.TrackerLayout.addWidget(self.TrackerAlgorithm)
 
+    def _add_filter_controls(self):
+        """Add the temporal filter's five controls, on their own row below the tracker's.
+
+        Same values, same names and same defaults as `infer --pose-filter` and its `--filter-*`
+        arguments, so a look tuned here can be written down as a command line and vice versa.
+        The spin boxes carry their own labels, which keeps five controls inside one row.
+        """
+        self.FilterLayout = QHBoxLayout()
+        self.FilterLayout.setObjectName("FilterLayout")
+
+        self.FilterMethod = QComboBox(self.BaseToolsGroup)
+        self.FilterMethod.setObjectName("FilterMethod")
+        self.FilterMethod.setMinimumSize(QSize(0, 25))
+        self.FilterMethod.setMaximumSize(QSize(16777215, 25))
+        self.FilterMethod.addItems(["none", "median", "savgol"])
+        self.FilterMethod.setToolTip("跑完对整段轨迹做时域平滑：none / median / savgol")
+        self.FilterLayout.addWidget(self.FilterMethod)
+
+        def spin(widget, name, prefix, value, maximum, tooltip):
+            widget.setObjectName(name)
+            widget.setPrefix(f"{prefix} ")
+            widget.setRange(widget.minimum(), maximum)
+            widget.setValue(value)
+            widget.setToolTip(tooltip)
+            widget.setMaximumSize(QSize(90, 25))
+            self.FilterLayout.addWidget(widget)
+            return widget
+
+        self.FilterWindow = spin(
+            QSpinBox(self.BaseToolsGroup), "FilterWindow", "win", 5, 999, "平滑窗口帧数"
+        )
+        self.FilterPolyorder = spin(
+            QSpinBox(self.BaseToolsGroup), "FilterPolyorder", "poly", 2, 99,
+            "Savitzky-Golay 多项式阶数（仅 savgol 用）",
+        )
+        self.FilterConfidence = spin(
+            QDoubleSpinBox(self.BaseToolsGroup), "FilterConfidence", "conf", 0.25, 1.0,
+            "低于此分数的关键点不参与平滑",
+        )
+        self.FilterConfidence.setSingleStep(0.05)
+        self.FilterConfidence.setDecimals(2)
+        self.FilterMaxGap = spin(
+            QSpinBox(self.BaseToolsGroup), "FilterMaxGap", "gap", 0, 999,
+            "允许插值的最大缺失帧数（0 = 不插）",
+        )
+
+        self.EngineDeviceLayout.addLayout(self.FilterLayout)
+        for widget in self._filter_controls():
+            widget.setEnabled(False)
+
+    def _filter_controls(self):
+        return (
+            self.FilterMethod,
+            self.FilterWindow,
+            self.FilterPolyorder,
+            self.FilterConfidence,
+            self.FilterMaxGap,
+        )
+
+    def _filter_is_on(self):
+        """Whether the filter should run: a method chosen, and tracking on to give it track ids.
+
+        The workflow refuses records without track ids outright, which is the same rule the
+        command line enforces by requiring `--tracker` alongside `--pose-filter`.
+        """
+        return self.FilterMethod.currentText() != "none" and self.EnableTracking.isChecked()
+
+    def _refresh_filter_controls(self):
+        """Follow tracking, and let the polynomial order follow the method."""
+        active = self.EnableTracking.isChecked() and self.EnableTracking.isEnabled()
+        method = self.FilterMethod.currentText()
+        self.FilterMethod.setEnabled(active)
+        self.FilterWindow.setEnabled(active)
+        self.FilterConfidence.setEnabled(active)
+        self.FilterMaxGap.setEnabled(active)
+        self.FilterPolyorder.setEnabled(active and method == "savgol")
+
+    def _final_records(self):
+        """The records to write: smoothed when the filter is on, exactly as `infer --records`."""
+        if not self._filter_is_on() or not self.records:
+            return self.records
+        from animalposetracker.postprocessing.workflows import filter_tracked_video_records
+
+        return filter_tracked_video_records(
+            self.records,
+            method=self.FilterMethod.currentText(),
+            window_length=int(self.FilterWindow.value()),
+            polyorder=int(self.FilterPolyorder.value()),
+            confidence_threshold=float(self.FilterConfidence.value()),
+            max_gap=int(self.FilterMaxGap.value()),
+        )
+
     def _build_tracker(self):
         """Create this run's tracker, or None when tracking is off.
 
@@ -250,22 +348,43 @@ class InferencerPage(QWidget, Ui_Inferencer):
     def onEnableTrackingStateChanged(self, state):
         """The algorithm picker only means anything while tracking is on."""
         self.TrackerAlgorithm.setEnabled(bool(state) and self.EnableTracking.isEnabled())
+        self._refresh_filter_controls()
+
+    def onFilterMethodChanged(self, method):
+        """The polynomial order is a Savitzky-Golay setting."""
+        self._refresh_filter_controls()
 
     def _write_records(self):
-        """Write this run's per-frame records, where the `infer` command line would put them."""
+        """Write this run's per-frame records, where the `infer` command line would put them.
+
+        The file carries the smoothed records when the filter ran, which is what `infer
+        --records --pose-filter` writes too: the whole point of the file is to be the run's
+        result, and the result is what the filter produced.
+        """
         if not self.SaveRecords.isChecked() or not self.records:
             return
+        smoothing = self._filter_is_on()
+        try:
+            records = self._final_records()
+        except (ValueError, KeyError) as error:
+            # Records without track ids are refused by the workflow. The controls already prevent
+            # that pairing, so this is the belt to their braces -- and it must not cost a whole
+            # run's records on the way out.
+            QMessageBox.warning(self, "整段平滑未执行", str(error))
+            records = self.records
+
         output_dir = Path.cwd() / "runs" / "inference"
         try:
             output_dir.mkdir(parents=True, exist_ok=True)
             target = output_dir / "records.json"
             target.write_text(
-                json.dumps(self.records, ensure_ascii=False, indent=2) + "\n", encoding="utf-8"
+                json.dumps(records, ensure_ascii=False, indent=2) + "\n", encoding="utf-8"
             )
         except OSError as error:
             QMessageBox.warning(self, "保存记录失败", f"无法写入逐帧记录：\n{error}")
             return
-        self.thread_status(f"逐帧记录已写入 {target}（{len(self.records)} 帧）")
+        note = "（已平滑）" if smoothing else ""
+        self.thread_status(f"逐帧记录已写入 {target}{note}（{len(records)} 帧）")
 
     def onSelectConfigureClicked(self):
         """

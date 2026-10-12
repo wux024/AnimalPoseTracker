@@ -195,6 +195,12 @@ animalpose-inferencer
 
 3. You can choose the configuration file and the weights file. The software will automatically show the available inference engines and devices.
 
+The configuration file describes the classes and the keypoints. Either style is accepted: a project yaml (`classes_name` / `keypoints_name` / `skeleton`, which is what a project created by this toolbox writes) or a dataset yaml (`names` / `kpt_shape` / `skeleton`). These three keys are not only labels — their counts tell the decoder how the model's output tensor is laid out, so a configuration that disagrees with the artifact shifts the keypoint block and decodes nonsense. Both files are therefore checked as soon as they are picked:
+
+- missing class names or keypoint count: a message explains which key is missing, and Start stays disabled;
+- the keypoint count disagrees with the artifact's metadata: a warning is printed and the run is still allowed, because the decoder follows the configuration;
+- the artifact holds an AnimalViTPose SimCC model: refused while selecting, since this toolbox infers YOLO-Pose layouts only. Run those through `animalposetracker predict`.
+
 https://github.com/user-attachments/assets/db726dd8-a092-40e3-94ea-e3d423973a03
 
 4. You can enable the camera or video to inference. Then, you can choose a video from the local directory or a camera to inference. And, you can preview video or camera.
@@ -210,6 +216,12 @@ https://github.com/user-attachments/assets/e67da907-e765-4247-affb-b85563a33d28
 https://github.com/user-attachments/assets/0b57bba6-9ed6-47b1-9f4f-1d449762c784
 
 https://github.com/user-attachments/assets/9d2ad685-7201-4488-a653-500a6c72b3bf
+
+7. You can turn tracking on. Tick `Track` and pick one of the tracker algorithms next to the engine and device; every label then carries its track id (`#1 mouse: 0.90`). The list is the same one `infer --tracker` accepts, and a tracker follows the pose records rather than the pixels — which is why the same run can be replayed later with another algorithm.
+
+8. You can save the per-frame pose records by ticking `Save Records`. The run then writes `runs/inference/records.json`, in the same `[{frame, predictions}, ...]` shape `infer --records` writes, with a `track_id` on every detection when tracking was on. It is the file tracking workbenches, trajectory tools and 3D reconstruction read.
+
+9. You can smooth the tracked poses over time by choosing a filter method (`median` or `savgol`) and its window, polynomial order, confidence and gap settings. The smoothing runs over the whole sequence when the run ends, so it cannot affect what you see live — the file written by `Save Records` holds the smoothed records. Filtering needs track ids, so the filter controls stay disabled until `Track` is ticked, exactly as `--pose-filter` requires `--tracker` on the command line.
 
 # Usage: How to use AnimalPoseTracker plugins to label and annotate animal poses
 
