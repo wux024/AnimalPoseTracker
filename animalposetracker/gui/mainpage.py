@@ -16,7 +16,7 @@ from .annotatorpage import AnnotatorPage
 from .inferencerpage import InferencerPage
 from .utils import (DatasetSplitDialog, split_dataset_sklearn, 
                     create_dataset_structure, copy_split_files,
-                    create_coco_annotations)
+                    create_coco_annotations, ConfigureValueDelegate)
 from animalposetracker.gui import WindowFactory
 from animalposetracker.project.api import AnimalPoseTrackerProject
 from animalposetracker.utils import (convert_labels_to_coco, 
@@ -55,6 +55,19 @@ _ADDED_CONFIGURE_KEYS = {
         ("pose_filter.max_gap", 0),
     ),
 }
+
+# Rows whose value comes from a fixed set, so the value column offers them instead of asking for
+# them to be typed. Booleans need no entry here: any row whose config value is a bool gets the
+# same True/False dropdown. `cache` is listed because it takes two more words besides a bool.
+_CONFIGURE_KEY_CHOICES = {
+    "cache": ("True", "False", "ram", "disk"),
+    "pose_filter.method": ("none", "median", "savgol"),
+    "split": ("train", "val", "test"),
+}
+
+# Rows that look boolean in the config but also accept free text, so they keep the text editor:
+# `pretrained` names a checkpoint when it is a string (`TrainingConfig.from_mapping`).
+_FREETEXT_CONFIGURE_KEYS = frozenset({"pretrained"})
 
 # Rows the backend does read, but under a different key than the Designer file uses.
 _RENAMED_CONFIGURE_KEYS = {
@@ -267,6 +280,28 @@ class AnimalPoseTrackerPage(QMainWindow, Ui_AnimalPoseTracker):
             container = nested
         container.setdefault(parts[-1], default)
 
+    def configure_choices(self, key):
+        """The fixed set of values a parameter row accepts, or ``()`` when it takes free text.
+
+        The value delegate asks this per row, so a boolean or an algorithm name is picked from a
+        list instead of typed -- a typo there used to reach the worker and fail far from the cell.
+        """
+        choices = _CONFIGURE_KEY_CHOICES.get(key)
+        if choices:
+            return tuple(choices)
+        if key in _FREETEXT_CONFIGURE_KEYS:
+            return ()
+        if key == "tracking.algorithm":
+            # Imported here rather than at module scope: the tracker package takes about a second
+            # to import and the list is only needed once someone edits that row.
+            from animalposetracker.tracking.config import ALGORITHMS
+
+            return tuple(ALGORITHMS)
+        container, leaf = self._resolve_other_key(self.project.other_config, key)
+        if container is not None and isinstance(container[leaf], bool):
+            return ("True", "False")
+        return ()
+
     def _shape_configure_trees(self):
         """Make each parameter tree match what this backend reads: drop, rename and add rows.
 
@@ -291,6 +326,17 @@ class AnimalPoseTrackerPage(QMainWindow, Ui_AnimalPoseTracker):
                 item = QTreeWidgetItem()
                 item.setText(0, key)
                 tree.addTopLevelItem(item)
+
+        # Kept on self: Qt does not take ownership of the delegate, and a collected one would
+        # silently drop every dropdown back to a text editor.
+        self._configure_delegate = ConfigureValueDelegate(self.configure_choices)
+        for tree_name in (
+            "TrainingConfigureEdit",
+            "EvaluateConfigure",
+            "InferenceConfigure",
+            "ExportConfigure",
+        ):
+            getattr(self, tree_name).setItemDelegateForColumn(1, self._configure_delegate)
 
     def initialize_other_config(self):
         """Initialize the other config"""

@@ -18,7 +18,7 @@ import yaml
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
 try:
-    from PySide6.QtWidgets import QApplication
+    from PySide6.QtWidgets import QApplication, QComboBox, QLineEdit, QStyleOptionViewItem
 
     from animalposetracker.gui.annotatorpage import AnnotatorPage
     from animalposetracker.gui.createnewprojectpage import CreateNewProjectPage
@@ -220,6 +220,58 @@ class ConfigureTreeTests(unittest.TestCase):
 
         self._row(page.InferenceConfigure, "tracking.enabled").setText(1, "True")
         self.assertIs(page.project.other_config["tracking"]["enabled"], True)
+
+    @staticmethod
+    def _editor(page, tree, key):
+        for index in range(tree.topLevelItemCount()):
+            if tree.topLevelItem(index).text(0) == key:
+                model_index = tree.model().index(index, 1)
+                return page._configure_delegate.createEditor(
+                    page, QStyleOptionViewItem(), model_index
+                )
+        raise AssertionError(f"{key} is not in the tree")
+
+    def test_fixed_set_rows_offer_their_values(self):
+        page = AnimalPoseTrackerPage()
+        self.assertEqual(
+            page.configure_choices("tracking.algorithm"),
+            ("bytetrack", "botsort", "ocsort", "deepocsort", "fasttrack", "tracktrack"),
+        )
+        self.assertEqual(page.configure_choices("pose_filter.method"), ("none", "median", "savgol"))
+        self.assertEqual(page.configure_choices("split"), ("train", "val", "test"))
+        # `cache` accepts two words besides a bool, so it is listed rather than derived.
+        self.assertEqual(page.configure_choices("cache"), ("True", "False", "ram", "disk"))
+        # Numbers and paths stay free text.
+        self.assertEqual(page.configure_choices("epochs"), ())
+        self.assertEqual(page.configure_choices("source"), ())
+
+    def test_boolean_rows_are_recognised_from_the_config_value(self):
+        page = AnimalPoseTrackerPage()
+        page.project.other_config["tracking"] = {"enabled": False}
+        page.project.other_config["epochs"] = 10
+
+        self.assertEqual(page.configure_choices("tracking.enabled"), ("True", "False"))
+        self.assertEqual(page.configure_choices("epochs"), ())
+
+    def test_rows_that_also_take_text_keep_the_text_editor(self):
+        # `pretrained` names a checkpoint when it holds a string, so a True/False dropdown would
+        # take away a capability rather than add one.
+        page = AnimalPoseTrackerPage()
+        self.assertEqual(page.configure_choices("pretrained"), ())
+
+    def test_the_value_column_edits_with_a_dropdown_when_there_are_choices(self):
+        page = AnimalPoseTrackerPage()
+        page.project.other_config["tracking"] = {"enabled": True, "algorithm": "bytetrack"}
+        page.initialize_other_config()
+        tree = page.InferenceConfigure
+
+        selected = self._editor(page, tree, "tracking.enabled")
+        self.assertIsInstance(selected, QComboBox)
+        self.assertEqual(
+            [selected.itemText(index) for index in range(selected.count())], ["True", "False"]
+        )
+        # A row with no fixed set still opens the plain text editor.
+        self.assertIsInstance(self._editor(page, tree, "imgsz"), QLineEdit)
 
 
 @unittest.skipUnless(QApplication is not None, "PySide6 (the gui extra) is not installed")

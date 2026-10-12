@@ -2,7 +2,8 @@ from PySide6.QtCore import Qt, QPoint, QRect, QSize, Signal, QObject
 from PySide6.QtWidgets import (QWidget, QHBoxLayout, QLabel, QLineEdit, 
                               QListWidgetItem, QGraphicsView, QCheckBox, 
                               QLayout, QTreeView, QMenu, QDialog, QPushButton, 
-                              QVBoxLayout, QMessageBox)
+                              QVBoxLayout, QMessageBox, QComboBox,
+                              QStyledItemDelegate)
 from PySide6.QtGui import (QPainter, QPixmap, QPen, QColor,QWheelEvent, QBrush, 
                            QStandardItemModel, QStandardItem, QFontMetrics)
 from typing import List
@@ -10,6 +11,47 @@ import shutil
 import json
 from sklearn.model_selection import train_test_split
 from animalposetracker.gui import COLORS
+
+
+class ConfigureValueDelegate(QStyledItemDelegate):
+    """Offer a dropdown for parameter rows whose value comes from a fixed set.
+
+    The configure trees edit their value column as free text, so a boolean had to be typed as
+    ``True`` and an algorithm name spelled out by hand -- and a value the worker cannot parse
+    fails later, far away from the cell that produced it. Rows without a fixed set keep the
+    plain text editor.
+    """
+
+    def __init__(self, choices_for_key, parent=None):
+        super().__init__(parent)
+        self._choices_for_key = choices_for_key
+
+    def createEditor(self, parent, option, index):
+        choices = self._choices(index)
+        if not choices:
+            return super().createEditor(parent, option, index)
+        editor = QComboBox(parent)
+        editor.addItems(list(choices))
+        return editor
+
+    def setEditorData(self, editor, index):
+        if isinstance(editor, QComboBox):
+            position = editor.findText(str(index.data(Qt.EditRole)))
+            editor.setCurrentIndex(position if position >= 0 else 0)
+            return
+        super().setEditorData(editor, index)
+
+    def setModelData(self, editor, model, index):
+        if isinstance(editor, QComboBox):
+            model.setData(index, editor.currentText(), Qt.EditRole)
+            return
+        super().setModelData(editor, model, index)
+
+    def _choices(self, index):
+        if index.column() != 1:
+            return ()
+        key_index = index.sibling(index.row(), 0)
+        return self._choices_for_key(key_index.data(Qt.DisplayRole))
 
 
 class ListManager(QObject):
