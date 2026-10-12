@@ -11,8 +11,7 @@ from .ui_inferencer import Ui_Inferencer
 from animalposetracker.utils import (VideoReaderThread, VideoWriterThread, 
                                      PreprocessThread, InferenceThread, 
                                      PostprocessThread, VisualizeThread)
-from animalposetracker.engine import InferenceEngine
-from animalposetracker.engine import ENGINEtoDEVICE
+from animalposetracker.inference import InferenceEngine, ENGINEtoDEVICE
 class InferencerPage(QWidget, Ui_Inferencer):
     def __init__(self, parent=None):
         super().__init__(parent)

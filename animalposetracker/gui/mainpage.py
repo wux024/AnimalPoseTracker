@@ -18,7 +18,7 @@ from .utils import (DatasetSplitDialog, split_dataset_sklearn,
                     create_dataset_structure, copy_split_files,
                     create_coco_annotations)
 from animalposetracker.gui import WindowFactory
-from animalposetracker.projector import AnimalPoseTrackerProject
+from animalposetracker.project.api import AnimalPoseTrackerProject
 from animalposetracker.utils import (convert_labels_to_coco, 
                                      convert_labels_to_yolo,
                                      KeyframeExtractor)

@@ -3,7 +3,7 @@ from PySide6.QtWidgets import  QFileDialog, QWidget
 from pathlib import Path
 
 from .ui_publicdatasetsproject import Ui_PublicDatasetProject
-from animalposetracker.projector import AnimalPoseTrackerProject
+from animalposetracker.project.api import AnimalPoseTrackerProject
 from animalposetracker.cfg import DATA_YAML_PATHS, MODEL_YAML_PATHS
 
 

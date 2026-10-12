@@ -5,7 +5,7 @@ from pathlib import Path
 
 from .ui_createnewproject import Ui_CreateNewProject
 from .utils import ListManager, CheckableListWidgetItem
-from animalposetracker.projector import AnimalPoseTrackerProject
+from animalposetracker.project.api import AnimalPoseTrackerProject
 from animalposetracker.cfg import MODEL_YAML_PATHS
 
 class CreateNewProjectPage(QWidget, Ui_CreateNewProject):
