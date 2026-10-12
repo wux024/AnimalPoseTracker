@@ -50,6 +50,8 @@ plots: True # (bool) save plots and images during train/val
 
 # Predict settings -----------------------------------------------------------------------------------------------------
 source: # (str, optional) source directory for images or videos
+prediction_confidence: 0.25 # (float) confidence threshold for dataset/video prediction
+prediction_iou: 0.7 # (float) NMS IoU threshold for dataset/video prediction
 vid_stride: 1 # (int) video frame-rate stride
 stream_buffer: False # (bool) buffer all streaming frames (True) or return the most recent frame (False)
 visualize: False # (bool) visualize model features

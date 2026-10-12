@@ -20,10 +20,12 @@ try:
 
     from animalposetracker.gui.createnewprojectpage import CreateNewProjectPage
     from animalposetracker.gui.inferencerpage import InferencerPage
+    from animalposetracker.gui.mainpage import AnimalPoseTrackerPage
 except ImportError:  # pragma: no cover - depends on the optional gui extra
     QApplication = None
     CreateNewProjectPage = None
     InferencerPage = None
+    AnimalPoseTrackerPage = None
 
 
 @unittest.skipUnless(QApplication is not None, "PySide6 (the gui extra) is not installed")
@@ -102,6 +104,75 @@ class InferencerControlTests(unittest.TestCase):
                 page.onSelectWeightsClicked()
 
             self.assertTrue(page.Start.isEnabled())
+
+
+@unittest.skipUnless(QApplication is not None, "PySide6 (the gui extra) is not installed")
+class ConfigureTreeTests(unittest.TestCase):
+    """The parameter trees must only offer keys the backend actually reads.
+
+    A row whose key is not in the project's other.yaml raises the moment it is edited, and a
+    row whose key nothing consumes is a knob that silently does nothing. The trees are generated
+    from the Designer files, which mirror the full set of reference-toolkit options, so mainpage
+    prunes them at startup.
+    """
+
+    # The exact rows each tree should end up with. Editing this list is the point: it forces
+    # every addition or removal to be a deliberate decision.
+    EXPECTED = {
+        "TrainingConfigureEdit": {
+            "model", "data", "epochs", "time", "patience", "batch", "imgsz", "save",
+            "save_period", "cache", "device", "workers", "project", "name", "pretrained",
+            "optimizer", "seed", "cos_lr", "close_mosaic", "resume", "amp", "fraction",
+            "profile", "lr0", "lrf", "momentum", "weight_decay", "warmup_epochs",
+            "warmup_momentum", "warmup_bias_lr", "box", "cls", "dfl", "pose", "kobj", "nbs",
+            "val", "plots",
+        },
+        "EvaluateConfigure": {
+            "data", "batch", "imgsz", "conf", "iou", "max_det", "half", "device", "dnn",
+            "plots", "rect", "split", "project", "name", "profile", "verbose", "workers",
+            "agnostic_nms", "single_cls",
+        },
+        "InferenceConfigure": {
+            "source", "prediction_confidence", "prediction_iou", "imgsz", "half", "device",
+            "batch", "max_det", "agnostic_nms", "classes", "project", "name", "verbose",
+            "save", "show_conf", "show_boxes", "line_width", "kpt_radius", "kpt_line",
+        },
+        # Untouched: every export option is read by the export pipeline.
+        "ExportConfigure": {
+            "format", "imgsz", "keras", "optimize", "half", "int8", "dynamic", "simplify",
+            "opset", "workspace", "nms", "batch", "device", "data", "fraction",
+        },
+    }
+
+    @classmethod
+    def setUpClass(cls):
+        cls.application = QApplication.instance() or QApplication([])
+
+    def _keys(self, tree):
+        return {tree.topLevelItem(i).text(0) for i in range(tree.topLevelItemCount())}
+
+    def test_each_tree_offers_exactly_the_supported_keys(self):
+        page = AnimalPoseTrackerPage()
+        for tree_name, expected in self.EXPECTED.items():
+            with self.subTest(tree=tree_name):
+                self.assertEqual(self._keys(getattr(page, tree_name)), expected)
+
+    def test_prediction_thresholds_are_fully_qualified(self):
+        # `conf`/`iou` are read as validation thresholds, not prediction ones; prediction reads
+        # prediction_confidence/prediction_iou, so those are the keys the tree has to carry.
+        page = AnimalPoseTrackerPage()
+        keys = self._keys(page.InferenceConfigure)
+        self.assertNotIn("conf", keys)
+        self.assertNotIn("iou", keys)
+
+    def test_editing_any_offered_row_does_not_raise(self):
+        page = AnimalPoseTrackerPage()
+        for tree_name in self.EXPECTED:
+            tree = getattr(page, tree_name)
+            for index in range(tree.topLevelItemCount()):
+                item = tree.topLevelItem(index)
+                with self.subTest(tree=tree_name, key=item.text(0)):
+                    item.setText(1, "1")
 
 
 if __name__ == "__main__":

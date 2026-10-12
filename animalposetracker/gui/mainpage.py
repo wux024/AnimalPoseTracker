@@ -25,6 +25,29 @@ from animalposetracker.utils import (convert_labels_to_coco,
 from animalposetracker.gui import (DARK_THEME_PATH, LIGHT_THEME_PATH, 
                                    LOGO_PATH_TRANSPARENT, LOGO_PATH, WELCOME_PATH)
 
+# The parameter trees come from the Designer files, which mirror every knob the reference
+# toolkits expose under those names. Only the ones this backend reads belong on screen: a row
+# nothing consumes is a knob that silently does nothing, and a row whose key is missing from the
+# project's other.yaml raises the moment it is edited.
+_DROPPED_CONFIGURE_KEYS = {
+    "TrainingConfigureEdit": frozenset({"overlap_mask", "mask_ratio", "dropout"}),
+    "EvaluateConfigure": frozenset({
+        "save_json", "save_hybrid", "save_txt", "save_conf", "save_crop", "augment",
+    }),
+    "InferenceConfigure": frozenset({
+        "vid_stride", "stream_buffer", "visualize", "augment", "retina_masks", "embed",
+        "stream", "show", "save_frame", "save_txt", "save_conf", "save_crop",
+        "show_label", "font_size", "font", "pil", "masks", "probs", "filename",
+        "color_mode", "txt_color",
+    }),
+}
+
+# Rows the backend does read, but under a different key than the Designer file uses.
+_RENAMED_CONFIGURE_KEYS = {
+    "InferenceConfigure": {"conf": "prediction_confidence", "iou": "prediction_iou"},
+}
+
+
 class AnimalPoseTrackerPage(QMainWindow, Ui_AnimalPoseTracker):
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -62,6 +85,7 @@ class AnimalPoseTrackerPage(QMainWindow, Ui_AnimalPoseTracker):
 
         self.ConfigureFile.setEditTriggers(QTreeWidget.DoubleClicked | QTreeWidget.EditKeyPressed)
         self.TrainingConfigureEdit.setEditTriggers(QTreeWidget.DoubleClicked | QTreeWidget.EditKeyPressed)
+        self._prune_configure_trees()
 
         self.onChangeTheme("light")
         self.SelectionVideosImagesLabel.setText("0 video or image selected")
@@ -192,6 +216,23 @@ class AnimalPoseTrackerPage(QMainWindow, Ui_AnimalPoseTracker):
             self.addRecentProject(project_config_path)
             # set work directory
             os.chdir(self.project.project_path)
+
+    def _prune_configure_trees(self):
+        """Drop the parameter rows this backend never reads, and rename the mislabelled ones.
+
+        Runs at startup rather than being baked into the generated ``ui_*.py``: those files are
+        rebuilt from the Designer sources, which would bring every dropped row straight back.
+        """
+        for tree_name, dropped in _DROPPED_CONFIGURE_KEYS.items():
+            tree = getattr(self, tree_name)
+            renamed = _RENAMED_CONFIGURE_KEYS.get(tree_name, {})
+            for index in reversed(range(tree.topLevelItemCount())):
+                item = tree.topLevelItem(index)
+                key = item.text(0)
+                if key in dropped:
+                    tree.takeTopLevelItem(index)
+                elif key in renamed:
+                    item.setText(0, renamed[key])
 
     def initialize_other_config(self):
         """Initialize the other config"""
@@ -814,7 +855,9 @@ class AnimalPoseTrackerPage(QMainWindow, Ui_AnimalPoseTracker):
                 new_value = self.convert_value(new_value)
                 self.project.other_config[key] = new_value
             else:
-                raise ValueError(f"Invalid key {key} in other config")
+                # A key the config does not carry would be dropped on save; say so instead of
+                # raising, because the value the user just typed is still on screen.
+                self.statusBar().showMessage(f"{key} is not a configuration key; the edit was ignored")
 
     def onStartTrain(self):
         """Slot for starting training"""
