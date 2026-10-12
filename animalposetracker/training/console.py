@@ -243,13 +243,9 @@ class PrettyTrainingRenderer:
             return
 
         if name == "epoch_end":
-            # Neither Ultralytics (`Epoch GPU_mem box_loss ...` progress row, then the
-            # validation table) nor MMPose (`Epoch(train) [...] loss: ...` per log interval,
-            # then `Epoch(val) [...]`) repeats the training loss after the epoch is over --
-            # it lives in the progress row above and in training.jsonl. So this line is a
-            # bare marker for which epoch the table below belongs to, which is the job
-            # MMPose's `Epoch(val)` prefix does.
-            self._line(f"[epoch {event.epoch}/{event.epochs}]")
+            # Nothing but the table: the epoch number and the training loss both belong to
+            # the progress row right above it, which Ultralytics and MMPose both end an
+            # epoch with -- validation figures and nothing else.
             header, row = _validation_table(metrics, self.columns.validation, prefix="val_")
             self._line(header)
             self._line(row)

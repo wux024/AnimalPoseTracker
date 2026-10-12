@@ -246,9 +246,10 @@ class PrettyTrainingRendererTests(unittest.TestCase):
         self.assertIn("[started] device=cuda", output)
         self.assertIn("[finished]", output)
         self.assertNotIn('"event"', output)
-        # An epoch ends with the validation figures and nothing else: the training loss
-        # belongs to the progress row above (Ultralytics and MMPose both do it this way).
-        self.assertIn("[epoch 1/2]", output)
+        # An epoch ends with the validation figures and nothing else: the epoch number and
+        # the training loss both belong to the progress row above (Ultralytics and MMPose
+        # both close an epoch with validation metrics only).
+        self.assertNotIn("[epoch", output)
         self.assertNotIn("train_loss", output)
         # A validation event has no line of its own: the epoch's metrics are collected and
         # rendered as one table when the epoch ends, which is what the training loop emits.
@@ -283,42 +284,31 @@ class PrettyTrainingRendererTests(unittest.TestCase):
         # The one column is the per-image average, not the batch sum.
         self.assertRegex(body, r"1/2\s+0G\s+1\.562\s+8\s+256")
 
-    def test_simcc_epoch_summary_is_a_bare_marker(self):
+    def test_simcc_epoch_end_prints_only_the_validation_table(self):
         stream = io.StringIO()
         renderer = PrettyTrainingRenderer(stream=stream, columns=SIMCC_COLUMNS)
         renderer.emit(TrainingEvent(
             event="epoch_end", epoch=1, epochs=2,
             metrics={
                 # The loop reports both the KL batch sum and the per-image figure; neither
-                # belongs on this line, which only marks which epoch the table belongs to.
+                # belongs here, and neither does a repeat of the epoch number.
                 "train_loss": 12.5,
-                "train_loss_simcc_per_sample": 1.5625,
-            },
-        ))
-        output = stream.getvalue()
-        self.assertIn("[epoch 1/2]", output)
-        self.assertNotIn("train_loss", output)
-        self.assertNotIn("12.5", output)
-        self.assertNotIn("1.562", output)
-        self.assertNotIn("12.5", output)
-
-    def test_simcc_layout_has_no_validation_loss_column(self):
-        stream = io.StringIO()
-        renderer = PrettyTrainingRenderer(stream=stream, columns=SIMCC_COLUMNS)
-        renderer.emit(TrainingEvent(
-            event="epoch_end", epoch=1, epochs=2,
-            metrics={
                 "train_loss_simcc_per_sample": 1.5625,
                 "val_images": 20, "val_instances": 31,
                 "val_coco/AP": 0.71, "val_PCK": 0.62,
             },
         ))
         output = stream.getvalue()
+        self.assertNotIn("[epoch", output)
+        self.assertNotIn("train_loss", output)
+        self.assertNotIn("12.5", output)
+        self.assertNotIn("1.562", output)
         # The SimCC validator scores AP/PCK/AUC/EPE and computes no validation loss.
         self.assertRegex(output, r"Class\s+Images\s+Instances\s+AP\s")
         self.assertIn("PCK", output)
         self.assertNotIn("Loss", output)
         self.assertRegex(output, r"all\s+20\s+31\s+0\.71")
+        self.assertNotIn("12.5", output)
 
     def test_loss_columns_follow_the_head(self):
         self.assertIs(loss_columns("SimCCHead"), SIMCC_COLUMNS)
