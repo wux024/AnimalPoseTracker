@@ -44,6 +44,17 @@ def convert_labels(labels_path, project_config, output_dir=None, output_format='
     else:
         raise ValueError(f'Unsupported output format: {output_format}')
 
+def _has_bounding_box(bbox) -> bool:
+    """Whether a label carries a usable box.
+
+    The annotator writes ``bbox: None`` for targets that only ever got keypoints drawn on them,
+    and both converters below need four numbers to place an instance.
+    """
+    if not isinstance(bbox, (list, tuple)) or len(bbox) != 4:
+        return False
+    return all(isinstance(value, (int, float)) for value in bbox)
+
+
 @with_progress_bar(desc="Converting to COCO format")
 def convert_labels_to_coco(labels_path, project_config, output_dir=None):
     """
@@ -78,6 +89,7 @@ def convert_labels_to_coco(labels_path, project_config, output_dir=None):
     # ID counters and mappings
     image_id_counter = 1
     annotation_id_counter = 1
+    skipped_annotations = 0
     
     for json_file in labels_path.iterdir():
         if not json_file.is_file() or not json_file.suffix == ".json":
@@ -99,23 +111,34 @@ def convert_labels_to_coco(labels_path, project_config, output_dir=None):
                 
                 # Process annotations for this image
                 for ann in data.get("annotations", []):
-                    if ann["image_id"] == image["id"]:
+                    if ann["image_id"] != image["id"]:
+                        continue
+                    if ann.get("category_id") is None or not _has_bounding_box(ann.get("bbox")):
+                        # Point-only targets have no category to add 1 to and no box to write;
+                        # counting them keeps the loss visible instead of failing the export.
+                        skipped_annotations += 1
+                        continue
 
-                        # Create new annotation with updated IDs
-                        new_ann = {
-                            "id": annotation_id_counter,
-                            "image_id": image_id_counter,
-                            "category_id": ann["category_id"] + 1,
-                            "area": ann.get("area", 0),
-                            "bbox": ann.get("bbox", []),
-                            "keypoints": ann.get("keypoints", []),
-                            "iscrowd": ann.get("iscrowd", 0)
-                        }
-                        coco["annotations"].append(new_ann)
-                        annotation_id_counter += 1
+                    # Create new annotation with updated IDs
+                    new_ann = {
+                        "id": annotation_id_counter,
+                        "image_id": image_id_counter,
+                        "category_id": ann["category_id"] + 1,
+                        "area": ann.get("area", 0),
+                        "bbox": ann.get("bbox", []),
+                        "keypoints": ann.get("keypoints", []),
+                        "iscrowd": ann.get("iscrowd", 0)
+                    }
+                    coco["annotations"].append(new_ann)
+                    annotation_id_counter += 1
                 
                 image_id_counter += 1
     
+    if skipped_annotations:
+        print(
+            f"Skipped {skipped_annotations} annotation(s) with no bounding box "
+            "while converting to COCO format."
+        )
     coco["categories"] = [
         {
             "supercategory": "",
@@ -176,7 +199,11 @@ def convert_labels_to_yolo(labels_path, output_dir=None):
         
         # Prepare YOLO content
         yolo_lines = []
+        skipped_annotations = 0
         for ann in data.get("annotations", []):
+            if ann.get("category_id") is None or not _has_bounding_box(ann.get("bbox")):
+                skipped_annotations += 1
+                continue
             # Convert bbox from [x,y,width,height] to YOLO format [center_x, center_y, width, height] (normalized)
             x, y, w, h = ann["bbox"]
             center_x = (x + w / 2) / img_width
@@ -204,5 +231,10 @@ def convert_labels_to_yolo(labels_path, output_dir=None):
         output_path = output_dir / f"{filename}.txt"
         with open(output_path, "w") as f:
             f.write("\n".join(yolo_lines))
+        if skipped_annotations:
+            print(
+                f"Skipped {skipped_annotations} annotation(s) with no bounding box "
+                f"in {json_file.name} while converting to YOLO format."
+            )
 
     return output_dir

@@ -1,5 +1,5 @@
 from PySide6.QtCore import Signal, QTimer, Qt, QSignalBlocker
-from PySide6.QtWidgets import  (QFileDialog, QWidget, QMenu)
+from PySide6.QtWidgets import  (QFileDialog, QMessageBox, QWidget, QMenu)
 from PySide6.QtGui import QCursor
 from pathlib import Path
 
@@ -190,9 +190,9 @@ class CreateNewProjectPage(QWidget, Ui_CreateNewProject):
             non_images = [f for f in all_files if f.suffix.lower() not in IMAGE_EXTS]
             
             if len(images) == 0:
-                self.showErrorMessage("Empty Directory", "No images found in selected folder")
+                QMessageBox.warning(self, "Empty Directory", "No images found in selected folder")
             elif non_images:
-                self.showErrorMessage("Invalid Directory", 
+                QMessageBox.warning(self, "Invalid Directory", 
                                     f"Contains {len(non_images)} non-image files")
             else:
                 self._updateSourceList([f"{dir_path}"], len(images))

@@ -188,6 +188,8 @@ class InferencerPage(QWidget, Ui_Inferencer):
   
         # Update UI
         self.SelectWeights.setEnabled(True)
+        if self.weights_path:
+            self.Start.setEnabled(True)
             
 
     def onSelectWeightsClicked(self):
@@ -243,7 +245,9 @@ class InferencerPage(QWidget, Ui_Inferencer):
         self._init_available_devices()
         self._init_model_bits()
 
-        if hasattr(self, 'model_config_path'):
+        # Start needs both halves of the configuration. This used to test an attribute that is
+        # never assigned anywhere, so it stayed disabled until a camera or video was touched.
+        if self.data_config_path and self.weights_path:
             self.Start.setEnabled(True)
 
     def _enable_widgets(self):
@@ -469,7 +473,7 @@ class InferencerPage(QWidget, Ui_Inferencer):
         self.CameraVideosSelection.clear()
         self._detect_available_cameras()
         if not self.camera_list:
-            Warning("No camera detected")
+            QMessageBox.warning(self, "Camera", "No camera detected")
         else:
             self.CameraVideosSelection.addItem("Select camera...")
             self.CameraVideosSelection.addItems(self.camera_list.keys())
@@ -561,7 +565,7 @@ class InferencerPage(QWidget, Ui_Inferencer):
 
         cap = cv2.VideoCapture(file_path)
         if not cap.isOpened():
-            Warning("Failed to open video file")
+            QMessageBox.warning(self, "Video", "Failed to open video file")
             return
         
         # Update UI with actual video parameters
@@ -576,7 +580,7 @@ class InferencerPage(QWidget, Ui_Inferencer):
             cap = cv2.VideoCapture(cam_id)
             
             if not cap.isOpened():
-                Warning("Failed to open camera")
+                QMessageBox.warning(self, "Camera", "Failed to open camera")
                 return
             
             self.tools_enabled()
@@ -619,7 +623,7 @@ class InferencerPage(QWidget, Ui_Inferencer):
             return
         cap = cv2.VideoCapture(source)
         if not cap.isOpened():
-            Warning("Failed to open camera/video source")
+            QMessageBox.warning(self, "Preview", "Failed to open camera/video source")
             return
         if self.CameraORVideos.isChecked():
             self._set_camera_params(cap)
@@ -704,7 +708,7 @@ class InferencerPage(QWidget, Ui_Inferencer):
         # Set up video reader thread
         cap = cv2.VideoCapture(source)
         if not cap.isOpened():
-            Warning("Failed to open camera/video source")
+            QMessageBox.warning(self, "Inference", "Failed to open camera/video source")
         if self.CameraORVideos.isChecked():
             self._set_camera_params(cap)
         self.videoreader_thread.cap = cap
@@ -816,12 +820,12 @@ class InferencerPage(QWidget, Ui_Inferencer):
                 cam_index = self.camera_list[current_text]
                 return cam_index
             except:
-                Warning("Failed to parse camera index")
+                QMessageBox.warning(self, "Camera", "Failed to parse camera index")
                 return None
         else:
             if hasattr(self, 'current_video_path'):
                 return self.current_video_path
-            Warning("No video file selected")
+            QMessageBox.warning(self, "Video", "No video file selected")
             return None
     
     def thread_status(self, message):

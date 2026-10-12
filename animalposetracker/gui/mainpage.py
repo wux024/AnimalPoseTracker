@@ -870,15 +870,20 @@ class AnimalPoseTrackerPage(QMainWindow, Ui_AnimalPoseTracker):
             elif kind == "validation":
                 metrics = event.get("metrics", {})
                 loss = metrics.get("loss")
-                pose_map = metrics.get("coco/AP")
-                box_map = metrics.get("metrics/mAP50-95(B)")
+                # The validators fill one AP namespace or the other depending on the project's
+                # best_metric, and neither one is a box mAP -- keypoint AP is all there is.
+                pose_map = metrics.get("coco/AP", metrics.get("ultralytics/AP"))
+                pose_map50 = metrics.get("coco/AP50", metrics.get("ultralytics/AP50"))
+                keypoint_pck = metrics.get("PCK")
                 details = []
                 if isinstance(loss, (int, float)):
                     details.append(f"loss={loss:.4g}")
                 if isinstance(pose_map, (int, float)):
                     details.append(f"pose mAP50-95={pose_map:.3f}")
-                if isinstance(box_map, (int, float)):
-                    details.append(f"box mAP50-95={box_map:.3f}")
+                if isinstance(pose_map50, (int, float)):
+                    details.append(f"pose mAP50={pose_map50:.3f}")
+                if isinstance(keypoint_pck, (int, float)):
+                    details.append(f"PCK={keypoint_pck:.3f}")
                 detail = f", {', '.join(details)}" if details else ""
                 self.statusBar().showMessage(f"Validation epoch {epoch}/{epochs}{detail}")
             elif kind == "pretrained":
@@ -978,10 +983,12 @@ class AnimalPoseTrackerPage(QMainWindow, Ui_AnimalPoseTracker):
         
     def onSelectModelWeights(self):
         """Show file dialog and return selected file path"""
+        # Export and evaluation both resolve this through _resolve_project_weights, which only
+        # accepts checkpoints -- offering .onnx here guaranteed a ValueError further down.
         file_path, _ = QFileDialog.getOpenFileName(
             parent=self,
-            caption="Select Media File",
-            filter="All Supported Files (*.pt *.onnx);;"
+            caption="Select Model Weights",
+            filter="PyTorch Weights (*.pt *.pth);;All Files (*)"
         )
         if file_path:
             self.project.update_config("other", {"model": file_path})
