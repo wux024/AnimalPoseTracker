@@ -793,49 +793,44 @@ class InferencerDecodeTests(unittest.TestCase):
         # The row those two used to share is gone.
         self.assertEqual(right.count(), 7)
 
-    def test_every_row_shares_one_cell_width_and_packs_left(self):
-        # Qt spreads a row's leftover space, so rows of different lengths never line up and a lone
-        # spin box stretches to a combo's width. One cell width plus a trailing stretch fixes both.
+    def test_the_rows_fill_their_group_the_way_the_designer_drew_them(self):
+        # The Designer file gives this group's controls an expanding width, so a row divides its
+        # group between its cells -- that is the look the page has always had, and the one to keep.
+        # A pass that clamped every control to one cell width and padded the row instead shrank the
+        # controls to their text and left the right half of each row empty.
         page = self._page()
-        width = InferencerPage._CELL_WIDTH
+        page.resize(1194, 800)
+        page.layout().activate()
+        QApplication.processEvents()
 
         for attribute in (
-            "SelectConfigure", "SelectWeights", "WidthSetup",
-            "ModelBits", "EngineSelection", "DeviceSelection", "Start", "End",
-            "IoU", "Conf", "TrackerAlgorithm", "FilterMethod", "FilterWindow",
-            "Save", "SaveRecords", "Show", "FPSShow", "ShowBBox", "EnableTracking",
+            "SelectConfigure", "SelectWeights", "WidthSetup", "HeightSetup", "FPSSetup",
+            "ModelBits", "EngineSelection", "DeviceSelection", "Start", "End", "IoU", "Conf",
+            "CameraVideosSelection", "TrackerAlgorithm", "FilterMethod", "FilterWindow",
+            "FilterConfidence", "SaveRecords",
         ):
             with self.subTest(widget=attribute):
-                self.assertEqual(getattr(page, attribute).maximumWidth(), width)
+                # QWIDGETSIZE_MAX: no upper bound of the page's own.
+                self.assertEqual(getattr(page, attribute).maximumWidth(), 16777215)
 
-        # The source field shows a path, so it is deliberately wider than one cell.
-        self.assertEqual(page.CameraVideosSelection.maximumWidth(), 240)
-
+        # A trailing stretch would pack a row against the left edge. No row has one, the rows the
+        # Designer file drew included: they divide the group, they do not hug its left side.
         for layout in (
             page.BaseConfigureLayout, page.ThresholdLayout, page.TrackerLayout,
             page.FilterValuesLayout, page.CameraVideosLayout, page.CameraParametersLayout,
             page.EngineDeviceLayout, page.StartEndLayout, page.SaveSwitchLayout,
-            page.MainShowLayout, page.ShowInfoLayput,
-        ):
-            with self.subTest(layout=layout.objectName()):
-                self.assertIsNotNone(layout.itemAt(layout.count() - 1).spacerItem())
-
-        # A sub-row is not a row. Padding one spreads its own columns across the group, which is
-        # what left the engine/device row out of step with every row above it.
-        for layout in (
-            page.IoULayout, page.ConfLayout, page.WidthLayout, page.HeightLayout, page.FPSLayout,
-            page.ModelBitsLayout, page.EngineLayout, page.DeviceLayout,
+            page.MainShowLayout, page.ShowInfoLayput, page.FontScaleLayout,
+            page.ShowKeypointsLayout, page.ShowSkeletonsLayout, page.ShowBBoxLayout,
         ):
             with self.subTest(layout=layout.objectName()):
                 self.assertIsNone(layout.itemAt(layout.count() - 1).spacerItem())
 
-        # The slider rows keep their sliders full width, so they must not be packed.
-        for layout in (
-            page.FontScaleLayout, page.ShowKeypointsLayout, page.ShowSkeletonsLayout,
-            page.ShowBBoxLayout,
-        ):
+        # Which shows up as cells of equal width: three buttons split their group three ways, and
+        # the four filter values split theirs four ways.
+        for layout, count in ((page.BaseConfigureLayout, 3), (page.FilterValuesLayout, 4)):
+            widths = [layout.itemAt(index).widget().width() for index in range(count)]
             with self.subTest(layout=layout.objectName()):
-                self.assertIsNone(layout.itemAt(layout.count() - 1).spacerItem())
+                self.assertLessEqual(max(widths) - min(widths), 2)
 
     def test_no_widget_or_row_is_left_out_of_the_page(self):
         # A widget or a row that sits in no layout draws nothing, and in the source it reads as
