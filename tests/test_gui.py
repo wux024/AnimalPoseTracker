@@ -570,8 +570,8 @@ class InferencerDecodeTests(unittest.TestCase):
         self.assertFalse(page.SaveRecords.isEnabled())
         page.tools_enabled()
         self.assertTrue(page.SaveRecords.isEnabled())
-        # Built at runtime, so it has to be added to a layout by hand.
-        self.assertGreaterEqual(page.ShowToolsGroupVLayout.indexOf(page.SaveRecords), 0)
+        # Built at runtime, so it has to be parented into the group by hand.
+        self.assertEqual(page.SaveRecords.parentWidget().objectName(), "ShowToolsGroup")
 
     def test_the_records_file_appears_only_when_the_switch_asked_for_it(self):
         page = self._page()
@@ -748,18 +748,37 @@ class InferencerDecodeTests(unittest.TestCase):
         self.assertFalse(page._filter_is_on())
         self.assertIs(page._final_records(), page.records)
 
-    def test_the_tracking_block_sits_at_the_top_of_the_display_group(self):
-        # Filter switch, filter values, then tracking: the group's own switches start below.
+    def test_the_layout_follows_the_third_plan(self):
         page = self._page()
-        layout = page.ShowToolsGroupVLayout
+        left = page.BaseToolsLayout
 
-        self.assertIs(layout.itemAt(0).layout(), page.FilterSwitchLayout)
-        self.assertIs(layout.itemAt(1).layout(), page.FilterValuesLayout)
-        self.assertIs(layout.itemAt(2).layout(), page.TrackerLayout)
-        self.assertIs(layout.itemAt(0).layout().itemAt(0).widget(), page.EnableFilter)
-        self.assertIs(layout.itemAt(2).layout().itemAt(0).widget(), page.EnableTracking)
-        # The Designer file's empty placeholder is gone from the left group's block.
+        # Row 2 holds the decode thresholds, moved out of the display group with their widgets.
+        self.assertIs(left.itemAt(1).layout(), page.ThresholdLayout)
+        self.assertEqual(page.IoU.parentWidget().objectName(), "BaseToolsGroup")
+        self.assertEqual(page.Conf.parentWidget().objectName(), "BaseToolsGroup")
+        # Rows 3 and 4 hold the two optional stages and the filter's values.
+        self.assertIs(left.itemAt(2).layout(), page.TrackerFilterLayout)
+        self.assertIs(left.itemAt(3).layout(), page.FilterValuesLayout)
+        self.assertEqual(
+            [left.itemAt(2).layout().itemAt(index).widget() for index in range(4)],
+            [page.EnableTracking, page.TrackerAlgorithm, page.EnableFilter, page.FilterMethod],
+        )
+        # Below them the group keeps its own order: source, camera parameters, engine and device.
+        self.assertIs(left.itemAt(4).layout(), page.CameraVideosLayout)
+        self.assertIs(left.itemAt(5).layout(), page.CameraParametersLayout)
+        self.assertIs(left.itemAt(6).layout(), page.EngineDeviceLayout)
+        self.assertIs(left.itemAt(7).layout(), page.StartEndLayout)
         self.assertEqual(page.EngineDeviceLayout.count(), 3)
+
+        # The display group opens with the two switches that write files.
+        right = page.ShowToolsGroupVLayout
+        self.assertIs(right.itemAt(0).layout(), page.SaveSwitchLayout)
+        self.assertEqual(
+            [right.itemAt(0).layout().itemAt(index).widget() for index in range(2)],
+            [page.Save, page.SaveRecords],
+        )
+        # The row those two used to share is gone.
+        self.assertEqual(right.count(), 7)
 
     def test_the_two_save_switches_say_what_they_save(self):
         # "Save" next to "Save Records" left the reader guessing which saved what.

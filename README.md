@@ -217,11 +217,11 @@ https://github.com/user-attachments/assets/0b57bba6-9ed6-47b1-9f4f-1d449762c784
 
 https://github.com/user-attachments/assets/9d2ad685-7201-4488-a653-500a6c72b3bf
 
-7. You can turn tracking on. Tick `Track` and pick one of the tracker algorithms; every label then carries its track id (`#1 mouse: 0.90`). The list is the same one `infer --tracker` accepts, and a tracker follows the pose records rather than the pixels — which is why the same run can be replayed later with another algorithm. `Track` and `Filter` sit at the top of the display options, above the switches that decide what gets drawn.
+7. You can turn tracking on. Tick `Track` and pick one of the tracker algorithms; every label then carries its track id (`#1 mouse: 0.90`). The list is the same one `infer --tracker` accepts, and a tracker follows the pose records rather than the pixels — which is why the same run can be replayed later with another algorithm. `Track`, `Filter` and the `Conf`/`IoU` thresholds sit together under the file pickers, above the source, engine and device choices: all of them decide what a run produces rather than what is drawn.
 
 8. You can save the per-frame pose records by ticking `Save Records`, next to the `Save Video` switch that writes the rendered frames. `Save Records` writes `runs/inference/records.json`, in the same `[{frame, predictions}, ...]` shape `infer --records` writes, with a `track_id` on every detection when tracking was on. It is the file tracking workbenches, trajectory tools and 3D reconstruction read.
 
-9. You can smooth the tracked poses over time by ticking `Filter` and choosing a method (`median` or `savgol`) with its window, polynomial order, confidence and gap settings. The smoothing runs over the whole sequence when the run ends, so it cannot affect what you see live — the file written by `Save Records` holds the smoothed records. Filtering needs track ids, so the filter row stays disabled until `Track` is ticked, exactly as `--pose-filter` requires `--tracker` on the command line.
+9. You can smooth the tracked poses over time by ticking `Filter` and choosing a method (`median` or `savgol`) with its window, polynomial order, keypoint confidence and gap settings. The smoothing runs over the whole sequence when the run ends, so it cannot affect what you see live — the file written by `Save Records` holds the smoothed records. Filtering needs track ids, so the filter controls stay disabled until `Track` is ticked, exactly as `--pose-filter` requires `--tracker` on the command line.
 
 # Usage: How to use AnimalPoseTracker plugins to label and annotate animal poses
 
