@@ -7,6 +7,7 @@ the calls the annotator makes rather than the pixels it produces.
 
 import sys
 import unittest
+from dataclasses import replace
 from unittest import mock
 
 from animalposetracker.rendering import (
@@ -30,6 +31,7 @@ class _Recorder:
 
     FONT_HERSHEY_SIMPLEX = 0
     LINE_AA = 16
+    FILLED = -1
 
     def __init__(self):
         self.calls = []
@@ -45,6 +47,9 @@ class _Recorder:
 
     def circle(self, img, center, radius, color, thickness, lineType):
         self.calls.append(("circle", center, radius, color))
+
+    def getTextSize(self, text, font, scale, thickness):
+        return (4 * len(text), 8), 2
 
     def ops(self):
         return [call[0] for call in self.calls]
@@ -157,6 +162,77 @@ class DrawInstanceTests(unittest.TestCase):
         self.assertEqual(_draw(style=PREDICTION_STYLE, line_width=0).of("putText")[0][5], 1)
         self.assertEqual(_draw(style=INFERENCE_STYLE, line_width=0).of("putText")[0][5], 0)
         self.assertEqual(_draw(style=INFERENCE_STYLE, line_width=3).of("putText")[0][5], 3)
+
+
+class PerClassAndPerEdgeColourTests(unittest.TestCase):
+    """The inferencer page shows one colour per class, one per skeleton edge, and a filled
+    label. Those are style data: the neutral renderer stays free of "if this caller"."""
+
+    CLASSES = ((11, 22, 33), (44, 55, 66))
+    EDGES = ((1, 2, 3), (4, 5, 6))
+
+    def test_box_colour_follows_the_class_id(self):
+        style = replace(PREDICTION_STYLE, class_colors=self.CLASSES)
+        first = _draw(style=style, class_id=0).of("rectangle")[0]
+        second = _draw(style=style, class_id=1).of("rectangle")[0]
+        self.assertEqual(first[3], self.CLASSES[0])
+        self.assertEqual(second[3], self.CLASSES[1])
+
+    def test_without_class_colours_the_plain_box_colour_is_used(self):
+        style = replace(PREDICTION_STYLE, class_colors=self.CLASSES)
+        self.assertEqual(
+            _draw(style=style, class_id=None).of("rectangle")[0][3], PREDICTION_STYLE.box_color
+        )
+
+    def test_edge_colours_cycle_by_edge_index(self):
+        style = replace(PREDICTION_STYLE, skeleton_colors=self.EDGES)
+        recorder = _draw(
+            style=style,
+            points=[(0, 0), (1, 1)],
+            skeleton=[[0, 1], [0, 1], [0, 1]],
+        )
+        self.assertEqual(
+            [call[3] for call in recorder.of("line")],
+            [self.EDGES[0], self.EDGES[1], self.EDGES[0]],
+        )
+
+    def test_without_edge_colours_the_plain_skeleton_colour_is_used(self):
+        style = replace(PREDICTION_STYLE, skeleton_colors=self.EDGES)
+        recorder = _draw(style=replace(style, skeleton_colors=()), skeleton=[[0, 1]])
+        self.assertEqual(recorder.of("line")[0][3], PREDICTION_STYLE.skeleton_color)
+
+    def test_box_and_edge_widths_are_independent(self):
+        style = replace(PREDICTION_STYLE, box_line_width=5, skeleton_line_width=1)
+        recorder = _draw(style=style, line_width=3)
+        self.assertEqual(recorder.of("rectangle")[0][4], 5)
+        self.assertEqual(recorder.of("line")[0][4], 1)
+        # The label still follows the caller's line width.
+        self.assertEqual(recorder.of("putText")[0][5], max(3, PREDICTION_STYLE.label_thickness_floor))
+
+    def test_a_width_of_none_keeps_the_caller_line_width(self):
+        recorder = _draw(style=PREDICTION_STYLE, line_width=7)
+        self.assertEqual(recorder.of("rectangle")[0][4], 7)
+        self.assertEqual(recorder.of("line")[0][4], 7)
+
+    def test_filled_label_paints_a_plate_before_the_text(self):
+        style = replace(
+            PREDICTION_STYLE, class_colors=self.CLASSES, label_fill=True, label_text_color=(0, 0, 0)
+        )
+        recorder = _draw(style=style, class_id=1, label="dog 0.90", box=(10, 40, 20, 60))
+
+        self.assertEqual(recorder.ops(), ["rectangle", "rectangle", "putText", "line", "circle", "circle"])
+        plate = recorder.of("rectangle")[1]
+        self.assertEqual(plate[3], self.CLASSES[1])
+        self.assertEqual(plate[4], _Recorder.FILLED)
+        # A plate is generous around the anchor: from y - h to y + h.
+        self.assertEqual(plate[1], (10, 40 - 5 - 8))
+        self.assertEqual(plate[2], (10 + 4 * len("dog 0.90"), 40 - 5 + 8))
+        self.assertEqual(recorder.of("putText")[0][4], (0, 0, 0))
+
+    def test_without_label_fill_the_text_keeps_its_colour(self):
+        recorder = _draw(style=PREDICTION_STYLE, label="m")
+        self.assertEqual(len(recorder.of("rectangle")), 1)  # the box only
+        self.assertEqual(recorder.of("putText")[0][4], PREDICTION_STYLE.label_color)
 
 
 if __name__ == "__main__":

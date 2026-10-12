@@ -20,6 +20,7 @@ from animalposetracker.inference.session import (
     build_inference_session,
     instance_to_record,
     load_inference_config,
+    pixel_points,
     resolve_num_classes,
 )
 
@@ -32,6 +33,7 @@ _FORMAT_TO_ENGINE = FORMAT_TO_ENGINE
 _resolve_num_classes = resolve_num_classes
 _load_dataset_config = load_inference_config
 _instance_to_record = instance_to_record
+_pixel_points = pixel_points
 
 
 def _make_argument_parser() -> argparse.ArgumentParser:
@@ -97,21 +99,6 @@ def _make_argument_parser() -> argparse.ArgumentParser:
     parser.add_argument("--max-frames", type=int,
                         help="Stop after this many frames (useful for smoke tests)")
     return parser
-
-
-def _pixel_points(keypoints):
-    """Integer pixel coordinate per keypoint, ``None`` where not scorable.
-
-    A keypoint whose score is not positive carries no position, so it is
-    neither drawn nor connected to an edge.
-    """
-    points = []
-    for point in keypoints:
-        if len(point) >= 3 and float(point[2]) <= 0.0:
-            points.append(None)
-            continue
-        points.append((int(round(point[0])), int(round(point[1]))))
-    return points
 
 
 def _detection_label(detection) -> str:

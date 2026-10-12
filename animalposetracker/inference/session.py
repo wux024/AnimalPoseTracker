@@ -338,6 +338,22 @@ def build_inference_session(
     )
 
 
+def pixel_points(keypoints: Sequence[Sequence[float]]) -> List[Any]:
+    """Integer pixel coordinate per keypoint, ``None`` where not scorable.
+
+    A keypoint whose score is not positive carries no position, so it is neither drawn nor
+    connected to an edge. This is the inferencer's visibility rule: the CLI's frame loop and
+    the GUI's both go through it, so the same artifact draws the same picture in both.
+    """
+    points = []
+    for point in keypoints:
+        if len(point) >= 3 and float(point[2]) <= 0.0:
+            points.append(None)
+            continue
+        points.append((int(round(float(point[0]))), int(round(float(point[1])))))
+    return points
+
+
 def instance_to_record(instance, class_names) -> Dict[str, Any]:
     """Turn one decoded instance into the record shape tracking and rendering expect."""
     keypoints = instance.keypoints_xy
@@ -370,6 +386,7 @@ __all__ = [
     "build_inference_session",
     "instance_to_record",
     "load_inference_config",
+    "pixel_points",
     "read_inference_config",
     "resolve_num_classes",
 ]

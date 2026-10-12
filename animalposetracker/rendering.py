@@ -63,9 +63,12 @@ class RenderStyle:
     """The look of one command line's annotations.
 
     Attributes:
-        box_color: BGR colour of the bounding box.
-        label_color: BGR colour of the label text.
-        skeleton_color: BGR colour of every skeleton edge.
+        box_color: BGR colour of the bounding box, unless ``class_colors`` has an
+            entry for the instance's class.
+        label_color: BGR colour of the label text, unless ``label_text_color``
+            overrides it (a filled label wants dark text on a bright plate).
+        skeleton_color: BGR colour of every skeleton edge, unless
+            ``skeleton_colors`` has an entry for that edge.
         keypoint_colors: BGR palette cycled by keypoint index.  A single entry
             means every keypoint gets that one colour.
         font_scale: OpenCV Hershey font scale for the label.
@@ -74,6 +77,16 @@ class RenderStyle:
         label_thickness_floor: Lower bound for the label stroke width.  ``0``
             means "whatever ``line_width`` says"; ``1`` keeps a hairline label
             readable even when the caller asked for zero-width shapes.
+        box_line_width: Stroke width for the box alone.  ``None`` means "use
+            ``line_width``", which is what the callers that do not separate the
+            two widths want.
+        skeleton_line_width: Stroke width for the skeleton edges alone; ``None``
+            behaves as ``box_line_width`` does.
+        class_colors: BGR palette cycled by class id, for boxes and label plates.
+        skeleton_colors: BGR palette cycled by *edge index*, so a skeleton can
+            show each limb in its own colour.
+        label_fill: Paint a filled rectangle behind the label text.
+        label_text_color: BGR colour of the label text when it is filled.
     """
 
     box_color: Color
@@ -84,6 +97,12 @@ class RenderStyle:
     label_offset_y: int
     label_min_y: int
     label_thickness_floor: int
+    box_line_width: Optional[int] = None
+    skeleton_line_width: Optional[int] = None
+    class_colors: Tuple[Color, ...] = ()
+    skeleton_colors: Tuple[Color, ...] = ()
+    label_fill: bool = False
+    label_text_color: Color = (0, 0, 0)
 
 
 # `predict`: green box and label, cyan skeleton, one colour per keypoint.
@@ -132,6 +151,7 @@ def draw_instance(
     skeleton: Sequence[Sequence[int]],
     *,
     style: RenderStyle,
+    class_id: Optional[int] = None,
     show_box: bool = True,
     show_label: bool = True,
     show_keypoints: bool = True,
@@ -151,16 +171,27 @@ def draw_instance(
             coordinates, or ``None`` for a keypoint that must not be drawn.
         skeleton: Keypoint index pairs, 0-based; anything not a pair is skipped.
         style: The palette and typography of the calling command.
+        class_id: Index into ``style.class_colors``; ``None`` keeps
+            ``style.box_color``.
         show_box: Draw the rectangle.
         show_label: Draw the label.  Independent of ``show_box``.
         show_keypoints: Draw the keypoint dots.
         show_skeleton: Draw the edges.
-        line_width: Stroke width for the box, edges and label.
+        line_width: Stroke width for the box, edges and label, unless the style
+            overrides the box or the edges separately.
         point_radius: Radius of the keypoint dots.
 
     Edges are drawn before dots so the dots sit on top of the lines.
     """
     import cv2
+
+    box_color = style.box_color
+    if style.class_colors and class_id is not None:
+        box_color = style.class_colors[int(class_id) % len(style.class_colors)]
+    box_width = line_width if style.box_line_width is None else style.box_line_width
+    edge_width = (
+        line_width if style.skeleton_line_width is None else style.skeleton_line_width
+    )
 
     if box is not None:
         if show_box:
@@ -168,23 +199,38 @@ def draw_instance(
                 frame,
                 (box[0], box[1]),
                 (box[2], box[3]),
-                style.box_color,
-                line_width,
+                box_color,
+                box_width,
             )
         if show_label and label:
+            anchor = (box[0], max(style.label_min_y, box[1] - style.label_offset_y))
+            if style.label_fill:
+                # Measured at the label's own reference size, as the original
+                # renderer did: the plate is generous enough for the drawn text.
+                (text_width, text_height), _baseline = cv2.getTextSize(
+                    label, cv2.FONT_HERSHEY_SIMPLEX, 0.5, 1
+                )
+                cv2.rectangle(
+                    frame,
+                    (anchor[0], anchor[1] - text_height),
+                    (anchor[0] + text_width, anchor[1] + text_height),
+                    box_color,
+                    cv2.FILLED,
+                )
             cv2.putText(
                 frame,
                 label,
-                (box[0], max(style.label_min_y, box[1] - style.label_offset_y)),
+                anchor,
                 cv2.FONT_HERSHEY_SIMPLEX,
                 style.font_scale,
-                style.label_color,
+                style.label_text_color if style.label_fill else style.label_color,
                 max(line_width, style.label_thickness_floor),
                 cv2.LINE_AA,
             )
 
     if show_skeleton:
-        for edge in skeleton:
+        edge_colors = style.skeleton_colors
+        for index, edge in enumerate(skeleton):
             if len(edge) != 2:
                 continue
             left, right = int(edge[0]), int(edge[1])
@@ -193,7 +239,8 @@ def draw_instance(
             start, end = points[left], points[right]
             if start is None or end is None:
                 continue
-            cv2.line(frame, start, end, style.skeleton_color, line_width, cv2.LINE_AA)
+            color = edge_colors[index % len(edge_colors)] if edge_colors else style.skeleton_color
+            cv2.line(frame, start, end, color, edge_width, cv2.LINE_AA)
 
     if show_keypoints:
         palette = style.keypoint_colors
