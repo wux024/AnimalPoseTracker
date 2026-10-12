@@ -260,8 +260,10 @@ class InferencerPage(QWidget, Ui_Inferencer):
         self.ThresholdLayout.addLayout(self.ConfLayout)
         self.BaseToolsLayout.insertLayout(1, self.ThresholdLayout)
 
-        # Its remaining occupant, Save, moved in with Save Records.
+        # Its last occupant, Save, moved in with Save Records, so the emptied row is dropped
+        # instead of lingering: a layout that sits in no layout is invisible and misleading.
         self.ShowToolsGroupVLayout.removeItem(self.SaveIoUConfLayout)
+        del self.SaveIoUConfLayout
 
     def _add_filter_controls(self):
         """Build the temporal filter's controls; the tracker's builder places them.
@@ -342,26 +344,24 @@ class InferencerPage(QWidget, Ui_Inferencer):
         self.TrackerAlgorithm.setToolTip("跟踪算法，与命令行 `infer --tracker` 是同一份清单")
         self.TrackerAlgorithm.setEnabled(False)
 
-        # The Designer file leaves an empty TrackerLayout inside the left group's engine/device
-        # block. The tracking row belongs with the output switches instead, and Qt refuses to
-        # insert a layout that already has a parent -- so the placeholder is dropped and a fresh
-        # layout takes the name.
-        placeholder = self.TrackerLayout
-        self.EngineDeviceLayout.removeItem(placeholder)
-        self.TrackerLayout = QHBoxLayout()
+        # The Designer file leaves an empty TrackerLayout in the left group's engine/device block:
+        # a slot kept for a tracker row that no longer belongs there. The slot is reused for the
+        # row rather than replaced -- it already carries the right name, and a layout that is in no
+        # layout at all draws nothing while reading like an oversight. Qt will not insert a layout
+        # that still has a parent, so it comes out of the engine/device block first.
+        self.EngineDeviceLayout.removeItem(self.TrackerLayout)
+
         # One row carries both switches and both pickers: tracking and filtering are the two
         # optional stages a run can have, and the filter has nothing to work on without the
         # tracker, so they read as a pair. The filter's values follow on the row below.
-        self.TrackerFilterLayout = QHBoxLayout()
-        self.TrackerFilterLayout.setObjectName("TrackerFilterLayout")
         for widget in (
             self.EnableTracking,
             self.TrackerAlgorithm,
             self.EnableFilter,
             self.FilterMethod,
         ):
-            self.TrackerFilterLayout.addWidget(widget)
-        self.BaseToolsLayout.insertLayout(2, self.TrackerFilterLayout)
+            self.TrackerLayout.addWidget(widget)
+        self.BaseToolsLayout.insertLayout(2, self.TrackerLayout)
         self.BaseToolsLayout.insertLayout(3, self.FilterValuesLayout)
 
     def _filter_controls(self):
@@ -423,17 +423,20 @@ class InferencerPage(QWidget, Ui_Inferencer):
         self.tracker = create_tracker(self.TrackerAlgorithm.currentText())
         self.tracker.reset()
 
-    # A row of controls reads as a row when its cells agree on width and start in the same column.
-    # Qt spreads the leftover space evenly instead, so a two-item row and a four-item row never
-    # line up, and a lone spin box stretches to the width of a combo box.
+    # A row of controls reads as a row when its cells agree on how wide they may get and start in
+    # the same column. Qt spreads the leftover space evenly instead, so a two-item row and a
+    # four-item row never line up, and a lone spin box stretches to the width of a combo box.
     _CELL_WIDTH = 126
 
     def _align_rows(self):
-        """Give both groups' rows one cell width, packed from the left.
+        """Give both groups' rows one width to grow into, packed from the left.
 
         Runs after the runtime rows are built so that every row -- drawn by the Designer file or
-        by this page -- ends up with the same rhythm. Only upper bounds are set: a narrower window
-        then shrinks the cells instead of forcing the group to clip them.
+        by this page -- ends up with the same rhythm. Only upper bounds are set: a cell wider than
+        its content shrinks back to it, and a narrower window shrinks the cells instead of forcing
+        the group to clip them. The stretch goes on the row itself, never inside a row that is
+        nested in another one: padding a sub-row spreads its own columns across the group, which
+        is how the engine/device row used to end up out of step with the rest.
         """
         controls = (
             self.SelectConfigure,
@@ -485,13 +488,11 @@ class InferencerPage(QWidget, Ui_Inferencer):
         for layout in (
             self.BaseConfigureLayout,
             self.ThresholdLayout,
-            self.TrackerFilterLayout,
+            self.TrackerLayout,
             self.FilterValuesLayout,
             self.CameraVideosLayout,
             self.CameraParametersLayout,
-            self.ModelBitsLayout,
-            self.EngineLayout,
-            self.DeviceLayout,
+            self.EngineDeviceLayout,
             self.StartEndLayout,
             self.SaveSwitchLayout,
             self.MainShowLayout,

@@ -28,7 +28,14 @@ from animalposetracker.postprocessing.workflows import filter_tracked_video_reco
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
 try:
-    from PySide6.QtWidgets import QApplication, QComboBox, QLineEdit, QStyleOptionViewItem
+    from PySide6.QtWidgets import (
+        QApplication,
+        QComboBox,
+        QLayout,
+        QLineEdit,
+        QStyleOptionViewItem,
+        QWidget,
+    )
 
     from animalposetracker.gui.annotatorpage import AnnotatorPage
     from animalposetracker.gui.createnewprojectpage import CreateNewProjectPage
@@ -756,8 +763,10 @@ class InferencerDecodeTests(unittest.TestCase):
         self.assertIs(left.itemAt(1).layout(), page.ThresholdLayout)
         self.assertEqual(page.IoU.parentWidget().objectName(), "BaseToolsGroup")
         self.assertEqual(page.Conf.parentWidget().objectName(), "BaseToolsGroup")
-        # Rows 3 and 4 hold the two optional stages and the filter's values.
-        self.assertIs(left.itemAt(2).layout(), page.TrackerFilterLayout)
+        # Rows 3 and 4 hold the two optional stages and the filter's values. The tracker's row is
+        # the empty TrackerLayout the Designer file left in the engine/device block, moved up and
+        # filled -- not a second layout wearing the same name.
+        self.assertIs(left.itemAt(2).layout(), page.TrackerLayout)
         self.assertIs(left.itemAt(3).layout(), page.FilterValuesLayout)
         self.assertEqual(
             [left.itemAt(2).layout().itemAt(index).widget() for index in range(4)],
@@ -768,7 +777,11 @@ class InferencerDecodeTests(unittest.TestCase):
         self.assertIs(left.itemAt(5).layout(), page.CameraParametersLayout)
         self.assertIs(left.itemAt(6).layout(), page.EngineDeviceLayout)
         self.assertIs(left.itemAt(7).layout(), page.StartEndLayout)
-        self.assertEqual(page.EngineDeviceLayout.count(), 3)
+        # Tracking moved out of that row, leaving the three pairs the Designer file drew.
+        self.assertEqual(
+            [page.EngineDeviceLayout.itemAt(index).layout() for index in range(3)],
+            [page.ModelBitsLayout, page.EngineLayout, page.DeviceLayout],
+        )
 
         # The display group opens with the two switches that write files.
         right = page.ShowToolsGroupVLayout
@@ -799,12 +812,22 @@ class InferencerDecodeTests(unittest.TestCase):
         self.assertEqual(page.CameraVideosSelection.maximumWidth(), 240)
 
         for layout in (
-            page.BaseConfigureLayout, page.ThresholdLayout, page.TrackerFilterLayout,
+            page.BaseConfigureLayout, page.ThresholdLayout, page.TrackerLayout,
             page.FilterValuesLayout, page.CameraVideosLayout, page.CameraParametersLayout,
-            page.StartEndLayout, page.SaveSwitchLayout, page.MainShowLayout, page.ShowInfoLayput,
+            page.EngineDeviceLayout, page.StartEndLayout, page.SaveSwitchLayout,
+            page.MainShowLayout, page.ShowInfoLayput,
         ):
             with self.subTest(layout=layout.objectName()):
                 self.assertIsNotNone(layout.itemAt(layout.count() - 1).spacerItem())
+
+        # A sub-row is not a row. Padding one spreads its own columns across the group, which is
+        # what left the engine/device row out of step with every row above it.
+        for layout in (
+            page.IoULayout, page.ConfLayout, page.WidthLayout, page.HeightLayout, page.FPSLayout,
+            page.ModelBitsLayout, page.EngineLayout, page.DeviceLayout,
+        ):
+            with self.subTest(layout=layout.objectName()):
+                self.assertIsNone(layout.itemAt(layout.count() - 1).spacerItem())
 
         # The slider rows keep their sliders full width, so they must not be packed.
         for layout in (
@@ -813,6 +836,39 @@ class InferencerDecodeTests(unittest.TestCase):
         ):
             with self.subTest(layout=layout.objectName()):
                 self.assertIsNone(layout.itemAt(layout.count() - 1).spacerItem())
+
+    def test_no_widget_or_row_is_left_out_of_the_page(self):
+        # A widget or a row that sits in no layout draws nothing, and in the source it reads as
+        # something that was meant to be mounted and never was. Two rows had been left that way:
+        # the row the thresholds moved out of, and a second TrackerLayout that took over the
+        # Designer file's slot without ever being added to a row itself.
+        page = self._page()
+        reachable_layouts, reachable_widgets = set(), set()
+
+        def walk(layout):
+            reachable_layouts.add(id(layout))
+            for index in range(layout.count()):
+                item = layout.itemAt(index)
+                widget = item.widget()
+                if widget is not None:
+                    reachable_widgets.add(id(widget))
+                    if widget.layout() is not None:
+                        walk(widget.layout())
+                elif item.layout() is not None:
+                    walk(item.layout())
+
+        walk(page.layout())
+
+        left_out = [
+            name
+            for name, value in sorted(vars(page).items())
+            if isinstance(value, QLayout) and id(value) not in reachable_layouts
+        ] + [
+            name
+            for name, value in sorted(vars(page).items())
+            if isinstance(value, QWidget) and id(value) not in reachable_widgets
+        ]
+        self.assertEqual(left_out, [])
 
     def test_the_two_save_switches_say_what_they_save(self):
         # "Save" next to "Save Records" left the reader guessing which saved what.
