@@ -77,12 +77,13 @@ class InferencerPage(QWidget, Ui_Inferencer):
         self._frame_index = 0
         self.records = []
         self.tracker = None
-        self._add_record_switch()
+        self._add_save_switch()
         self._add_threshold_controls()
         # The filter's widgets are built first, because the tracker's builder is the one that
         # places them (both rows go into the left group, in this order).
         self._add_filter_controls()
         self._add_tracker_controls()
+        self._align_labels()
 
         self.platform = self._detect_platform()
         self.device_check_results = self._detect_device_availability()
@@ -173,7 +174,6 @@ class InferencerPage(QWidget, Ui_Inferencer):
         self.PreprocessTime.setEnabled(True)
         self.InferenceTime.setEnabled(True)
         self.PostprocessTime.setEnabled(True)
-        self.SaveRecords.setEnabled(True)
         self.EnableTracking.setEnabled(True)
         self.TrackerAlgorithm.setEnabled(self.EnableTracking.isChecked())
         self._refresh_filter_controls()
@@ -201,41 +201,29 @@ class InferencerPage(QWidget, Ui_Inferencer):
         self.PreprocessTime.setEnabled(False)
         self.InferenceTime.setEnabled(False)    
         self.PostprocessTime.setEnabled(False)
-        self.SaveRecords.setEnabled(False)
         self.EnableTracking.setEnabled(False)
         self.TrackerAlgorithm.setEnabled(False)
         for widget in self._filter_controls():
             widget.setEnabled(False)
-    def _add_record_switch(self):
-        """Add the "save records" switch to the display options.
+    def _add_save_switch(self):
+        """Name the Save switch and move it in with the display options.
 
-        Built here rather than in the Designer file for the same reason the parameter trees are
-        shaped at runtime: ``ui_inferencer.py`` is generated, so a widget put there would be lost
-        the next time the file is regenerated.
+        The records are written out whether or not anyone asks for them, so there is one switch
+        here and not two, and it belongs to the row that lists what the run shows -- on its own it
+        would have been a lone checkbox in a row of its own.
         """
-        # "Save" alone read as ambiguous next to "Save Records". Each switch now says what it
-        # saves; the label is set here because ui_inferencer.py is generated.
+        # "Save" alone read as ambiguous while there was also a records switch. The label is set
+        # here because ui_inferencer.py is generated.
         self.Save.setText("Save Video")
-        self.Save.setToolTip("把渲染后的画面写成 runs/inference/output.avi")
-
-        self.SaveRecords = QCheckBox(self.ShowToolsGroup)
-        self.SaveRecords.setObjectName("SaveRecords")
-        self.SaveRecords.setText("Save Records")
-        self.SaveRecords.setToolTip(
-            "存的是逐帧姿态记录（不是画面）：runs/inference/records.json，"
-            "形状与命令行 `infer --records` 一致，给跟踪/轨迹/3D 重建用"
+        self.Save.setToolTip(
+            "把渲染后的画面写成 runs/inference/output.avi。"
+            "逐帧姿态记录始终保存到 runs/inference/records.json，与命令行 `infer --records` 同形"
         )
 
-        # The two switches that write files share the group's first row, so "save the picture" and
-        # "save the poses" read as the pair they are. Save has to be taken out of its old row by
-        # hand: a layout keeps its own item list. Neither switch is clamped: the Designer file
-        # leaves Save at its own width, and the row divides the rest the way every other row does.
+        # Save has to leave its old row by hand: a layout keeps its own item list, and Qt will not
+        # pull the widget out of it. Both rows live in the same group box, so it needs no reparent.
         self.SaveIoUConfLayout.removeWidget(self.Save)
-        self.SaveSwitchLayout = QHBoxLayout()
-        self.SaveSwitchLayout.setObjectName("SaveSwitchLayout")
-        self.SaveSwitchLayout.addWidget(self.Save)
-        self.SaveSwitchLayout.addWidget(self.SaveRecords)
-        self.ShowToolsGroupVLayout.insertLayout(0, self.SaveSwitchLayout)
+        self.MainShowLayout.insertWidget(0, self.Save)
 
     def _add_threshold_controls(self):
         """Move the decode thresholds out of the display group, under the file pickers.
@@ -423,6 +411,28 @@ class InferencerPage(QWidget, Ui_Inferencer):
         self.tracker = create_tracker(self.TrackerAlgorithm.currentText())
         self.tracker.reset()
 
+    def _align_labels(self):
+        """Put the left group's labels in one column, wide enough for the longest of them.
+
+        Rows read as a table when the labels stand in a column and the fields all start at the same
+        x. The Designer file does that for the display group (its label column is a fixed 120). The
+        left group's labels were left to their own text instead, so the field column began at 60 in
+        the threshold row, 74 in the camera row and 101 in the engine row.
+        """
+        labels = (
+            self.IoULabel,
+            self.ConfLabel,
+            self.WidthLabel,
+            self.HeightLabel,
+            self.FPSLabel,
+            self.ModelBitsLabel,
+            self.EngineLabel,
+            self.DeviceLabel,
+        )
+        width = max(label.sizeHint().width() for label in labels)
+        for label in labels:
+            label.setFixedWidth(width)
+
     def onEnableTrackingStateChanged(self, state):
         """The algorithm picker only means anything while tracking is on."""
         self.TrackerAlgorithm.setEnabled(bool(state) and self.EnableTracking.isEnabled())
@@ -441,9 +451,10 @@ class InferencerPage(QWidget, Ui_Inferencer):
 
         The file carries the smoothed records when the filter ran, which is what `infer
         --records --pose-filter` writes too: the whole point of the file is to be the run's
-        result, and the result is what the filter produced.
+        result, and the result is what the filter produced. There is no switch for this -- the
+        records are the run's result, so it is written whenever a run produced any.
         """
-        if not self.SaveRecords.isChecked() or not self.records:
+        if not self.records:
             return
         smoothing = self._filter_is_on()
         try:
@@ -1161,10 +1172,9 @@ class InferencerPage(QWidget, Ui_Inferencer):
                 class_names=class_names,
             )
         results["records"] = records
-        # Only collected when the switch asks for it: a camera session can run for hours, and an
-        # unbounded buffer is not worth carrying for a file nobody asked for.
-        if self.SaveRecords.isChecked():
-            self.records.append({"frame": self._frame_index, "predictions": records})
+        # Every frame is kept: the records are this run's result and they are what gets written
+        # out at the end, so there is nothing to ask for first.
+        self.records.append({"frame": self._frame_index, "predictions": records})
         self._frame_index += 1
 
         config = self.visualization_config

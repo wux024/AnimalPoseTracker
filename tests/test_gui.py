@@ -551,9 +551,10 @@ class InferencerDecodeTests(unittest.TestCase):
         self.assertEqual(len(page._edge_colors), 1)
         self.assertEqual(len(page._keypoint_colors), 2)
 
-    def test_records_are_collected_only_when_the_switch_is_on(self):
+    def test_every_frame_is_collected_as_a_record(self):
+        # The records are the run's result, so every frame is kept and written out when the run
+        # ends -- there is no switch to ask for them first.
         page = self._page()
-        page.SaveRecords.setChecked(True)
         for _ in range(3):
             page._present(np.zeros((480, 640, 3), np.uint8), page._decode(self._tensor(), None))
 
@@ -566,35 +567,33 @@ class InferencerDecodeTests(unittest.TestCase):
             ["bbox_xyxy", "class_id", "class_name", "keypoints", "score"],
         )
 
-        quiet = self._page()
-        quiet._present(np.zeros((480, 640, 3), np.uint8), quiet._decode(self._tensor(), None))
-        self.assertEqual(quiet.records, [])
-
-    def test_the_record_switch_joins_the_start_stop_allow_lists(self):
+    def test_the_one_save_switch_joins_the_start_stop_allow_lists(self):
         page = self._page()
 
         page.tools_disabled()
-        self.assertFalse(page.SaveRecords.isEnabled())
+        self.assertFalse(page.Save.isEnabled())
         page.tools_enabled()
-        self.assertTrue(page.SaveRecords.isEnabled())
-        # Built at runtime, so it has to be parented into the group by hand.
-        self.assertEqual(page.SaveRecords.parentWidget().objectName(), "ShowToolsGroup")
+        self.assertTrue(page.Save.isEnabled())
 
-    def test_the_records_file_appears_only_when_the_switch_asked_for_it(self):
+    def test_the_records_file_is_written_without_being_asked_for(self):
         page = self._page()
         page.records = [{"frame": 0, "predictions": []}]
         with tempfile.TemporaryDirectory() as temporary, patch.object(
             Path, "cwd", return_value=Path(temporary)
         ):
+            page._finalize_cleanup()
+
             target = Path(temporary) / "runs" / "inference" / "records.json"
-
-            page.SaveRecords.setChecked(False)
-            page._finalize_cleanup()
-            self.assertFalse(target.exists())
-
-            page.SaveRecords.setChecked(True)
-            page._finalize_cleanup()
             self.assertEqual(json.loads(target.read_text(encoding="utf-8")), page.records)
+
+    def test_a_run_that_produced_no_records_writes_no_file(self):
+        page = self._page()
+        with tempfile.TemporaryDirectory() as temporary, patch.object(
+            Path, "cwd", return_value=Path(temporary)
+        ):
+            page._finalize_cleanup()
+
+            self.assertFalse((Path(temporary) / "runs" / "inference" / "records.json").exists())
 
     def test_tracking_controls_offer_the_cli_algorithms(self):
         from animalposetracker.tracking.config import ALGORITHMS
@@ -635,7 +634,6 @@ class InferencerDecodeTests(unittest.TestCase):
         page.tools_enabled()
         page.EnableTracking.setChecked(True)
         page._build_tracker()
-        page.SaveRecords.setChecked(True)
 
         identifiers = []
         for _ in range(3):
@@ -676,7 +674,6 @@ class InferencerDecodeTests(unittest.TestCase):
         page.tools_enabled()
         page.EnableTracking.setChecked(True)
         page._build_tracker()
-        page.SaveRecords.setChecked(True)
         return page
 
     def _feed(self, page, frames=6):
@@ -747,7 +744,6 @@ class InferencerDecodeTests(unittest.TestCase):
     def test_turning_the_filter_on_alone_is_not_enough_without_tracking(self):
         page = self._page()
         page.tools_enabled()
-        page.SaveRecords.setChecked(True)
         page.FilterMethod.setCurrentText("median")
         self._feed(page)
 
@@ -783,15 +779,16 @@ class InferencerDecodeTests(unittest.TestCase):
             [page.ModelBitsLayout, page.EngineLayout, page.DeviceLayout],
         )
 
-        # The display group opens with the two switches that write files.
+        # The display group opens with the switch that writes the video, in the row that lists what
+        # the run shows -- it had a row of its own while there was a records switch to pair it with.
         right = page.ShowToolsGroupVLayout
-        self.assertIs(right.itemAt(0).layout(), page.SaveSwitchLayout)
+        self.assertIs(right.itemAt(0).layout(), page.MainShowLayout)
         self.assertEqual(
-            [right.itemAt(0).layout().itemAt(index).widget() for index in range(2)],
-            [page.Save, page.SaveRecords],
+            [right.itemAt(0).layout().itemAt(index).widget() for index in range(4)],
+            [page.Save, page.Show, page.Backgroud, page.ShowClasses],
         )
-        # The row those two used to share is gone.
-        self.assertEqual(right.count(), 7)
+        # Six rows: the two switch rows and the four the sliders sit in.
+        self.assertEqual(right.count(), 6)
 
     def test_the_rows_fill_their_group_the_way_the_designer_drew_them(self):
         # The Designer file gives this group's controls an expanding width, so a row divides its
@@ -807,7 +804,7 @@ class InferencerDecodeTests(unittest.TestCase):
             "SelectConfigure", "SelectWeights", "WidthSetup", "HeightSetup", "FPSSetup",
             "ModelBits", "EngineSelection", "DeviceSelection", "Start", "End", "IoU", "Conf",
             "CameraVideosSelection", "TrackerAlgorithm", "FilterMethod", "FilterWindow",
-            "FilterConfidence", "SaveRecords",
+            "FilterConfidence",
         ):
             with self.subTest(widget=attribute):
                 # QWIDGETSIZE_MAX: no upper bound of the page's own.
@@ -818,8 +815,8 @@ class InferencerDecodeTests(unittest.TestCase):
         for layout in (
             page.BaseConfigureLayout, page.ThresholdLayout, page.TrackerLayout,
             page.FilterValuesLayout, page.CameraVideosLayout, page.CameraParametersLayout,
-            page.EngineDeviceLayout, page.StartEndLayout, page.SaveSwitchLayout,
-            page.MainShowLayout, page.ShowInfoLayput, page.FontScaleLayout,
+            page.EngineDeviceLayout, page.StartEndLayout, page.MainShowLayout,
+            page.ShowInfoLayput, page.FontScaleLayout,
             page.ShowKeypointsLayout, page.ShowSkeletonsLayout, page.ShowBBoxLayout,
         ):
             with self.subTest(layout=layout.objectName()):
@@ -831,6 +828,37 @@ class InferencerDecodeTests(unittest.TestCase):
             widths = [layout.itemAt(index).widget().width() for index in range(count)]
             with self.subTest(layout=layout.objectName()):
                 self.assertLessEqual(max(widths) - min(widths), 2)
+
+    def test_the_left_group_labels_stand_in_one_column(self):
+        # Rows read as a table when the labels are all one width: the field column then starts at
+        # the same x in every row. Left to their own text, the fields began at 60 in the threshold
+        # row, 74 in the camera row and 101 in the engine row.
+        page = self._page()
+        page.resize(1194, 800)
+        page.layout().activate()
+        QApplication.processEvents()
+
+        labels = (
+            page.IoULabel, page.ConfLabel, page.WidthLabel, page.HeightLabel, page.FPSLabel,
+            page.ModelBitsLabel, page.EngineLabel, page.DeviceLabel,
+        )
+        widest = max(label.sizeHint().width() for label in labels)
+        for label in labels:
+            with self.subTest(label=label.objectName()):
+                self.assertEqual(label.minimumWidth(), widest)
+                self.assertEqual(label.maximumWidth(), widest)
+
+        # Which puts the fields of the two three-cell rows in the same columns, of one width.
+        self.assertEqual(
+            [page.WidthSetup.x(), page.HeightSetup.x(), page.FPSSetup.x()],
+            [page.ModelBits.x(), page.EngineSelection.x(), page.DeviceSelection.x()],
+        )
+        self.assertEqual(
+            [page.WidthSetup.width(), page.HeightSetup.width(), page.FPSSetup.width()],
+            [page.ModelBits.width(), page.EngineSelection.width(), page.DeviceSelection.width()],
+        )
+        # The threshold row's first field shares the first column with them.
+        self.assertEqual(page.IoU.x(), page.WidthSetup.x())
 
     def test_no_widget_or_row_is_left_out_of_the_page(self):
         # A widget or a row that sits in no layout draws nothing, and in the source it reads as
@@ -865,14 +893,14 @@ class InferencerDecodeTests(unittest.TestCase):
         ]
         self.assertEqual(left_out, [])
 
-    def test_the_two_save_switches_say_what_they_save(self):
-        # "Save" next to "Save Records" left the reader guessing which saved what.
+    def test_the_save_switch_says_what_it_saves(self):
+        # "Save" next to the other switches left the reader guessing what was being saved.
         page = self._page()
 
         self.assertEqual(page.Save.text(), "Save Video")
         self.assertIn("output.avi", page.Save.toolTip())
-        self.assertEqual(page.SaveRecords.text(), "Save Records")
-        self.assertIn("records.json", page.SaveRecords.toolTip())
+        # The records have no switch of their own any more, so the tooltip is where it is said.
+        self.assertIn("records.json", page.Save.toolTip())
 
     def test_start_hands_the_chosen_files_and_thresholds_to_the_builder(self):
         # The Start path had never been exercised: it read `self.conf`/`self.iou`, which are not
