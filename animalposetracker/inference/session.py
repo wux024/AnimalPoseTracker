@@ -9,7 +9,7 @@ and this module is the part of that promise the callers share.
 Nothing here trains, and nothing here imports torch: the inferencer is deployment-side code.
 """
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Dict, List, Mapping, Optional, Sequence, Tuple
 
@@ -174,6 +174,107 @@ def read_inference_config(config_arg) -> InferenceConfigSummary:
     if summary.kpt_shape is None:
         raise ValueError("配置文件的关键点数量无法解析：请检查 kpt_shape 或 keypoints_name。")
     return summary
+
+
+@dataclass(frozen=True)
+class InferenceSelectionReport:
+    """What a hand-picked config/weights pair is worth, before either is loaded.
+
+    ``errors`` block the run; ``warnings`` describe something worth knowing that the pipeline
+    can still cope with -- it decodes with the counts the config states, and an edge whose
+    indices are out of range simply is not drawn. The two booleans are what the GUI lights its
+    Start button from, computed here because only this function knows which side each message
+    came from.
+    """
+
+    summary: Optional[InferenceConfigSummary] = None
+    metadata: Mapping[str, Any] = field(default_factory=dict)
+    errors: Tuple[str, ...] = ()
+    warnings: Tuple[str, ...] = ()
+    config_ok: bool = False
+    weights_ok: bool = False
+
+
+def validate_inference_selection(config_path, weights_path=None) -> InferenceSelectionReport:
+    """Check a config file against an optional artifact, without loading either.
+
+    Two things this deliberately does not do. It never initialises an engine -- that is the
+    Start button's job, and doing it here would load a backend on every file dialog. And it
+    cannot compare class counts: the exported sidecar carries ``kpt_shape``, ``head``, output
+    names and sizes but no class count, and only the runtime output shape knows that, only for
+    the raw layout. The keypoint count is the one thing both sources state, so it is the one
+    checked, and a disagreement is a warning rather than an error because the decoder follows
+    the config anyway.
+
+    Nothing raised inside is allowed out: this runs in a file-dialog slot, where an exception
+    would surface as a traceback instead of a message.
+    """
+    from animalposetracker.artifacts import read_artifact_metadata
+
+    errors: List[str] = []
+    warnings: List[str] = []
+
+    summary = None
+    try:
+        summary = read_inference_config(config_path)
+    except Exception as error:  # a bad file of any kind must become a message
+        errors.append(str(error))
+    config_ok = summary is not None
+
+    if summary is not None and summary.skeleton and summary.num_keypoints:
+        out_of_range = sorted({
+            int(index)
+            for edge in summary.skeleton
+            for index in edge
+            if not 0 <= int(index) < summary.num_keypoints
+        })
+        if out_of_range:
+            warnings.append(
+                "配置文件的 skeleton 含越界关键点索引 "
+                f"{', '.join(str(index) for index in out_of_range)}"
+                f"（关键点数为 {summary.num_keypoints}），这些连线不会被画出。"
+            )
+
+    metadata: Mapping[str, Any] = {}
+    weights_errors: List[str] = []
+    if weights_path is not None:
+        try:
+            metadata = read_artifact_metadata(weights_path) or {}
+        except Exception as error:  # a corrupt sidecar must not take the dialog down
+            weights_errors.append(f"权重文件的元数据无法解析：{error}")
+
+        if not weights_errors:
+            head = str(metadata.get("head") or "")
+            if not head and "simcc_x" in tuple(metadata.get("outputs") or ()):
+                head = "SimCCHead"
+            if head == "SimCCHead":
+                weights_errors.append(
+                    f"{weights_path} 是 SimCCHead（AnimalViTPose）模型，推理器无法运行："
+                    "自上而下的解码需要一个额外的检测器，推理器没有地方提供它。"
+                    "请改用 `animalposetracker predict`。"
+                )
+        errors.extend(weights_errors)
+
+        if not metadata:
+            warnings.append(
+                "权重未附带 sidecar 元数据；输出布局与关键点形状将依赖配置文件与运行时推断。"
+            )
+        elif summary is not None and summary.kpt_shape and metadata.get("kpt_shape"):
+            sidecar_shape = tuple(int(value) for value in metadata["kpt_shape"])
+            if tuple(int(value) for value in summary.kpt_shape) != sidecar_shape:
+                warnings.append(
+                    f"配置文件的关键点形状 {tuple(summary.kpt_shape)} 与权重元数据的 "
+                    f"{sidecar_shape} 不一致；解码将按配置文件解析。"
+                )
+
+    return InferenceSelectionReport(
+        summary=summary,
+        metadata=metadata,
+        errors=tuple(errors),
+        warnings=tuple(warnings),
+        config_ok=config_ok,
+        weights_ok=weights_path is not None and not weights_errors,
+    )
 
 
 def resolve_num_classes(engine, kpt_shape, default: int = 1, schema: str = None) -> int:
@@ -382,6 +483,7 @@ __all__ = [
     "ENGINE_NAMES",
     "FORMAT_TO_ENGINE",
     "InferenceConfigSummary",
+    "InferenceSelectionReport",
     "InferenceSession",
     "build_inference_session",
     "instance_to_record",
@@ -389,4 +491,5 @@ __all__ = [
     "pixel_points",
     "read_inference_config",
     "resolve_num_classes",
+    "validate_inference_selection",
 ]

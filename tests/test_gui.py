@@ -83,9 +83,11 @@ class InferencerControlTests(unittest.TestCase):
     def test_start_enables_once_a_config_and_weights_are_both_chosen(self):
         # The old guard tested an attribute that is never assigned, so Start stayed disabled
         # after a weights file was picked -- the button that runs inference never lit up.
+        # The config has to be one that passes the selection check: class names and a keypoint
+        # count. The weights carry no sidecar, which is only a warning.
         with tempfile.TemporaryDirectory() as temporary:
-            config_path = Path(temporary) / "project.yaml"
-            config_path.write_text("project_name: probe\n", encoding="utf-8")
+            config_path = Path(temporary) / "dataset.yaml"
+            config_path.write_text("names: {0: probe}\nkpt_shape: [2, 3]\n", encoding="utf-8")
             weights_path = Path(temporary) / "best.onnx"
             weights_path.write_bytes(b"")
 
@@ -97,6 +99,7 @@ class InferencerControlTests(unittest.TestCase):
                 return_value=(str(config_path), ""),
             ):
                 page.onSelectConfigureClicked()
+            self.assertTrue(page._config_ready)
             self.assertFalse(page.Start.isEnabled())
 
             def fake_engine_detection(_extension):
@@ -117,7 +120,95 @@ class InferencerControlTests(unittest.TestCase):
             ):
                 page.onSelectWeightsClicked()
 
+            self.assertTrue(page._weights_ready)
             self.assertTrue(page.Start.isEnabled())
+
+    def test_a_broken_config_keeps_start_dark_and_says_why(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            config_path = Path(temporary) / "dataset.yaml"
+            config_path.write_text("kpt_shape: [2, 3]\n", encoding="utf-8")
+
+            page = InferencerPage()
+            with patch("os.chdir"), patch(
+                "animalposetracker.gui.inferencerpage.QFileDialog.getOpenFileName",
+                return_value=(str(config_path), ""),
+            ), patch("animalposetracker.gui.inferencerpage.QMessageBox") as box:
+                page.onSelectConfigureClicked()
+
+            self.assertFalse(page._config_ready)
+            self.assertFalse(page.Start.isEnabled())
+            self.assertIn("类别名", box.critical.call_args.args[2])
+
+    def test_reselecting_a_broken_config_turns_start_off_again(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            good = Path(temporary) / "dataset.yaml"
+            good.write_text("names: {0: probe}\nkpt_shape: [2, 3]\n", encoding="utf-8")
+            bad = Path(temporary) / "project.yaml"
+            bad.write_text("project_name: probe\n", encoding="utf-8")
+            weights_path = Path(temporary) / "best.onnx"
+            weights_path.write_bytes(b"")
+
+            page = InferencerPage()
+            with patch("os.chdir"), patch(
+                "animalposetracker.gui.inferencerpage.QFileDialog.getOpenFileName",
+                return_value=(str(good), ""),
+            ), patch("animalposetracker.gui.inferencerpage.QMessageBox"):
+                page.onSelectConfigureClicked()
+            self.assertTrue(page._config_ready)
+
+            def fake_engine_detection(_extension):
+                page.supported_engines_and_devices = {"ONNX": ["Intel CPU"]}
+
+            with patch(
+                "animalposetracker.gui.inferencerpage.QFileDialog.getOpenFileName",
+                return_value=(str(weights_path), ""),
+            ), patch.object(
+                page, "_get_supported_engines_and_devices", side_effect=fake_engine_detection
+            ), patch.object(page, "_init_engine_selection"), patch.object(
+                page, "_init_available_devices"
+            ), patch.object(page, "_init_model_bits"):
+                page.onSelectWeightsClicked()
+            self.assertTrue(page.Start.isEnabled())
+
+            with patch("os.chdir"), patch(
+                "animalposetracker.gui.inferencerpage.QFileDialog.getOpenFileName",
+                return_value=(str(bad), ""),
+            ), patch("animalposetracker.gui.inferencerpage.QMessageBox"):
+                page.onSelectConfigureClicked()
+
+            self.assertFalse(page._config_ready)
+            self.assertFalse(page.Start.isEnabled())
+
+    def test_a_simcc_artifact_is_refused_before_the_hardware_probe(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            config_path = Path(temporary) / "dataset.yaml"
+            config_path.write_text("names: {0: probe}\nkpt_shape: [2, 3]\n", encoding="utf-8")
+            weights_path = Path(temporary) / "best.onnx"
+            weights_path.write_bytes(b"")
+            Path(temporary, "best.onnx.json").write_text(
+                '{"head": "SimCCHead", "kpt_shape": [2, 3]}', encoding="utf-8"
+            )
+
+            page = InferencerPage()
+            with patch("os.chdir"), patch(
+                "animalposetracker.gui.inferencerpage.QFileDialog.getOpenFileName",
+                return_value=(str(config_path), ""),
+            ), patch("animalposetracker.gui.inferencerpage.QMessageBox"):
+                page.onSelectConfigureClicked()
+
+            with patch(
+                "animalposetracker.gui.inferencerpage.QFileDialog.getOpenFileName",
+                return_value=(str(weights_path), ""),
+            ), patch.object(page, "_get_supported_engines_and_devices") as probe, patch(
+                "animalposetracker.gui.inferencerpage.QMessageBox"
+            ) as box:
+                page.onSelectWeightsClicked()
+
+            self.assertFalse(page._weights_ready)
+            self.assertFalse(page.Start.isEnabled())
+            self.assertIn("predict", box.critical.call_args.args[2])
+            # The check runs first, so the engine/device probe never happens.
+            probe.assert_not_called()
 
 
 @unittest.skipUnless(QApplication is not None, "PySide6 (the gui extra) is not installed")

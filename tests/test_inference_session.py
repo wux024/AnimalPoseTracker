@@ -18,6 +18,7 @@ from animalposetracker.inference.session import (
     instance_to_record,
     load_inference_config,
     read_inference_config,
+    validate_inference_selection,
 )
 
 PROJECT_STYLE = {
@@ -281,6 +282,90 @@ class RecordShapeTests(unittest.TestCase):
         record = instance_to_record(_FakeInstance([[1.5, 2.5]], scores=[0.5]), ["cat", "dog"])
 
         self.assertEqual(json.loads(json.dumps(record))["class_name"], "dog")
+
+
+class ValidationTests(unittest.TestCase):
+    """What the page checks the moment a file is picked, before anything is loaded."""
+
+    def _pair(self, config_mapping, metadata=None, sidecar_text=None):
+        directory = tempfile.TemporaryDirectory()
+        self.addCleanup(directory.cleanup)
+        config_path = _write(directory.name, "config.yaml", config_mapping)
+        weights_path = Path(directory.name) / "model.onnx"
+        weights_path.write_bytes(b"")
+        if metadata is not None or sidecar_text is not None:
+            payload = sidecar_text if sidecar_text is not None else json.dumps(metadata)
+            Path(directory.name, "model.onnx.json").write_text(payload, encoding="utf-8")
+        return str(config_path), str(weights_path)
+
+    def test_a_matching_pair_passes(self):
+        config, weights = self._pair(DATASET_STYLE, {"kpt_shape": [4, 3], "head": "YOLOPoseHead"})
+        report = validate_inference_selection(config, weights)
+
+        self.assertEqual(report.errors, ())
+        self.assertEqual(report.warnings, ())
+        self.assertTrue(report.config_ok)
+        self.assertTrue(report.weights_ok)
+
+    def test_a_config_without_class_names_is_refused_in_chinese(self):
+        config, _weights = self._pair({"kpt_shape": [4, 3]})
+        report = validate_inference_selection(config, None)
+
+        self.assertIn("类别名", " ".join(report.errors))
+        self.assertFalse(report.config_ok)
+        self.assertFalse(report.weights_ok)  # nothing to run yet
+
+    def test_a_config_without_a_keypoint_count_is_refused(self):
+        config, _weights = self._pair({"names": {0: "cat"}})
+        report = validate_inference_selection(config, None)
+
+        self.assertIn("关键点数量", " ".join(report.errors))
+
+    def test_a_simcc_artifact_is_refused_while_selecting(self):
+        config, weights = self._pair(DATASET_STYLE, {"head": "SimCCHead", "kpt_shape": [4, 3]})
+        report = validate_inference_selection(config, weights)
+
+        self.assertIn("predict", " ".join(report.errors))
+        self.assertTrue(report.config_ok)
+        self.assertFalse(report.weights_ok)
+
+    def test_a_simcc_artifact_is_caught_from_its_output_names_too(self):
+        config, weights = self._pair(DATASET_STYLE, {"outputs": ["simcc_x", "simcc_y"]})
+        report = validate_inference_selection(config, weights)
+
+        self.assertIn("predict", " ".join(report.errors))
+
+    def test_an_artifact_without_a_sidecar_only_warns(self):
+        config, weights = self._pair(DATASET_STYLE)
+        report = validate_inference_selection(config, weights)
+
+        self.assertEqual(report.errors, ())
+        self.assertTrue(report.weights_ok)
+        self.assertIn("sidecar", " ".join(report.warnings))
+
+    def test_a_keypoint_count_mismatch_only_warns(self):
+        # The decoder follows the config, so this shifts the keypoint block rather than failing;
+        # the user needs to know, but it does not block the run.
+        config, weights = self._pair(DATASET_STYLE, {"kpt_shape": [12, 3]})
+        report = validate_inference_selection(config, weights)
+
+        self.assertEqual(report.errors, ())
+        self.assertIn("不一致", " ".join(report.warnings))
+
+    def test_a_skeleton_index_beyond_the_keypoints_warns(self):
+        config, _weights = self._pair({**DATASET_STYLE, "skeleton": [[0, 1], [3, 9]]})
+        report = validate_inference_selection(config, None)
+
+        self.assertEqual(report.errors, ())
+        self.assertIn("越界", " ".join(report.warnings))
+        self.assertIn("9", " ".join(report.warnings))
+
+    def test_a_corrupt_sidecar_becomes_a_message(self):
+        config, weights = self._pair(DATASET_STYLE, sidecar_text="{not json at all")
+        report = validate_inference_selection(config, weights)
+
+        self.assertIn("无法解析", " ".join(report.errors))
+        self.assertFalse(report.weights_ok)
 
 
 if __name__ == "__main__":

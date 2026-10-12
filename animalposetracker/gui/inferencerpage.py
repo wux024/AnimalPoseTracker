@@ -18,6 +18,7 @@ from animalposetracker.inference.session import (
     build_inference_session,
     instance_to_record,
     pixel_points,
+    validate_inference_selection,
 )
 from animalposetracker.postprocessing.output_decoders import decode_pose_outputs
 from animalposetracker.rendering import INFERENCE_STYLE, draw_instance, pixel_box
@@ -58,6 +59,9 @@ class InferencerPage(QWidget, Ui_Inferencer):
 
         self.data_config_path = None
         self.weights_path = None
+        # Whether each half of the inference setup has passed its checks; Start needs both.
+        self._config_ready = False
+        self._weights_ready = False
 
         self.platform = self._detect_platform()
         self.device_check_results = self._detect_device_availability()
@@ -200,8 +204,32 @@ class InferencerPage(QWidget, Ui_Inferencer):
   
         # Update UI
         self.SelectWeights.setEnabled(True)
-        if self.weights_path:
-            self.Start.setEnabled(True)
+        self._refresh_start_state(show_dialog=True)
+
+    def _refresh_start_state(self, show_dialog=False):
+        """Check the chosen config/weights pair and light Start only when both pass.
+
+        Every path that changes either selection comes through here. The two scattered
+        `Start.setEnabled(True)` calls this replaces could light the button for a pair that then
+        failed at Start -- which is the failure this check exists to move earlier, to where the
+        user can still see which file caused it.
+
+        Errors are reported in a dialog; warnings only reach the console, because this page has
+        no status bar to put them in and a common one (an artifact with no sidecar) would
+        otherwise greet every single selection with a popup.
+        """
+        report = validate_inference_selection(self.data_config_path, self.weights_path)
+        self._config_ready = report.config_ok
+        self._weights_ready = report.weights_ok
+        self.Start.setEnabled(self._config_ready and self._weights_ready)
+
+        for warning in report.warnings:
+            self.thread_status(f"警告：{warning}")
+        if report.errors and show_dialog:
+            detail = "\n".join(report.errors)
+            if report.warnings:
+                detail += "\n\n另外注意：\n" + "\n".join(report.warnings)
+            QMessageBox.critical(self, "配置校验失败", detail)
             
 
     def onSelectWeightsClicked(self):
@@ -239,11 +267,22 @@ class InferencerPage(QWidget, Ui_Inferencer):
         if not file_path:
             return
 
+        self.weights_path = file_path
+        # Check before probing the hardware: a pair that cannot run should say so now, and the
+        # probe is the expensive part of this slot.
+        report = validate_inference_selection(self.data_config_path, self.weights_path)
+        if not report.weights_ok:
+            self._config_ready = report.config_ok
+            self._weights_ready = False
+            self.Start.setEnabled(False)
+            self._clear_selections()
+            QMessageBox.critical(self, "配置校验失败", "\n".join(report.errors))
+            return
+
         self._enable_widgets()
         self._clear_selections()
         self.supported_engines_and_devices = {}
 
-        self.weights_path = file_path
         file_path = Path(file_path)
         file_ext = file_path.suffix.lower()
         
@@ -259,8 +298,7 @@ class InferencerPage(QWidget, Ui_Inferencer):
 
         # Start needs both halves of the configuration. This used to test an attribute that is
         # never assigned anywhere, so it stayed disabled until a camera or video was touched.
-        if self.data_config_path and self.weights_path:
-            self.Start.setEnabled(True)
+        self._refresh_start_state(show_dialog=False)
 
     def _enable_widgets(self):
         self.EngineSelection.setEnabled(True)
