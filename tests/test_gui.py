@@ -770,6 +770,88 @@ class InferencerDecodeTests(unittest.TestCase):
         self.assertEqual(page.SaveRecords.text(), "Save Records")
         self.assertIn("records.json", page.SaveRecords.toolTip())
 
+    def test_start_hands_the_chosen_files_and_thresholds_to_the_builder(self):
+        # The Start path had never been exercised: it read `self.conf`/`self.iou`, which are not
+        # attributes of this page, so pressing the button raised AttributeError.
+        page = InferencerPage()
+        page.data_config_path = "config.yaml"
+        page.weights_path = "model.onnx"
+        page.Conf.setValue(0.4)
+        page.IoU.setValue(0.6)
+        handed_over = {}
+
+        def fake_build(**arguments):
+            handed_over.update(arguments)
+            return SimpleNamespace(
+                engine=SimpleNamespace(output_names=(), preprocess=lambda frame: (frame, None)),
+                output_config=None,
+                input_config=SimpleNamespace(input_size=(640, 480)),
+                class_names=(),
+                skeleton=(),
+                kpt_shape=(0, 3),
+            )
+
+        with patch.object(page, "_get_source", return_value="video.mp4"), patch(
+            "animalposetracker.gui.inferencerpage.build_inference_session",
+            side_effect=fake_build,
+        ), patch.object(page, "_init_inference_threads"), patch.object(
+            page, "_start_inference_threads"
+        ), patch("animalposetracker.gui.inferencerpage.QMessageBox"):
+            page.onStartClicked()
+
+        self.assertEqual(handed_over["weights_path"], "model.onnx")
+        self.assertEqual(handed_over["config_path"], "config.yaml")
+        self.assertEqual(handed_over["conf"], 0.4)
+        self.assertEqual(handed_over["iou"], 0.6)
+        self.assertIsNotNone(page.session)
+        self.assertFalse(page.Start.isEnabled())
+
+    def test_start_reports_a_refused_artifact_instead_of_starting(self):
+        page = InferencerPage()
+        page.data_config_path = "config.yaml"
+        page.weights_path = "simcc.onnx"
+
+        with patch.object(page, "_get_source", return_value="video.mp4"), patch(
+            "animalposetracker.gui.inferencerpage.build_inference_session",
+            side_effect=ValueError("是 SimCCHead 模型"),
+        ), patch.object(page, "_init_inference_threads") as threads, patch(
+            "animalposetracker.gui.inferencerpage.QMessageBox"
+        ) as box:
+            page.onStartClicked()
+
+        self.assertIn("无法启动推理", box.critical.call_args.args[2])
+        threads.assert_not_called()
+        self.assertIsNone(page.session)  # the run never began
+
+    def test_a_video_source_supplies_the_frame_rate(self):
+        # The video branch never set it: only the camera branch did, so the display timer later
+        # divided by an attribute that was never written.
+        page = self._page()
+        page.fps = 0
+
+        class Video(_FakeCapture):
+            def get(self, prop):
+                return 25.0
+
+        with patch.object(page, "_get_source", return_value="video.mp4"), patch(
+            "animalposetracker.gui.inferencerpage.cv2.VideoCapture", return_value=Video()
+        ), patch("animalposetracker.gui.inferencerpage.QMessageBox"):
+            page._init_inference_threads()
+
+        self.assertEqual(page.fps, 25.0)
+
+    def test_the_display_timer_survives_a_source_without_a_frame_rate(self):
+        page = self._page()
+        page.fps = 0
+        page.display_thread = Mock()
+        for thread in ("videoreader_thread", "preprocess_thread", "inference_thread",
+                       "postprocess_thread", "visualize_thread"):
+            setattr(page, thread, Mock())
+
+        page._start_inference_threads()
+
+        self.assertEqual(page.display_thread.start.call_args.args[0], 33)
+
 
 class _FakeCapture:
     """Minimal stand-in for a camera/video handle."""

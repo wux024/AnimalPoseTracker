@@ -66,6 +66,13 @@ class InferencerPage(QWidget, Ui_Inferencer):
         self._config_ready = False
         self._weights_ready = False
 
+        # The camera controls normally fill these in when the user touches them or when a source
+        # is opened. Seeding them from the spin boxes keeps Start working when neither happened:
+        # they used to exist only after their own handler had run, so reading them threw.
+        self.width = self.WidthSetup.value()
+        self.height = self.HeightSetup.value()
+        self.fps = self.FPSSetup.value()
+
         # One run's frame counter and record buffer, both reset by Start.
         self._frame_index = 0
         self.records = []
@@ -1176,6 +1183,10 @@ class InferencerPage(QWidget, Ui_Inferencer):
             QMessageBox.warning(self, "Inference", "Failed to open camera/video source")
         if self.CameraORVideos.isChecked():
             self._set_camera_params(cap)
+        else:
+            # A video knows its own frame rate; the spin box is only what a camera was asked for.
+            # Without this the display timer divided by a frame rate that was never set.
+            self.fps = cap.get(cv2.CAP_PROP_FPS) or self.fps
         self.videoreader_thread.cap = cap
         self.videoreader_thread.status_update.connect(self.thread_status)
         self.videoreader_thread.data_ready.connect(self.put_read_data)
@@ -1212,7 +1223,9 @@ class InferencerPage(QWidget, Ui_Inferencer):
             save_path = Path.cwd() / "runs" / "inference"
             save_path.mkdir(exist_ok=True, parents=True)
             self.videowriter_thread.save_path = save_path / "output.avi"
-            self.videowriter_thread.fps = self.fps
+            # A source that reports no frame rate (or a page where nothing was ever set) would
+            # otherwise hand the writer a rate it cannot open a file with.
+            self.videowriter_thread.fps = self.fps or 30.0
             # The writer sizes itself from the frames it receives; the spin box values are only
             # what the source was asked for, which a camera need not honour.
             self.write_frame_end = False
@@ -1227,7 +1240,9 @@ class InferencerPage(QWidget, Ui_Inferencer):
         self.inference_thread.start()
         self.postprocess_thread.start()
         self.visualize_thread.start()
-        self.display_thread.start(1000 // self.fps)
+        # A source that reports no frame rate leaves self.fps at zero; the display still has to
+        # tick, so fall back to roughly thirty frames a second instead of dividing by zero.
+        self.display_thread.start(int(1000 / self.fps) if self.fps else 33)
         if self.Save.isChecked():
             self.videowriter_thread.start()
     
@@ -1433,9 +1448,13 @@ class InferencerPage(QWidget, Ui_Inferencer):
                     config_path=self.data_config_path,
                     engine=self.engine,
                     device=self.device,
-                    bits=self.model_bits,
-                    conf=self.conf,
-                    iou=self.iou,
+                    # Straight from the combo: the handler that copies it into `model_bits` only
+                    # runs if the user touched it, and this used to read the attribute instead.
+                    bits=self.ModelBits.currentText(),
+                    # Read straight from the controls: they are the source, and
+                    # _init_visualization_config has just copied them into its dict.
+                    conf=self.Conf.value(),
+                    iou=self.IoU.value(),
                 )
             except Exception as error:
                 # Whatever the artifact and the config cannot support together (an unknown
