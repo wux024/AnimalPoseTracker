@@ -83,6 +83,7 @@ class InferencerPage(QWidget, Ui_Inferencer):
         # places them (both rows go into the left group, in this order).
         self._add_filter_controls()
         self._add_tracker_controls()
+        self._align_rows()
 
         self.platform = self._detect_platform()
         self.device_check_results = self._detect_device_availability()
@@ -421,6 +422,82 @@ class InferencerPage(QWidget, Ui_Inferencer):
             return
         self.tracker = create_tracker(self.TrackerAlgorithm.currentText())
         self.tracker.reset()
+
+    # A row of controls reads as a row when its cells agree on width and start in the same column.
+    # Qt spreads the leftover space evenly instead, so a two-item row and a four-item row never
+    # line up, and a lone spin box stretches to the width of a combo box.
+    _CELL_WIDTH = 126
+
+    def _align_rows(self):
+        """Give both groups' rows one cell width, packed from the left.
+
+        Runs after the runtime rows are built so that every row -- drawn by the Designer file or
+        by this page -- ends up with the same rhythm. Only upper bounds are set: a narrower window
+        then shrinks the cells instead of forcing the group to clip them.
+        """
+        controls = (
+            self.SelectConfigure,
+            self.SelectWeights,
+            self.CheckCameraVideosConnect,
+            self.WidthSetup,
+            self.HeightSetup,
+            self.FPSSetup,
+            self.ModelBits,
+            self.EngineSelection,
+            self.DeviceSelection,
+            self.Start,
+            self.End,
+            self.IoU,
+            self.Conf,
+            self.TrackerAlgorithm,
+            self.FilterMethod,
+            self.FilterWindow,
+            self.FilterPolyorder,
+            self.FilterConfidence,
+            self.FilterMaxGap,
+            self.Save,
+            self.SaveRecords,
+        )
+        for widget in controls:
+            widget.setMaximumWidth(self._CELL_WIDTH)
+        # The source field shows a file path, so it keeps room for more than an ellipsis.
+        self.CameraVideosSelection.setMaximumWidth(240)
+
+        switches = (
+            self.CameraORVideos,
+            self.EnableTracking,
+            self.EnableFilter,
+            self.Show,
+            self.Backgroud,
+            self.ShowClasses,
+            self.FPSShow,
+            self.PreprocessTime,
+            self.InferenceTime,
+            self.PostprocessTime,
+            self.ShowKeypoints,
+            self.ShowSkeletons,
+            self.ShowBBox,
+        )
+        for widget in switches:
+            widget.setMaximumWidth(self._CELL_WIDTH)
+
+        # The slider rows are deliberately left alone: their sliders are meant to fill the row.
+        for layout in (
+            self.BaseConfigureLayout,
+            self.ThresholdLayout,
+            self.TrackerFilterLayout,
+            self.FilterValuesLayout,
+            self.CameraVideosLayout,
+            self.CameraParametersLayout,
+            self.ModelBitsLayout,
+            self.EngineLayout,
+            self.DeviceLayout,
+            self.StartEndLayout,
+            self.SaveSwitchLayout,
+            self.MainShowLayout,
+            self.ShowInfoLayput,
+        ):
+            layout.addStretch(1)
 
     def onEnableTrackingStateChanged(self, state):
         """The algorithm picker only means anything while tracking is on."""

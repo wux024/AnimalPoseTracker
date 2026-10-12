@@ -780,6 +780,40 @@ class InferencerDecodeTests(unittest.TestCase):
         # The row those two used to share is gone.
         self.assertEqual(right.count(), 7)
 
+    def test_every_row_shares_one_cell_width_and_packs_left(self):
+        # Qt spreads a row's leftover space, so rows of different lengths never line up and a lone
+        # spin box stretches to a combo's width. One cell width plus a trailing stretch fixes both.
+        page = self._page()
+        width = InferencerPage._CELL_WIDTH
+
+        for attribute in (
+            "SelectConfigure", "SelectWeights", "WidthSetup",
+            "ModelBits", "EngineSelection", "DeviceSelection", "Start", "End",
+            "IoU", "Conf", "TrackerAlgorithm", "FilterMethod", "FilterWindow",
+            "Save", "SaveRecords", "Show", "FPSShow", "ShowBBox", "EnableTracking",
+        ):
+            with self.subTest(widget=attribute):
+                self.assertEqual(getattr(page, attribute).maximumWidth(), width)
+
+        # The source field shows a path, so it is deliberately wider than one cell.
+        self.assertEqual(page.CameraVideosSelection.maximumWidth(), 240)
+
+        for layout in (
+            page.BaseConfigureLayout, page.ThresholdLayout, page.TrackerFilterLayout,
+            page.FilterValuesLayout, page.CameraVideosLayout, page.CameraParametersLayout,
+            page.StartEndLayout, page.SaveSwitchLayout, page.MainShowLayout, page.ShowInfoLayput,
+        ):
+            with self.subTest(layout=layout.objectName()):
+                self.assertIsNotNone(layout.itemAt(layout.count() - 1).spacerItem())
+
+        # The slider rows keep their sliders full width, so they must not be packed.
+        for layout in (
+            page.FontScaleLayout, page.ShowKeypointsLayout, page.ShowSkeletonsLayout,
+            page.ShowBBoxLayout,
+        ):
+            with self.subTest(layout=layout.objectName()):
+                self.assertIsNone(layout.itemAt(layout.count() - 1).spacerItem())
+
     def test_the_two_save_switches_say_what_they_save(self):
         # "Save" next to "Save Records" left the reader guessing which saved what.
         page = self._page()
