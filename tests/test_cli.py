@@ -244,9 +244,12 @@ class PrettyTrainingRendererTests(unittest.TestCase):
         ])
         self.assertIn("[pretrained] loaded 423 tensors (42 incompatible shapes skipped)", output)
         self.assertIn("[started] device=cuda", output)
-        self.assertIn("[epoch 1/2] train_loss=22.4", output)
         self.assertIn("[finished]", output)
         self.assertNotIn('"event"', output)
+        # An epoch ends with the validation figures and nothing else: the training loss
+        # belongs to the progress row above (Ultralytics and MMPose both do it this way).
+        self.assertIn("[epoch 1/2]", output)
+        self.assertNotIn("train_loss", output)
         # A validation event has no line of its own: the epoch's metrics are collected and
         # rendered as one table when the epoch ends, which is what the training loop emits.
         self.assertNotIn("[val]", output)
@@ -280,21 +283,23 @@ class PrettyTrainingRendererTests(unittest.TestCase):
         # The one column is the per-image average, not the batch sum.
         self.assertRegex(body, r"1/2\s+0G\s+1\.562\s+8\s+256")
 
-    def test_simcc_epoch_summary_reads_the_per_image_loss(self):
+    def test_simcc_epoch_summary_is_a_bare_marker(self):
         stream = io.StringIO()
         renderer = PrettyTrainingRenderer(stream=stream, columns=SIMCC_COLUMNS)
         renderer.emit(TrainingEvent(
             event="epoch_end", epoch=1, epochs=2,
             metrics={
-                # The loop reports both: the KL batch sum, and the same figure per image.
+                # The loop reports both the KL batch sum and the per-image figure; neither
+                # belongs on this line, which only marks which epoch the table belongs to.
                 "train_loss": 12.5,
                 "train_loss_simcc_per_sample": 1.5625,
             },
         ))
         output = stream.getvalue()
-        # The progress row and the summary line have to read the same criterion field, or
-        # one run reports two different scales a line apart (here: a factor of batch_size).
-        self.assertIn("[epoch 1/2] train_loss=1.562", output)
+        self.assertIn("[epoch 1/2]", output)
+        self.assertNotIn("train_loss", output)
+        self.assertNotIn("12.5", output)
+        self.assertNotIn("1.562", output)
         self.assertNotIn("12.5", output)
 
     def test_simcc_layout_has_no_validation_loss_column(self):

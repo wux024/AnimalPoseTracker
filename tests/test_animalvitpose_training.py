@@ -281,7 +281,8 @@ class SimCCTrainingTests(unittest.TestCase):
         self.assertEqual(len(epoch_events), 1)
         epoch_metrics = epoch_events[0].metrics
         self.assertIn("train_loss_simcc_per_sample", epoch_metrics)
-        # Same run, one line apart: the batch-sum figure is batch_size times larger.
+        # The two are a factor of batch_size apart, which is exactly why the progress row
+        # prints the per-image figure: `train_loss` alone would move when batch_size does.
         self.assertAlmostEqual(
             epoch_metrics["train_loss"],
             epoch_metrics["train_loss_simcc_per_sample"] * batch,
