@@ -1,7 +1,9 @@
-from PySide6.QtCore import QMetaObject, Qt, Q_ARG, QTimer
+from PySide6.QtCore import QMetaObject, Qt, Q_ARG, QTimer, QSize
 from PySide6.QtGui import QImage, QPixmap
-from PySide6.QtWidgets import  QApplication, QFileDialog, QWidget, QMessageBox
+from PySide6.QtWidgets import  (QApplication, QFileDialog, QWidget, QMessageBox,
+                                QCheckBox)
 from dataclasses import replace
+import json
 import os
 import cv2
 import numpy as np
@@ -62,6 +64,11 @@ class InferencerPage(QWidget, Ui_Inferencer):
         # Whether each half of the inference setup has passed its checks; Start needs both.
         self._config_ready = False
         self._weights_ready = False
+
+        # One run's frame counter and record buffer, both reset by Start.
+        self._frame_index = 0
+        self.records = []
+        self._add_record_switch()
 
         self.platform = self._detect_platform()
         self.device_check_results = self._detect_device_availability()
@@ -149,6 +156,7 @@ class InferencerPage(QWidget, Ui_Inferencer):
         self.PreprocessTime.setEnabled(True)
         self.InferenceTime.setEnabled(True)
         self.PostprocessTime.setEnabled(True)
+        self.SaveRecords.setEnabled(True)
 
     def tools_disabled(self):
         self.CheckCameraVideosConnect.setEnabled(False)
@@ -173,6 +181,40 @@ class InferencerPage(QWidget, Ui_Inferencer):
         self.PreprocessTime.setEnabled(False)
         self.InferenceTime.setEnabled(False)    
         self.PostprocessTime.setEnabled(False)
+        self.SaveRecords.setEnabled(False)
+
+    def _add_record_switch(self):
+        """Add the "save records" switch to the display options.
+
+        Built here rather than in the Designer file for the same reason the parameter trees are
+        shaped at runtime: ``ui_inferencer.py`` is generated, so a widget put there would be lost
+        the next time the file is regenerated.
+        """
+        self.SaveRecords = QCheckBox(self.ShowToolsGroup)
+        self.SaveRecords.setObjectName("SaveRecords")
+        self.SaveRecords.setMinimumSize(QSize(120, 25))
+        self.SaveRecords.setMaximumSize(QSize(120, 25))
+        self.SaveRecords.setText("Save Records")
+        self.SaveRecords.setToolTip(
+            "把逐帧姿态记录写到 runs/inference/records.json，形状与命令行 `infer --records` 一致"
+        )
+        self.ShowToolsGroupVLayout.addWidget(self.SaveRecords)
+
+    def _write_records(self):
+        """Write this run's per-frame records, where the `infer` command line would put them."""
+        if not self.SaveRecords.isChecked() or not self.records:
+            return
+        output_dir = Path.cwd() / "runs" / "inference"
+        try:
+            output_dir.mkdir(parents=True, exist_ok=True)
+            target = output_dir / "records.json"
+            target.write_text(
+                json.dumps(self.records, ensure_ascii=False, indent=2) + "\n", encoding="utf-8"
+            )
+        except OSError as error:
+            QMessageBox.warning(self, "保存记录失败", f"无法写入逐帧记录：\n{error}")
+            return
+        self.thread_status(f"逐帧记录已写入 {target}（{len(self.records)} 帧）")
 
     def onSelectConfigureClicked(self):
         """
@@ -850,6 +892,11 @@ class InferencerPage(QWidget, Ui_Inferencer):
             instance_to_record(instance, list(self.session.class_names)) for instance in instances
         ]
         results["records"] = records
+        # Only collected when the switch asks for it: a camera session can run for hours, and an
+        # unbounded buffer is not worth carrying for a file nobody asked for.
+        if self.SaveRecords.isChecked():
+            self.records.append({"frame": self._frame_index, "predictions": records})
+        self._frame_index += 1
 
         config = self.visualization_config
         skeleton = list(self.session.skeleton)
@@ -1171,6 +1218,9 @@ class InferencerPage(QWidget, Ui_Inferencer):
                 QMessageBox.critical(self, "无法启动推理", f"无法启动推理：\n{error}")
                 return
             self._build_palettes()
+            # One run, one buffer: the frame indices the records carry start at zero again.
+            self._frame_index = 0
+            self.records = []
             # init threads
             self._init_inference_threads()
             # start threads
@@ -1191,6 +1241,9 @@ class InferencerPage(QWidget, Ui_Inferencer):
     def _finalize_cleanup(self):
         """Clean up after all threads have stopped"""
         try:
+            # Every worker has stopped by now (see _stop_all_threads), so the record buffer is
+            # final; the file is only useful whole, so it is written here rather than per frame.
+            self._write_records()
             self.Display.clear()
             self.Start.setText("Start")
             self.Start.setEnabled(True)

@@ -5,6 +5,7 @@ PySide6 is missing -- it ships as the optional ``gui`` extra, so the core suite 
 green without it.
 """
 
+import json
 import os
 import tempfile
 import unittest
@@ -541,6 +542,51 @@ class InferencerDecodeTests(unittest.TestCase):
         self.assertEqual(len(page._class_colors), 1)
         self.assertEqual(len(page._edge_colors), 1)
         self.assertEqual(len(page._keypoint_colors), 2)
+
+    def test_records_are_collected_only_when_the_switch_is_on(self):
+        page = self._page()
+        page.SaveRecords.setChecked(True)
+        for _ in range(3):
+            page._present(np.zeros((480, 640, 3), np.uint8), page._decode(self._tensor(), None))
+
+        self.assertEqual([entry["frame"] for entry in page.records], [0, 1, 2])
+        self.assertEqual(page._frame_index, 3)
+        # The shape the `infer --records` file carries, so a workbench can read both.
+        self.assertEqual(sorted(page.records[0]), ["frame", "predictions"])
+        self.assertEqual(
+            sorted(page.records[0]["predictions"][0]),
+            ["bbox_xyxy", "class_id", "class_name", "keypoints", "score"],
+        )
+
+        quiet = self._page()
+        quiet._present(np.zeros((480, 640, 3), np.uint8), quiet._decode(self._tensor(), None))
+        self.assertEqual(quiet.records, [])
+
+    def test_the_record_switch_joins_the_start_stop_allow_lists(self):
+        page = self._page()
+
+        page.tools_disabled()
+        self.assertFalse(page.SaveRecords.isEnabled())
+        page.tools_enabled()
+        self.assertTrue(page.SaveRecords.isEnabled())
+        # Built at runtime, so it has to be added to a layout by hand.
+        self.assertGreaterEqual(page.ShowToolsGroupVLayout.indexOf(page.SaveRecords), 0)
+
+    def test_the_records_file_appears_only_when_the_switch_asked_for_it(self):
+        page = self._page()
+        page.records = [{"frame": 0, "predictions": []}]
+        with tempfile.TemporaryDirectory() as temporary, patch.object(
+            Path, "cwd", return_value=Path(temporary)
+        ):
+            target = Path(temporary) / "runs" / "inference" / "records.json"
+
+            page.SaveRecords.setChecked(False)
+            page._finalize_cleanup()
+            self.assertFalse(target.exists())
+
+            page.SaveRecords.setChecked(True)
+            page._finalize_cleanup()
+            self.assertEqual(json.loads(target.read_text(encoding="utf-8")), page.records)
 
 
 class _FakeCapture:
