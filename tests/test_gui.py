@@ -9,11 +9,19 @@ import os
 import tempfile
 import unittest
 from pathlib import Path
+from types import SimpleNamespace
 from unittest.mock import Mock, patch
 
 import cv2
 import numpy as np
 import yaml
+
+from animalposetracker.inference.session import instance_to_record, pixel_points
+from animalposetracker.postprocessing.output_decoders import (
+    YOLO_POSE_RAW,
+    PoseOutputConfig,
+    decode_pose_outputs,
+)
 
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
@@ -272,6 +280,192 @@ class ConfigureTreeTests(unittest.TestCase):
         )
         # A row with no fixed set still opens the plain text editor.
         self.assertIsInstance(self._editor(page, tree, "imgsz"), QLineEdit)
+
+
+@unittest.skipUnless(QApplication is not None, "PySide6 (the gui extra) is not installed")
+class InferencerDecodeTests(unittest.TestCase):
+    """The page decodes and draws through the shared layers.
+
+    It used to call the engine's own `postprocess`, a raw-layout hard slicer whose only remaining
+    caller was this page -- so its results were right for one of the three ultralytics layouts and
+    silently wrong for the other two. These tests pin the shared contract instead.
+    """
+
+    CONFIG = PoseOutputConfig(
+        schema=YOLO_POSE_RAW,
+        num_classes=1,
+        num_keypoints=2,
+        keypoint_dims=3,
+        output_names=("predictions",),
+    )
+
+    @classmethod
+    def setUpClass(cls):
+        cls.application = QApplication.instance() or QApplication([])
+
+    @staticmethod
+    def _tensor():
+        """One anchor: a box, one class score, two keypoints (the second one unscorable)."""
+        array = np.zeros((1, 4 + 1 + 2 * 3, 1), dtype=np.float32)
+        array[0, 0:4, 0] = [0.5, 0.5, 0.2, 0.2]
+        array[0, 4, 0] = 0.9
+        array[0, 5:11, 0] = [0.1, 0.2, 0.9, 0.3, 0.4, 0.0]
+        return {"predictions": array}
+
+    def _page(self, **config):
+        page = InferencerPage()
+        page.session = SimpleNamespace(
+            engine=SimpleNamespace(
+                output_names=("predictions",),
+                preprocess=lambda frame: (frame, None),
+            ),
+            output_config=self.CONFIG,
+            input_config=SimpleNamespace(input_size=(640, 480)),
+            class_names=("mouse",),
+            skeleton=((0, 1),),
+            kpt_shape=(2, 3),
+        )
+        page._init_visualization_config()
+        page.visualization_config.update(config)
+        page._build_palettes()
+        return page
+
+    def test_decode_matches_the_shared_decoder_point_for_point(self):
+        page = self._page()
+        decoded = page._decode(self._tensor(), None)["instances"]
+        direct = decode_pose_outputs(self._tensor(), self.CONFIG, inverse_affine=None)
+
+        self.assertEqual(len(decoded), len(direct))
+        self.assertTrue(np.allclose(decoded[0].keypoints_xy, direct[0].keypoints_xy))
+        self.assertTrue(np.allclose(decoded[0].bbox_xyxy, direct[0].bbox_xyxy))
+        self.assertEqual(decoded[0].score, direct[0].score)
+        self.assertEqual(decoded[0].class_id, direct[0].class_id)
+
+    def test_the_pipeline_runs_the_shared_functions(self):
+        page = self._page()
+        with patch.object(page, "_get_source", return_value="video.mp4"), patch(
+            "animalposetracker.gui.inferencerpage.cv2.VideoCapture", return_value=_FakeCapture()
+        ), patch("animalposetracker.gui.inferencerpage.QMessageBox"):
+            page._init_inference_threads()
+
+        # Bound methods compare equal by (instance, function); they are not identical objects.
+        self.assertEqual(page.preprocess_thread.preprocess_function, page.session.engine.preprocess)
+        self.assertEqual(page.inference_thread.inference_function, page._infer_outputs)
+        self.assertEqual(page.postprocess_thread.postprocess_function, page._decode)
+        self.assertEqual(page.visualize_thread.visualize_function, page._present)
+
+    def test_named_outputs_are_what_the_decoder_is_handed(self):
+        page = self._page()
+        seen = {}
+
+        def named_outputs(image, output_names=None):
+            seen["output_names"] = output_names
+            return {"predictions": np.zeros((1, 10, 1), dtype=np.float32)}
+
+        page.session.engine.inference_named_outputs = named_outputs
+        page._infer_outputs("image")
+
+        # Without the artifact's own output names, an artifact whose output is not called
+        # "predictions" cannot be decoded at all.
+        self.assertEqual(seen["output_names"], ("predictions",))
+
+    def test_records_use_the_shared_record_shape(self):
+        page = self._page()
+        results = page._decode(self._tensor(), None)
+        frame = np.zeros((480, 640, 3), dtype=np.uint8)
+
+        _rendered, presented = page._present(frame, dict(results))
+
+        expected = instance_to_record(results["instances"][0], ["mouse"])
+        self.assertEqual(presented["records"], [expected])
+
+    def test_an_unscorable_keypoint_is_not_drawn(self):
+        page = self._page()
+        results = page._decode(self._tensor(), None)
+        frame = np.zeros((480, 640, 3), dtype=np.uint8)
+
+        _rendered, presented = page._present(frame, dict(results))
+
+        # The second keypoint scores zero, so it keeps no position: not drawn, and no edge
+        # reaches it. The record still carries its row, with the score in the third column.
+        self.assertEqual(
+            pixel_points(presented["records"][0]["keypoints"]), [(0, 0), None]
+        )
+
+    def test_the_background_selector_replaces_the_frame(self):
+        # With every overlay switched off, the frame is exactly what the selector says.
+        quiet = dict(
+            show_fps=False,
+            show_preprocess_time=False,
+            show_inference_time=False,
+            show_postprocess_time=False,
+        )
+        white = self._page(background="White", **quiet)
+        painted = white._present(np.zeros((24, 32, 3), np.uint8), {"instances": []})[0]
+        self.assertTrue(bool(np.all(painted == 255)))
+
+        black = self._page(background="Black", **quiet)
+        painted = black._present(np.full((24, 32, 3), 255, np.uint8), {"instances": []})[0]
+        self.assertTrue(bool(np.all(painted == 0)))
+
+    def test_the_timing_overlay_follows_its_switches(self):
+        results = {
+            "instances": [],
+            "preprocess_time": 0.001,
+            "inference_time": 0.002,
+            "postprocess_time": 0.003,
+            "fps": 166.0,
+        }
+
+        def overlay_lines(page):
+            lines = []
+            with patch(
+                "animalposetracker.gui.inferencerpage.cv2.putText",
+                lambda _frame, text, *_rest: lines.append(text),
+            ):
+                page._present(np.zeros((480, 640, 3), np.uint8), dict(results))
+            return lines
+
+        every = self._page(show_fps=True, show_preprocess_time=True,
+                           show_inference_time=True, show_postprocess_time=True)
+        # Single prefixes: the engine's renderer printed them twice ("FPS: FPS: 30.0 FPS").
+        self.assertEqual(overlay_lines(every), [
+            "FPS: 166.0",
+            "Preprocess: 1.000 ms",
+            "Inference: 2.000 ms",
+            "Postprocess: 3.000 ms",
+        ])
+
+        only_fps = self._page(show_fps=True, show_preprocess_time=False,
+                              show_inference_time=False, show_postprocess_time=False)
+        self.assertEqual(overlay_lines(only_fps), ["FPS: 166.0"])
+
+        silent = self._page(show_fps=False, show_preprocess_time=False,
+                            show_inference_time=False, show_postprocess_time=False)
+        self.assertEqual(overlay_lines(silent), [])
+
+    def test_palettes_follow_the_session(self):
+        page = self._page()
+
+        self.assertEqual(len(page._class_colors), 1)
+        self.assertEqual(len(page._edge_colors), 1)
+        self.assertEqual(len(page._keypoint_colors), 2)
+
+
+class _FakeCapture:
+    """Minimal stand-in for a camera/video handle."""
+
+    def isOpened(self):
+        return True
+
+    def get(self, prop):
+        return 0
+
+    def set(self, prop, value):
+        return True
+
+    def release(self):
+        return None
 
 
 @unittest.skipUnless(QApplication is not None, "PySide6 (the gui extra) is not installed")

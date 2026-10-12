@@ -1,8 +1,10 @@
 from PySide6.QtCore import QMetaObject, Qt, Q_ARG, QTimer
 from PySide6.QtGui import QImage, QPixmap
 from PySide6.QtWidgets import  QApplication, QFileDialog, QWidget, QMessageBox
+from dataclasses import replace
 import os
 import cv2
+import numpy as np
 import sys
 from pathlib import Path
 import queue
@@ -11,7 +13,14 @@ from .ui_inferencer import Ui_Inferencer
 from animalposetracker.utils import (VideoReaderThread, VideoWriterThread, 
                                      PreprocessThread, InferenceThread, 
                                      PostprocessThread, VisualizeThread)
-from animalposetracker.inference import InferenceEngine, ENGINEtoDEVICE
+from animalposetracker.inference import ENGINEtoDEVICE
+from animalposetracker.inference.session import (
+    build_inference_session,
+    instance_to_record,
+    pixel_points,
+)
+from animalposetracker.postprocessing.output_decoders import decode_pose_outputs
+from animalposetracker.rendering import INFERENCE_STYLE, draw_instance, pixel_box
 class InferencerPage(QWidget, Ui_Inferencer):
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -31,7 +40,10 @@ class InferencerPage(QWidget, Ui_Inferencer):
         self.visualization_config = {}
         self.max_cache_size = 1024
 
-        self.inference = None
+        self.session = None
+        self._class_colors = ()
+        self._edge_colors = ()
+        self._keypoint_colors = ()
         self.device = None
         self.engine = None
 
@@ -681,7 +693,149 @@ class InferencerPage(QWidget, Ui_Inferencer):
            'show_postprocess_time': self.PostprocessTime.isChecked(),
             'font_scale': self.FontScale.value() / 10.0,
         }
-        
+
+    # ------------------------------------------------------------ decode and render adapters
+    #
+    # The page keeps the frame loop; decoding and drawing come from the shared layers. Decoding
+    # goes through the same `decode_pose_outputs` contract the `infer` command line uses, and
+    # drawing through `rendering.draw_instance`, so the window shows what the written video and
+    # the records say. Only the frame-level extras (background, timing text) live here: they
+    # need numpy and are not per instance.
+
+    def _build_palettes(self):
+        """One colour per class, per skeleton edge and per keypoint, drawn once per run.
+
+        Deliberately random, as the engine's own renderer always was: the colours are
+        decoration, and nobody should read meaning into which class got which hue.
+        """
+        def palette(count):
+            if count <= 0:
+                return ()
+            colours = np.random.uniform(0, 255, size=(count, 3))
+            return tuple(tuple(int(channel) for channel in colour) for colour in colours)
+
+        self._class_colors = palette(len(self.session.class_names))
+        self._edge_colors = palette(len(self.session.skeleton))
+        self._keypoint_colors = palette(self.session.kpt_shape[0])
+
+    def _infer_outputs(self, img):
+        """Run the engine and hand back its *named* outputs.
+
+        Named rather than positional: the decoder looks tensors up by name, which is what lets
+        an artifact whose output is called "output0" decode at all.
+        """
+        engine = self.session.engine
+        return engine.inference_named_outputs(img, output_names=engine.output_names or None)
+
+    def _decode(self, outputs, inverse_affine):
+        """Decode one frame's raw outputs into instances.
+
+        Returns a dict so the postprocess thread can keep stamping its stage timings into it.
+        """
+        return {
+            "instances": decode_pose_outputs(
+                outputs, self.session.output_config, inverse_affine=inverse_affine
+            )
+        }
+
+    def _render_style(self, frame):
+        """The page's look, as data, for the neutral renderer."""
+        config = self.visualization_config
+        input_height = self.session.input_config.input_size[1]
+        return replace(
+            INFERENCE_STYLE,
+            keypoint_colors=self._keypoint_colors or INFERENCE_STYLE.keypoint_colors,
+            font_scale=input_height / 960.0 * config['font_scale'],
+            class_colors=self._class_colors,
+            skeleton_colors=self._edge_colors,
+            box_line_width=int(config['bbox_line_width']),
+            skeleton_line_width=int(config['skeleton_line_width']),
+            label_fill=True,
+            label_text_color=(0, 0, 0),
+        )
+
+    def _draw_background(self, frame):
+        """The Background selector's three states, applied before anything else is drawn."""
+        mode = self.visualization_config['background']
+        if mode == 'Black':
+            return np.zeros_like(frame)
+        if mode == 'White':
+            return np.ones_like(frame) * 255
+        return frame
+
+    def _draw_timings(self, frame, results):
+        """FPS and the three stage timings, top-left, in the order the old renderer used."""
+        config = self.visualization_config
+
+        def milliseconds(key):
+            return f"{float(results.get(key, 0.0)) * 1000.0:.3f} ms"
+
+        lines = []
+        if config['show_fps']:
+            lines.append(f"FPS: {float(results.get('fps', 0.0)):.1f}")
+        if config['show_preprocess_time']:
+            lines.append(f"Preprocess: {milliseconds('preprocess_time')}")
+        if config['show_inference_time']:
+            lines.append(f"Inference: {milliseconds('inference_time')}")
+        if config['show_postprocess_time']:
+            lines.append(f"Postprocess: {milliseconds('postprocess_time')}")
+        if not lines:
+            return frame
+
+        style = self._render_style(frame)
+        input_width, input_height = self.session.input_config.input_size
+        x, y = int(input_width * 0.02), int(input_height * 0.05)
+        # Only the drawn lines advance the cursor, exactly as before: skipping one pulls the
+        # rest of the block up instead of leaving a hole.
+        step = int(input_height * 0.04 * config['font_scale'])
+        thickness = max(1, int(style.font_scale))
+        for line in lines:
+            cv2.putText(
+                frame,
+                line,
+                (x, y),
+                cv2.FONT_HERSHEY_SIMPLEX,
+                style.font_scale,
+                (0, 255, 0),
+                thickness,
+                cv2.LINE_AA,
+            )
+            y += step
+        return frame
+
+    def _present(self, frame, results):
+        """Render one decoded frame, and keep the frame's records for the caller."""
+        frame = self._draw_background(frame)
+        style = self._render_style(frame)
+        instances = list(results.get("instances") or ())
+        records = [
+            instance_to_record(instance, list(self.session.class_names)) for instance in instances
+        ]
+        results["records"] = records
+
+        config = self.visualization_config
+        skeleton = list(self.session.skeleton)
+        for record in records:
+            label = None
+            if config['show_classes']:
+                label = f"{record['class_name']}: {record['score']:.2f}"
+            draw_instance(
+                frame,
+                pixel_box(record['bbox_xyxy']),
+                label,
+                pixel_points(record['keypoints']),
+                skeleton,
+                style=style,
+                class_id=record['class_id'],
+                show_box=config['show_bbox'],
+                show_label=bool(label),
+                show_keypoints=config['show_keypoints'],
+                show_skeleton=config['show_skeletons'],
+                line_width=2,
+                point_radius=int(config['radius']),
+            )
+        self._draw_timings(frame, results)
+        return frame, results
 
     def _init_inference_threads(self):
         source = self._get_source()
@@ -716,23 +870,24 @@ class InferencerPage(QWidget, Ui_Inferencer):
         self.videoreader_thread.data_ready.connect(self.put_read_data)
         self.videoreader_thread.finished.connect(self.read_end)
 
-        # Set up frame preprocessor thread
-        self.preprocess_thread.preprocess_function = self.inference.preprocess
+        # Set up frame preprocessor thread. The engine's preprocess is the one the shared
+        # decoder's inverse affine belongs to, which is why the CLI's pipeline calls it too.
+        self.preprocess_thread.preprocess_function = self.session.engine.preprocess
         self.preprocess_thread.status_update.connect(self.thread_status)
         self.preprocess_thread.data_ready.connect(self.put_preprocessed_data)
 
         # Set up inference thread
-        self.inference_thread.inference_function = self.inference.inference
+        self.inference_thread.inference_function = self._infer_outputs
         self.inference_thread.status_update.connect(self.thread_status)
         self.inference_thread.data_ready.connect(self.put_inference_data)
 
         # Set up postprocessor thread
-        self.postprocess_thread.postprocess_function = self.inference.postprocess
+        self.postprocess_thread.postprocess_function = self._decode
         self.postprocess_thread.status_update.connect(self.thread_status)
         self.postprocess_thread.data_ready.connect(self.put_postprocessed_data)
 
         # Set up visualization thread
-        self.visualize_thread.visualize_function = self.inference.visualize
+        self.visualize_thread.visualize_function = self._present
         self.visualize_thread.data_ready.connect(self.put_visualized_data)
         self.visualize_thread.status_update.connect(self.thread_status)
 
@@ -957,22 +1112,27 @@ class InferencerPage(QWidget, Ui_Inferencer):
             source = self._get_source()
             if source is None:
                 QMessageBox.warning(self, "Warning", "Please select a source")
-            # inference config
-            self.inference = InferenceEngine()
-            self.inference.weights_path = self.weights_path
-            self.inference.data_config = self.data_config_path
-            self.inference.engine = self.engine
-            self.inference.device = self.device
-            self.inference.model_bits = self.model_bits
+                return
             self._init_visualization_config()
-            self.inference.update_config(self.visualization_config)
-            self.inference.model_init()
-            # Warmup: remove the first-call kernel-compile / memory-allocation overhead. Without it,
-            # the first frames of the first video run abnormally slow and that cost is included in
-            # the FPS statistics. warmup() goes through the existing preprocess / inference /
-            # postprocess entry points, so it works for all six engines; it returns the average
-            # forward time in seconds. Uncomment to enable:
-            # self.inference.warmup(times=3, with_postprocess=True, verbose=True)
+            # One call assembles the artifact, the schema and the decode contract -- the same
+            # call the `infer` command line makes, so both decode identically.
+            try:
+                self.session = build_inference_session(
+                    weights_path=self.weights_path,
+                    config_path=self.data_config_path,
+                    engine=self.engine,
+                    device=self.device,
+                    bits=self.model_bits,
+                    conf=self.conf,
+                    iou=self.iou,
+                )
+            except Exception as error:
+                # Whatever the artifact and the config cannot support together (an unknown
+                # keypoint count, a SimCC artifact, an unreadable file) is reported here, in
+                # Chinese, instead of surfacing as a numpy failure inside a worker thread.
+                QMessageBox.critical(self, "无法启动推理", f"无法启动推理：\n{error}")
+                return
+            self._build_palettes()
             # init threads
             self._init_inference_threads()
             # start threads
@@ -1001,19 +1161,16 @@ class InferencerPage(QWidget, Ui_Inferencer):
                 del self._stopping
 
     
+    # Every display option below just writes the config the renderer reads each frame. They used
+    # to push into the engine as well, which stopped meaning anything once the page took over
+    # drawing.
     def onIoUChanged(self, value):
         """Handle changes to the IOU threshold slider value"""
-        if hasattr(self, 'inference') and self.inference is not None:
-            self.inference.update_config({"iou": value})
-        else:
-            self.visualization_config.update({"iou": value})
-    
+        self.visualization_config.update({"iou": value})
+
     def onConfChanged(self, value):
         """Handle changes to the Confidence threshold slider value"""
-        if hasattr(self, 'inference') and self.inference is not None:
-            self.inference.update_config({"conf": value})
-        else:
-            self.visualization_config.update({"conf": value})
+        self.visualization_config.update({"conf": value})
 
     def onBackgroudStateChanged(self, state):
         """Handle changes to the Show Backgroud checkbox state"""
@@ -1024,94 +1181,55 @@ class InferencerPage(QWidget, Ui_Inferencer):
         else:
             background = "Black"
         self.Backgroud.setText(background)
-        if hasattr(self, 'inference') and self.inference is not None:
-            self.inference.update_config({"background": background})
-        else:
-            self.visualization_config.update({"background": background})
-    
+        self.visualization_config.update({"background": background})
+
     def onShowClassesStateChanged(self, state):
         """Handle changes to the Show Classes checkbox state"""
-        if hasattr(self, 'inference') and self.inference is not None:
-            self.inference.update_config({"show_classes": bool(state)})
-        else:
-            self.visualization_config.update({"show_classes": bool(state)})
-    
+        self.visualization_config.update({"show_classes": bool(state)})
+
     def onShowKeypointsStateChanged(self, state):
         """Handle changes to the Show Keypoints checkbox state"""
-        if hasattr(self, 'inference') and self.inference is not None:
-            self.inference.update_config({"show_keypoints": bool(state)})
-        else:
-            self.visualization_config.update({"show_keypoints": bool(state)})
-    
+        self.visualization_config.update({"show_keypoints": bool(state)})
+
     def onShowKeypointsRadiusChanged(self, value):
         """Handle changes to the keypoint radius slider value"""
-        if hasattr(self, 'inference') and self.inference is not None:
-            self.inference.update_config({"radius": value})
-        else:
-            self.visualization_config.update({"radius": value})
-    
+        self.visualization_config.update({"radius": value})
+
     def onShowSkeletonsStateChanged(self, state):
         """Handle changes to the Show Skeletons checkbox state"""
-        if hasattr(self, 'inference') and self.inference is not None:
-            self.inference.update_config({"show_skeletons": bool(state)})
-        else:
-            self.visualization_config.update({"show_skeletons": bool(state)})
-    
+        self.visualization_config.update({"show_skeletons": bool(state)})
+
     def onShowSkeletonsLineWidthChanged(self, value):
         """Handle changes to the skeleton line width slider value"""
-        if hasattr(self, 'inference') and self.inference is not None:
-            self.inference.update_config({"skeleton_line_width": value})
-        else:
-            self.visualization_config.update({"skeleton_line_width": value})
-    
+        self.visualization_config.update({"skeleton_line_width": value})
+
     def onShowBBoxStateChanged(self, state):
         """Handle changes to the Show Bounding Box checkbox state"""
-        if hasattr(self, 'inference') and self.inference is not None:
-            self.inference.update_config({"show_bbox": bool(state)})
-        else:
-            self.visualization_config.update({"show_bbox": bool(state)})
-    
+        self.visualization_config.update({"show_bbox": bool(state)})
+
     def onShowBBoxWidthChanged(self, value):
         """Handle changes to the bounding box width slider value"""
-        if hasattr(self, 'inference') and self.inference is not None:
-            self.inference.update_config({"bbox_line_width": value})
-        else:
-            self.visualization_config.update({"bbox_line_width": value})
+        self.visualization_config.update({"bbox_line_width": value})
 
     def onFPSShowStateChanged(self, state):
         """Handle changes to the Show FPS checkbox state"""
-        if hasattr(self, 'inference') and self.inference is not None:
-            self.inference.update_config({"show_fps": bool(state)})
-        else:
-            self.visualization_config.update({"show_fps": bool(state)})
-    
+        self.visualization_config.update({"show_fps": bool(state)})
+
     def onPreprocessTimeStateChanged(self, state):
         """Handle changes to the Show Preprocess Time checkbox state"""
-        if hasattr(self, 'inference') and self.inference is not None:
-            self.inference.update_config({"show_preprocess_time": bool(state)})
-        else:
-            self.visualization_config.update({"show_preprocess_time": bool(state)})
-    
+        self.visualization_config.update({"show_preprocess_time": bool(state)})
+
     def onInferenceTimeStateChanged(self, state):
         """Handle changes to the Show Inference Time checkbox state"""
-        if hasattr(self, 'inference') and self.inference is not None:
-            self.inference.update_config({"show_inference_time": bool(state)})
-        else:
-            self.visualization_config.update({"show_inference_time": bool(state)})
-    
+        self.visualization_config.update({"show_inference_time": bool(state)})
+
     def onPostprocessTimeStateChanged(self, state):
         """Handle changes to the Show Postprocess Time checkbox state"""
-        if hasattr(self, 'inference') and self.inference is not None:
-            self.inference.update_config({"show_postprocess_time": bool(state)})
-        else:
-            self.visualization_config.update({"show_postprocess_time": bool(state)})
-    
+        self.visualization_config.update({"show_postprocess_time": bool(state)})
+
     def onFontScaleChanged(self, value):
         """Handle changes to the Font Scale slider value"""
-        if hasattr(self, 'inference') and self.inference is not None:
-            self.inference.update_config({"font_scale": value / 10.0})
-        else:
-            self.visualization_config.update({"font_scale": value / 10.0})
+        self.visualization_config.update({"font_scale": value / 10.0})
     
     def closeEvent(self, event):
         """Handle window close event"""
