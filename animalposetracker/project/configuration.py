@@ -108,6 +108,45 @@ class ProjectConfigurationMixin:
         if head_args[0] != "num_keypoints":
             head_args[0] = int(self.dataset_config['kpt_shape'][0])
 
+    def _sync_dataset_config_from_project(self) -> None:
+        """Derive the dataset YAML's shape keys from the project's keypoint/class inputs.
+
+        ``create_dataset_config`` writes whatever ``__init__`` defaulted to, so a caller that
+        only edits the project config -- which is exactly what the new-project form does --
+        would leave dataset.yaml at the built-in 17-keypoint/1-class default while claiming a
+        different shape everywhere else. Training reads ``kpt_shape`` straight out of that
+        file, so the two have to agree before any config is written.
+        """
+        keypoints = int(self.project_config.get("keypoints") or 0)
+        if keypoints <= 0:
+            raise ValueError("project_config must define at least one keypoint")
+
+        class_count = int(self.project_config.get("classes") or 0)
+        class_names = [str(name) for name in (self.project_config.get("classes_name") or [])]
+        class_count = class_count or len(class_names) or 1
+        # Pad or trim so the names mapping always covers exactly the classes the model outputs;
+        # the form can hold fewer name rows than the spin box asks for.
+        class_names = [
+            *class_names[:class_count],
+            *[f"class{index + 1}" for index in range(len(class_names), class_count)],
+        ]
+
+        # A dataset YAML handed in by the CLI may carry explicit OKS sigmas; only replace a
+        # vector that cannot belong to this keypoint count.
+        sigmas = self.dataset_config.get("kpt_oks_sigmas")
+        if not isinstance(sigmas, (list, tuple)) or len(sigmas) != keypoints:
+            sigmas = [1.0 / keypoints] * keypoints
+
+        self.dataset_config.update({
+            "kpt_shape": [keypoints, 3 if self.project_config.get("visible") else 2],
+            "flip_idx": list(range(keypoints)),
+            "names": dict(enumerate(class_names)),
+            "skeleton": [
+                list(connection) for connection in (self.project_config.get("skeleton") or [])
+            ],
+            "kpt_oks_sigmas": list(sigmas),
+        })
+
     def load_project_config(self, config_path: Union[str, Path]) -> None:
         """Load a project configuration from file."""
         self._load_config_from_file("project", config_path)

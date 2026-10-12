@@ -58,6 +58,10 @@ class ProjectFilesMixin:
 
     def create_new_project(self) -> None:
         """Create a new project with default configurations."""
+        # Shape the dataset config from the project inputs first: CONFIG_TYPES is a set, so the
+        # per-config creators run in an arbitrary order, and create_model_config reads
+        # dataset_config['kpt_shape'] on the way through.
+        self._sync_dataset_config_from_project()
         self._create_project_structure()
         self.load_config_file()
 

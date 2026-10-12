@@ -109,6 +109,71 @@ class CommandDispatcherTests(unittest.TestCase):
             self.assertEqual(main([]), 0)
 
 
+class ProjectDatasetShapeTests(unittest.TestCase):
+    """A project's keypoint/class inputs belong in dataset.yaml, not only in project.yaml.
+
+    Training reads `kpt_shape` straight out of dataset.yaml, so a project created with the
+    built-in default (17 keypoints, 1 class) while project.yaml claimed something else would
+    train a model whose output shape never matched its own configuration.
+    """
+
+    def _create(self, temporary, **overrides):
+        arguments = {
+            "local_path": Path(temporary),
+            "project_name": "shape",
+            "worker": "wux",
+            "model_type": "AnimalRTPose",
+            "model_scale": "N",
+        }
+        arguments.update(overrides)
+        project = AnimalPoseTrackerProject(**arguments)
+        project.create_new_project()
+        datasets = project.project_path / "configs" / "dataset.yaml"
+        model = project.project_path / "configs" / "model.yaml"
+        return (
+            yaml.safe_load(datasets.read_text(encoding="utf-8")),
+            yaml.safe_load(model.read_text(encoding="utf-8")),
+        )
+
+    def test_dataset_and_model_shape_follow_the_project_inputs(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            dataset, model = self._create(
+                temporary,
+                keypoints=5,
+                visible=True,
+                classes=2,
+                classes_name=["cat", "dog"],
+                skeleton=[[0, 1], [2, 3]],
+            )
+
+        self.assertEqual(dataset["kpt_shape"], [5, 3])
+        self.assertEqual(dataset["names"], {0: "cat", 1: "dog"})
+        self.assertEqual(dataset["skeleton"], [[0, 1], [2, 3]])
+        self.assertEqual(dataset["flip_idx"], [0, 1, 2, 3, 4])
+        self.assertEqual(len(dataset["kpt_oks_sigmas"]), 5)
+        self.assertEqual(model["kpt_shape"], [5, 3])
+        self.assertEqual(model["nc"], 2)
+
+    def test_invisible_keypoints_drop_the_visibility_dimension(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            dataset, model = self._create(
+                temporary, keypoints=3, visible=False, classes=1, classes_name=["mouse"]
+            )
+
+        self.assertEqual(dataset["kpt_shape"], [3, 2])
+        self.assertEqual(model["kpt_shape"], [3, 2])
+
+    def test_class_names_are_padded_to_the_class_count(self):
+        # The form holds one name row per class it was told about, but the spin box can ask for
+        # more than the rows the user filled in; the mapping still has to cover every class.
+        with tempfile.TemporaryDirectory() as temporary:
+            dataset, _model = self._create(
+                temporary, keypoints=2, visible=True, classes=3, classes_name=["cat"]
+            )
+
+        self.assertEqual(dataset["names"], {0: "cat", 1: "class2", 2: "class3"})
+
+
 def _write_minimal_dataset_yaml(root: Path) -> Path:
     dataset_yaml = root / "trimouse.yaml"
     dataset_yaml.write_text(yaml.safe_dump({

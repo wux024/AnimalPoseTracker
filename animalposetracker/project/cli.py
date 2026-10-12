@@ -221,18 +221,14 @@ def _create_project(args: argparse.Namespace) -> AnimalPoseTrackerProject:
         date=args.date,
     )
     project.create_new_project()
-    project.dataset_config.update(dataset_config)
-    project.dataset_config["names"] = class_names
-    project.project_config.update({
-        "classes": len(class_names),
-        "classes_name": ordered_names,
-        "keypoints": keypoint_count,
-        "keypoints_name": keypoint_names,
-        "visible": (keypoint_dims == 3),
-        "skeleton": dataset_config.get("skeleton", []),
-        "project_path": str(project.project_path),
+    # dataset.yaml now derives every shape key from the arguments the project was built with, so
+    # only carry over what the dataset file adds on top of them (annotation_format, splits, root).
+    project.dataset_config.update({
+        key: value
+        for key, value in dataset_config.items()
+        if key not in {"kpt_shape", "flip_idx", "names", "skeleton", "kpt_oks_sigmas"}
     })
-    project._sync_model_config_from_dataset()
+    project.dataset_config["path"] = str(dataset_root)
     project.other_config.update({
         "val": True,
         "plots": True,
