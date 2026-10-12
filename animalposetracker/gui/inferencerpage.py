@@ -71,8 +71,9 @@ class InferencerPage(QWidget, Ui_Inferencer):
         self.records = []
         self.tracker = None
         self._add_record_switch()
-        self._add_tracker_controls()
+        # The filter's rows go in first because they sit above the tracker's in the group.
         self._add_filter_controls()
+        self._add_tracker_controls()
 
         self.platform = self._detect_platform()
         self.device_check_results = self._detect_device_availability()
@@ -132,6 +133,7 @@ class InferencerPage(QWidget, Ui_Inferencer):
         self.ShowBBox.stateChanged.connect(self.onShowBBoxStateChanged)
         self.ShowBBoxWidth.valueChanged.connect(self.onShowBBoxWidthChanged)
         self.EnableTracking.stateChanged.connect(self.onEnableTrackingStateChanged)
+        self.EnableFilter.stateChanged.connect(self.onEnableFilterStateChanged)
         self.FilterMethod.currentTextChanged.connect(self.onFilterMethodChanged)
         self.FPSShow.stateChanged.connect(self.onFPSShowStateChanged)
         self.PreprocessTime.stateChanged.connect(self.onPreprocessTimeStateChanged)
@@ -195,7 +197,6 @@ class InferencerPage(QWidget, Ui_Inferencer):
         self.TrackerAlgorithm.setEnabled(False)
         for widget in self._filter_controls():
             widget.setEnabled(False)
-
     def _add_record_switch(self):
         """Add the "save records" switch to the display options.
 
@@ -203,13 +204,19 @@ class InferencerPage(QWidget, Ui_Inferencer):
         shaped at runtime: ``ui_inferencer.py`` is generated, so a widget put there would be lost
         the next time the file is regenerated.
         """
+        # "Save" alone read as ambiguous next to "Save Records". Each switch now says what it
+        # saves; the label is set here because ui_inferencer.py is generated.
+        self.Save.setText("Save Video")
+        self.Save.setToolTip("把渲染后的画面写成 runs/inference/output.avi")
+
         self.SaveRecords = QCheckBox(self.ShowToolsGroup)
         self.SaveRecords.setObjectName("SaveRecords")
         self.SaveRecords.setMinimumSize(QSize(120, 25))
         self.SaveRecords.setMaximumSize(QSize(120, 25))
         self.SaveRecords.setText("Save Records")
         self.SaveRecords.setToolTip(
-            "把逐帧姿态记录写到 runs/inference/records.json，形状与命令行 `infer --records` 一致"
+            "存的是逐帧姿态记录（不是画面）：runs/inference/records.json，"
+            "形状与命令行 `infer --records` 一致，给跟踪/轨迹/3D 重建用"
         )
         self.ShowToolsGroupVLayout.addWidget(self.SaveRecords)
 
@@ -222,40 +229,64 @@ class InferencerPage(QWidget, Ui_Inferencer):
         """
         from animalposetracker.tracking.config import ALGORITHMS
 
-        self.EnableTracking = QCheckBox(self.BaseToolsGroup)
+        self.EnableTracking = QCheckBox(self.ShowToolsGroup)
         self.EnableTracking.setObjectName("EnableTracking")
         self.EnableTracking.setText("Track")
         self.EnableTracking.setToolTip(
             "逐帧跟踪目标：画面标签会带上 track ID，保存的记录里也会带 track_id"
         )
-        self.TrackerAlgorithm = QComboBox(self.BaseToolsGroup)
+        self.TrackerAlgorithm = QComboBox(self.ShowToolsGroup)
         self.TrackerAlgorithm.setObjectName("TrackerAlgorithm")
         self.TrackerAlgorithm.setMinimumSize(QSize(0, 25))
-        self.TrackerAlgorithm.setMaximumSize(QSize(16777215, 25))
+        self.TrackerAlgorithm.setMaximumSize(QSize(88, 25))
         self.TrackerAlgorithm.addItems(list(ALGORITHMS))
         self.TrackerAlgorithm.setToolTip("跟踪算法，与命令行 `infer --tracker` 是同一份清单")
         self.TrackerAlgorithm.setEnabled(False)
 
+        # The Designer file leaves an empty TrackerLayout inside the left group's engine/device
+        # block. The tracking row belongs with the output switches instead, and Qt refuses to
+        # insert a layout that already has a parent -- so the placeholder is dropped and a fresh
+        # layout takes the name.
+        placeholder = self.TrackerLayout
+        self.EngineDeviceLayout.removeItem(placeholder)
+        self.TrackerLayout = QHBoxLayout()
+        self.TrackerLayout.setObjectName("TrackerLayout")
+
         self.TrackerLayout.addWidget(self.EnableTracking)
         self.TrackerLayout.addWidget(self.TrackerAlgorithm)
+        # Third row of the block at the top of the right-hand group: the filter's two rows above,
+        # then what the filter needs (track ids) to have anything to work on.
+        self.ShowToolsGroupVLayout.insertLayout(2, self.TrackerLayout)
 
     def _add_filter_controls(self):
-        """Add the temporal filter's five controls, on their own row below the tracker's.
+        """Add the temporal filter's controls, on the first two rows of the right-hand group.
 
-        Same values, same names and same defaults as `infer --pose-filter` and its `--filter-*`
-        arguments, so a look tuned here can be written down as a command line and vice versa.
-        The spin boxes carry their own labels, which keeps five controls inside one row.
+        Every switch in that group is a checkbox, so the filter gets one of its own: it is the
+        on/off, which is why the method list has no `none` -- one way to be off is enough. The
+        values and defaults match `infer --pose-filter` and its `--filter-*` arguments, so a look
+        tuned here can be written down as a command line and the other way round.
+
+        The smoothing acts on a whole sequence and therefore runs when the run ends; it changes
+        the records file, never the live picture.
         """
-        self.FilterLayout = QHBoxLayout()
-        self.FilterLayout.setObjectName("FilterLayout")
+        self.FilterSwitchLayout = QHBoxLayout()
+        self.FilterSwitchLayout.setObjectName("FilterSwitchLayout")
 
-        self.FilterMethod = QComboBox(self.BaseToolsGroup)
+        self.EnableFilter = QCheckBox(self.ShowToolsGroup)
+        self.EnableFilter.setObjectName("EnableFilter")
+        self.EnableFilter.setText("Filter")
+        self.EnableFilter.setToolTip("跑完对整段轨迹平滑一次：只改存下来的记录，不改实时画面")
+        self.FilterSwitchLayout.addWidget(self.EnableFilter)
+
+        self.FilterMethod = QComboBox(self.ShowToolsGroup)
         self.FilterMethod.setObjectName("FilterMethod")
-        self.FilterMethod.setMinimumSize(QSize(0, 25))
-        self.FilterMethod.setMaximumSize(QSize(16777215, 25))
-        self.FilterMethod.addItems(["none", "median", "savgol"])
-        self.FilterMethod.setToolTip("跑完对整段轨迹做时域平滑：none / median / savgol")
-        self.FilterLayout.addWidget(self.FilterMethod)
+        self.FilterMethod.setMaximumSize(QSize(88, 25))
+        self.FilterMethod.addItems(["median", "savgol"])
+        self.FilterMethod.setToolTip("median = 中值平滑；savgol = Savitzky-Golay 拟合")
+        self.FilterSwitchLayout.addWidget(self.FilterMethod)
+
+        self.FilterValuesLayout = QHBoxLayout()
+        self.FilterValuesLayout.setObjectName("FilterValuesLayout")
 
         def spin(widget, name, prefix, value, maximum, tooltip):
             widget.setObjectName(name)
@@ -263,34 +294,38 @@ class InferencerPage(QWidget, Ui_Inferencer):
             widget.setRange(widget.minimum(), maximum)
             widget.setValue(value)
             widget.setToolTip(tooltip)
-            widget.setMaximumSize(QSize(90, 25))
-            self.FilterLayout.addWidget(widget)
+            widget.setMaximumSize(QSize(62, 25))
+            self.FilterValuesLayout.addWidget(widget)
             return widget
 
         self.FilterWindow = spin(
-            QSpinBox(self.BaseToolsGroup), "FilterWindow", "win", 5, 999, "平滑窗口帧数"
+            QSpinBox(self.ShowToolsGroup), "FilterWindow", "win", 5, 999, "平滑窗口帧数"
         )
         self.FilterPolyorder = spin(
-            QSpinBox(self.BaseToolsGroup), "FilterPolyorder", "poly", 2, 99,
+            QSpinBox(self.ShowToolsGroup), "FilterPolyorder", "poly", 2, 99,
             "Savitzky-Golay 多项式阶数（仅 savgol 用）",
         )
         self.FilterConfidence = spin(
-            QDoubleSpinBox(self.BaseToolsGroup), "FilterConfidence", "conf", 0.25, 1.0,
+            QDoubleSpinBox(self.ShowToolsGroup), "FilterConfidence", "conf", 0.25, 1.0,
             "低于此分数的关键点不参与平滑",
         )
         self.FilterConfidence.setSingleStep(0.05)
         self.FilterConfidence.setDecimals(2)
         self.FilterMaxGap = spin(
-            QSpinBox(self.BaseToolsGroup), "FilterMaxGap", "gap", 0, 999,
+            QSpinBox(self.ShowToolsGroup), "FilterMaxGap", "gap", 0, 999,
             "允许插值的最大缺失帧数（0 = 不插）",
         )
 
-        self.EngineDeviceLayout.addLayout(self.FilterLayout)
+        # Above the tracker's row, and at the top of the group: the switch that turns the filter
+        # on, then its values, then what the filter needs (tracking).
+        self.ShowToolsGroupVLayout.insertLayout(0, self.FilterSwitchLayout)
+        self.ShowToolsGroupVLayout.insertLayout(1, self.FilterValuesLayout)
         for widget in self._filter_controls():
             widget.setEnabled(False)
 
     def _filter_controls(self):
         return (
+            self.EnableFilter,
             self.FilterMethod,
             self.FilterWindow,
             self.FilterPolyorder,
@@ -299,16 +334,18 @@ class InferencerPage(QWidget, Ui_Inferencer):
         )
 
     def _filter_is_on(self):
-        """Whether the filter should run: a method chosen, and tracking on to give it track ids.
+        """Whether the filter should run: switched on, and given track ids to work on.
 
         The workflow refuses records without track ids outright, which is the same rule the
         command line enforces by requiring `--tracker` alongside `--pose-filter`.
         """
-        return self.FilterMethod.currentText() != "none" and self.EnableTracking.isChecked()
+        return self.EnableFilter.isChecked() and self.EnableTracking.isChecked()
 
     def _refresh_filter_controls(self):
-        """Follow tracking, and let the polynomial order follow the method."""
-        active = self.EnableTracking.isChecked() and self.EnableTracking.isEnabled()
+        """Follow tracking, follow the filter's own switch, and let the order follow the method."""
+        tracking = self.EnableTracking.isChecked() and self.EnableTracking.isEnabled()
+        self.EnableFilter.setEnabled(tracking)
+        active = tracking and self.EnableFilter.isChecked()
         method = self.FilterMethod.currentText()
         self.FilterMethod.setEnabled(active)
         self.FilterWindow.setEnabled(active)
@@ -352,6 +389,10 @@ class InferencerPage(QWidget, Ui_Inferencer):
 
     def onFilterMethodChanged(self, method):
         """The polynomial order is a Savitzky-Golay setting."""
+        self._refresh_filter_controls()
+
+    def onEnableFilterStateChanged(self, state):
+        """The filter's own switch decides whether its values matter."""
         self._refresh_filter_controls()
 
     def _write_records(self):

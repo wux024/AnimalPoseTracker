@@ -682,34 +682,40 @@ class InferencerDecodeTests(unittest.TestCase):
     def test_the_filter_controls_match_the_command_line_defaults(self):
         page = self._page()
 
+        # The switch is the on/off, so the method list has no `none` of its own.
+        self.assertFalse(page.EnableFilter.isChecked())
         self.assertEqual(
             [page.FilterMethod.itemText(index) for index in range(page.FilterMethod.count())],
-            ["none", "median", "savgol"],
+            ["median", "savgol"],
         )
         self.assertEqual(page.FilterWindow.value(), 5)
         self.assertEqual(page.FilterPolyorder.value(), 2)
         self.assertEqual(page.FilterConfidence.value(), 0.25)
         self.assertEqual(page.FilterMaxGap.value(), 0)
 
-    def test_the_filter_controls_follow_tracking_and_the_method(self):
+    def test_the_filter_controls_follow_tracking_and_their_own_switch(self):
         page = self._page()
         page.tools_disabled()
-        self.assertFalse(page.FilterMethod.isEnabled())
+        self.assertFalse(page.EnableFilter.isEnabled())
 
         page.tools_enabled()
         # Filtering needs track ids, which only exist while tracking is on.
-        self.assertFalse(page.FilterMethod.isEnabled())
+        self.assertFalse(page.EnableFilter.isEnabled())
         page.EnableTracking.setChecked(True)
+        self.assertTrue(page.EnableFilter.isEnabled())
+        # Its own switch decides whether its values matter.
+        self.assertFalse(page.FilterMethod.isEnabled())
+        page.EnableFilter.setChecked(True)
         self.assertTrue(page.FilterMethod.isEnabled())
+        self.assertTrue(page.FilterWindow.isEnabled())
         # The polynomial order belongs to Savitzky-Golay.
-        self.assertFalse(page.FilterPolyorder.isEnabled())
-        page.FilterMethod.setCurrentText("median")
         self.assertFalse(page.FilterPolyorder.isEnabled())
         page.FilterMethod.setCurrentText("savgol")
         self.assertTrue(page.FilterPolyorder.isEnabled())
 
     def test_the_filter_produces_what_the_workflow_produces(self):
         page = self._tracked_page()
+        page.EnableFilter.setChecked(True)
         page.FilterMethod.setCurrentText("savgol")
         page.FilterWindow.setValue(3)
         page.FilterConfidence.setValue(0.5)
@@ -725,7 +731,7 @@ class InferencerDecodeTests(unittest.TestCase):
         )
         self.assertEqual(page._final_records(), expected)
 
-    def test_with_no_method_the_records_are_written_untouched(self):
+    def test_without_the_switch_the_records_are_written_untouched(self):
         page = self._tracked_page()
         self._feed(page)
 
@@ -738,8 +744,31 @@ class InferencerDecodeTests(unittest.TestCase):
         page.FilterMethod.setCurrentText("median")
         self._feed(page)
 
+        # The switch is checked, but there are no track ids for the filter to work on.
         self.assertFalse(page._filter_is_on())
         self.assertIs(page._final_records(), page.records)
+
+    def test_the_tracking_block_sits_at_the_top_of_the_display_group(self):
+        # Filter switch, filter values, then tracking: the group's own switches start below.
+        page = self._page()
+        layout = page.ShowToolsGroupVLayout
+
+        self.assertIs(layout.itemAt(0).layout(), page.FilterSwitchLayout)
+        self.assertIs(layout.itemAt(1).layout(), page.FilterValuesLayout)
+        self.assertIs(layout.itemAt(2).layout(), page.TrackerLayout)
+        self.assertIs(layout.itemAt(0).layout().itemAt(0).widget(), page.EnableFilter)
+        self.assertIs(layout.itemAt(2).layout().itemAt(0).widget(), page.EnableTracking)
+        # The Designer file's empty placeholder is gone from the left group's block.
+        self.assertEqual(page.EngineDeviceLayout.count(), 3)
+
+    def test_the_two_save_switches_say_what_they_save(self):
+        # "Save" next to "Save Records" left the reader guessing which saved what.
+        page = self._page()
+
+        self.assertEqual(page.Save.text(), "Save Video")
+        self.assertIn("output.avi", page.Save.toolTip())
+        self.assertEqual(page.SaveRecords.text(), "Save Records")
+        self.assertIn("records.json", page.SaveRecords.toolTip())
 
 
 class _FakeCapture:
