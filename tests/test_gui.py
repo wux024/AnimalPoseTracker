@@ -142,6 +142,11 @@ class ConfigureTreeTests(unittest.TestCase):
             "source", "prediction_confidence", "prediction_iou", "imgsz", "half", "device",
             "batch", "max_det", "agnostic_nms", "classes", "project", "name", "verbose",
             "save", "show_conf", "show_boxes", "line_width", "kpt_radius", "kpt_line",
+            # Added by mainpage: the prediction pipeline reads these, the Designer file has no
+            # row for them, and the dotted names address the nested mappings in other.yaml.
+            "tracking.enabled", "tracking.algorithm",
+            "pose_filter.method", "pose_filter.window_length", "pose_filter.polyorder",
+            "pose_filter.max_gap",
         },
         # Untouched: every export option is read by the export pipeline.
         "ExportConfigure": {
@@ -179,6 +184,42 @@ class ConfigureTreeTests(unittest.TestCase):
                 item = tree.topLevelItem(index)
                 with self.subTest(tree=tree_name, key=item.text(0)):
                     item.setText(1, "1")
+
+    @staticmethod
+    def _row(tree, key):
+        for index in range(tree.topLevelItemCount()):
+            item = tree.topLevelItem(index)
+            if item.text(0) == key:
+                return item
+        raise AssertionError(f"{key} is not in the tree")
+
+    def test_editing_a_nested_row_updates_the_nested_mapping(self):
+        # `other.yaml` holds tracking and pose_filter as mappings, so the rows address one field
+        # of each; writing the row has to land inside the mapping the pipeline reads.
+        page = AnimalPoseTrackerPage()
+        page.project.other_config["tracking"] = {"enabled": False, "algorithm": "bytetrack"}
+        page.project.other_config["pose_filter"] = {"method": "none", "window_length": 5}
+        page.initialize_other_config()
+
+        tree = page.InferenceConfigure
+        self.assertEqual(self._row(tree, "tracking.enabled").text(1), "False")
+        self._row(tree, "tracking.enabled").setText(1, "True")
+        self._row(tree, "pose_filter.window_length").setText(1, "9")
+
+        self.assertIs(page.project.other_config["tracking"]["enabled"], True)
+        self.assertEqual(page.project.other_config["pose_filter"]["window_length"], 9)
+
+    def test_a_project_predating_the_nested_keys_gets_editable_rows(self):
+        # Projects saved before these keys existed must still be able to turn tracking on.
+        page = AnimalPoseTrackerPage()
+        page.project.other_config.clear()
+        page.initialize_other_config()
+
+        self.assertEqual(page.project.other_config["tracking"]["enabled"], False)
+        self.assertEqual(page.project.other_config["pose_filter"]["method"], "none")
+
+        self._row(page.InferenceConfigure, "tracking.enabled").setText(1, "True")
+        self.assertIs(page.project.other_config["tracking"]["enabled"], True)
 
 
 @unittest.skipUnless(QApplication is not None, "PySide6 (the gui extra) is not installed")

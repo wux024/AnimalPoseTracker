@@ -42,6 +42,20 @@ _DROPPED_CONFIGURE_KEYS = {
     }),
 }
 
+# Rows the backend reads that the Designer file has no entry for, as ``(key, default)``. A dotted
+# key addresses one field of a nested mapping in other.yaml (``tracking: {enabled: ...}``), which
+# is the shape the prediction pipeline reads; the default seeds a project that predates the key.
+_ADDED_CONFIGURE_KEYS = {
+    "InferenceConfigure": (
+        ("tracking.enabled", False),
+        ("tracking.algorithm", "bytetrack"),
+        ("pose_filter.method", "none"),
+        ("pose_filter.window_length", 5),
+        ("pose_filter.polyorder", 2),
+        ("pose_filter.max_gap", 0),
+    ),
+}
+
 # Rows the backend does read, but under a different key than the Designer file uses.
 _RENAMED_CONFIGURE_KEYS = {
     "InferenceConfigure": {"conf": "prediction_confidence", "iou": "prediction_iou"},
@@ -85,7 +99,7 @@ class AnimalPoseTrackerPage(QMainWindow, Ui_AnimalPoseTracker):
 
         self.ConfigureFile.setEditTriggers(QTreeWidget.DoubleClicked | QTreeWidget.EditKeyPressed)
         self.TrainingConfigureEdit.setEditTriggers(QTreeWidget.DoubleClicked | QTreeWidget.EditKeyPressed)
-        self._prune_configure_trees()
+        self._shape_configure_trees()
 
         self.onChangeTheme("light")
         self.SelectionVideosImagesLabel.setText("0 video or image selected")
@@ -222,11 +236,43 @@ class AnimalPoseTrackerPage(QMainWindow, Ui_AnimalPoseTracker):
             # set work directory
             os.chdir(self.project.project_path)
 
-    def _prune_configure_trees(self):
-        """Drop the parameter rows this backend never reads, and rename the mislabelled ones.
+    @staticmethod
+    def _resolve_other_key(config, key):
+        """Find where a tree key lives in the other config, following dots into nested mappings.
+
+        Returns ``(container, leaf)``, or ``(None, None)`` when the config does not carry the key.
+        The tree edits one scalar per row, so a dotted row addresses a single field of a nested
+        mapping (``tracking.enabled``) rather than the mapping as a whole.
+        """
+        parts = key.split(".")
+        container = config
+        for part in parts[:-1]:
+            if not isinstance(container, dict):
+                return None, None
+            container = container.get(part)
+        if not isinstance(container, dict) or parts[-1] not in container:
+            return None, None
+        return container, parts[-1]
+
+    @staticmethod
+    def _ensure_other_key(config, key, default):
+        """Make sure a tree key exists in the config so its row stays editable."""
+        parts = key.split(".")
+        container = config
+        for part in parts[:-1]:
+            nested = container.get(part)
+            if not isinstance(nested, dict):
+                nested = {}
+                container[part] = nested
+            container = nested
+        container.setdefault(parts[-1], default)
+
+    def _shape_configure_trees(self):
+        """Make each parameter tree match what this backend reads: drop, rename and add rows.
 
         Runs at startup rather than being baked into the generated ``ui_*.py``: those files are
-        rebuilt from the Designer sources, which would bring every dropped row straight back.
+        rebuilt from the Designer sources, which would bring every dropped row straight back and
+        lose every added one.
         """
         for tree_name, dropped in _DROPPED_CONFIGURE_KEYS.items():
             tree = getattr(self, tree_name)
@@ -239,8 +285,20 @@ class AnimalPoseTrackerPage(QMainWindow, Ui_AnimalPoseTracker):
                 elif key in renamed:
                     item.setText(0, renamed[key])
 
+        for tree_name, added in _ADDED_CONFIGURE_KEYS.items():
+            tree = getattr(self, tree_name)
+            for key, _default in added:
+                item = QTreeWidgetItem()
+                item.setText(0, key)
+                tree.addTopLevelItem(item)
+
     def initialize_other_config(self):
         """Initialize the other config"""
+        for _tree_name, added in _ADDED_CONFIGURE_KEYS.items():
+            for key, default in added:
+                # A project saved before the key existed still has to be editable, and an edit to
+                # a key the config does not carry is discarded.
+                self._ensure_other_key(self.project.other_config, key, default)
         self.TrainingConfigureEdit.blockSignals(True)
         self.EvaluateConfigure.blockSignals(True)
         self.InferenceConfigure.blockSignals(True)
@@ -253,11 +311,11 @@ class AnimalPoseTrackerPage(QMainWindow, Ui_AnimalPoseTracker):
         for iterator in iterators:
             while iterator.value():
                     item = iterator.value()
-                    key = item.text(0)  # First column contains parameter names
+                    key = item.text(0)  # First column contains parameter names, dotted if nested
                     # Only update if the key exists in project config
-                    if key in self.project.other_config:
-                        current_value = self.project.other_config[key]
-                        item.setText(1, str(current_value))
+                    container, leaf = self._resolve_other_key(self.project.other_config, key)
+                    if container is not None:
+                        item.setText(1, str(container[leaf]))
                     iterator += 1 
         self.TrainingConfigureEdit.blockSignals(False)
         self.EvaluateConfigure.blockSignals(False)
@@ -843,9 +901,9 @@ class AnimalPoseTrackerPage(QMainWindow, Ui_AnimalPoseTracker):
         if column == 1:
             new_value = item.text(1)
             key = item.text(0)
-            if key in self.project.other_config:
-                new_value = self.convert_value(new_value)
-                self.project.other_config[key] = new_value
+            container, leaf = self._resolve_other_key(self.project.other_config, key)
+            if container is not None:
+                container[leaf] = self.convert_value(new_value)
             else:
                 # A key the config does not carry would be dropped on save; say so instead of
                 # raising, because the value the user just typed is still on screen.

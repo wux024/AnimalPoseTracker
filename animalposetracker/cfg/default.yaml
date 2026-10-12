@@ -53,6 +53,16 @@ source: # (str, optional) source directory for images or videos
 prediction_confidence: 0.25 # (float) confidence threshold for dataset/video prediction
 prediction_iou: 0.7 # (float) NMS IoU threshold for dataset/video prediction
 vid_stride: 1 # (int) video frame-rate stride
+
+# Video tracking and temporal smoothing (both need video sources) -------------------------------------------------------
+tracking: # (mapping) track detections across frames before writing them
+  enabled: False # (bool) turn tracking on
+  algorithm: bytetrack # (str) tracker algorithm, see animalposetracker.tracking.config.ALGORITHMS
+pose_filter: # (mapping) smooth tracked keypoints over time after prediction
+  method: none # (str) smoothing method: none, median or savgol
+  window_length: 5 # (int) frames per smoothing window
+  polyorder: 2 # (int) Savitzky-Golay polynomial order
+  max_gap: 0 # (int) missing frames to interpolate; 0 leaves gaps as they are
 stream_buffer: False # (bool) buffer all streaming frames (True) or return the most recent frame (False)
 visualize: False # (bool) visualize model features
 augment: False # (bool) apply image augmentation to prediction sources
