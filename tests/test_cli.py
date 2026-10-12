@@ -280,13 +280,30 @@ class PrettyTrainingRendererTests(unittest.TestCase):
         # The one column is the per-image average, not the batch sum.
         self.assertRegex(body, r"1/2\s+0G\s+1\.562\s+8\s+256")
 
+    def test_simcc_epoch_summary_reads_the_per_image_loss(self):
+        stream = io.StringIO()
+        renderer = PrettyTrainingRenderer(stream=stream, columns=SIMCC_COLUMNS)
+        renderer.emit(TrainingEvent(
+            event="epoch_end", epoch=1, epochs=2,
+            metrics={
+                # The loop reports both: the KL batch sum, and the same figure per image.
+                "train_loss": 12.5,
+                "train_loss_simcc_per_sample": 1.5625,
+            },
+        ))
+        output = stream.getvalue()
+        # The progress row and the summary line have to read the same criterion field, or
+        # one run reports two different scales a line apart (here: a factor of batch_size).
+        self.assertIn("[epoch 1/2] train_loss=1.562", output)
+        self.assertNotIn("12.5", output)
+
     def test_simcc_layout_has_no_validation_loss_column(self):
         stream = io.StringIO()
         renderer = PrettyTrainingRenderer(stream=stream, columns=SIMCC_COLUMNS)
         renderer.emit(TrainingEvent(
             event="epoch_end", epoch=1, epochs=2,
             metrics={
-                "train_loss": 1.5625,
+                "train_loss_simcc_per_sample": 1.5625,
                 "val_images": 20, "val_instances": 31,
                 "val_coco/AP": 0.71, "val_PCK": 0.62,
             },

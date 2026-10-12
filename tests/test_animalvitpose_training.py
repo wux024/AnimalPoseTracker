@@ -17,7 +17,8 @@ from animalposetracker.nn.spec import parse as parse_model_spec
 from animalposetracker.training.checkpoint import load_model_weights
 from animalposetracker.training.cli import _resolve_project_pretrained_path
 from animalposetracker.training.config import TrainingConfig
-from animalposetracker.training.engine import build_optimizer
+from animalposetracker.training.engine import Trainer, build_optimizer
+from animalposetracker.training.events import EventEmitter
 from animalposetracker.evaluation.metrics import (
     build_coco_ground_truth,
     evaluate_coco_keypoints,
@@ -216,6 +217,76 @@ class SimCCTrainingTests(unittest.TestCase):
         result["loss"].backward()
         self.assertTrue(torch.isfinite(pred_x.grad).all())
         self.assertTrue(torch.isfinite(pred_y.grad).all())
+
+    def test_simcc_loss_keys_reach_the_training_events(self):
+        """The console reads these keys by name, so the training loop has to emit them.
+
+        ``train_loss`` is the KL batch sum and scales with batch_size, which is why the
+        display reads the per-sample figure instead. Both keys have to survive the trip
+        from the criterion to the emitted events.
+        """
+        keypoints, width, batch = 2, 8, 2
+
+        class TinySimCC(torch.nn.Module):
+            def __init__(self):
+                super().__init__()
+                # The trainer reads the working dtype off the model's parameters.
+                self.anchor = torch.nn.Parameter(torch.zeros(1))
+                self.logits = torch.nn.Parameter(torch.zeros(1, keypoints, width))
+
+            def forward(self, images):
+                expanded = self.logits.expand(images.shape[0], -1, -1)
+                return expanded, expanded
+
+        def batch_sample():
+            target = torch.zeros(1, keypoints, width)
+            target[:, :, 3] = 1.0
+            return {
+                "images": torch.rand(batch, 3, 8, 8),
+                "targets": {
+                    "simcc_x": target.expand(batch, -1, -1).clone(),
+                    "simcc_y": target.expand(batch, -1, -1).clone(),
+                    "keypoint_weights": torch.ones(batch, keypoints),
+                },
+            }
+
+        captured = []
+        with tempfile.TemporaryDirectory() as temporary:
+            config = TrainingConfig.from_mapping({
+                "epochs": 1,
+                "batch": batch,
+                "nbs": batch,
+                "optimizer": "SGD",
+                "learning_rate": 0.1,
+                "warmup_epochs": 0.0,
+                "amp": False,
+                "ema": False,
+                "save": False,
+                "plots": False,
+                "device": "cpu",
+                "project": temporary,
+                "name": "simcc-events",
+            }, project_dir=temporary)
+            trainer = Trainer(
+                TinySimCC(), config, events=EventEmitter(callback=captured.append)
+            )
+            trainer.fit([batch_sample(), batch_sample()], SimCCKLLoss(keypoints))
+
+        batch_events = [event for event in captured if event.event == "batch"]
+        self.assertTrue(batch_events)
+        for key in ("loss", "loss_simcc_x", "loss_simcc_y", "loss_simcc_per_sample"):
+            self.assertIn(key, batch_events[0].metrics)
+
+        epoch_events = [event for event in captured if event.event == "epoch_end"]
+        self.assertEqual(len(epoch_events), 1)
+        epoch_metrics = epoch_events[0].metrics
+        self.assertIn("train_loss_simcc_per_sample", epoch_metrics)
+        # Same run, one line apart: the batch-sum figure is batch_size times larger.
+        self.assertAlmostEqual(
+            epoch_metrics["train_loss"],
+            epoch_metrics["train_loss_simcc_per_sample"] * batch,
+            places=5,
+        )
 
     def test_negative_vit_output_index_selects_last_layer(self):
         model = VisionTransformer(

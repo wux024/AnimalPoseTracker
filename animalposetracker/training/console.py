@@ -44,10 +44,16 @@ class LossColumns(NamedTuple):
     ``loss/box/pose/kobj/class/dfl``, ``SimCCHead`` reports ``loss`` plus the two
     SimCC axes), so a column that renders as ``-`` means the head structurally
     never reports that key -- the row would print an empty slot every single step.
+
+    ``epoch_loss`` names the criterion field the per-epoch summary line averages
+    (the engine stores it as ``train_<field>``). It has to follow the same rule as
+    the columns: whatever the progress row prints as "loss" is what the epoch line
+    must average, or the same run reports two different scales one line apart.
     """
 
     train: Tuple[Tuple[str, str], ...]
     validation: Tuple[Tuple[str, str], ...]
+    epoch_loss: str = "loss"
 
 
 YOLO_POSE_COLUMNS = LossColumns(
@@ -72,6 +78,7 @@ SIMCC_COLUMNS = LossColumns(
     # The SimCC validator scores AP/PCK/AUC/EPE but computes no validation loss, so
     # this table has no Loss column to leave empty.
     validation=_KEYPOINT_VALIDATION_COLUMNS,
+    epoch_loss="loss_simcc_per_sample",
 )
 
 
@@ -243,7 +250,7 @@ class PrettyTrainingRenderer:
             return
 
         if name == "epoch_end":
-            train_loss = metrics.get("train_loss")
+            train_loss = metrics.get(f"train_{self.columns.epoch_loss}")
             parts = [f"[epoch {event.epoch}/{event.epochs}]"]
             if train_loss is not None:
                 parts.append(f"train_loss={_fmt(float(train_loss))}")
