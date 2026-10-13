@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 
 ################################################################################
-## Form generated from reading UI file 'animalposetrackeroroliq.ui'
+## Form generated from reading UI file 'animalposetracker.ui'
 ##
 ## Created by: Qt User Interface Compiler version 6.8.2
 ##
@@ -23,8 +23,6 @@ from PySide6.QtWidgets import (QApplication, QCheckBox, QComboBox, QFrame,
     QSpinBox, QStackedWidget, QTabWidget, QToolBar,
     QTreeWidget, QTreeWidgetItem, QVBoxLayout, QWidget)
 
-from animalposetracker.gui import LOGO_PATH_TRANSPARENT, LOGO_SMALL_PATH
-
 class Ui_AnimalPoseTracker(object):
     def setupUi(self, AnimalPoseTracker):
         if not AnimalPoseTracker.objectName():
@@ -39,27 +37,24 @@ class Ui_AnimalPoseTracker(object):
         font = QFont()
         font.setFamilies([u"Times New Roman"])
         AnimalPoseTracker.setFont(font)
-        icon = QIcon()
-        icon.addFile(LOGO_SMALL_PATH, QSize(), QIcon.Mode.Normal, QIcon.State.Off)
-        AnimalPoseTracker.setWindowIcon(icon)
         AnimalPoseTracker.setLayoutDirection(Qt.LayoutDirection.LeftToRight)
         AnimalPoseTracker.setAutoFillBackground(False)
         self.actionLoadProject = QAction(AnimalPoseTracker)
         self.actionLoadProject.setObjectName(u"actionLoadProject")
-        icon1 = QIcon(QIcon.fromTheme(u"document-open"))
-        self.actionLoadProject.setIcon(icon1)
+        icon = QIcon(QIcon.fromTheme(u"document-open"))
+        self.actionLoadProject.setIcon(icon)
         self.actionOpenRecent = QAction(AnimalPoseTracker)
         self.actionOpenRecent.setObjectName(u"actionOpenRecent")
-        icon2 = QIcon(QIcon.fromTheme(u"document-open-recent"))
-        self.actionOpenRecent.setIcon(icon2)
+        icon1 = QIcon(QIcon.fromTheme(u"document-open-recent"))
+        self.actionOpenRecent.setIcon(icon1)
         self.actionSave = QAction(AnimalPoseTracker)
         self.actionSave.setObjectName(u"actionSave")
-        icon3 = QIcon(QIcon.fromTheme(u"document-save"))
-        self.actionSave.setIcon(icon3)
+        icon2 = QIcon(QIcon.fromTheme(u"document-save"))
+        self.actionSave.setIcon(icon2)
         self.actionExit = QAction(AnimalPoseTracker)
         self.actionExit.setObjectName(u"actionExit")
-        icon4 = QIcon(QIcon.fromTheme(u"application-exit"))
-        self.actionExit.setIcon(icon4)
+        icon3 = QIcon(QIcon.fromTheme(u"application-exit"))
+        self.actionExit.setIcon(icon3)
         self.actionAnnotator = QAction(AnimalPoseTracker)
         self.actionAnnotator.setObjectName(u"actionAnnotator")
         self.actionInferencer = QAction(AnimalPoseTracker)
@@ -68,24 +63,24 @@ class Ui_AnimalPoseTracker(object):
         self.actionDoc.setObjectName(u"actionDoc")
         self.actionCheckUpdated = QAction(AnimalPoseTracker)
         self.actionCheckUpdated.setObjectName(u"actionCheckUpdated")
-        icon5 = QIcon(QIcon.fromTheme(u"update"))
-        self.actionCheckUpdated.setIcon(icon5)
+        icon4 = QIcon(QIcon.fromTheme(u"update"))
+        self.actionCheckUpdated.setIcon(icon4)
         self.actionHelp = QAction(AnimalPoseTracker)
         self.actionHelp.setObjectName(u"actionHelp")
-        icon6 = QIcon(QIcon.fromTheme(u"help-browser"))
-        self.actionHelp.setIcon(icon6)
+        icon5 = QIcon(QIcon.fromTheme(u"help-browser"))
+        self.actionHelp.setIcon(icon5)
         self.actionPublicDatasetsProject = QAction(AnimalPoseTracker)
         self.actionPublicDatasetsProject.setObjectName(u"actionPublicDatasetsProject")
-        icon7 = QIcon(QIcon.fromTheme(u"edit-copy"))
-        self.actionPublicDatasetsProject.setIcon(icon7)
+        icon6 = QIcon(QIcon.fromTheme(u"edit-copy"))
+        self.actionPublicDatasetsProject.setIcon(icon6)
         self.actionDark = QAction(AnimalPoseTracker)
         self.actionDark.setObjectName(u"actionDark")
         self.actionLight = QAction(AnimalPoseTracker)
         self.actionLight.setObjectName(u"actionLight")
         self.actionCreateNewProject = QAction(AnimalPoseTracker)
         self.actionCreateNewProject.setObjectName(u"actionCreateNewProject")
-        icon8 = QIcon(QIcon.fromTheme(u"document-new"))
-        self.actionCreateNewProject.setIcon(icon8)
+        icon7 = QIcon(QIcon.fromTheme(u"document-new"))
+        self.actionCreateNewProject.setIcon(icon7)
         self.AnimalPoseTrackerLayout = QWidget(AnimalPoseTracker)
         self.AnimalPoseTrackerLayout.setObjectName(u"AnimalPoseTrackerLayout")
         sizePolicy1 = QSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
@@ -132,7 +127,6 @@ class Ui_AnimalPoseTracker(object):
         self.Logo.setSizePolicy(sizePolicy3)
         self.Logo.setMaximumSize(QSize(200, 200))
         self.Logo.setTextFormat(Qt.TextFormat.AutoText)
-        self.Logo.setPixmap(QPixmap(LOGO_PATH_TRANSPARENT))
         self.Logo.setScaledContents(True)
 
         self.LogoLayout.addWidget(self.Logo)
@@ -272,8 +266,8 @@ class Ui_AnimalPoseTracker(object):
         self.ConfigureFilePathBrowser.setObjectName(u"ConfigureFilePathBrowser")
         sizePolicy.setHeightForWidth(self.ConfigureFilePathBrowser.sizePolicy().hasHeightForWidth())
         self.ConfigureFilePathBrowser.setSizePolicy(sizePolicy)
-        icon9 = QIcon(QIcon.fromTheme(u"folder-open"))
-        self.ConfigureFilePathBrowser.setIcon(icon9)
+        icon8 = QIcon(QIcon.fromTheme(u"folder-open"))
+        self.ConfigureFilePathBrowser.setIcon(icon8)
 
         self.ConfigureFilePathLayout.addWidget(self.ConfigureFilePathBrowser)
 
@@ -281,7 +275,7 @@ class Ui_AnimalPoseTracker(object):
         self.ConfigureFileEdit.setObjectName(u"ConfigureFileEdit")
         sizePolicy.setHeightForWidth(self.ConfigureFileEdit.sizePolicy().hasHeightForWidth())
         self.ConfigureFileEdit.setSizePolicy(sizePolicy)
-        self.ConfigureFileEdit.setIcon(icon1)
+        self.ConfigureFileEdit.setIcon(icon)
 
         self.ConfigureFilePathLayout.addWidget(self.ConfigureFileEdit)
 

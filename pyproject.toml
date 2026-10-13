@@ -81,19 +81,15 @@ animalposetracker = [
     "cfg/*.yaml",
     "cfg/models/*.yaml",
     "cfg/datasets/*.yaml",
-    "assets/logo_transparent.png",
-    "assets/logo.png",
-    "assets/welcome.png",
-    "assets/icons/help.png",
-    "assets/icons/help2.png",
-    "assets/icons/new_project.png",
-    "assets/icons/new_project2.png",
-    "assets/icons/open.png",
-    "assets/icons/save.png",
-    "media/dlc_1-01.png",
-    "media/logo.png",
-    "style/dark.qss",
-    "style/light.qss"  
+]
+# The GUI's images and stylesheets live under `animalposetracker/gui/`, so they need their own
+# key. The paths here used to point at `animalposetracker/assets` and `animalposetracker/style`,
+# which do not exist -- the built wheel carried no `.png` and no `.qss`, so an installed GUI had
+# a blank splash screen, no icons and no theme.
+"animalposetracker.gui" = [
+    "assets/*.png",
+    "media/*.png",
+    "style/*.qss",
 ]
 
 [tool.setuptools.dynamic]

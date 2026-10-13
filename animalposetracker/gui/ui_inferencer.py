@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 
 ################################################################################
-## Form generated from reading UI file 'inferencersrYFOJ.ui'
+## Form generated from reading UI file 'inferencer.ui'
 ##
 ## Created by: Qt User Interface Compiler version 6.8.2
 ##
@@ -20,8 +20,6 @@ from PySide6.QtWidgets import (QApplication, QCheckBox, QComboBox, QDoubleSpinBo
     QRadioButton, QSizePolicy, QSlider, QSpinBox,
     QVBoxLayout, QWidget)
 
-from animalposetracker.gui import LOGO_SMALL_PATH
-
 class Ui_Inferencer(object):
     def setupUi(self, Inferencer):
         if not Inferencer.objectName():
@@ -33,9 +31,6 @@ class Ui_Inferencer(object):
         sizePolicy.setHeightForWidth(Inferencer.sizePolicy().hasHeightForWidth())
         Inferencer.setSizePolicy(sizePolicy)
         Inferencer.setAcceptDrops(False)
-        icon = QIcon()
-        icon.addFile(LOGO_SMALL_PATH, QSize(), QIcon.Mode.Normal, QIcon.State.Off)
-        Inferencer.setWindowIcon(icon)
         self.InferencerLayout = QVBoxLayout(Inferencer)
         self.InferencerLayout.setObjectName(u"InferencerLayout")
         self.ConfigureLayout = QHBoxLayout()

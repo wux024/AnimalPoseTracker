@@ -1,31 +1,31 @@
 # -*- coding: utf-8 -*-
 
 ################################################################################
-## Form generated from reading UI file 'createnewprojectdRPRkw.ui'
+## Form generated from reading UI file 'createnewproject.ui'
 ##
 ## Created by: Qt User Interface Compiler version 6.8.2
 ##
 ## WARNING! All changes made in this file will be lost when recompiling UI file!
 ################################################################################
 
-from PySide6.QtCore import QCoreApplication, QMetaObject, QRect, QSize, Qt
-from PySide6.QtGui import QIcon
-from PySide6.QtWidgets import (QCheckBox, QComboBox, QGridLayout,
+from PySide6.QtCore import (QCoreApplication, QDate, QDateTime, QLocale,
+    QMetaObject, QObject, QPoint, QRect,
+    QSize, QTime, QUrl, Qt)
+from PySide6.QtGui import (QBrush, QColor, QConicalGradient, QCursor,
+    QFont, QFontDatabase, QGradient, QIcon,
+    QImage, QKeySequence, QLinearGradient, QPainter,
+    QPalette, QPixmap, QRadialGradient, QTransform)
+from PySide6.QtWidgets import (QApplication, QCheckBox, QComboBox, QGridLayout,
     QGroupBox, QHBoxLayout, QLabel, QLayout,
-    QLineEdit, QListWidget, QPushButton,
+    QLineEdit, QListWidget, QListWidgetItem, QPushButton,
     QScrollArea, QSizePolicy, QSpinBox, QToolButton,
     QVBoxLayout, QWidget)
-
-from animalposetracker.gui import LOGO_SMALL_PATH
 
 class Ui_CreateNewProject(object):
     def setupUi(self, CreateNewProject):
         if not CreateNewProject.objectName():
             CreateNewProject.setObjectName(u"CreateNewProject")
         CreateNewProject.resize(968, 575)
-        icon = QIcon()
-        icon.addFile(LOGO_SMALL_PATH, QSize(), QIcon.Mode.Normal, QIcon.State.Off)
-        CreateNewProject.setWindowIcon(icon)
         self.CreateNewProjectLayout = QVBoxLayout(CreateNewProject)
         self.CreateNewProjectLayout.setObjectName(u"CreateNewProjectLayout")
         self.BaseConfigGroup = QGroupBox(CreateNewProject)
@@ -148,8 +148,8 @@ class Ui_CreateNewProject(object):
         self.LocationPathSelection.setSizePolicy(sizePolicy3)
         self.LocationPathSelection.setMinimumSize(QSize(25, 25))
         self.LocationPathSelection.setMaximumSize(QSize(25, 25))
-        icon1 = QIcon(QIcon.fromTheme(u"folder-open"))
-        self.LocationPathSelection.setIcon(icon1)
+        icon = QIcon(QIcon.fromTheme(u"folder-open"))
+        self.LocationPathSelection.setIcon(icon)
 
         self.LocationPathLayout.addWidget(self.LocationPathSelection)
 

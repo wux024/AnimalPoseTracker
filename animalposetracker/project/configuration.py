@@ -252,6 +252,15 @@ class ProjectConfigurationMixin:
         config = getattr(self, f"{config_type}_config")
         config.update({k: v for k, v in params.items() if k in config})
 
+        if config_type == "project" and any(
+            key in params for key in ("project_name", "worker", "model_type", "model_scale", "date")
+        ):
+            # Those five components build the directory name, so the recorded path has to be
+            # recomputed here. It used to keep whatever it was at construction time, and
+            # `project.yaml` then pointed at a directory that never existed.
+            self._project_path = self._generate_project_path()
+            config["project_path"] = str(self._project_path)
+
     def create_other_config(self) -> None:
         """Create any other missing configurations."""
         self._load_config_from_file("other", DEFAULT_CFG_PATH)

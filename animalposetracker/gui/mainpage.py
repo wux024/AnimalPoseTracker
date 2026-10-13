@@ -1,9 +1,9 @@
-from PySide6.QtCore import  Qt, QSettings, QFile, QTextStream, QTimer
+from PySide6.QtCore import  Qt, QSettings, QFile, QTextStream, QTimer, QThread, Signal
 from PySide6.QtWidgets import  (QMenu, QApplication, QFileDialog, QMainWindow,
                                  QMessageBox, QTreeWidget, QTreeWidgetItem, QLabel, 
                                  QTreeWidgetItemIterator, QSplashScreen, QProgressBar,
                                  QDialog)
-from PySide6.QtGui import QCursor, QPixmap
+from PySide6.QtGui import QCursor, QPixmap, QIcon, QColor
 import os
 import sys
 from pathlib import Path
@@ -23,7 +23,8 @@ from animalposetracker.utils import (convert_labels_to_coco,
                                      convert_labels_to_yolo,
                                      KeyframeExtractor)
 from animalposetracker.gui import (DARK_THEME_PATH, LIGHT_THEME_PATH, 
-                                   LOGO_PATH_TRANSPARENT, LOGO_PATH, WELCOME_PATH)
+                                   LOGO_PATH_TRANSPARENT, LOGO_PATH, LOGO_SMALL_PATH,
+                                   WELCOME_PATH)
 
 # The parameter trees come from the Designer files, which mirror every knob the reference
 # toolkits expose under those names. Only the ones this backend reads belong on screen: a row
@@ -75,6 +76,61 @@ _RENAMED_CONFIGURE_KEYS = {
 }
 
 
+class _FrameExtractionThread(QThread):
+    """Run the keyframe extractor off the GUI thread.
+
+    Run inline, a longer extraction froze the whole window for its whole duration. The extractor
+    has no stop hook, so this worker is only ever waited for briefly (see `closeEvent`).
+    """
+
+    failed = Signal(str)
+
+    def __init__(self, extractor, video_paths, image_paths, mode, algorithm, n_clusters, interval,
+                 parent=None):
+        super().__init__(parent)
+        self.extractor = extractor
+        self.video_paths = list(video_paths)
+        self.image_paths = list(image_paths)
+        self.mode = mode
+        self.algorithm = algorithm
+        self.n_clusters = n_clusters
+        self.interval = interval
+
+    def run(self):
+        try:
+            if self.video_paths:
+                self.extractor.extract_keyframes_from_videos(
+                    video_paths=self.video_paths,
+                    mode=self.mode,
+                    algorithm=self.algorithm,
+                    n_clusters=self.n_clusters,
+                    interval=self.interval,
+                )
+            for image_path in self.image_paths:
+                self.extractor.extract_keyframes_from_images(
+                    image_path=image_path,
+                    mode=self.mode,
+                    algorithm=self.algorithm,
+                    n_clusters=self.n_clusters,
+                    interval=self.interval,
+                )
+        except Exception as exc:  # the report goes to a dialog on the GUI thread via `failed`
+            self.failed.emit(str(exc))
+
+
+# Closing the window does not wait for a running extraction to finish (the extractor has no stop
+# hook). Detached workers are kept here so the garbage collector does not destroy one mid-run.
+_DETACHED_THREADS = []
+
+
+def _detach_running_thread(thread):
+    thread.setParent(None)
+    _DETACHED_THREADS.append(thread)
+    thread.finished.connect(
+        lambda t=thread: _DETACHED_THREADS.remove(t) if t in _DETACHED_THREADS else None
+    )
+
+
 class AnimalPoseTrackerPage(QMainWindow, Ui_AnimalPoseTracker):
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -86,14 +142,24 @@ class AnimalPoseTrackerPage(QMainWindow, Ui_AnimalPoseTracker):
         """Initialize the controls of the main page"""
 
         self.sub_page = None
+        # Set here rather than in the Designer file: the icon and the logo are files on disk, and a
+        # path baked into `ui_*.py` breaks the moment the sources are regenerated.
+        self.setWindowIcon(QIcon(LOGO_SMALL_PATH))
+        self.Logo.setPixmap(QPixmap(LOGO_PATH_TRANSPARENT))
+        # Declared here, not only in _start_check_thread: End Evaluate/Inference read it, and on a
+        # cold start neither had ever run, so the click raised AttributeError.
+        self.check_thread = None
+        # Which worker is running, or None. The buttons follow this rather than `Start.text()`.
+        self.current_mode = None
         # set work directory
         os.chdir(Path.cwd())
         self.source_type = 'image' 
         self.project = AnimalPoseTrackerProject()
         self.extractor = KeyframeExtractor(Path.home())
+        # The worker for one frame-extraction run; non-None only while it is running.
+        self._extract_thread = None
         self.config_data = {}
         self.config_type = "project"
-        self.current_mode = None
         self.inference_source = None
 
         # set recent projects
@@ -114,7 +180,9 @@ class AnimalPoseTrackerPage(QMainWindow, Ui_AnimalPoseTracker):
         self.TrainingConfigureEdit.setEditTriggers(QTreeWidget.DoubleClicked | QTreeWidget.EditKeyPressed)
         self._shape_configure_trees()
 
-        self.onChangeTheme("light")
+        # Restore the theme the user last chose instead of always starting light.
+        saved_theme = QSettings("Northeast Normal University", "AnimalPoseTracker").value("theme")
+        self.onChangeTheme(saved_theme if saved_theme in ("dark", "light") else "light")
         self.SelectionVideosImagesLabel.setText("0 video or image selected")
 
         self.setupConnections()
@@ -202,7 +270,9 @@ class AnimalPoseTrackerPage(QMainWindow, Ui_AnimalPoseTracker):
         if self.sub_page is not None:
             self.sub_page.close()
             self.sub_page.deleteLater()
-        self.sub_page = WindowFactory.run(page_class)
+        # The tool window is top-level, so it does not inherit this window's stylesheet; it is
+        # handed the current theme instead of coming up in the default look.
+        self.sub_page = WindowFactory.run(page_class, stylesheet=self.styleSheet())
         return self.sub_page
 
     def onCreateNewProject(self):
@@ -362,6 +432,17 @@ class AnimalPoseTrackerPage(QMainWindow, Ui_AnimalPoseTracker):
                     container, leaf = self._resolve_other_key(self.project.other_config, key)
                     if container is not None:
                         item.setText(1, str(container[leaf]))
+                        item.setFlags(item.flags() | Qt.ItemIsEditable)
+                        item.setData(1, Qt.ForegroundRole, None)
+                        item.setToolTip(1, "")
+                    else:
+                        # A row this project does not carry must not keep the value of the
+                        # project opened before it: an edit to it would be silently discarded on
+                        # save, while the stale value looked editable. Show it as unavailable.
+                        item.setText(1, "")
+                        item.setFlags(item.flags() & ~Qt.ItemIsEditable)
+                        item.setData(1, Qt.ForegroundRole, QColor(150, 150, 150))
+                        item.setToolTip(1, f"'{key}' is not present in this project's configuration")
                     iterator += 1 
         self.TrainingConfigureEdit.blockSignals(False)
         self.EvaluateConfigure.blockSignals(False)
@@ -371,8 +452,16 @@ class AnimalPoseTrackerPage(QMainWindow, Ui_AnimalPoseTracker):
     def loadRecentProjects(self):
         """Load saved projects from QSettings"""
         settings = QSettings("Northeast Normal University", "AnimalPoseTracker")
-        projects = settings.value("recentProjects", [], type=list)
-        self.recent_projects.extend(p for p in projects if Path(p).exists())
+        try:
+            projects = settings.value("recentProjects", [], type=list) or []
+            # One damaged entry used to abort the whole constructor: `Path(None)` raises, and the
+            # main window then never appeared, with no way for the user to repair the setting.
+            self.recent_projects.extend(
+                path for path in projects
+                if isinstance(path, str) and Path(path).exists()
+            )
+        except (TypeError, ValueError):
+            self.recent_projects.clear()
 
     def updateRecentProjectsMenu(self):
         """Consolidated menu updater"""
@@ -425,6 +514,8 @@ class AnimalPoseTrackerPage(QMainWindow, Ui_AnimalPoseTracker):
     def saveRecentProjects(self):
         settings = QSettings("Northeast Normal University", "AnimalPoseTracker")
         settings.setValue("recentProjects", list(self.recent_projects))
+        # Flushed explicitly: a crash before the next event-loop turn otherwise lost the write.
+        settings.sync()
 
     def onSave(self):
         """Slot for saving the current project"""
@@ -437,6 +528,30 @@ class AnimalPoseTrackerPage(QMainWindow, Ui_AnimalPoseTracker):
         if self.project is not None:
             self.project.save_configs()
         self.close()
+
+    def closeEvent(self, event):
+        """Close the window the same way the Exit action does.
+
+        The title-bar X used to take the default handler, which left a running worker behind,
+        dropped unsaved config edits and never closed the tool window.
+        """
+        if self.project is not None:
+            self.project.save_configs()
+        if self.project is not None and self.project.process is not None:
+            # Orderly stop, the same contract the End button uses: the trainer writes its
+            # checkpoint and exits with 130. `project.stop()` would kill it outright.
+            self.project.request_training_stop()
+            self.project.stop()
+        self._stop_check_thread()
+        if self._extract_thread is not None and self._extract_thread.isRunning():
+            # The extractor has no stop hook: wait a moment only, then detach the worker, so
+            # closing neither blocks on a long run nor lets Qt destroy a running thread.
+            if not self._extract_thread.wait(3000):
+                _detach_running_thread(self._extract_thread)
+        if self.sub_page is not None:
+            self.sub_page.close()
+            self.sub_page = None
+        event.accept()
 
     def onOpenAnnotator(self):
         """Slot for opening the annotator tool"""
@@ -480,6 +595,12 @@ class AnimalPoseTrackerPage(QMainWindow, Ui_AnimalPoseTracker):
                 self.Logo.setPixmap(QPixmap(LOGO_PATH))
             elif theme == "light":
                 self.Logo.setPixmap(QPixmap(LOGO_PATH_TRANSPARENT))
+            # An open tool window is top-level and keeps its own stylesheet, so it has to be told
+            # about the change; otherwise the main window goes dark around a light tool window.
+            if self.sub_page is not None:
+                self.sub_page.setStyleSheet(self.styleSheet())
+            # Remembered so the choice survives a restart; it used to reset to light every launch.
+            QSettings("Northeast Normal University", "AnimalPoseTracker").setValue("theme", theme)
         except Exception as e:
             QMessageBox.warning(self, "Theme Error", str(e))
         
@@ -515,26 +636,36 @@ class AnimalPoseTrackerPage(QMainWindow, Ui_AnimalPoseTracker):
     def onEditConfigureFile(self):
         """Slot for file"""
         yaml_file = self.ConfigureFilePathDisplay.text()
-        self.config_type = Path(yaml_file).stem.lower()
-        if self.config_type not in self.project.CONFIG_TYPES:
+        config_type = Path(yaml_file).stem.lower()
+        if config_type not in self.project.CONFIG_TYPES:
+            # Returns rather than falling through: `config_data` used to stay at its previous
+            # value (or `{}`), the tree was filled from it anyway, and Save then asked for a
+            # `<type>_config` attribute that does not exist.
             QMessageBox.warning(
                 self, 
                 "Invalid Configuration Type", 
-                "Please select a valid configuration type (project, dataset, or model)"
+                "Please select a valid configuration type (project, dataset, model or other)"
             )
-        if self.config_type == "project":
-            self.config_data = self.project.project_config
-        elif self.config_type == "dataset":
-            self.config_data = self.project.dataset_config
-        elif self.config_type == "model":
-            self.config_data = self.project.model_config
-        elif self.config_type == "other":
-            self.config_data = self.project.other_config
+            return
+        self.config_type = config_type
+        self.config_data = getattr(self.project, f"{config_type}_config")
         self.DisplayConfigureFile()
 
     def DisplayConfigureFile(self):
+        """Show the config in the tree without writing it back.
+
+        Filling the tree sets each row's path through `setData`, and `setData` emits
+        `itemChanged` -- the same signal the editor is connected to. Displaying a project used to
+        run every value through `convert_value` as a side effect, so `'0012'` became `12`,
+        `'1.0'` became `1.0` and `''` became `None`; saving after a plain look then wrote those
+        types to disk and the project could not be loaded again.
+        """
         self.ConfigureFile.clear()
-        self.AddItemsToTree(self.config_data)
+        self.ConfigureFile.blockSignals(True)
+        try:
+            self.AddItemsToTree(self.config_data)
+        finally:
+            self.ConfigureFile.blockSignals(False)
     
     def AddItemsToTree(self, data, parent=None, path=None):
         if parent is None:
@@ -550,14 +681,9 @@ class AnimalPoseTrackerPage(QMainWindow, Ui_AnimalPoseTracker):
                 item.setFlags(item.flags() & ~Qt.ItemIsEditable)
                 self.AddItemsToTree(value, item, path + [("list", index)]) 
         else:
-            if parent.columnCount() < 2:
-                parent.setText(1, str(data))
-                parent.setFlags(parent.flags() | Qt.ItemIsEditable)
-                parent.setData(1, Qt.UserRole, path)
-            else:
-                parent.setText(1, str(data))
-                parent.setFlags(parent.flags() | Qt.ItemIsEditable)
-                parent.setData(1, Qt.UserRole, path)
+            parent.setText(1, str(data))
+            parent.setFlags(parent.flags() | Qt.ItemIsEditable)
+            parent.setData(1, Qt.UserRole, path)
     
     def OnConfigureFileEdited(self, item, column):
         if column == 1:
@@ -659,24 +785,39 @@ class AnimalPoseTrackerPage(QMainWindow, Ui_AnimalPoseTracker):
                 QMessageBox.warning(self, 
                                     "No Valid Images", 
                                     "No valid image files found in directory")
-            elif non_images:
-                QMessageBox.warning(self, 
-                                    "Non-Image Files", 
-                                    "Non-image files found in directory")
             else:
+                # A stray non-image file (a label, a `desktop.ini`) used to abort the whole
+                # selection; the images are still perfectly usable, so it is only reported.
                 self.project.add_source_to_project(dir_path)
+                if non_images:
+                    self.statusBar().showMessage(
+                        f"{len(images)} images selected; ignored {len(non_images)} non-image file(s)"
+                    )
                 self.SelectionVideosImagesLabel.setText(f"{len(images)} images selected")
         
     def onClearVideosImages(self):
         """Slot for clearing videos/images selection"""
         self.SelectionVideosImagesLabel.setText("0 video or image selected")
-        self.project.update_config("project", {"sources", []})
+        # A dict, not a set literal: `{"sources", []}` raised `TypeError: unhashable type:
+        # 'list'` before it could clear anything, on every click.
+        self.project.update_config("project", {"sources": []})
 
     def onExtractFrames(self):
         """Slot for extracting frames"""
-        self.statusBar().showMessage("Starting frame extraction...")
-        self.extractor.output_dir = self.project.project_path / "sources" / "extracted"
         extract_mode = self.ExtractionMethodSelection.currentText()
+        if extract_mode == "manual":
+            # That path builds its own `QApplication` (utils/extract_frame.py), which cannot exist
+            # beside the running one -- it raised RuntimeError inside the click. Labelling has its
+            # own page, so point the user there instead.
+            QMessageBox.information(
+                self, "手动抽帧",
+                "手动抽帧请在标注工具里进行：点击 “Start Label Frames”。"
+            )
+            return
+        if self._extract_thread is not None and self._extract_thread.isRunning():
+            QMessageBox.information(self, "Frame Extraction", "Frame extraction is already running.")
+            return
+        self.extractor.output_dir = self.project.project_path / "sources" / "extracted"
         extract_algorithm = self.ExtractionAlgorithmSelection.currentText()
         sources = self.project.project_config.get("sources", [])
         n_clusters = self.ClusterStepSetup.value()
@@ -684,28 +825,35 @@ class AnimalPoseTrackerPage(QMainWindow, Ui_AnimalPoseTracker):
         if not sources:
             QMessageBox.warning(self, "No Sources", "No sources found in project.yaml")
             return
-        self.source_type = "image" if Path(sources[0]).is_dir() else "video"
-        if self.source_type == "video":
-            self.extractor.extract_keyframes_from_videos(
-                video_paths=sources, 
-                mode=extract_mode,
-                algorithm=extract_algorithm,
-                n_clusters=n_clusters,
-                interval=interval 
-            )
-        elif self.source_type == "image":
-            self.extractor.extract_keyframes_from_images(
-                image_path=sources[0], 
-                mode=extract_mode,
-                algorithm=extract_algorithm,
-                n_clusters=n_clusters,
-                interval=interval 
-            )
+        # Decided per source, not from the first one: a mixed selection used to have its later
+        # entries read as whatever type the first entry happened to be.
+        video_paths = [s for s in sources if not Path(s).is_dir()]
+        image_paths = [s for s in sources if Path(s).is_dir()]
+        self.source_type = "image" if image_paths and not video_paths else "video"
+        # Off the GUI thread: run inline, a longer extraction froze the whole window with no way
+        # to tell that anything was happening until it finished.
+        self.statusBar().showMessage("Frame extraction running...")
+        self.ExtracFrames.setEnabled(False)
+        self._extract_thread = _FrameExtractionThread(
+            self.extractor, video_paths, image_paths, extract_mode, extract_algorithm,
+            n_clusters, interval, parent=self,
+        )
+        self._extract_thread.finished.connect(self._on_frame_extraction_finished)
+        self._extract_thread.failed.connect(self._on_frame_extraction_failed)
+        self._extract_thread.start()
+
+    def _on_frame_extraction_finished(self):
+        self.ExtracFrames.setEnabled(True)
         self.statusBar().showMessage("Frame extraction complete.")
+
+    def _on_frame_extraction_failed(self, message):
+        self.ExtracFrames.setEnabled(True)
+        self.statusBar().showMessage("Frame extraction failed.")
+        QMessageBox.warning(self, "Frame Extraction Failed", message)
 
     def onStartLabelFrames(self):
         """Slot for starting frame labeling"""
-        self._open_sub_page(AnnotatorPage)
+        self.onOpenAnnotator()
 
     def onCreateDatasets(self):
         """Slot for starting dataset creation"""
@@ -859,10 +1007,10 @@ class AnimalPoseTrackerPage(QMainWindow, Ui_AnimalPoseTracker):
             resume_path = file
         else:
             resume_path = str(self.project.project_path / "runs/train/weights/last.pt")
-        self.ResumeTrain.setEnabled(False)
-        self.StartTrain.setEnabled(False)
-        self.EndTrain.setEnabled(True)
-        self.project.resume(resume_path)
+        # Through the same guarded path as Start Train: resuming is the same worker, and this
+        # used to disable the buttons by hand and never start the poll timer, so nothing brought
+        # them back.
+        self._start_worker("train", lambda: self.project.resume(resume_path))
 
     def onEditOtherParameters(self):
         """Slot for editing other parameters"""
@@ -884,8 +1032,11 @@ class AnimalPoseTrackerPage(QMainWindow, Ui_AnimalPoseTracker):
         while iterator.value():
             item = iterator.value()
             if is_edit_mode:
-                # EDIT MODE: Enable editing and load current values
-                item.setFlags(item.flags() | Qt.ItemIsEditable)
+                # EDIT MODE: Enable editing unless this project does not carry the key -- that
+                # row stays locked, or an edit to it would be silently discarded on save.
+                container, _leaf = self._resolve_other_key(self.project.other_config, item.text(0))
+                if container is not None:
+                    item.setFlags(item.flags() | Qt.ItemIsEditable)
             else:
                 # SAVE MODE: Disable editing and save changes
                 item.setFlags(item.flags() & ~Qt.ItemIsEditable)
@@ -924,9 +1075,13 @@ class AnimalPoseTrackerPage(QMainWindow, Ui_AnimalPoseTracker):
             return value
             
         value = value.strip()  # Normalize input
-        
-        # Handle empty/None cases
-        if not value or value in ("None", "Null", "null", "none"):
+
+        # An empty cell is left as the empty string. Mapping it to None wrote `null` into the
+        # config for a field the user merely cleared, and `_generate_project_path` then failed
+        # joining a non-string component.
+        if not value:
+            return ""
+        if value in ("None", "Null", "null", "none"):
             return None
             
         # Handle booleans
@@ -957,21 +1112,21 @@ class AnimalPoseTrackerPage(QMainWindow, Ui_AnimalPoseTracker):
 
     def onStartTrain(self):
         """Slot for starting training"""
-        self.current_mode = "train"
-        self._toggle_buttons("train", start=False)
-        self.project.train()
-        self._start_check_thread()
+        self._start_worker("train", self.project.train)
 
     def _start_check_thread(self):
-        """Create a QTimer thread for checking training process"""
+        """Start the one-second poll timer that watches the running worker."""
+        if self.check_thread is not None:
+            self.check_thread.stop()
+            self.check_thread.deleteLater()
         self.check_thread = QTimer()
         self.check_thread.setInterval(1000)
         self.check_thread.timeout.connect(self._check_process)
         self.check_thread.start()
 
     def _stop_check_thread(self):
-        """Remove the QTimer thread for checking training process"""
-        if self.check_thread is not None:
+        """Stop the poll timer, if it was ever started."""
+        if getattr(self, "check_thread", None) is not None:
             self.check_thread.stop()
             self.check_thread.deleteLater()
             self.check_thread = None
@@ -983,15 +1138,45 @@ class AnimalPoseTrackerPage(QMainWindow, Ui_AnimalPoseTracker):
         """
         if self.current_mode in {"train", "evaluate"}:
             self._display_project_events()
-        if self.project.process.poll() is not None:
-            if self.current_mode == "train":
-                self._toggle_buttons("train", start=True)
-            elif self.current_mode == "evaluate":
-                self._toggle_buttons("evaluate", start=True)
-            elif self.current_mode == "inference":
-                self._toggle_buttons("inference", start=True)
-            self.project.stop()
+
+        process = self.project.process
+        if process is None:
+            # Nothing to watch. This used to raise on `None.poll()` *before* the timer was
+            # stopped, so the timer survived and threw once a second for the rest of the session
+            # while the Start button stayed greyed out.
             self._stop_check_thread()
+            return
+
+        if process.poll() is None:
+            return
+
+        returncode = process.returncode
+        if self.current_mode == "train":
+            self._toggle_buttons("train", start=True)
+        elif self.current_mode == "evaluate":
+            self._toggle_buttons("evaluate", start=True)
+        elif self.current_mode == "inference":
+            self._toggle_buttons("inference", start=True)
+        self.project.stop()
+        self._stop_check_thread()
+        self._report_worker_exit(returncode)
+        self.current_mode = None
+
+    def _report_worker_exit(self, returncode):
+        """Surface the training CLI's exit-code contract in the status bar.
+
+        The worker documents 0 for a normal finish (early stopping included), 130 for an external
+        stop request and 1 for an error, but nothing here read it -- a run that died before it
+        opened its event stream reported nothing at all.
+        """
+        if returncode in (0, None):
+            return
+        if returncode == 130:
+            self.statusBar().showMessage("训练已按请求停止，检查点已保存。")
+            return
+        self.statusBar().showMessage(
+            f"训练异常退出（退出码 {returncode}）。详见项目 runs 目录下的训练日志。"
+        )
 
     @staticmethod
     def _displayed_loss(metrics):
@@ -1059,35 +1244,65 @@ class AnimalPoseTrackerPage(QMainWindow, Ui_AnimalPoseTracker):
 
     def onEndTrain(self):
         """Request an orderly stop after the custom trainer saves its checkpoint."""
+        if self.project.process is None:
+            # Disabling the button first meant a stray click left it permanently dead, because
+            # nothing ever re-enabled it when no run was there to stop.
+            self.statusBar().showMessage("当前没有正在进行的训练。")
+            return
         self.EndTrain.setEnabled(False)
         self.project.request_training_stop()
         self.statusBar().showMessage("Stopping after the current training batch...")
 
+    def _start_worker(self, mode, launch):
+        """Run one worker, keeping the three tabs from starting over each other.
+
+        `project.process` holds a single process, so starting an evaluate or inference while
+        training was running replaced it: the trainer could no longer be stopped, its poll timer
+        was gone, and the Start button for it never came back.
+        """
+        if self.project.process is not None and self.project.process.poll() is None:
+            QMessageBox.warning(
+                self, "已有任务在运行",
+                f"当前正在运行「{self.current_mode or '未知'}」，请先结束它再开始新的任务。",
+            )
+            return
+        self.current_mode = mode
+        self._toggle_buttons(mode, start=False)
+        try:
+            launch()
+        except Exception as error:
+            # The backend raises for real reasons (a missing checkpoint, a bad config). Leaving
+            # the buttons flipped left the tab unusable until the application was restarted.
+            self._toggle_buttons(mode, start=True)
+            self.current_mode = None
+            QMessageBox.critical(self, "无法启动", f"任务启动失败：\n{error}")
+            return
+        self._start_check_thread()
+
     def onStartEvaluate(self):
         """Slot for starting evaluation"""
-        self.current_mode = "evaluate"
-        self._toggle_buttons("evaluate", start=False)
-        self.project.evaluate()
-        self._start_check_thread()
+        self._start_worker("evaluate", self.project.evaluate)
 
     def onEndEvaluate(self):
         """Slot for ending evaluation"""
         self._toggle_buttons("evaluate", start=True)
         self.project.stop()
         self._stop_check_thread()
+        self.current_mode = None
 
     def onStartInference(self):
         """Slot for starting inference"""
-        self.current_mode = "inference"
-        self._toggle_buttons("inference", start=False)
-        self.project.predict(inference_source=self.inference_source)
-        self._start_check_thread()
+        self._start_worker(
+            "inference",
+            lambda: self.project.predict(inference_source=self.inference_source),
+        )
 
     def onEndInference(self):
         """Slot for ending inference"""
         self._toggle_buttons("inference", start=True)
         self.project.stop()
         self._stop_check_thread()
+        self.current_mode = None
 
     def _toggle_buttons(self, mode, start=True):
         """
@@ -1098,6 +1313,9 @@ class AnimalPoseTrackerPage(QMainWindow, Ui_AnimalPoseTracker):
         if mode == "train":
             self.StartTrain.setEnabled(start)
             self.EndTrain.setEnabled(not start)
+            # Resume shares the training tab's single worker, so it follows the same switch;
+            # leaving it out left it disabled forever after one resume.
+            self.ResumeTrain.setEnabled(start)
         elif mode == "evaluate":
             self.StartEvaluate.setEnabled(start)
             self.EndEvaluate.setEnabled(not start)
@@ -1214,11 +1432,11 @@ class SplashScreen(QSplashScreen):
 
 def main():
 
+    # Qt 6 scales high-DPI displays by default; `AA_EnableHighDpiScaling` and
+    # `AA_UseHighDpiPixmaps` are deprecated no-ops there, so only the rounding policy is set.
     QApplication.setHighDpiScaleFactorRoundingPolicy(
         Qt.HighDpiScaleFactorRoundingPolicy.PassThrough
     )
-    QApplication.setAttribute(Qt.AA_EnableHighDpiScaling)
-    QApplication.setAttribute(Qt.AA_UseHighDpiPixmaps)
 
     app = QApplication(sys.argv)
     app.setStyle("Fusion")
@@ -1229,6 +1447,7 @@ def main():
 
     # Setup loading simulation
     progress = 0
+    holder = {}
     def simulate_loading():
         nonlocal progress
         progress += 2  # Increment by 2% each step
@@ -1239,9 +1458,10 @@ def main():
             timer.stop()
             # Ensure complete splash cleanup
             splash.deleteLater()
-            # Init main window AFTER splash destruction
-            main_win = AnimalPoseTrackerPage()
-            main_win.show()
+            # Init main window AFTER splash destruction. Held in `holder` rather than a local:
+            # the closure would otherwise let the window be collected once it returns.
+            holder["main_win"] = AnimalPoseTrackerPage()
+            holder["main_win"].show()
     
     # Start loading simulation AFTER splash is fully shown
     timer = QTimer()

@@ -26,6 +26,12 @@ class ProjectFilesMixin:
         """Set the local path of the project."""
         self._local_path = Path(value)
         self._project_path = self._generate_project_path()
+        # Keep the recorded path in step. The GUI sets `local_path` *after* pushing the form's
+        # name/worker/model into the config, and without this the file kept the path computed
+        # from the previous location -- a directory that never existed.
+        config = getattr(self, "project_config", None)
+        if isinstance(config, dict):
+            config["project_path"] = str(self._project_path)
 
     @property
     def project_path(self) -> Path:
@@ -58,6 +64,15 @@ class ProjectFilesMixin:
 
     def create_new_project(self) -> None:
         """Create a new project with default configurations."""
+        # Refuse to write over an existing project: the directory name is
+        # `name-worker-model-scale-date`, so a second create on the same day landed in the same
+        # folder and silently replaced its configs.
+        existing = self._project_path / "project.yaml"
+        if existing.exists():
+            raise FileExistsError(
+                f"项目目录已存在，未做任何改动：{self._project_path}\n"
+                "请换一个项目名称、worker，或换一个保存位置。"
+            )
         # Shape the dataset config from the project inputs first: CONFIG_TYPES is a set, so the
         # per-config creators run in an arbitrary order, and create_model_config reads
         # dataset_config['kpt_shape'] on the way through.

@@ -1,14 +1,15 @@
-from PySide6.QtCore import Signal, QTimer, Qt, QSignalBlocker
+from PySide6.QtCore import Signal, Qt, QSignalBlocker
 from PySide6.QtWidgets import  (QFileDialog, QMessageBox, QWidget, QMenu)
-from PySide6.QtGui import QCursor
+from PySide6.QtGui import QCursor, QIcon
 from pathlib import Path
 
 from .ui_createnewproject import Ui_CreateNewProject
-from .utils import ListManager, CheckableListWidgetItem
+from .utils import ListManager, CheckableListWidgetItem, ProjectFormBase
+from animalposetracker.gui import LOGO_SMALL_PATH
 from animalposetracker.project.api import AnimalPoseTrackerProject
 from animalposetracker.cfg import MODEL_YAML_PATHS
 
-class CreateNewProjectPage(QWidget, Ui_CreateNewProject):
+class CreateNewProjectPage(ProjectFormBase, QWidget, Ui_CreateNewProject):
     # Signals
     CreateProjectClicked = Signal()
     source_type = "image"
@@ -22,6 +23,9 @@ class CreateNewProjectPage(QWidget, Ui_CreateNewProject):
     def initialize_controls(self):
         """Initialize all UI controls based on project configuration"""
 
+        # Set here rather than in the Designer file: the icon is a file on disk, and a path baked
+        # into `ui_*.py` breaks as soon as the sources are regenerated.
+        self.setWindowIcon(QIcon(LOGO_SMALL_PATH))
         self.project = AnimalPoseTrackerProject()
         self.project.local_path = Path.cwd()
 
@@ -32,14 +36,8 @@ class CreateNewProjectPage(QWidget, Ui_CreateNewProject):
         self.LocationPathDisplay.setReadOnly(True)
         self.LocationPathDisplay.setText(str(self.project.local_path))
 
-        # edit project timer
-        self.edit_project_timer = QTimer()
-        self.edit_project_timer.setSingleShot(True)
-        self.edit_project_timer.timeout.connect(self.onEditProjectTimerTimeout)
-
-        self.worker_project_timer = QTimer()
-        self.worker_project_timer.setSingleShot(True)
-        self.worker_project_timer.timeout.connect(self.onWorkerProjectTimerTimeout)
+        # Debounce timers for the name fields; see ProjectFormBase.
+        self._init_project_form_timers()
 
         self.ModelTypeSelection.clear()
         self.ModelTypeSelection.addItems(list(MODEL_YAML_PATHS.keys()))
@@ -94,24 +92,6 @@ class CreateNewProjectPage(QWidget, Ui_CreateNewProject):
         # Model selection
         self.ModelTypeSelection.currentTextChanged.connect(self.onModelTypeChanged)
 
-    def onProjectTextEdited(self):
-        """Handler for project configuration text edit"""
-        self.edit_project_timer.stop()
-        self.edit_project_timer.start(500) # wait for 500ms before updating project config
-        
-    def onEditProjectTimerTimeout(self):
-        """Handler for edit project timer timeout"""
-        self.project.update_config("project", {"project_name": self.ProjectConfig.text()})
-
-    def onWorkerTextEdited(self):
-        """Handler for worker configuration text edit"""
-        self.worker_project_timer.stop()
-        self.worker_project_timer.start(500) # wait for 500ms before updating worker config
-        
-    def onWorkerProjectTimerTimeout(self):
-        """Handler for worker project timer timeout"""
-        self.project.update_config("project", {"worker": self.WorkerConfig.text()})
-    
     def onLocationPathClicked(self):
         """Open directory dialog to select project location and update UI"""
         start_dir = str(Path.cwd())
@@ -264,43 +244,102 @@ class CreateNewProjectPage(QWidget, Ui_CreateNewProject):
         
 
     def getAllProjectConfig(self):
+        keypoints = self.KeypointConfig.value()
+        classes = self.ClassConfig.value()
         project_config = {
             "project_path": str(self.project.project_path),
             "project_name": self.ProjectConfig.text(),
             "worker": self.WorkerConfig.text(),
             "model_type": self.ModelTypeSelection.currentText(),
             "model_scale": self.ModelScaleSelection.currentText(),
-            "keypoints": self.KeypointConfig.value(),
+            "keypoints": keypoints,
             "visible": self.VisibleSelection.isChecked(),
             "keypoints_name": self.keypoint_manager.get_list_data(),
-            "classes": self.ClassConfig.value(),
+            "classes": classes,
             "classes_name": self.class_manager.get_list_data(),
-            "source": self.GetCheckedItems(),
         }
-        if not project_config["keypoints_name"]:
-            project_config["keypoints_name"] = [f"keypoint{i+1}" for i in range(project_config["keypoints"])]
-        if not project_config["classes_name"]:
-            project_config["classes_name"] = [f"class{i+1}" for i in range(project_config["classes"])]
-        
-        project_config.update({
-            "oks_sigmas": [1.0 / self.KeypointConfig.value()] * self.KeypointConfig.value()
-        })
+        # Both lists have to line up with their counts: the annotator and the dataset config read
+        # them positionally, so a short list left the later keypoints unnamed.
+        project_config["keypoints_name"] = self._fit_names(
+            project_config["keypoints_name"], keypoints, "keypoint"
+        )
+        project_config["classes_name"] = self._fit_names(
+            project_config["classes_name"], classes, "class"
+        )
 
         return project_config
 
+    @staticmethod
+    def _fit_names(names, count, prefix):
+        """Pad or trim a name list to exactly ``count`` entries."""
+        names = list(names)[:count]
+        names.extend(f"{prefix}{index + 1}" for index in range(len(names), count))
+        return names
+
+    def _validate_form(self, project_config):
+        """Return a user-facing complaint, or None when the form can be submitted."""
+        if not project_config["project_name"].strip():
+            return "请填写项目名称。"
+        if not project_config["worker"].strip():
+            return "请填写 worker 名称。"
+        if not self.LocationPathDisplay.text().strip():
+            return "请选择项目保存位置。"
+        if project_config["keypoints"] < 1:
+            return "关键点数量至少为 1。"
+        if project_config["classes"] < 1:
+            return "类别数量至少为 1。"
+        return None
+
     def onCreateProjectClicked(self):
-        project_config = self.getAllProjectConfig() 
-        if project_config is None:
+        project_config = self.getAllProjectConfig()
+        complaint = self._validate_form(project_config)
+        if complaint is not None:
+            QMessageBox.warning(self, "无法创建项目", complaint)
             return
+
         self.project.update_config("project", project_config)
         self.project.local_path = Path(self.LocationPathDisplay.text())
-        self.project.create_new_project()
+        # Recorded before the attempt: rollback may only remove a directory this call created,
+        # never a project that was already there (an existing one is refused, not overwritten).
+        existed_before = (self.project.project_path / "project.yaml").exists()
+        try:
+            self.project.create_new_project()
 
-        if self.CopySourceData.isChecked():
-            sources = self.project.project_config['sources']
-            self.project.add_source_to_project(sources, 'copy')
+            if self.CopySourceData.isChecked():
+                sources = self.project.project_config['sources']
+                if sources:
+                    self.project.add_source_to_project(sources, 'copy')
+                    # The copies are what the project should point at, and `create_new_project`
+                    # already wrote the file -- so the new paths have to be persisted or the
+                    # next load reverts `sources` to the originals.
+                    self.project.save_configs("project")
+        except Exception as error:
+            # A half-created project on disk with no message was the old behaviour: the folder
+            # stayed, the main window never advanced, and only a console traceback appeared.
+            QMessageBox.critical(
+                self, "创建项目失败",
+                f"项目创建失败：\n{error}"
+            )
+            if not existed_before:
+                self._rollback_project()
+            return
 
         self.CreateProjectClicked.emit()
+
+    def _rollback_project(self):
+        """Remove the project directory this attempt created.
+
+        Called only when no project was there beforehand, so an existing project can never be
+        removed by a failed create.
+        """
+        import shutil
+
+        path = self.project.project_path
+        try:
+            if path.is_dir() and (path / "project.yaml").exists():
+                shutil.rmtree(path, ignore_errors=True)
+        except OSError:
+            pass
         
     def onKeypointConfigChanged(self, keypoints):
         self.project.update_config("project", {"keypoints": keypoints})
@@ -308,18 +347,6 @@ class CreateNewProjectPage(QWidget, Ui_CreateNewProject):
     def onClassConfigChanged(self, classes):
         self.project.update_config("project", {"classes": classes})
         
-    def onModelTypeChanged(self, model_type):
-        """Handler for model type selection change"""
-        if model_type == "AnimalViTPose":
-            self.ModelScaleSelection.clear()
-            self.ModelScaleSelection.addItems(["S", "B", "L", "H"])
-        else:
-            self.ModelScaleSelection.clear()
-            self.ModelScaleSelection.addItems(["N", "S", "M", "L", "X"])
-        # Nothing to write here: the model config carries nc/kpt_shape/backbone/head, and
-        # create_model_config picks the YAML from project_config["model_type"], which this form
-        # submits when the project is created. The scale lands the same way.
-
     def onKeypointChanged(self):
         """Handler for keypoint input change"""
         keypoint_names = self.keypoint_manager.get_list_data()

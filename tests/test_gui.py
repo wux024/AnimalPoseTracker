@@ -7,6 +7,7 @@ green without it.
 
 import json
 import os
+import queue
 import tempfile
 import unittest
 from pathlib import Path
@@ -33,21 +34,35 @@ try:
         QComboBox,
         QLayout,
         QLineEdit,
+        QMenu,
+        QMenuBar,
+        QScrollArea,
+        QStackedWidget,
         QStyleOptionViewItem,
+        QTabWidget,
         QWidget,
     )
+    from PySide6.QtCore import Qt, QSize
 
     from animalposetracker.gui.annotatorpage import AnnotatorPage
     from animalposetracker.gui.createnewprojectpage import CreateNewProjectPage
     from animalposetracker.gui.inferencerpage import InferencerPage
-    from animalposetracker.gui.mainpage import AnimalPoseTrackerPage
-    from animalposetracker.utils import VideoWriterThread
+    from animalposetracker.gui.mainpage import AnimalPoseTrackerPage, SplashScreen
+    from animalposetracker.gui.publicdatasetsprojectpage import PublicDatasetProjectPage
+    from animalposetracker.gui.utils import AnnotationTarget
+    from animalposetracker.gui import WindowFactory
+    from animalposetracker.utils import VideoReaderThread, VideoWriterThread
 except ImportError:  # pragma: no cover - depends on the optional gui extra
     QApplication = None
     AnnotatorPage = None
     CreateNewProjectPage = None
     InferencerPage = None
     AnimalPoseTrackerPage = None
+    PublicDatasetProjectPage = None
+    AnnotationTarget = None
+    WindowFactory = None
+    SplashScreen = None
+    VideoReaderThread = None
     VideoWriterThread = None
 
 
@@ -81,6 +96,39 @@ class NewProjectFormTests(unittest.TestCase):
         self.assertEqual(len(dataset["names"]), 2)
         self.assertEqual(model["kpt_shape"], [6, 3])
         self.assertEqual(model["nc"], 2)
+
+    def test_closing_the_form_stops_the_pending_debounce(self):
+        # A pending debounce used to fire into the closed page.
+        page = CreateNewProjectPage()
+        page.ProjectConfig.setText("probe")
+        page.onProjectTextEdited()
+        self.assertTrue(page.edit_project_timer.isActive())
+
+        self.assertTrue(page.close())
+
+        self.assertFalse(page.edit_project_timer.isActive())
+
+    def test_the_keypoint_rows_grow_and_clear_without_leftovers(self):
+        # Typing into the last row appends a fresh empty one; clearing must take every extra row
+        # (and its layout) back out, so the scroll area does not keep reporting rows the manager
+        # no longer holds.
+        page = CreateNewProjectPage()
+        manager = page.keypoint_manager
+        base = manager.v_layout.count()
+
+        manager.input_rows[0]['input_field'].setText("head")
+        self.assertEqual(manager.get_list_data(), ["head"])
+        self.assertEqual(len(manager.input_rows), 2)
+        self.assertEqual(manager.input_rows[-1]['input_field'].text(), "")
+        self.assertEqual(manager.v_layout.count(), base + 1)
+
+        manager.input_rows[-1]['input_field'].setText("tail")
+        self.assertEqual(manager.get_list_data(), ["head", "tail"])
+
+        manager.clear_inputs()
+        self.assertEqual(manager.get_list_data(), [])
+        self.assertEqual(len(manager.input_rows), 1)
+        self.assertEqual(manager.v_layout.count(), base)
 
 
 @unittest.skipUnless(QApplication is not None, "PySide6 (the gui extra) is not installed")
@@ -328,6 +376,42 @@ class ConfigureTreeTests(unittest.TestCase):
 
         self._row(page.InferenceConfigure, "tracking.enabled").setText(1, "True")
         self.assertIs(page.project.other_config["tracking"]["enabled"], True)
+
+    def test_a_row_the_project_lacks_is_cleared_and_locked(self):
+        # Switching projects: a row the newly opened project does not carry used to keep the
+        # previous project's value and stay editable, while an edit to it was discarded on save.
+        page = AnimalPoseTrackerPage()
+        page.project.other_config["imgsz"] = 640
+        page.initialize_other_config()
+        row = self._row(page.InferenceConfigure, "imgsz")
+        self.assertEqual(row.text(1), "640")
+        self.assertTrue(bool(row.flags() & Qt.ItemIsEditable))
+
+        page.project.other_config.pop("imgsz", None)
+        page.initialize_other_config()
+        row = self._row(page.InferenceConfigure, "imgsz")
+        self.assertEqual(row.text(1), "")
+        self.assertFalse(bool(row.flags() & Qt.ItemIsEditable))
+
+        page.project.other_config["imgsz"] = 512
+        page.initialize_other_config()
+        row = self._row(page.InferenceConfigure, "imgsz")
+        self.assertEqual(row.text(1), "512")
+        self.assertTrue(bool(row.flags() & Qt.ItemIsEditable))
+
+    def test_edit_mode_keeps_a_row_the_project_lacks_locked(self):
+        # Edit mode used to unlock every row, including the ones an edit to which is dropped.
+        page = AnimalPoseTrackerPage()
+        page.project.other_config["imgsz"] = 640  # carried by the project -> editable
+        page.project.other_config.pop("save", None)  # not carried -> stays locked
+        page.initialize_other_config()
+        page.EditInferenceParameters.click()  # "Edit ..." -> edit mode
+        self.assertTrue(
+            bool(self._row(page.InferenceConfigure, "imgsz").flags() & Qt.ItemIsEditable)
+        )
+        self.assertFalse(
+            bool(self._row(page.InferenceConfigure, "save").flags() & Qt.ItemIsEditable)
+        )
 
     @staticmethod
     def _editor(page, tree, key):
@@ -1101,6 +1185,142 @@ class StatusBarEventTests(unittest.TestCase):
 
 
 @unittest.skipUnless(QApplication is not None, "PySide6 (the gui extra) is not installed")
+class FrameExtractionTests(unittest.TestCase):
+    """Extraction has to run on a worker; run inline, the click froze the window."""
+
+    @classmethod
+    def setUpClass(cls):
+        cls.application = QApplication.instance() or QApplication([])
+
+    def test_extraction_runs_on_a_worker_and_the_button_comes_back(self):
+        page = AnimalPoseTrackerPage()
+        calls = []
+
+        class FakeExtractor:
+            output_dir = None
+
+            def extract_keyframes_from_videos(self, **kwargs):
+                calls.append(("videos", kwargs))
+
+            def extract_keyframes_from_images(self, **kwargs):
+                calls.append(("images", kwargs))
+
+        page.extractor = FakeExtractor()
+        page.project.project_config["sources"] = ["C:/does/not/exist/clip.mp4"]
+        page.ExtractionMethodSelection.setCurrentText("auto")
+        page.onExtractFrames()
+
+        # The click returned with the run handed to a worker, and the button stays locked until
+        # the worker reports back.
+        self.assertIsNotNone(page._extract_thread)
+        self.assertFalse(page.ExtracFrames.isEnabled())
+
+        self.assertTrue(page._extract_thread.wait(5000), "the extraction worker did not finish")
+        QApplication.processEvents()  # deliver the worker's `finished` to the page
+        self.assertEqual([kind for kind, _ in calls], ["videos"])
+        self.assertTrue(page.ExtracFrames.isEnabled())
+        self.assertEqual(page.statusBar().currentMessage(), "Frame extraction complete.")
+
+
+class _FramesThenStop:
+    """A capture that yields a fixed list of frames and then reports the end of stream."""
+
+    def __init__(self, frames):
+        self._frames = list(frames)
+
+    def isOpened(self):
+        return True
+
+    def get(self, prop):
+        return 0  # a camera that has not started streaming yet
+
+    def read(self):
+        if self._frames:
+            return True, self._frames.pop(0)
+        return False, None
+
+    def release(self):
+        return None
+
+
+@unittest.skipUnless(QApplication is not None, "PySide6 (the gui extra) is not installed")
+class InferenceWorkerContractTests(unittest.TestCase):
+    """Queue, shutdown and reader contracts behind the inferencer page."""
+
+    @classmethod
+    def setUpClass(cls):
+        cls.application = QApplication.instance() or QApplication([])
+
+    def test_a_full_queue_does_not_block_the_page(self):
+        # The put helpers used the blocking `put()`, so one dead consumer froze the GUI thread
+        # behind an `except queue.Full` that could never fire.
+        page = InferencerPage()
+        page.read_cache = queue.Queue(maxsize=1)
+        page.read_cache.put("first")
+
+        page.put_read_data("second")  # must return, not block
+
+        self.assertEqual(page.read_cache.qsize(), 1)
+
+    def test_end_with_save_checked_stops_the_writer_and_resets_the_page(self):
+        page = InferencerPage()
+        page.Save.setChecked(True)
+        writer = Mock()
+        writer.isRunning.return_value = True
+        page.videowriter_thread = writer
+        page._run_active = True
+
+        page.onEndClicked()
+
+        self.assertTrue(writer.stop_flag)
+        writer.safe_stop.assert_called_once()
+        self.assertFalse(page._run_active)
+        self.assertEqual(page.Start.text(), "Start")
+
+    def test_the_reader_survives_a_zero_fps_source(self):
+        # 1 / 0 used to end the reader after its first frame: a preview or a run that stopped on
+        # its own while the camera reported 0 fps before it started streaming.
+        reader = VideoReaderThread()
+        reader.cap = _FramesThenStop([np.zeros((4, 4, 3), dtype=np.uint8) for _ in range(3)])
+        received = []
+        reader.data_ready.connect(received.append)
+
+        reader.start()
+        self.assertTrue(reader.wait(10000), "the reader did not finish")
+        QApplication.processEvents()  # deliver the queued `data_ready` emissions
+
+        self.assertEqual(len(received), 3)
+        self.assertFalse(reader.is_running)
+
+
+@unittest.skipUnless(QApplication is not None, "PySide6 (the gui extra) is not installed")
+class AppShellTests(unittest.TestCase):
+    """The splash fallback and what the tool-window factory hands a new window."""
+
+    @classmethod
+    def setUpClass(cls):
+        cls.application = QApplication.instance() or QApplication([])
+
+    def test_the_splash_falls_back_to_a_blank_pixmap_for_a_missing_image(self):
+        splash = SplashScreen("C:/does/not/exist/welcome.png")
+        try:
+            self.assertFalse(splash.pixmap().isNull())
+            self.assertEqual(splash.pixmap().size(), QSize(800, 600))
+        finally:
+            splash.close()
+
+    def test_the_factory_gives_a_tool_window_its_theme_and_lifetime(self):
+        window = WindowFactory.run(
+            QWidget, delete_on_close=True, stylesheet="QWidget { color: red; }"
+        )
+        try:
+            self.assertEqual(window.styleSheet(), "QWidget { color: red; }")
+            self.assertTrue(window.testAttribute(Qt.WA_DeleteOnClose))
+        finally:
+            window.close()
+
+
+@unittest.skipUnless(QApplication is not None, "PySide6 (the gui extra) is not installed")
 class VideoWriterOutputTests(unittest.TestCase):
     """The saved video keeps the size of the frames it was handed.
 
@@ -1162,6 +1382,649 @@ class VideoWriterOutputTests(unittest.TestCase):
 
         self.assertEqual(frames, 1)
         self.assertEqual(writer.skipped_frames, 1)
+
+
+@unittest.skipUnless(QApplication is not None, "PySide6 (the gui extra) is not installed")
+class ConfigEditorFidelityTests(unittest.TestCase):
+    """Opening a project's config must not change it.
+
+    `AddItemsToTree` labels each row's path with `setData`, which emits `itemChanged` -- the very
+    signal the editor slot listens to. Merely displaying a project therefore ran every value
+    through `convert_value`: `'0012'` became `12`, `''` became `None`. Saving after a look wrote
+    those types to disk, and the project could not be loaded again.
+    """
+
+    @classmethod
+    def setUpClass(cls):
+        cls.application = QApplication.instance() or QApplication([])
+
+    def _page_with_config(self, config):
+        page = AnimalPoseTrackerPage()
+        page.project.project_config = dict(config)
+        page.config_data = page.project.project_config
+        return page
+
+    def test_displaying_the_tree_does_not_rewrite_the_config(self):
+        original = {
+            "project_name": "0012",
+            "worker": "1.0",
+            "date": "20240101",
+            "note": "",
+            "classes_name": ["1", "2"],
+        }
+        page = self._page_with_config(original)
+
+        page.DisplayConfigureFile()
+
+        self.assertEqual(page.project.project_config, original)
+
+    def test_editing_a_row_still_reaches_the_config(self):
+        # The other half of the contract: display must be inert, but a real edit must still land.
+        page = self._page_with_config({"project_name": "old", "worker": "wux"})
+        page.DisplayConfigureFile()
+
+        item = page.ConfigureFile.topLevelItem(0)
+        self.assertEqual(item.text(0), "project_name")
+        item.setText(1, "new")
+        page.OnConfigureFileEdited(item, 1)
+
+        self.assertEqual(page.project.project_config["project_name"], "new")
+
+    def test_clearing_a_cell_does_not_write_null(self):
+        page = self._page_with_config({"project_name": "keep", "worker": "wux"})
+        page.DisplayConfigureFile()
+
+        item = page.ConfigureFile.topLevelItem(0)
+        item.setText(1, "")
+        page.OnConfigureFileEdited(item, 1)
+
+        # `None` here made `"-".join(components)` fail the next time the path was rebuilt.
+        self.assertEqual(page.project.project_config["project_name"], "")
+
+    def test_clear_videos_images_empties_the_sources(self):
+        page = self._page_with_config({"sources": ["a.mp4"]})
+
+        page.onClearVideosImages()
+
+        self.assertEqual(page.project.project_config["sources"], [])
+
+
+@unittest.skipUnless(QApplication is not None, "PySide6 (the gui extra) is not installed")
+class TrainingMonitorTests(unittest.TestCase):
+    """The poll timer and the exit-code contract of the training worker."""
+
+    @classmethod
+    def setUpClass(cls):
+        cls.application = QApplication.instance() or QApplication([])
+
+    @staticmethod
+    def _finished_process(returncode):
+        class _Process:
+            def __init__(self, code):
+                self.returncode = code
+
+            def poll(self):
+                return self.returncode
+
+        return _Process(returncode)
+
+    def test_a_missing_process_stops_the_timer_instead_of_raising(self):
+        page = AnimalPoseTrackerPage()
+        page.current_mode = "train"
+        page._start_check_thread()
+        self.assertTrue(page.check_thread.isActive())
+
+        page.project.process = None
+        page._check_process()  # used to raise, leaving a timer that threw once a second
+
+        self.assertIsNone(page.check_thread)
+
+    def test_ending_before_starting_does_not_raise(self):
+        page = AnimalPoseTrackerPage()
+
+        page.onEndEvaluate()
+        page.onEndInference()
+
+        self.assertIsNone(page.check_thread)
+
+    def test_a_normal_finish_says_nothing_and_restores_start(self):
+        page = AnimalPoseTrackerPage()
+        page.current_mode = "train"
+        page._start_check_thread()
+        page.project.process = self._finished_process(0)
+
+        page._check_process()
+
+        self.assertEqual(page.statusBar().currentMessage(), "")
+        self.assertTrue(page.StartTrain.isEnabled())
+        self.assertIsNone(page.check_thread)
+
+    def test_an_external_stop_is_reported(self):
+        page = AnimalPoseTrackerPage()
+        page.current_mode = "train"
+        page._start_check_thread()
+        page.project.process = self._finished_process(130)
+
+        page._check_process()
+
+        self.assertIn("停止", page.statusBar().currentMessage())
+
+    def test_an_error_is_reported_with_its_code(self):
+        page = AnimalPoseTrackerPage()
+        page.current_mode = "train"
+        page._start_check_thread()
+        page.project.process = self._finished_process(1)
+
+        page._check_process()
+
+        self.assertIn("1", page.statusBar().currentMessage())
+
+
+@unittest.skipUnless(QApplication is not None, "PySide6 (the gui extra) is not installed")
+class InferencerStartContractTests(unittest.TestCase):
+    """The engine vocabulary, the queue helpers and the records file."""
+
+    @classmethod
+    def setUpClass(cls):
+        cls.application = QApplication.instance() or QApplication([])
+
+    def test_every_engine_label_maps_to_a_builder_key(self):
+        from animalposetracker.inference.session import ENGINE_NAMES
+
+        page = InferencerPage()
+        for label in ENGINE_NAMES.values():
+            with self.subTest(label=label):
+                page.EngineSelection.clear()
+                page.EngineSelection.addItem(label)
+                page.EngineSelection.setCurrentText(label)
+
+                # Handing the display label to the builder raised `KeyError: 'ONNX'`, so no GUI
+                # run ever started.
+                self.assertIn(page._engine_key(), ENGINE_NAMES)
+
+    def test_a_full_queue_does_not_block_the_caller(self):
+        page = InferencerPage()
+        page.read_cache = queue.Queue(maxsize=1)
+        page.read_cache.put("first")
+
+        # Blocking `put()` never raises `Full`, so the handler was dead code and the GUI thread
+        # waited forever once a consumer died.
+        page.put_read_data("second")
+
+        self.assertEqual(page.read_cache.qsize(), 1)
+
+    def test_the_records_survive_the_tool_switch(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            page = InferencerPage()
+            page.records = [{"frame": 0, "predictions": []}]
+            with patch.object(Path, "cwd", return_value=Path(temporary)):
+                # What `mainpage._open_sub_page` does when the user picks another tool: the write
+                # used to be deferred behind a timer that ran after the page was destroyed.
+                page.close()
+                page.deleteLater()
+                self.application.processEvents()
+
+                target = Path(temporary) / "runs" / "inference" / "records.json"
+                self.assertTrue(target.exists(), "the run's records were lost")
+                self.assertEqual(json.loads(target.read_text(encoding="utf-8")), page.records)
+
+    def test_start_stays_dark_without_a_config_and_weights(self):
+        page = InferencerPage()
+
+        with patch.object(page, "_select_video_file"):
+            page.tools_enabled()
+
+        self.assertFalse(page.Start.isEnabled())
+
+    def test_a_second_start_is_refused_while_a_run_is_active(self):
+        page = InferencerPage()
+        page._run_active = True
+        page.data_config_path = "config.yaml"
+        page.weights_path = "model.onnx"
+
+        with patch.object(page, "_get_source", return_value="video.mp4"), patch(
+            "animalposetracker.gui.inferencerpage.build_inference_session"
+        ) as builder:
+            page.onStartClicked()
+
+        builder.assert_not_called()
+
+
+@unittest.skipUnless(QApplication is not None, "PySide6 (the gui extra) is not installed")
+class NewProjectSafetyTests(unittest.TestCase):
+    """The create-project form: validation, path fidelity, and what it leaves behind."""
+
+    @classmethod
+    def setUpClass(cls):
+        cls.application = QApplication.instance() or QApplication([])
+
+    def _page(self, temporary, name="probe", worker="wux", keypoints=6, classes=2):
+        page = CreateNewProjectPage()
+        page.ProjectConfig.setText(name)
+        page.WorkerConfig.setText(worker)
+        page.LocationPathDisplay.setText(temporary)
+        page.KeypointConfig.setValue(keypoints)
+        page.ClassConfig.setValue(classes)
+        page.onEditProjectTimerTimeout()
+        page.onWorkerProjectTimerTimeout()
+        return page
+
+    def test_the_default_form_explains_instead_of_raising(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            page = self._page(temporary, keypoints=0, classes=0)
+            with patch("animalposetracker.gui.createnewprojectpage.QMessageBox") as box:
+                # `[1.0 / value] * value` raised ZeroDivisionError on the form's default state,
+                # so Create did nothing at all and said nothing.
+                page.onCreateProjectClicked()
+
+            self.assertTrue(box.warning.called)
+
+    def test_the_recorded_path_matches_the_created_directory(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            page = self._page(temporary)
+            page.onCreateProjectClicked()
+
+            recorded = yaml.safe_load(
+                (page.project.project_path / "project.yaml").read_text(encoding="utf-8")
+            )
+            self.assertEqual(recorded["project_path"], str(page.project.project_path))
+
+    def test_an_existing_project_is_not_overwritten(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            first = self._page(temporary, name="dup")
+            first.onCreateProjectClicked()
+            config = first.project.project_path / "project.yaml"
+            config.write_text("# SENTINEL\n" + config.read_text(encoding="utf-8"), encoding="utf-8")
+
+            second = self._page(temporary, name="dup")
+            with patch("animalposetracker.gui.createnewprojectpage.QMessageBox"):
+                second.onCreateProjectClicked()
+
+            self.assertIn("SENTINEL", config.read_text(encoding="utf-8"))
+
+    def test_a_failed_create_leaves_no_partial_project(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            destination = Path(temporary) / "dest"
+            destination.mkdir()
+            page = self._page(str(destination), name="half")
+            page.project.update_config("project", {"sources": [str(Path(temporary) / "gone")]})
+            page.CopySourceData.setChecked(True)
+
+            with patch("animalposetracker.gui.createnewprojectpage.QMessageBox"):
+                page.onCreateProjectClicked()
+
+            self.assertEqual(list(destination.iterdir()), [])
+
+    def test_keypoint_names_are_padded_to_the_count(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            page = self._page(temporary, keypoints=4)
+            page.keypoint_manager.input_rows[0]["input_field"].setText("nose")
+
+            config = page.getAllProjectConfig()
+
+            # The annotator reads names positionally, so a short list left keypoints unnamed.
+            self.assertEqual(len(config["keypoints_name"]), config["keypoints"])
+            self.assertEqual(config["keypoints_name"][0], "nose")
+
+
+@unittest.skipUnless(QApplication is not None, "PySide6 (the gui extra) is not installed")
+class PublicDatasetConfigTests(unittest.TestCase):
+    """Every dataset the public-project page offers has to be usable."""
+
+    @classmethod
+    def setUpClass(cls):
+        cls.application = QApplication.instance() or QApplication([])
+
+    def test_every_offered_dataset_config_parses(self):
+        from animalposetracker.cfg import DATA_YAML_PATHS
+
+        for name, path in DATA_YAML_PATHS.items():
+            with self.subTest(dataset=name):
+                # `acinoset.yaml` was missing commas in its skeleton flow sequence. It is also
+                # the first entry, so it was the page's default and its Create always failed.
+                parsed = yaml.safe_load(Path(path).read_text(encoding="utf-8"))
+                self.assertIsInstance(parsed, dict)
+
+    def test_the_default_dataset_selection_parses(self):
+        page = PublicDatasetProjectPage()
+
+        from animalposetracker.cfg import DATA_YAML_PATHS
+
+        self.assertIn(page.dataset, DATA_YAML_PATHS)
+        yaml.safe_load(Path(DATA_YAML_PATHS[page.dataset]).read_text(encoding="utf-8"))
+
+
+@unittest.skipUnless(QApplication is not None, "PySide6 (the gui extra) is not installed")
+class AnnotatorRoundTripTests(unittest.TestCase):
+    """What the annotator writes has to be what it can read back."""
+
+    @classmethod
+    def setUpClass(cls):
+        cls.application = QApplication.instance() or QApplication([])
+
+    def _page(self, temporary, keypoints=("nose", "ear"), skeleton=((0, 1),)):
+        image = Path(temporary) / "frame1.jpg"
+        cv2.imwrite(str(image), np.zeros((40, 60, 3), dtype=np.uint8))
+        config = Path(temporary) / "project.yaml"
+        config.write_text(
+            yaml.safe_dump(
+                {
+                    "keypoints_name": list(keypoints),
+                    "classes_name": ["mouse"],
+                    "skeleton": [list(edge) for edge in skeleton],
+                    "keypoints": len(keypoints),
+                    "classes": 1,
+                },
+                sort_keys=False,
+            ),
+            encoding="utf-8",
+        )
+
+        page = AnnotatorPage()
+        page.config_path = str(config)
+        page.project_config = yaml.safe_load(config.read_text(encoding="utf-8"))
+        page._populate_comboboxes()
+        page.images = {image.name: str(image)}
+        page.sorted_keys = sorted(page.images)
+        page.current_image_index = 0
+        page.current_image = str(image)
+        page.current_image_path = str(temporary)
+        page.labels_cache = {}
+        return page, image, config
+
+    @staticmethod
+    def _target(keypoints, box=True):
+        target = AnnotationTarget(0, None)
+        if box:
+            target.bounding_rect = {"category_id": 0, "bbox": [1, 2, 10, 20], "area": 200}
+        target.keypoints = {
+            index: {"name": name, "pos": [5 + index, 6 + index, 2]}
+            for index, name in enumerate(keypoints)
+        }
+        return target
+
+    def test_a_boxless_target_survives_save_and_reload(self):
+        with tempfile.TemporaryDirectory() as temporary, patch(
+            "animalposetracker.gui.annotatorpage.QMessageBox"
+        ):
+            page, image, _config = self._page(temporary)
+            page.drawing_label.targets = [self._target(("nose", "ear"), box=False)]
+
+            page.onSaveLabel()
+
+            # The file used to record `"bbox": null`, and the loader then raised on `len(None)`
+            # and dropped every annotation for the image.
+            page._LoadAnnotationtoCache(
+                str(image), json.loads(Path(image).with_suffix(".json").read_text(encoding="utf-8"))
+            )
+
+            cached = page.labels_cache[str(image)]["targets"]
+            self.assertEqual(len(cached), 1)
+            self.assertEqual(len(cached[0].keypoints), 2)
+
+    def test_deleting_annotations_persists(self):
+        with tempfile.TemporaryDirectory() as temporary, patch(
+            "animalposetracker.gui.annotatorpage.QMessageBox"
+        ):
+            page, image, _config = self._page(temporary)
+            page.drawing_label.targets = [self._target(("nose", "ear"))]
+            page.onSaveLabel()
+
+            page.onDeleteLabel()
+
+            written = json.loads(Path(image).with_suffix(".json").read_text(encoding="utf-8"))
+            self.assertEqual(written["annotations"], [])
+
+    def test_deleting_a_referenced_keypoint_row_is_refused(self):
+        with tempfile.TemporaryDirectory() as temporary, patch(
+            "animalposetracker.gui.annotatorpage.QMessageBox"
+        ) as box:
+            page, _image, config = self._page(
+                temporary, keypoints=("a", "b", "c"), skeleton=((0, 2),)
+            )
+            page.EditKeypoints.setText("Save Keypoints")
+            page._HandleConfigDisplay("keypoints")
+
+            # Index 1 sits between two referenced keypoints; removing it would shift `c` from 2
+            # to 1 while `skeleton` kept saying 2, so the edge would mean a different keypoint.
+            page._delete_config_row(page.ConfigureDisplay.topLevelItem(1))
+
+            self.assertTrue(box.warning.called)
+            saved = yaml.safe_load(config.read_text(encoding="utf-8"))
+            self.assertEqual(saved["keypoints_name"], ["a", "b", "c"])
+
+    def test_deleting_an_unreferenced_keypoint_row_renumbers_consistently(self):
+        with tempfile.TemporaryDirectory() as temporary, patch(
+            "animalposetracker.gui.annotatorpage.QMessageBox"
+        ):
+            page, _image, config = self._page(
+                temporary, keypoints=("a", "b", "c"), skeleton=((0, 1),)
+            )
+            page.EditKeypoints.setText("Save Keypoints")
+            page._HandleConfigDisplay("keypoints")
+
+            # Index 2 is past every referenced index, so removing it shifts nothing.
+            page._delete_config_row(page.ConfigureDisplay.topLevelItem(2))
+            page._SaveConfigChanges("keypoints")
+
+            saved = yaml.safe_load(config.read_text(encoding="utf-8"))
+            self.assertEqual(saved["keypoints_name"], ["a", "b"])
+            for source, destination in saved["skeleton"]:
+                self.assertLess(source, len(saved["keypoints_name"]))
+                self.assertLess(destination, len(saved["keypoints_name"]))
+
+    def test_editing_classes_then_keypoints_writes_the_right_key(self):
+        with tempfile.TemporaryDirectory() as temporary, patch(
+            "animalposetracker.gui.annotatorpage.QMessageBox"
+        ):
+            page, _image, config = self._page(temporary)
+
+            # Open the Classes editor, then the Keypoints one, the way the two buttons do.
+            with patch.object(page, "sender", return_value=page.EditClasses):
+                page.onEditParameters()
+            with patch.object(page, "sender", return_value=page.EditKeypoints):
+                page.onEditParameters()
+
+            page.ConfigureDisplay.topLevelItem(0).setText(1, "nose")
+            with patch.object(page, "sender", return_value=page.EditKeypoints):
+                page.onEditParameters()  # save
+
+            saved = yaml.safe_load(config.read_text(encoding="utf-8"))
+            # One shared edit flag meant this save wrote the *keypoints* list into whichever key
+            # the button pair happened to leave active -- the class list could end up in
+            # `keypoints_name` and a skeleton list in `classes_name`.
+            self.assertEqual(saved["keypoints_name"], ["nose", "ear"])
+            self.assertEqual(saved["classes_name"], ["mouse"])
+
+
+@unittest.skipUnless(QApplication is not None, "PySide6 (the gui extra) is not installed")
+class LayoutGuardrailTests(unittest.TestCase):
+    """No widget or row may be built and left out of its page."""
+
+    @classmethod
+    def setUpClass(cls):
+        cls.application = QApplication.instance() or QApplication([])
+
+    @staticmethod
+    def _left_out(page):
+        reachable_layouts, reachable_widgets = set(), set()
+
+        def visit_widget(widget):
+            reachable_widgets.add(id(widget))
+            # The walk has to descend into containers that hold their pages indirectly, or every
+            # control inside a scroll area reads as "left out".
+            if isinstance(widget, QScrollArea) and widget.widget() is not None:
+                inner = widget.widget()
+                reachable_widgets.add(id(inner))
+                if inner.layout() is not None:
+                    walk(inner.layout())
+            if isinstance(widget, (QTabWidget, QStackedWidget)):
+                for index in range(widget.count()):
+                    visit_widget(widget.widget(index))
+            if widget.layout() is not None:
+                walk(widget.layout())
+
+        def walk(layout):
+            reachable_layouts.add(id(layout))
+            for index in range(layout.count()):
+                item = layout.itemAt(index)
+                widget = item.widget()
+                if widget is not None:
+                    visit_widget(widget)
+                elif item.layout() is not None:
+                    walk(item.layout())
+
+        if page.layout() is not None:
+            walk(page.layout())
+
+        layouts = [
+            name
+            for name, value in sorted(vars(page).items())
+            if isinstance(value, QLayout) and id(value) not in reachable_layouts
+        ]
+        widgets = [
+            name
+            for name, value in sorted(vars(page).items())
+            if isinstance(value, QWidget)
+            and id(value) not in reachable_widgets
+            # Menus and the menu bar are not mounted in a layout by design, and the annotator's
+            # drawing board is placed on its graphics scene rather than in a layout.
+            and not isinstance(value, (QMenu, QMenuBar))
+            and name != "drawing_label"
+        ]
+        return layouts + widgets
+
+    def test_no_page_leaves_a_widget_or_row_out(self):
+        for name, page_class in (
+            ("mainpage", AnimalPoseTrackerPage),
+            ("inferencer", InferencerPage),
+            ("annotator", AnnotatorPage),
+            ("createnewproject", CreateNewProjectPage),
+            ("publicdatasets", PublicDatasetProjectPage),
+        ):
+            with self.subTest(page=name):
+                self.assertEqual(self._left_out(page_class()), [])
+
+
+@unittest.skipUnless(QApplication is not None, "PySide6 (the gui extra) is not installed")
+class ThemeTests(unittest.TestCase):
+    """A tool window is top-level, so it has to be given the theme rather than inheriting it."""
+
+    @classmethod
+    def setUpClass(cls):
+        cls.application = QApplication.instance() or QApplication([])
+
+    def test_a_tool_window_carries_the_main_window_theme(self):
+        from animalposetracker.gui import DARK_THEME_PATH
+
+        page = AnimalPoseTrackerPage()
+        page.onChangeTheme("dark")
+
+        window = page._open_sub_page(InferencerPage)
+
+        self.assertEqual(window.styleSheet(), Path(DARK_THEME_PATH).read_text(encoding="utf-8"))
+        window.close()
+
+    def test_the_chosen_theme_survives_a_restart(self):
+        from PySide6.QtCore import QSettings
+
+        settings = QSettings("Northeast Normal University", "AnimalPoseTracker")
+        previous = settings.value("theme")
+        try:
+            page = AnimalPoseTrackerPage()
+            page.onChangeTheme("dark")
+            self.assertEqual(settings.value("theme"), "dark")
+
+            reopened = AnimalPoseTrackerPage()
+            self.assertEqual(
+                reopened.styleSheet(),
+                Path(__import__(
+                    "animalposetracker.gui", fromlist=["DARK_THEME_PATH"]
+                ).DARK_THEME_PATH).read_text(encoding="utf-8"),
+            )
+        finally:
+            if previous is None:
+                settings.remove("theme")
+            else:
+                settings.setValue("theme", previous)
+
+    def test_every_page_sets_its_own_window_icon(self):
+        # The icon is a file on disk and used to be baked into the generated `ui_*.py`, which
+        # meant regenerating them from the Designer sources dropped it.
+        for page_class in (
+            AnimalPoseTrackerPage,
+            InferencerPage,
+            AnnotatorPage,
+            CreateNewProjectPage,
+            PublicDatasetProjectPage,
+        ):
+            with self.subTest(page=page_class.__name__):
+                self.assertFalse(page_class().windowIcon().isNull())
+
+
+@unittest.skipUnless(QApplication is not None, "PySide6 (the gui extra) is not installed")
+class GeneratedUiTests(unittest.TestCase):
+    """The checked-in `ui_*.py` must be what `pyside6-uic` produces from the `.ui` sources."""
+
+    @classmethod
+    def setUpClass(cls):
+        cls.application = QApplication.instance() or QApplication([])
+
+    def test_the_generated_files_are_in_sync_with_their_sources(self):
+        import shutil
+        import subprocess
+        import sys
+
+        uic = shutil.which("pyside6-uic")
+        if uic is None:
+            # `pyside6-uic` ships beside the interpreter that has PySide6, but is not always on
+            # PATH; the running environment is the one that matters. On Windows it lives in the
+            # environment's `Scripts` directory rather than next to `python.exe`.
+            interpreter_directory = Path(sys.executable).parent
+            for directory in (interpreter_directory, interpreter_directory / "Scripts"):
+                for name in ("pyside6-uic.exe", "pyside6-uic"):
+                    candidate = directory / name
+                    if candidate.exists():
+                        uic = str(candidate)
+                        break
+                if uic is not None:
+                    break
+        if uic is None:
+            self.skipTest("pyside6-uic was not found")
+
+        root = Path(__file__).resolve().parent.parent
+        ui_directory = root / "animalposetracker" / "gui" / "ui"
+
+        with tempfile.TemporaryDirectory() as temporary:
+            for source in sorted(ui_directory.glob("*.ui")):
+                name = source.stem
+                generated = root / "animalposetracker" / "gui" / f"ui_{name}.py"
+                target = Path(temporary) / f"ui_{name}.py"
+
+                subprocess.run(
+                    [uic, str(source), "-o", str(target)],
+                    check=True, capture_output=True, timeout=120,
+                )
+
+                # The header names the file uic was handed, which differs run to run.
+                def body(path):
+                    return [
+                        line for line in path.read_text(encoding="utf-8").splitlines()
+                        if line.strip() and not line.startswith("#")
+                    ]
+
+                with self.subTest(form=name):
+                    self.assertEqual(body(target), body(generated))
+
+    def test_no_generated_file_hard_codes_a_machine_path(self):
+        root = Path(__file__).resolve().parent.parent
+        for generated in sorted((root / "animalposetracker" / "gui").glob("ui_*.py")):
+            text = generated.read_text(encoding="utf-8")
+            with self.subTest(file=generated.name):
+                # A Designer backup path was once baked in here, so regenerating on any other
+                # machine produced an icon that could not load.
+                self.assertNotIn(".designer", text)
+                self.assertNotIn(":\\", text)
 
 
 if __name__ == "__main__":

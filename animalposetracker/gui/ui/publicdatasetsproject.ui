@@ -19,10 +19,6 @@
   <property name="windowTitle">
    <string>New Public Dataset Project</string>
   </property>
-  <property name="windowIcon">
-   <iconset>
-    <normaloff>media/logo.png</normaloff>media/logo.png</iconset>
-  </property>
   <layout class="QVBoxLayout" name="PublicDatasetProjectLayout">
    <property name="sizeConstraint">
     <enum>QLayout::SizeConstraint::SetMinAndMaxSize</enum>

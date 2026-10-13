@@ -1,20 +1,23 @@
 # -*- coding: utf-8 -*-
 
 ################################################################################
-## Form generated from reading UI file 'publicdatasetsprojectbUJqZf.ui'
+## Form generated from reading UI file 'publicdatasetsproject.ui'
 ##
 ## Created by: Qt User Interface Compiler version 6.8.2
 ##
 ## WARNING! All changes made in this file will be lost when recompiling UI file!
 ################################################################################
 
-from PySide6.QtCore import QCoreApplication, QMetaObject, QSize, Qt
-from PySide6.QtGui import QIcon
-from PySide6.QtWidgets import (QComboBox, QGroupBox, QHBoxLayout,
+from PySide6.QtCore import (QCoreApplication, QDate, QDateTime, QLocale,
+    QMetaObject, QObject, QPoint, QRect,
+    QSize, QTime, QUrl, Qt)
+from PySide6.QtGui import (QBrush, QColor, QConicalGradient, QCursor,
+    QFont, QFontDatabase, QGradient, QIcon,
+    QImage, QKeySequence, QLinearGradient, QPainter,
+    QPalette, QPixmap, QRadialGradient, QTransform)
+from PySide6.QtWidgets import (QApplication, QComboBox, QGroupBox, QHBoxLayout,
     QLabel, QLayout, QLineEdit, QPushButton,
-    QSizePolicy, QToolButton, QVBoxLayout)
-
-from animalposetracker.gui import LOGO_SMALL_PATH
+    QSizePolicy, QToolButton, QVBoxLayout, QWidget)
 
 class Ui_PublicDatasetProject(object):
     def setupUi(self, PublicDatasetProject):
@@ -26,9 +29,6 @@ class Ui_PublicDatasetProject(object):
         sizePolicy.setVerticalStretch(0)
         sizePolicy.setHeightForWidth(PublicDatasetProject.sizePolicy().hasHeightForWidth())
         PublicDatasetProject.setSizePolicy(sizePolicy)
-        icon = QIcon()
-        icon.addFile(LOGO_SMALL_PATH, QSize(), QIcon.Mode.Normal, QIcon.State.Off)
-        PublicDatasetProject.setWindowIcon(icon)
         self.PublicDatasetProjectLayout = QVBoxLayout(PublicDatasetProject)
         self.PublicDatasetProjectLayout.setObjectName(u"PublicDatasetProjectLayout")
         self.PublicDatasetProjectLayout.setSizeConstraint(QLayout.SizeConstraint.SetMinAndMaxSize)
@@ -132,8 +132,8 @@ class Ui_PublicDatasetProject(object):
         self.LocationPathSelection.setSizePolicy(sizePolicy4)
         self.LocationPathSelection.setMinimumSize(QSize(25, 25))
         self.LocationPathSelection.setMaximumSize(QSize(25, 25))
-        icon1 = QIcon(QIcon.fromTheme(u"folder-open"))
-        self.LocationPathSelection.setIcon(icon1)
+        icon = QIcon(QIcon.fromTheme(u"folder-open"))
+        self.LocationPathSelection.setIcon(icon)
 
         self.LocationPathLayout.addWidget(self.LocationPathSelection)
 

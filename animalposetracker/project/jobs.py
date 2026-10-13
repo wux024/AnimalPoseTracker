@@ -82,11 +82,20 @@ class ProjectJobsMixin:
                 self._training_event_offset = 0
             stream.seek(self._training_event_offset)
             for raw_line in stream:
-                self._training_event_offset += len(raw_line)
+                # A line without its terminator is a write in progress, not an event: the offset
+                # stays put so the completed line is read on the next poll. Advancing past it
+                # dropped that event for good, and the GUI polls once a second while the worker
+                # is writing.
+                if not raw_line.endswith(b"\n"):
+                    break
                 try:
-                    events.append(json.loads(raw_line.decode("utf-8")))
+                    event = json.loads(raw_line.decode("utf-8"))
                 except (UnicodeDecodeError, json.JSONDecodeError):
+                    # A complete but unparseable line is skipped, not re-read forever.
+                    self._training_event_offset += len(raw_line)
                     continue
+                self._training_event_offset += len(raw_line)
+                events.append(event)
         return events
 
     def stop(self) -> None:

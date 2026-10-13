@@ -1,8 +1,8 @@
 from PySide6.QtCore import QMetaObject, Qt, Q_ARG, QTimer, QSize
-from PySide6.QtGui import QImage, QPixmap
+from PySide6.QtGui import QImage, QPixmap, QIcon, QPalette
 from PySide6.QtWidgets import  (QApplication, QFileDialog, QWidget, QMessageBox,
                                 QCheckBox, QComboBox, QDoubleSpinBox, QHBoxLayout,
-                                QSpinBox)
+                                QLabel, QSpinBox)
 from dataclasses import replace
 import json
 import os
@@ -13,11 +13,13 @@ from pathlib import Path
 import queue
 
 from .ui_inferencer import Ui_Inferencer
+from animalposetracker.gui import LOGO_SMALL_PATH
 from animalposetracker.utils import (VideoReaderThread, VideoWriterThread, 
                                      PreprocessThread, InferenceThread, 
                                      PostprocessThread, VisualizeThread)
 from animalposetracker.inference import ENGINEtoDEVICE
 from animalposetracker.inference.session import (
+    ENGINE_NAMES,
     build_inference_session,
     instance_to_record,
     pixel_points,
@@ -38,6 +40,10 @@ class InferencerPage(QWidget, Ui_Inferencer):
         """Initialize all buttons and dependent controls"""
         os.chdir(Path.cwd())
 
+        # Set here rather than in the Designer file: the icon is a file on disk, and a path baked
+        # into `ui_*.py` breaks as soon as the sources are regenerated.
+        self.setWindowIcon(QIcon(LOGO_SMALL_PATH))
+
         # constants
         self.camera_list = {}
         self.supported_engines_and_devices = {}
@@ -52,13 +58,16 @@ class InferencerPage(QWidget, Ui_Inferencer):
         self.engine = None
 
         # threads
-        self.video_reader_thread = None
-        self.video_writer_thread = None
+        self.videoreader_thread = None
+        self.videowriter_thread = None
         self.preprocess_thread = None
         self.inference_thread = None
         self.postprocess_thread = None
         self.visualize_thread = None
+        self.display_thread = None
         self.write_frame_end = True
+        # True between a successful Start and the stop that finalizes it.
+        self._run_active = False
 
         self.data_config_path = None
         self.weights_path = None
@@ -77,12 +86,18 @@ class InferencerPage(QWidget, Ui_Inferencer):
         self._frame_index = 0
         self.records = []
         self.tracker = None
+        # Frozen by `_build_palettes` when a run starts; these defaults keep the render path
+        # usable before then.
+        self._run_style = None
+        self._run_class_names = ()
+        self._run_skeleton = ()
         self._add_save_switch()
         self._add_threshold_controls()
         # The filter's widgets are built first, because the tracker's builder is the one that
         # places them (both rows go into the left group, in this order).
         self._add_filter_controls()
         self._add_tracker_controls()
+        self._add_status_line()
         self._align_labels()
 
         self.platform = self._detect_platform()
@@ -156,7 +171,9 @@ class InferencerPage(QWidget, Ui_Inferencer):
         self.WidthSetup.setEnabled(True)
         self.HeightSetup.setEnabled(True)
         self.FPSSetup.setEnabled(True)
-        self.Start.setEnabled(True)
+        # Start is deliberately absent: it is lit only by `_refresh_start_state`, once a config
+        # *and* weights have both passed their checks. Enabling it here let the user start a run
+        # with neither chosen, and the builder then failed on a None path.
         self.End.setEnabled(True)
         self.Save.setEnabled(True)
         self.IoU.setEnabled(True)
@@ -411,6 +428,23 @@ class InferencerPage(QWidget, Ui_Inferencer):
         self.tracker = create_tracker(self.TrackerAlgorithm.currentText())
         self.tracker.reset()
 
+    def _add_status_line(self):
+        """One visible line for worker messages.
+
+        `thread_status` only printed, and a packaged GUI has no console to print to: a camera
+        that failed to open, a worker error or a written records file was invisible.
+        """
+        self.StatusLabel = QLabel()
+        self.StatusLabel.setObjectName("StatusLabel")
+        self.StatusLabel.setWordWrap(True)
+        palette = self.StatusLabel.palette()
+        # Greyed through the palette so it follows the active theme instead of a fixed colour.
+        palette.setColor(
+            QPalette.WindowText, palette.color(QPalette.Disabled, QPalette.WindowText)
+        )
+        self.StatusLabel.setPalette(palette)
+        self.InferencerLayout.addWidget(self.StatusLabel)
+
     def _align_labels(self):
         """Put the left group's labels in one column, wide enough for the longest of them.
 
@@ -501,9 +535,9 @@ class InferencerPage(QWidget, Ui_Inferencer):
         if not file_path:  # User cancelled
             return
         
-        # set home directory
-        os.chdir(Path(file_path).parent)
-            
+        # The working directory is left alone: this used to `chdir` into the config's folder, so
+        # every `Path.cwd()`-based output (the records and the video) landed next to whichever
+        # file was picked last instead of in the project.
         # Store configuration
         self.data_config_path = file_path
   
@@ -600,7 +634,17 @@ class InferencerPage(QWidget, Ui_Inferencer):
         self._get_supported_engines_and_devices(file_ext)
 
         if not self.supported_engines_and_devices:
-            raise ValueError(f"Unsupported format: {file_ext}")
+            # Reached when the artifact format is known but no engine on this machine can run it
+            # (a TensorRT engine on a box with no NVIDIA GPU, for instance). Reported instead of
+            # raising, which only printed a traceback.
+            QMessageBox.warning(
+                self, "没有可用引擎",
+                f"{file_ext} 产物在这台机器上没有可用的推理引擎，"
+                "请换一个已安装运行时的格式（如 ONNX）。"
+            )
+            self._clear_selections()
+            self._refresh_start_state(show_dialog=False)
+            return
 
         self._init_engine_selection(list(self.supported_engines_and_devices.keys()))
         self._init_available_devices()
@@ -621,20 +665,32 @@ class InferencerPage(QWidget, Ui_Inferencer):
         self.DeviceSelection.clear()
     
     def _get_supported_engines_and_devices(self, file_ext):
-        """Get supported engines based on file extension"""
-        if file_ext == '.onnx':
-            supported_engines = ["ONNX", "OpenVINO", "TensorRT", "OpenCV"]
-        elif file_ext == '.xml':
-            supported_engines =  ["OpenVINO"]
-        elif file_ext == '.om':
-            supported_engines =  ["CANN", "OpenCV"]
-        elif file_ext == '.engine':
-            supported_engines =  ["TensorRT"]
-        elif file_ext in ['.mlmodel', '.mlpackage']:
-            supported_engines =  ["CoreML"]
-        else:
-            raise ValueError(f"Unsupported format: {file_ext}")
-        
+        """Get supported engines based on file extension.
+
+        The labels come from `ENGINE_NAMES`, which is the shared layer's own vocabulary, so the
+        combo and the builder cannot drift apart.
+        """
+        extensions = {
+            '.onnx': ("onnx", "openvino", "tensorrt", "opencv"),
+            '.xml': ("openvino",),
+            '.om': ("cann", "opencv"),
+            '.engine': ("tensorrt",),
+            '.mlmodel': ("coreml",),
+            '.mlpackage': ("coreml",),
+        }
+        keys = extensions.get(file_ext)
+        if keys is None:
+            # A format nothing can run is a message for the user, not an exception out of a slot:
+            # PySide6 only prints those, so the window simply did nothing.
+            QMessageBox.warning(
+                self, "不支持的格式",
+                f"不支持的文件格式：{file_ext or '（无扩展名）'}\n"
+                "请选择 ONNX / OpenVINO / TensorRT / CANN / CoreML 产物。"
+            )
+            return
+
+        supported_engines = [ENGINE_NAMES[key] for key in keys]
+
         for engine in supported_engines:
             device_list = self._get_supported_devices(engine)
             if device_list:
@@ -646,21 +702,26 @@ class InferencerPage(QWidget, Ui_Inferencer):
         self.EngineSelection.setCurrentText(default_engine)
 
     def _detect_platform(self):
-        """Detect platform and hardware availability"""
+        """Detect platform and hardware availability.
+
+        An unrecognised CPU vendor is not an error: it only means the vendor-specific device
+        checks below stay off, which is exactly what an unknown vendor should look like. Raising
+        here aborted the whole page's construction.
+        """
         try:
             import cpuinfo
-            info = cpuinfo.get_cpu_info()
-            vendor = info.get('vendor_id_raw', '')
-            if vendor == 'GenuineIntel':
-                return 'Intel'
-            elif vendor == 'AuthenticAMD':
-                return 'AMD'
-            elif 'ARM' in info.get('arch', ''):
-                return 'ARM'
-            else:
-                raise ValueError(f"Unsupported CPU vendor: {vendor}")
-        except ImportError:
-            raise ImportError("Please install 'py-cpuinfo' module")
+        except ImportError as exc:
+            raise ImportError("Please install 'py-cpuinfo' module") from exc
+
+        info = cpuinfo.get_cpu_info()
+        vendor = info.get('vendor_id_raw', '') or info.get('vendor_id', '') or ''
+        if vendor == 'GenuineIntel':
+            return 'Intel'
+        if vendor == 'AuthenticAMD':
+            return 'AMD'
+        if 'ARM' in info.get('arch', ''):
+            return 'ARM'
+        return 'Unknown'
     
     def _detect_device_availability(self):
         """Check if devices are available for each engine and platform"""
@@ -702,102 +763,99 @@ class InferencerPage(QWidget, Ui_Inferencer):
 
         return supported_devices
 
+    # How long any single hardware probe may take. These run inside `initialize_controls`, on the
+    # GUI thread, and a wedged driver made `nvidia-smi` hang the whole window with no timeout.
+    _PROBE_TIMEOUT_SECONDS = 5
+
+    def _run_probe(self, cmd, shell=False):
+        """Run one hardware probe command and return its stdout, or None if it did not answer."""
+        import subprocess
+
+        try:
+            result = subprocess.run(
+                cmd,
+                shell=shell,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.DEVNULL,
+                text=True,
+                encoding='utf-8',
+                errors='replace',
+                timeout=self._PROBE_TIMEOUT_SECONDS,
+            )
+        except (OSError, subprocess.SubprocessError):
+            return None
+        if result.returncode != 0:
+            return None
+        return result.stdout or ""
+
+    def _windows_video_controllers(self):
+        """The names of this machine's display adapters, via CIM.
+
+        `wmic` was the old way to ask; it is absent from current Windows, so every Intel/AMD GPU
+        check silently answered "no" and the device list came up short. The answer is cached
+        because the Intel and AMD checks both ask, and each query costs a PowerShell start.
+        """
+        cached = getattr(self, "_video_controllers_cache", None)
+        if cached is not None:
+            return cached
+        output = self._run_probe(
+            [
+                'powershell', '-NoProfile', '-NonInteractive', '-Command',
+                'Get-CimInstance Win32_VideoController | '
+                'Select-Object -ExpandProperty Name',
+            ]
+        )
+        self._video_controllers_cache = output or ""
+        return self._video_controllers_cache
+
     def _check_intel_gpu(self):
         """Check if Intel GPU is available in the system"""
-        try:
-            import subprocess
-            if os.name == 'nt': 
-                cmd = 'wmic path win32_VideoController get name'
-                result = subprocess.run(cmd, shell=True, 
-                                        stdout=subprocess.PIPE, 
-                                        stderr=subprocess.DEVNULL,
-                                        text=True, encoding='utf-8')
-                return "Intel" in result.stdout
-            else: 
-                cmd = "lspci | grep -i 'VGA.*Intel'"
-                result = subprocess.run(cmd, shell=True,
-                                        stdout=subprocess.PIPE,
-                                        stderr=subprocess.DEVNULL)
-                return result.returncode == 0
-        except:
-            return False
+        if os.name == 'nt':
+            return "Intel" in self._windows_video_controllers()
+        return self._run_probe("lspci | grep -i 'VGA.*Intel'", shell=True) is not None
         
     def _check_intel_npu(self):
         """Check if Intel NPU is available through OpenVINO"""
-        try:
-            import subprocess
-            if os.name == 'nt':  
-                cmd = 'wmic path Win32_PnPEntity get name | findstr /i "AI Boost"'
-                result = subprocess.run(cmd, shell=True, 
-                                    stdout=subprocess.PIPE,
-                                    stderr=subprocess.DEVNULL,
-                                    text=True)
-                return "AI Boost" in result.stdout
-            
-            else:
-                return os.path.exists("/dev/accel/accel0") or \
-                    os.path.exists("/sys/class/accel/accel0")
-        except:
-            return False
+        if os.name == 'nt':
+            # Filtered server-side: enumerating every PnP entity costs ~1.7s, and this runs while
+            # the page is being constructed.
+            output = self._run_probe(
+                [
+                    'powershell', '-NoProfile', '-NonInteractive', '-Command',
+                    'Get-CimInstance Win32_PnPEntity -Filter "Name LIKE \'%AI Boost%\'" | '
+                    'Select-Object -ExpandProperty Name',
+                ]
+            )
+            return "AI Boost" in (output or "")
+        return os.path.exists("/dev/accel/accel0") or os.path.exists("/sys/class/accel/accel0")
     
     def _check_amd_gpu(self):
         """Check if AMD GPU is available in the system (Windows/Linux)"""
-        try:
-            import subprocess
-            if os.name == 'nt': 
-                cmd = 'wmic path win32_VideoController get name'
-                result = subprocess.run(cmd, shell=True,
-                                    stdout=subprocess.PIPE,
-                                    stderr=subprocess.DEVNULL,
-                                    text=True,
-                                    encoding='utf-8')
-                return "AMD" in result.stdout or "Radeon" in result.stdout
-                
-            else:
-                cmd = "lspci | grep -i 'VGA.*AMD'"
-                result = subprocess.run(cmd, shell=True,
-                                    stdout=subprocess.PIPE,
-                                    stderr=subprocess.DEVNULL,
-                                    text=True)
-                return result.returncode == 0 and len(result.stdout) > 0
-        except:
-            return False
+        if os.name == 'nt':
+            output = self._windows_video_controllers()
+            return "AMD" in output or "Radeon" in output
+        output = self._run_probe("lspci | grep -i 'VGA.*AMD'", shell=True)
+        return bool(output)
 
     def _check_nvidia_gpu(self):
         """Check if NVIDIA GPU is available in the system"""
-        try:
-            import subprocess
-            subprocess.run(['nvidia-smi'], 
-                           stdout=subprocess.DEVNULL, 
-                           stderr=subprocess.DEVNULL)
-            return True 
-        except (FileNotFoundError, subprocess.CalledProcessError):
-            return False
+        # The exit status is the answer. Returning True whenever the command merely existed
+        # offered CUDA/TensorRT devices on machines whose driver could not load them.
+        return self._run_probe(['nvidia-smi']) is not None
     
     def _check_nvidia_gpu_tensorrt(self):
         """Check if NVIDIA GPU with TensorRT is available in the system"""
-        try:
-            if not self._check_nvidia_gpu():
-                return False
-            import tensorrt as trt
-            return trt.__version__ is not None
-        except ImportError:
-            print("Please install 'tensorrt' module! "
-                  "if NVIDIA GPU with TensorRT is available in the system!")
+        if not self._check_nvidia_gpu():
             return False
+        try:
+            import tensorrt as trt
+        except ImportError:
+            return False
+        return trt.__version__ is not None
 
     def _check_ascend_npu(self):
         """Check if CANN environment is available for Ascend NPU"""
-        try:
-            import subprocess
-            result = subprocess.run(
-                ['npu-smi', 'info'],
-                stdout=subprocess.DEVNULL,
-                stderr=subprocess.DEVNULL
-            )
-            return result.returncode == 0
-        except FileNotFoundError:
-            return False
+        return self._run_probe(['npu-smi', 'info']) is not None
 
     def onCameraORVideosToggled(self, checked):
         """Handle toggling between camera and video source options"""
@@ -947,9 +1005,10 @@ class InferencerPage(QWidget, Ui_Inferencer):
             self._set_camera_setup(cap)
             cap.release()
             
-        except Exception as e:
-            print(f"Error updating camera params: {str(e)}")
-            # Fallback to defaults
+        except Exception as exc:
+            # The fallback used to be silent, with the reason only in a console a packaged GUI
+            # does not have: the boxes going back to the defaults looked like a normal result.
+            self.thread_status(f"无法读取相机参数（{exc}），已回落到默认 640×480 / 30 FPS")
             self._set_camera_setup()
         
     def onCameraVideosSelectionChanged(self):
@@ -987,24 +1046,29 @@ class InferencerPage(QWidget, Ui_Inferencer):
             return
         if self.CameraORVideos.isChecked():
             self._set_camera_params(cap)
-        self.videoreader_thread = VideoReaderThread()
-        self.videoreader_thread.cap = cap
-        self.videoreader_thread.data_ready.connect(self.display_preview_frame)
-        self.videoreader_thread.finished.connect(self._stop_preview)
-        self.videoreader_thread.start()
+        self.preview_thread = VideoReaderThread()
+        self.preview_thread.cap = cap
+        self.preview_thread.data_ready.connect(self.display_preview_frame)
+        self.preview_thread.finished.connect(self._stop_preview)
+        self.preview_thread.start()
         mode = "Camera" if self.CameraORVideos.isChecked() else "Video"
         self.CheckCameraVideosConnect.setText(f"Close {mode}")
 
     def _stop_preview(self):
         """Stop camera/video preview"""
-        self.videoreader_thread.safe_stop()
+        # Guarded: the attribute only exists once a preview has been started, and closing the
+        # window without one used to raise.
+        if getattr(self, "preview_thread", None) is not None:
+            self.preview_thread.safe_stop()
+            self.preview_thread = None
         self.Display.clear()
         mode = "Camera" if self.CameraORVideos.isChecked() else "Video"
         self.CheckCameraVideosConnect.setText(f"Preview {mode}")
 
     def display_preview_frame(self, frame):
         """Handle new frame from camera/video source"""
-
+        # A frame delivered by the reader thread; the conversion and the label update happen on
+        # the GUI thread, which is where the queued call lands.
         RGB = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
         height, width, _ = RGB.shape
         QImg = QImage(RGB.data, width, height, QImage.Format_RGB888)
@@ -1053,8 +1117,8 @@ class InferencerPage(QWidget, Ui_Inferencer):
     def _build_palettes(self):
         """One colour per class, per skeleton edge and per keypoint, drawn once per run.
 
-        Deliberately random, as the engine's own renderer always was: the colours are
-        decoration, and nobody should read meaning into which class got which hue.
+        Also freezes the inputs that cannot change while a run is live -- the render style, the
+        class names and the skeleton -- so the hot path does not rebuild them every frame.
         """
         def palette(count):
             if count <= 0:
@@ -1065,6 +1129,26 @@ class InferencerPage(QWidget, Ui_Inferencer):
         self._class_colors = palette(len(self.session.class_names))
         self._edge_colors = palette(len(self.session.skeleton))
         self._keypoint_colors = palette(self.session.kpt_shape[0])
+
+        self._run_class_names = tuple(self.session.class_names)
+        self._run_skeleton = tuple(self.session.skeleton)
+        self._run_style = self._render_style(None)
+
+    def _render_style(self, frame=None):
+        """The page's look, as data, for the neutral renderer."""
+        config = self.visualization_config
+        input_height = self.session.input_config.input_size[1]
+        return replace(
+            INFERENCE_STYLE,
+            keypoint_colors=self._keypoint_colors or INFERENCE_STYLE.keypoint_colors,
+            font_scale=input_height / 960.0 * config['font_scale'],
+            class_colors=self._class_colors,
+            skeleton_colors=self._edge_colors,
+            box_line_width=int(config['bbox_line_width']),
+            skeleton_line_width=int(config['skeleton_line_width']),
+            label_fill=True,
+            label_text_color=(0, 0, 0),
+        )
 
     def _infer_outputs(self, img):
         """Run the engine and hand back its *named* outputs.
@@ -1086,22 +1170,6 @@ class InferencerPage(QWidget, Ui_Inferencer):
             )
         }
 
-    def _render_style(self, frame):
-        """The page's look, as data, for the neutral renderer."""
-        config = self.visualization_config
-        input_height = self.session.input_config.input_size[1]
-        return replace(
-            INFERENCE_STYLE,
-            keypoint_colors=self._keypoint_colors or INFERENCE_STYLE.keypoint_colors,
-            font_scale=input_height / 960.0 * config['font_scale'],
-            class_colors=self._class_colors,
-            skeleton_colors=self._edge_colors,
-            box_line_width=int(config['bbox_line_width']),
-            skeleton_line_width=int(config['skeleton_line_width']),
-            label_fill=True,
-            label_text_color=(0, 0, 0),
-        )
-
     def _draw_background(self, frame):
         """The Background selector's three states, applied before anything else is drawn."""
         mode = self.visualization_config['background']
@@ -1120,7 +1188,10 @@ class InferencerPage(QWidget, Ui_Inferencer):
 
         lines = []
         if config['show_fps']:
-            lines.append(f"FPS: {float(results.get('fps', 0.0)):.1f}")
+            # Clamped: the value is derived from a measured stage time, and an outlier used to
+            # print as a seven-digit frame rate.
+            fps_value = min(max(float(results.get('fps', 0.0)), 0.0), 999.9)
+            lines.append(f"FPS: {fps_value:.1f}")
         if config['show_preprocess_time']:
             lines.append(f"Preprocess: {milliseconds('preprocess_time')}")
         if config['show_inference_time']:
@@ -1154,9 +1225,11 @@ class InferencerPage(QWidget, Ui_Inferencer):
     def _present(self, frame, results):
         """Render one decoded frame, and keep the frame's records for the caller."""
         frame = self._draw_background(frame)
-        style = self._render_style(frame)
+        # Built once per run (see `_build_palettes`) rather than per frame: the session's class
+        # names and skeleton do not change while a run is live.
+        style = self._run_style
         instances = list(results.get("instances") or ())
-        class_names = list(self.session.class_names)
+        class_names = self._run_class_names
         records = [instance_to_record(instance, class_names) for instance in instances]
         if self.tracker is not None:
             # Tracking is a stage *on the records*, not on the pixels: the same shape comes out,
@@ -1178,7 +1251,7 @@ class InferencerPage(QWidget, Ui_Inferencer):
         self._frame_index += 1
 
         config = self.visualization_config
-        skeleton = list(self.session.skeleton)
+        skeleton = self._run_skeleton
         for record in records:
             label = None
             if config['show_classes']:
@@ -1207,6 +1280,7 @@ class InferencerPage(QWidget, Ui_Inferencer):
     def _init_inference_threads(self):
         source = self._get_source()
         if source is None:
+            self.videoreader_thread = None
             return
         
         # set up cache queues
@@ -1222,14 +1296,17 @@ class InferencerPage(QWidget, Ui_Inferencer):
         self.inference_thread = InferenceThread(input_queue=self.preprocess_cache) 
         self.postprocess_thread = PostprocessThread(input_queue=self.inference_cache)
         self.visualize_thread = VisualizeThread(input_queue=self.postprocess_cache)
-        self.videowriter_thread = VideoWriterThread()
         self.display_thread = QTimer()
         self.read_frame_end = False
 
         # Set up video reader thread
         cap = cv2.VideoCapture(source)
         if not cap.isOpened():
+            # A warning alone used to be followed by starting the reader against a handle that
+            # never opened, so the run produced nothing and looked like it had worked.
             QMessageBox.warning(self, "Inference", "Failed to open camera/video source")
+            self.videoreader_thread = None
+            return
         if self.CameraORVideos.isChecked():
             self._set_camera_params(cap)
         else:
@@ -1290,8 +1367,11 @@ class InferencerPage(QWidget, Ui_Inferencer):
         self.postprocess_thread.start()
         self.visualize_thread.start()
         # A source that reports no frame rate leaves self.fps at zero; the display still has to
-        # tick, so fall back to roughly thirty frames a second instead of dividing by zero.
-        self.display_thread.start(int(1000 / self.fps) if self.fps else 33)
+        # tick, so fall back to roughly thirty frames a second instead of dividing by zero. A
+        # negative rate is truthy and produced a negative interval, which Qt rejects outright --
+        # the timer never fired and the run never finalized.
+        interval = int(1000 / self.fps) if self.fps and self.fps > 0 else 33
+        self.display_thread.start(interval)
         if self.Save.isChecked():
             self.videowriter_thread.start()
     
@@ -1324,10 +1404,13 @@ class InferencerPage(QWidget, Ui_Inferencer):
             hasattr(self, "videowriter_thread") and 
             getattr(self, "videowriter_thread") is not None and
             getattr(self, "videowriter_thread").isRunning()):
+            # `safe_stop` sets this too; setting it here as well means the writer is told to
+            # finish even if it is reached through a different path.
+            getattr(self, "videowriter_thread").stop_flag = True
             getattr(self, "videowriter_thread").safe_stop()
 
-        if hasattr(self, "display_thread"):
-            getattr(self, "display_thread").stop()
+        if self.display_thread is not None:
+            self.display_thread.stop()
 
         # Clear all cache queues
         queues = [
@@ -1360,7 +1443,13 @@ class InferencerPage(QWidget, Ui_Inferencer):
             return None
     
     def thread_status(self, message):
+        """Show a worker message on the page as well as the console.
+
+        It only printed before, and a packaged GUI has no console: a camera that failed to
+        open, a worker error or a written records file was invisible there.
+        """
         print(message)
+        self.StatusLabel.setText(message)
 
     def write_end(self):
         """Handle when video writer thread has finished"""
@@ -1373,35 +1462,35 @@ class InferencerPage(QWidget, Ui_Inferencer):
     def put_read_data(self, frame):
         """Put new frame from video reader thread to preprocess thread"""
         try:
-            self.read_cache.put(frame)
+            self.read_cache.put_nowait(frame)
         except queue.Full:
             pass
     
     def put_preprocessed_data(self, frame, img, IM, pred_time):
         """Put new frame from preprocess thread to inference thread"""
         try:
-            self.preprocess_cache.put((frame, img, IM, pred_time))
+            self.preprocess_cache.put_nowait((frame, img, IM, pred_time))
         except queue.Full:
             pass
     
     def put_inference_data(self, frame, pred, IM, pred_time, infer_time):
         """Put new frame from inference thread to postprocess thread"""
         try:
-            self.inference_cache.put((frame, pred, IM, pred_time, infer_time))
+            self.inference_cache.put_nowait((frame, pred, IM, pred_time, infer_time))
         except queue.Full:
             pass
     
     def put_postprocessed_data(self, frame, results):
         """Put new frame from postprocess thread to visualization thread"""
         try:
-            self.postprocess_cache.put((frame, results))
+            self.postprocess_cache.put_nowait((frame, results))
         except queue.Full:  
             pass
 
     def put_visualized_data(self, frame, results):
         """Put new frame from visualization thread to display"""
         try:
-            self.visualize_cache.put((frame, results))
+            self.visualize_cache.put_nowait((frame, results))
         except queue.Full:
             pass
 
@@ -1433,14 +1522,10 @@ class InferencerPage(QWidget, Ui_Inferencer):
                 Qt.SmoothTransformation
                 )
             
+            # One path, not two: this slot already runs on the GUI thread, so the queued
+            # `invokeMethod` that followed re-set the same pixmap and kept a second copy of
+            # every frame alive for nothing.
             self.Display.setPixmap(pixmap)
-
-            QMetaObject.invokeMethod(
-                self.Display,
-                "setPixmap",
-                Qt.QueuedConnection,
-                Q_ARG(QPixmap, pixmap)
-            )
         else:
             self.Display.clear()
 
@@ -1474,6 +1559,20 @@ class InferencerPage(QWidget, Ui_Inferencer):
             return
         self.DeviceSelection.clear()
         self.DeviceSelection.addItems(self.supported_engines_and_devices[self.engine])
+
+    def _engine_key(self):
+        """The builder's key for the engine the user picked.
+
+        `build_inference_session` takes the lowercase key the command line passes (`"onnx"`),
+        while the combo shows the display label (`"ONNX"`). Handing the label straight to the
+        builder raised `KeyError: 'ONNX'` for every run, and the page's own error dialog then
+        blamed the model. The reverse lookup keeps the two vocabularies in step.
+        """
+        label = self.EngineSelection.currentText() or self.engine
+        for key, name in ENGINE_NAMES.items():
+            if name == label:
+                return key
+        return (label or "").lower()
     
     def onDeviceSelectionChanged(self):
         """Handle changes in device selection"""
@@ -1483,10 +1582,20 @@ class InferencerPage(QWidget, Ui_Inferencer):
     
     def onStartClicked(self):
         """Handle when the Start button is clicked to begin processing"""
+        # A run flag, not the button's caption: `_refresh_start_state` can re-light Start while a
+        # run is live, and starting again overwrote the thread references, leaving the first
+        # run's threads with nothing pointing at them.
+        if self._run_active:
+            return
         if self.Start.text() == "Start":
             source = self._get_source()
             if source is None:
                 QMessageBox.warning(self, "Warning", "Please select a source")
+                return
+            if not self.weights_path or not self.data_config_path:
+                # The builder indexes both paths; without them it failed with a raw TypeError
+                # that the dialog then showed verbatim.
+                QMessageBox.warning(self, "无法启动推理", "请先选择配置文件与权重文件。")
                 return
             self._init_visualization_config()
             # One call assembles the artifact, the schema and the decode contract -- the same
@@ -1495,7 +1604,7 @@ class InferencerPage(QWidget, Ui_Inferencer):
                 self.session = build_inference_session(
                     weights_path=self.weights_path,
                     config_path=self.data_config_path,
-                    engine=self.engine,
+                    engine=self._engine_key(),
                     device=self.device,
                     # Straight from the combo: the handler that copies it into `model_bits` only
                     # runs if the user touched it, and this used to read the attribute instead.
@@ -1518,6 +1627,10 @@ class InferencerPage(QWidget, Ui_Inferencer):
             self._build_tracker()
             # init threads
             self._init_inference_threads()
+            if self.videoreader_thread is None:
+                # The source could not be opened; `_init_inference_threads` already said so.
+                return
+            self._run_active = True
             # start threads
             self._start_inference_threads()
             self.Start.setEnabled(False)
@@ -1527,12 +1640,15 @@ class InferencerPage(QWidget, Ui_Inferencer):
         self._stop_all_threads()
     
     def _stop_all_threads(self):
-        """Stop all threads"""
+        """Stop all threads and write this run's records."""
         if not hasattr(self, '_stopping'):
             self._stopping = True
             self._stop_inference_threads()
-            QTimer.singleShot(33, self._finalize_cleanup)
-    
+            # Written here, not from a deferred timer: the page is closed with `deleteLater()`
+            # when the user switches tools, and a `singleShot` callback queued behind that ran
+            # against a destroyed object, so the run's records were silently never saved.
+            self._finalize_cleanup()
+
     def _finalize_cleanup(self):
         """Clean up after all threads have stopped"""
         try:
@@ -1541,7 +1657,10 @@ class InferencerPage(QWidget, Ui_Inferencer):
             self._write_records()
             self.Display.clear()
             self.Start.setText("Start")
-            self.Start.setEnabled(True)
+            self._run_active = False
+            # Re-ask rather than enabling blindly: a run that ended with no valid selection used
+            # to leave Start lit for a pair that cannot run.
+            self._refresh_start_state(show_dialog=False)
         finally:
             if hasattr(self, '_stopping'):
                 del self._stopping

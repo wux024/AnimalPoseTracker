@@ -13,10 +13,6 @@
   <property name="windowTitle">
    <string>AnimalPoseAnnotator</string>
   </property>
-  <property name="windowIcon">
-   <iconset>
-    <normaloff>../media/logo.png</normaloff>../media/logo.png</iconset>
-  </property>
   <widget class="QWidget" name="AnnotatorLayout">
    <layout class="QHBoxLayout" name="AnnotatorHLayout">
     <item>

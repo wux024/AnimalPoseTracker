@@ -1,4 +1,4 @@
-from PySide6.QtCore import Qt, QPoint, QRect, QSize, Signal, QObject
+from PySide6.QtCore import Qt, QPoint, QRect, QSize, Signal, QObject, QTimer
 from PySide6.QtWidgets import (QWidget, QHBoxLayout, QLabel, QLineEdit, 
                               QListWidgetItem, QGraphicsView, QCheckBox, 
                               QLayout, QTreeView, QMenu, QDialog, QPushButton, 
@@ -7,10 +7,67 @@ from PySide6.QtWidgets import (QWidget, QHBoxLayout, QLabel, QLineEdit,
 from PySide6.QtGui import (QPainter, QPixmap, QPen, QColor,QWheelEvent, QBrush, 
                            QStandardItemModel, QStandardItem, QFontMetrics)
 from typing import List
-import shutil
 import json
+import math
+import shutil
 from sklearn.model_selection import train_test_split
 from animalposetracker.gui import COLORS
+
+
+class ProjectFormBase:
+    """The debounce timers and model-scale handling shared by the two create-project forms.
+
+    Both pages carried their own copies of these handlers. The copies had no way to stop their
+    pending debounce, so one could fire into a page that was already closed.
+
+    The mixin expects the using page to provide `project`, `ProjectConfig`, `WorkerConfig` and
+    `ModelScaleSelection` (both pages build them in ``setupUi``).
+    """
+
+    def _init_project_form_timers(self):
+        self.edit_project_timer = QTimer()
+        self.edit_project_timer.setSingleShot(True)
+        self.edit_project_timer.timeout.connect(self.onEditProjectTimerTimeout)
+
+        self.worker_project_timer = QTimer()
+        self.worker_project_timer.setSingleShot(True)
+        self.worker_project_timer.timeout.connect(self.onWorkerProjectTimerTimeout)
+
+    def onProjectTextEdited(self):
+        """Restart the debounce that writes the project name."""
+        self.edit_project_timer.stop()
+        self.edit_project_timer.start(500)  # wait for 500ms before updating project config
+
+    def onEditProjectTimerTimeout(self):
+        """Write the project name once typing paused."""
+        self.project.update_config("project", {"project_name": self.ProjectConfig.text()})
+
+    def onWorkerTextEdited(self):
+        """Restart the debounce that writes the worker name."""
+        self.worker_project_timer.stop()
+        self.worker_project_timer.start(500)  # wait for 500ms before updating worker config
+
+    def onWorkerProjectTimerTimeout(self):
+        """Write the worker name once typing paused."""
+        self.project.update_config("project", {"worker": self.WorkerConfig.text()})
+
+    def onModelTypeChanged(self, model_type):
+        """Fill the scale list of the newly chosen model family."""
+        if model_type == "AnimalViTPose":
+            self.ModelScaleSelection.clear()
+            self.ModelScaleSelection.addItems(["S", "B", "L", "H"])
+        else:
+            self.ModelScaleSelection.clear()
+            self.ModelScaleSelection.addItems(["N", "S", "M", "L", "X"])
+        # Nothing to write to the config here: the model config holds nc/kpt_shape/backbone/head,
+        # and model_type / model_scale reach the created project through project_config, which
+        # the form submits on creation.
+
+    def closeEvent(self, event):
+        """Stop the debounces: a pending one must not fire into a closed page."""
+        self.edit_project_timer.stop()
+        self.worker_project_timer.stop()
+        super().closeEvent(event)
 
 
 class ConfigureValueDelegate(QStyledItemDelegate):
@@ -36,7 +93,14 @@ class ConfigureValueDelegate(QStyledItemDelegate):
 
     def setEditorData(self, editor, index):
         if isinstance(editor, QComboBox):
-            position = editor.findText(str(index.data(Qt.EditRole)))
+            current = str(index.data(Qt.EditRole))
+            position = editor.findText(current)
+            if position < 0 and current:
+                # A value the fixed set does not list (an older project, or one edited by hand)
+                # has to stay selectable: silently snapping it to the first choice rewrote the
+                # user's config the moment they opened the dropdown.
+                editor.addItem(current)
+                position = editor.count() - 1
             editor.setCurrentIndex(position if position >= 0 else 0)
             return
         super().setEditorData(editor, index)
@@ -169,6 +233,12 @@ class ListManager(QObject):
 
     def _cleanup_layout(self, layout):
         """Safely removes layout while preserving your structure"""
+        # A layout keeps its place in its parent's item list until it is taken out, and
+        # `deleteLater()` alone left an empty row behind on every removal -- the scroll area then
+        # reported more rows than `input_rows` held.
+        parent = layout.parent()
+        if isinstance(parent, QLayout):
+            parent.removeItem(layout)
         while layout.count():
             item = layout.takeAt(0)
             if item.widget():
@@ -311,19 +381,26 @@ class DatasetSplitDialog(QDialog):
             train = float(self.train_edit.text())
             val = float(self.val_edit.text())
             test = float(self.test_edit.text())
-            
-            if abs(train + val + test - 1.0) > 0.001:
-                QMessageBox.warning(self, "Invalid Ratios", "Ratios must sum to 1.0")
-                return
-                
-            if train <= 0 or val <= 0 or test <= 0:
-                QMessageBox.warning(self, "Invalid Ratios", "All ratios must be positive")
-                return
-                
-            self.ratios = (train, val, test)
-            self.accept()
         except ValueError:
             QMessageBox.warning(self, "Invalid Input", "Please enter valid numbers")
+            return
+
+        # `nan` passes every comparison below (nan != nan, and abs(nan - 1) > 0.001 is False),
+        # so the finite check has to come first.
+        if not all(math.isfinite(value) for value in (train, val, test)):
+            QMessageBox.warning(self, "Invalid Ratios", "Please enter valid numbers")
+            return
+
+        if abs(train + val + test - 1.0) > 0.001:
+            QMessageBox.warning(self, "Invalid Ratios", "Ratios must sum to 1.0")
+            return
+
+        if train <= 0 or val <= 0 or test <= 0:
+            QMessageBox.warning(self, "Invalid Ratios", "All ratios must be positive")
+            return
+
+        self.ratios = (train, val, test)
+        self.accept()
 
 def split_dataset_sklearn(image_paths, 
                           label_paths, 
@@ -346,7 +423,16 @@ def split_dataset_sklearn(image_paths,
     # First split into train+val and test
     train_val_ratio = ratios[0] + ratios[1]
     test_ratio = ratios[2]
-        
+
+    # sklearn's own message for a tiny dataset is about n_samples and test_size, which says
+    # nothing about the images the user just picked.
+    sample_count = len(image_paths)
+    if sample_count < 3:
+        raise ValueError(
+            f"至少需要 3 张图片才能划分 train/val/test，当前只有 {sample_count} 张。"
+            "请多标注几张后再切分。"
+        )
+
     # First split to separate test set
     train_val_imgs, test_imgs, train_val_lbls, test_lbls = train_test_split(
             image_paths, label_paths, 
@@ -438,10 +524,24 @@ def create_coco_annotations(annotations_input_dir,
             json.dump(split_ann, f, indent=4)
 
 def copy_split_files(pairs, img_dir, lbl_dir):
-    """Copy image-label pairs to their destination directories"""
+    """Copy image-label pairs to their destination directories.
+
+    The destinations are emptied first: re-splitting after adding images used to leave the
+    previous split's files behind, so a directory held both runs' data.
+    """
+    for directory in (img_dir, lbl_dir):
+        if directory.exists():
+            for stale in directory.iterdir():
+                if stale.is_file() or stale.is_symlink():
+                    stale.unlink()
+                else:
+                    shutil.rmtree(stale, ignore_errors=True)
+        directory.mkdir(parents=True, exist_ok=True)
+
     for img, lbl in pairs:
         shutil.copy(img, img_dir)
         shutil.copy(lbl, lbl_dir)
+
 class AnnotationTarget:
     """Represents a single annotated object with visual elements"""
     def __init__(self, target_id, color):
@@ -486,15 +586,23 @@ class AnnotationViewer(QObject):
         self.tree_view.customContextMenuRequested.connect(self._show_context_menu)
     
     def _show_context_menu(self, pos):
-        """Show context menu for tree view items"""
+        """Show context menu for the row that was right-clicked"""
+        # The row under the cursor, remembered for the action: the handler used to read
+        # `currentIndex()`, which is whatever row happened to be selected, so right-clicking one
+        # row deleted another. No menu on empty space -- nothing there is deletable.
+        index = self.tree_view.indexAt(pos)
+        if not index.isValid():
+            return
+        self._context_index = index
+
         menu = QMenu()
         delete_action = menu.addAction("Delete")
         delete_action.triggered.connect(self._handle_delete_action)
         menu.exec(self.tree_view.viewport().mapToGlobal(pos))
-    
+
     def _handle_delete_action(self):
         """Handle delete action from context menu"""
-        index = self.tree_view.currentIndex()
+        index = getattr(self, "_context_index", None) or self.tree_view.currentIndex()
         if not index.isValid():
             return
         item = self.model.itemFromIndex(index)
@@ -628,7 +736,8 @@ class DrawingBoard(QLabel):
                  classes=None, 
                  skeletons=None,
                  visible=None,
-                 labels=None):
+                 labels=None,
+                 labels_view=None):
         super().__init__(parent)
         self.setMouseTracking(True)
         self.setAlignment(Qt.AlignCenter)
@@ -655,7 +764,11 @@ class DrawingBoard(QLabel):
         self.labels.clicked.connect(self._on_label_click)
         self.visible.currentIndexChanged.connect(self._on_visible_change)
 
-        self.labels_view = AnnotationViewer(labels)
+        # One viewer per label view, not one per board: a board is rebuilt for every image, and
+        # each rebuild used to attach its own viewer and signal connections to the same tree.
+        self.labels_view = (
+            labels_view if labels_view is not None else AnnotationViewer(labels)
+        )
         self.labels_view.target_deleted.connect(self._on_target_deleted)
         self.labels_view.keypoints_cleared.connect(self._on_keypoints_cleared)
         self.labels_view.keypoint_deleted.connect(self._on_keypoint_deleted)
@@ -669,6 +782,9 @@ class DrawingBoard(QLabel):
             "preview_alpha": 180,
             "radius": 3
         }
+        # A `QLabel` takes no focus by default, so `keyPressEvent` -- and with it the Escape
+        # cancel -- never fired at all.
+        self.setFocusPolicy(Qt.StrongFocus)
         self.preview_style = {
             "rect": {
                 "color": QColor(255, 0, 0, 120),
@@ -699,11 +815,14 @@ class DrawingBoard(QLabel):
         if target_id is None:
             target_id = self.targets[0].id
 
-        if not any(t.id == target_id for t in self.targets):
+        # `id` is a label, not a position: the project's own COCO export renumbers ids to 1..N
+        # (utils/dataset.py), so indexing `targets` with it raised IndexError on a real file.
+        target = next((t for t in self.targets if t.id == target_id), None)
+        if target is None:
             raise ValueError(f"Target {target_id} not found")
-            
+
         self.current_target_id = target_id
-        self.current_target = self.targets[self.current_target_id]
+        self.current_target = target
         self.keypoints.setCurrentIndex(self.current_target.current_keypoint_id)
         self.labels_view.highlight_target(target_id)
 
@@ -763,10 +882,28 @@ class DrawingBoard(QLabel):
                 self.current_target.bounding_rect = self._get_class_info(rect)
                 self.current_target._is_temp = False
                 self._commit_changes()
+            else:
+                # Too small to be a box: the second click of a double-click lands here, so the
+                # temporary target has to go. Leaving it in `targets` produced a boxless target
+                # that `onSaveLabel` wrote as `"bbox": null`, and the loader then refused the
+                # whole file -- every annotation for that image was lost on the next open.
+                self._discard_temp_target()
 
             self.start_position = None
             self.current_target = None
             self.reset_temp_canvas()
+
+    def _discard_temp_target(self):
+        """Drop the in-progress target a cancelled or too-small box created."""
+        target = self.current_target
+        if target is None or not getattr(target, "_is_temp", False):
+            return
+        self.targets = [item for item in self.targets if item is not target]
+        if self.current_target_id is not None and self.targets:
+            self.current_target_id = min(self.current_target_id, len(self.targets) - 1)
+        elif not self.targets:
+            self.current_target_id = None
+        self.labels_view.display_target(self.targets)
 
     def _get_class_info(self, rect: QRect):
         """Get classification metadata from parent widget"""
@@ -784,10 +921,11 @@ class DrawingBoard(QLabel):
         """Process point annotation operations"""
         if not self.targets:
             raise ValueError("No targets for point annotation")
-        self.current_target = self.targets[self.current_target_id]
-        if not self.current_target:
+        # Same reason as set_current_target: the id is not an index into `targets`.
+        target = next((t for t in self.targets if t.id == self.current_target_id), None)
+        if target is None:
             raise ValueError("No current target for point annotation")
-        
+        self.current_target = target
         point_info = self._get_keypoint_info(click_pos)
         self.current_target.keypoints.update(point_info)
 
@@ -812,10 +950,10 @@ class DrawingBoard(QLabel):
 
     def _handle_bline_mode(self, click_pos):
         """Process bone line drawing operations"""
-        self.current_target = self.targets[self.current_target_id]
-        if not self.current_target:
+        target = next((t for t in self.targets if t.id == self.current_target_id), None)
+        if target is None:
             raise ValueError("No current target for bone line drawing")
-            
+        self.current_target = target    
         nearest_id = self._find_nearest_keypoint(click_pos)
         if nearest_id is None:
             return
@@ -834,7 +972,11 @@ class DrawingBoard(QLabel):
 
     def _create_skeleton_connection(self, start_id, end_id):
         """Create a skeleton connection between two keypoints"""
-        skeleton_id = len(self.current_target.skeletons)
+        # The lowest free id, not len(): deleting a connection leaves a gap, and len() would hand
+        # out an id that is still in use and overwrite the surviving connection.
+        skeleton_id = 0
+        while skeleton_id in self.current_target.skeletons:
+            skeleton_id += 1
         start_pos = self.current_target.keypoints[start_id]["pos"][0:2]
         end_pos = self.current_target.keypoints[end_id]["pos"][0:2]
         self.current_target.skeletons[skeleton_id] = {
@@ -1073,7 +1215,9 @@ class DrawingBoard(QLabel):
         end_pos = keypoints[dest]["pos"][0:2]
 
         
-        skeleton_id = len(self.current_target.skeletons)
+        skeleton_id = 0
+        while skeleton_id in self.current_target.skeletons:
+            skeleton_id += 1
         self.current_target.skeletons[skeleton_id] = {
             "skeleton": (src, dest),
             "pos": [*start_pos, *end_pos]
@@ -1104,9 +1248,9 @@ class DrawingBoard(QLabel):
     def _cancel_rect_drawing(self):
         """Cancel rectangle drawing operation"""
         if self.start_position is not None:
-            if self.current_target and not self.current_target.bounding_rect:
-                self.targets.remove(self.current_target)
-                self.current_target_id = self.current_target_id - 1 if self.targets else 0
+            # The in-progress target has no box yet, so it is dropped -- through the same helper
+            # the too-small-box path uses, which keeps `current_target_id` consistent.
+            self._discard_temp_target()
             self.start_position = None
             self.current_target = None
     

@@ -15,30 +15,36 @@ LIGHT_THEME_PATH = os.path.join(BASE_DIR, "style", "light.qss")
 
 class WindowFactory:
     @staticmethod
-    def run(window_class, 
-            parent=None, 
-            modal=False, 
-            delete_on_close=False, 
-            *args, 
+    def run(window_class,
+            *args,
+            parent=None,
+            modal=False,
+            delete_on_close=False,
+            stylesheet=None,
             **kwargs):
-        try:
-            window = window_class(parent, *args, **kwargs)
-            
-            if parent:
-                window.setParent(parent)
-            
-            if modal:
-                window.setWindowModality(Qt.ApplicationModal)
+        """Build and show one tool window.
 
-            if delete_on_close:
-                window.setAttribute(Qt.WA_DeleteOnClose)
-            
-            window.show()
-            return window
-        
-        except Exception as e:
-            print(f"Window creation failed: {str(e)}")
-            raise
+        ``parent``, ``modal``, ``delete_on_close`` and ``stylesheet`` are keyword-only: they used
+        to sit after ``*args``-style parameters, so a second positional argument silently bound to
+        ``parent``. ``stylesheet`` is applied to the new window because a tool window is
+        top-level and does not inherit the main window's theme.
+        """
+        window = window_class(parent, *args, **kwargs)
+
+        if parent:
+            window.setParent(parent)
+
+        if modal:
+            window.setWindowModality(Qt.ApplicationModal)
+
+        if delete_on_close:
+            window.setAttribute(Qt.WA_DeleteOnClose)
+
+        if stylesheet:
+            window.setStyleSheet(stylesheet)
+
+        window.show()
+        return window
 
 
 COLORS = [

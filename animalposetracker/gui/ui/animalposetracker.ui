@@ -27,10 +27,6 @@
   <property name="windowTitle">
    <string>AnimalPoseTracker</string>
   </property>
-  <property name="windowIcon">
-   <iconset>
-    <normaloff>../media/logo.png</normaloff>../media/logo.png</iconset>
-  </property>
   <property name="layoutDirection">
    <enum>Qt::LayoutDirection::LeftToRight</enum>
   </property>
@@ -111,9 +107,6 @@
             </property>
             <property name="textFormat">
              <enum>Qt::TextFormat::AutoText</enum>
-            </property>
-            <property name="pixmap">
-             <pixmap>assets/logo_transparent.png</pixmap>
             </property>
             <property name="scaledContents">
              <bool>true</bool>

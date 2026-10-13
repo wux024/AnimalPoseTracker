@@ -22,10 +22,6 @@
   <property name="windowTitle">
    <string>AnimalPoseInference</string>
   </property>
-  <property name="windowIcon">
-   <iconset>
-    <normaloff>C:/Users/wux024/.designer/backup/media/logo.png</normaloff>C:/Users/wux024/.designer/backup/media/logo.png</iconset>
-  </property>
   <layout class="QVBoxLayout" name="InferencerLayout">
    <item>
     <layout class="QHBoxLayout" name="ConfigureLayout">
@@ -657,9 +653,6 @@
             </property>
             <property name="text">
              <string>Preprocess Time</string>
-            </property>
-            <property name="tristate">
-             <bool>true</bool>
             </property>
            </widget>
           </item>

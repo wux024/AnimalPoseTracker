@@ -1,13 +1,16 @@
-from PySide6.QtCore import Signal, QTimer
+from PySide6.QtCore import Signal
+from PySide6.QtGui import QIcon
 from PySide6.QtWidgets import  QFileDialog, QWidget
 from pathlib import Path
 
 from .ui_publicdatasetsproject import Ui_PublicDatasetProject
+from .utils import ProjectFormBase
+from animalposetracker.gui import LOGO_SMALL_PATH
 from animalposetracker.project.api import AnimalPoseTrackerProject
 from animalposetracker.cfg import DATA_YAML_PATHS, MODEL_YAML_PATHS
 
 
-class PublicDatasetProjectPage(QWidget, Ui_PublicDatasetProject):
+class PublicDatasetProjectPage(ProjectFormBase, QWidget, Ui_PublicDatasetProject):
     CreateProjectClicked = Signal()
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -17,19 +20,18 @@ class PublicDatasetProjectPage(QWidget, Ui_PublicDatasetProject):
     
     def initialize_controls(self):
 
+        # Set here rather than in the Designer file: the icon is a file on disk, and a path baked
+        # into `ui_*.py` breaks as soon as the sources are regenerated.
+        self.setWindowIcon(QIcon(LOGO_SMALL_PATH))
         self.project = AnimalPoseTrackerProject()
-        self.dataset = "AP10K"
+        # The first entry in the list, not a hard-coded name: the page used to open on whatever
+        # `DATA_YAML_PATHS` happened to list first, which is also what the combo shows.
+        self.dataset = next(iter(DATA_YAML_PATHS))
         self.project.local_path = Path.cwd()
         self.LocationPathDisplay.setText(str(self.project.local_path))
 
-        # edit project timer
-        self.edit_project_timer = QTimer()
-        self.edit_project_timer.setSingleShot(True)
-        self.edit_project_timer.timeout.connect(self.onEditProjectTimerTimeout)
-
-        self.worker_project_timer = QTimer()
-        self.worker_project_timer.setSingleShot(True)
-        self.worker_project_timer.timeout.connect(self.onWorkerProjectTimerTimeout)
+        # Debounce timers for the name fields; see ProjectFormBase.
+        self._init_project_form_timers()
 
         self.ModelTypeSelection.clear()
         self.ModelTypeSelection.addItems(list(MODEL_YAML_PATHS.keys()))
@@ -88,36 +90,7 @@ class PublicDatasetProjectPage(QWidget, Ui_PublicDatasetProject):
         self.project.create_public_dataset_project(self.dataset)
         self.CreateProjectClicked.emit()
         
-    def onModelTypeChanged(self, model_type):
-        """Handler for model type selection change"""
-        if model_type == "AnimalViTPose":
-            self.ModelScaleSelection.clear()
-            self.ModelScaleSelection.addItems(["S", "B", "L", "H"])
-        else:
-            self.ModelScaleSelection.clear()
-            self.ModelScaleSelection.addItems(["N", "S", "M", "L", "X"])
-        # The model config holds nc/kpt_shape/backbone/head; model_type and model_scale reach the
-        # created project through project_config, which this form submits on creation.
-        
     def onDatasetChanged(self, dataset):
         """Handler for public dataset selection change"""
         if dataset in DATA_YAML_PATHS:
             self.dataset = dataset
-
-    def onProjectTextEdited(self):
-        """Handler for project configuration text edit"""
-        self.edit_project_timer.stop()
-        self.edit_project_timer.start(500) # wait for 500ms before updating project config
-        
-    def onEditProjectTimerTimeout(self):
-        """Handler for edit project timer timeout"""
-        self.project.update_config("project", {"project_name": self.ProjectConfig.text()})
-
-    def onWorkerTextEdited(self):
-        """Handler for worker configuration text edit"""
-        self.worker_project_timer.stop()
-        self.worker_project_timer.start(500) # wait for 500ms before updating worker config
-        
-    def onWorkerProjectTimerTimeout(self):
-        """Handler for worker project timer timeout"""
-        self.project.update_config("project", {"worker": self.WorkerConfig.text()})

@@ -1,8 +1,8 @@
-from PySide6.QtCore import Qt, QFile, QTextStream, QTimer
+from PySide6.QtCore import Qt, QFile, QTextStream, QTimer, QSettings
 from PySide6.QtWidgets import (QApplication, QFileDialog, QMainWindow, QTreeWidget,
                                QMessageBox, QTreeWidgetItem, QTreeWidgetItemIterator,
                                QGraphicsScene, QGraphicsView, QMenu)
-from PySide6.QtGui import QPixmap, QPainter
+from PySide6.QtGui import QPixmap, QPainter, QIcon
 
 import os
 import sys
@@ -10,11 +10,11 @@ from pathlib import Path
 import yaml
 import json
 
-from animalposetracker.gui import (DARK_THEME_PATH, LIGHT_THEME_PATH, COLORS)
+from animalposetracker.gui import (DARK_THEME_PATH, LIGHT_THEME_PATH, COLORS, LOGO_SMALL_PATH)
 from animalposetracker.utils.dataset import convert_labels_to_coco, convert_labels_to_yolo
 
 from .ui_annotator import Ui_Annotator
-from .utils import ZoomableGraphicsView, DrawingBoard, AnnotationTarget
+from .utils import ZoomableGraphicsView, DrawingBoard, AnnotationTarget, AnnotationViewer
 
 class AnnotatorPage(QMainWindow, Ui_Annotator):
     """Main application window for animal pose annotation"""
@@ -29,6 +29,9 @@ class AnnotatorPage(QMainWindow, Ui_Annotator):
     def initialize_controls(self):
         """Initialize UI controls and state"""
         os.chdir(Path.cwd())
+        # Set here rather than in the Designer file: the icon is a file on disk, and a path baked
+        # into `ui_*.py` breaks as soon as the sources are regenerated.
+        self.setWindowIcon(QIcon(LOGO_SMALL_PATH))
         self.project_config = {}
         self.images = {}
         self.config_path = None
@@ -39,7 +42,9 @@ class AnnotatorPage(QMainWindow, Ui_Annotator):
         self.labels_cache = {}
         self._CreateGraphicsScene()
         self.ConfigureDisplay.header().close()
-        self._edit_mode = False
+        # One flag per config type: the buttons are independent, and a single shared flag made
+        # one editor's save write its data under another type's key.
+        self._edit_modes = {'keypoints': False, 'classes': False, 'skeleton': False}
         self.current_drawing_mode = "none"
 
         self.EditKeypoints.setEnabled(False)
@@ -51,7 +56,10 @@ class AnnotatorPage(QMainWindow, Ui_Annotator):
         self.actionDrawPoint.setEnabled(False)
         self.actionBuildSkeleton.setEnabled(False)
 
-        self.onChangeTheme("light")
+        # No hard-coded theme: the main window applies its current stylesheet to this window when
+        # it opens it, and forcing light here left a light tool window inside a dark application.
+        saved_theme = QSettings("Northeast Normal University", "AnimalPoseTracker").value("theme")
+        self.onChangeTheme(saved_theme if saved_theme in ("dark", "light") else "light")
 
     def setupConnections(self):
         """Connect all UI signals to their corresponding slot functions"""
@@ -114,11 +122,18 @@ class AnnotatorPage(QMainWindow, Ui_Annotator):
 
     def _init_drawing_board(self):
         """Initialize the drawing board"""
+        # The board is rebuilt for every image, and each one attached its own `AnnotationViewer`
+        # (and a tree signal connection) to the shared label view. One viewer is reused instead,
+        # so navigating a folder no longer accumulates them.
+        if getattr(self, "labels_view", None) is None:
+            self.labels_view = AnnotationViewer(self.LabelInformationView)
+
         self.drawing_label = DrawingBoard(keypoints=self.KeypointsSeletion,
                                           classes=self.ClassesSelection,
                                           skeletons=self.SkeletonSelection,
                                           labels=self.LabelInformationView,
-                                          visible=self.Visible)
+                                          visible=self.Visible,
+                                          labels_view=self.labels_view)
         
         if hasattr(self, 'LineWidth'):
             self.drawing_label.pen_settings["width"] = self.LineWidth.value()
@@ -128,8 +143,8 @@ class AnnotatorPage(QMainWindow, Ui_Annotator):
             self.drawing_label.set_current_target()
         self.drawing_label.setAutoFillBackground(True)
         self.drawing_label.setAttribute(Qt.WA_TranslucentBackground)
-        self.drawing_proxy = self.scene.addWidget(self.drawing_label)
-        self.drawing_proxy.setZValue(1)
+        self.drawing_label_proxy = self.scene.addWidget(self.drawing_label)
+        self.drawing_label_proxy.setZValue(1)
         self.drawing_label.setVisible(True)
         self.drawing_label.addskeletons.connect(self.onAddSkeletons)
         
@@ -231,9 +246,12 @@ class AnnotatorPage(QMainWindow, Ui_Annotator):
                 color=COLORS[i % len(COLORS)]
             )
             
-            # 1. Process bounding box if exists
-            if 'bbox' in ann and len(ann['bbox']) >= 4:
-                x, y, w, h = ann['bbox']
+            # 1. Process bounding box if exists. A point-only target has no box, and the file
+            # records that as `null`; `len(None)` used to raise and the caller dropped *every*
+            # annotation for that image, keypoints included.
+            bbox = ann.get('bbox')
+            if isinstance(bbox, (list, tuple)) and len(bbox) >= 4:
+                x, y, w, h = bbox
                 target.bounding_rect = {
                     'category_id': ann.get('category_id', 0),
                     'category_name': self._GetCategoryName(ann.get('category_id', 0)),
@@ -330,7 +348,11 @@ class AnnotatorPage(QMainWindow, Ui_Annotator):
 
             self.current_image = str(image_path)
             if self.current_image in self.labels_cache:
-                self.drawing_label.targets = self.labels_cache[self.current_image]['targets']
+                # A copy, not the cached list itself: the board clears and rebuilds its target
+                # list, and sharing the object meant `board.targets.clear()` emptied the cache too.
+                self.drawing_label.targets = list(
+                    self.labels_cache[self.current_image]['targets']
+                )
                 self.drawing_label._commit_changes()
             
             # Set view parameters
@@ -526,6 +548,20 @@ class AnnotatorPage(QMainWindow, Ui_Annotator):
                                 "This connection is used in existing annotations!\n"
                                 "Please delete annotations first.")
                 return
+
+        # Deleting a keypoint shifts every later keypoint's index, and the saved labels still
+        # carry the old numbering -- so the annotations would quietly come to mean different
+        # keypoints. Refused rather than silently remapped.
+        if config_type == 'keypoints':
+            index = self.ConfigureDisplay.indexOfTopLevelItem(item)
+            if not self._keypoint_row_is_removable(index):
+                QMessageBox.warning(
+                    self, "Warning",
+                    f"关键点 {item.text(1)}（序号 {index}）之后还有被引用的关键点。\n"
+                    "删除它会让后面的关键点序号前移，已有标注与骨架连接将指向别的关键点。\n"
+                    "请先删除相关标注与骨架连接。"
+                )
+                return
         
         # Confirm deletion
         reply = QMessageBox.question(
@@ -564,8 +600,34 @@ class AnnotatorPage(QMainWindow, Ui_Annotator):
                         return True
         return False
 
+    def _referenced_keypoint_indices(self):
+        """Every keypoint index that a cached annotation or a configured edge refers to."""
+        indices = set()
+        for img_data in self.labels_cache.values():
+            for target in img_data['targets']:
+                indices.update(target.keypoints)
+                for skeleton in target.skeletons.values():
+                    indices.update(skeleton['skeleton'])
+        for edge in self.project_config.get('skeleton', []) or []:
+            indices.update(edge)
+        return indices
+
+    def _keypoint_row_is_removable(self, index):
+        """Whether removing this keypoint row leaves every remaining index meaning the same thing.
+
+        Removing row ``i`` shifts every later keypoint down one, and nothing rewrites `skeleton`
+        or the saved annotations -- so a referenced index at or after ``i`` would silently come to
+        mean a different keypoint. Only rows past every reference are safe.
+        """
+        return all(referenced < index for referenced in self._referenced_keypoint_indices())
+
     def onEditParameters(self):
-        """Handle parameter editing with state tracking"""
+        """Toggle edit mode for the button that was clicked.
+
+        Each button tracks its own state. One shared flag meant "Edit Classes" followed by
+        "Edit Keypoints" saved the second button's type against the first button's data -- the
+        class list was written into `keypoints_name`, and a skeleton list into `classes_name`.
+        """
         button = self.sender()
         button_map = {
             self.EditKeypoints: 'keypoints',
@@ -574,16 +636,27 @@ class AnnotatorPage(QMainWindow, Ui_Annotator):
         }
 
         config_type = button_map.get(button)
+        if config_type is None:
+            return
 
-        self._edit_mode = not self._edit_mode
-        
-        if self._edit_mode:
+        if not hasattr(self, '_edit_modes'):
+            self._edit_modes = {}
+
+        if not self._edit_modes.get(config_type):
+            # Opening one editor closes any other that was left open, so the table always shows
+            # the type the buttons claim it shows.
+            for other, is_open in list(self._edit_modes.items()):
+                if is_open and other != config_type:
+                    self._edit_modes[other] = False
+                    self._edit_button(other).setText(f"Edit {other.title()}")
+            self._edit_modes[config_type] = True
             self._HandleConfigDisplay(config_type)
             button.setText(f"Save {config_type.title()}")
             self.ConfigureDisplay.itemChanged.connect(
                 self.onConfigureEdited,
                 Qt.QueuedConnection)
         else:
+            self._edit_modes[config_type] = False
             self.ConfigureDisplay.blockSignals(True)
             try:
                 self._SaveConfigChanges(config_type)
@@ -593,6 +666,14 @@ class AnnotatorPage(QMainWindow, Ui_Annotator):
                 QMessageBox.warning(self, "Save Error", str(e))
             finally:
                 self.ConfigureDisplay.blockSignals(False)
+
+    def _edit_button(self, config_type):
+        """The button that toggles one config type's editor."""
+        return {
+            'keypoints': self.EditKeypoints,
+            'classes': self.EditClasses,
+            'skeleton': self.EditSkeleton,
+        }[config_type]
 
     def _SaveConfigChanges(self, config_type):
         """Validate and save configuration changes"""
@@ -674,19 +755,28 @@ class AnnotatorPage(QMainWindow, Ui_Annotator):
             self._edit_lock = False
         if self._edit_lock:
             return
-        
+
         try:
             self._edit_lock = True
             if column == 1:
                 new_value = item.text(1)
-                key = item.text(0)
+                # The row number, not the text of column 0: `text(0)` is a *string*, and using it
+                # as a list index raised TypeError on every edit, which Qt then swallowed.
+                row = int(item.text(0))
                 if self.EditClasses.text().startswith('Save'):
-                    self.project_config['classes_name'][key] = new_value
+                    if row < len(self.project_config.get('classes_name', [])):
+                        self.project_config['classes_name'][row] = new_value
                 elif self.EditKeypoints.text().startswith('Save'):
-                    self.project_config['keypoints_name'][key] = new_value
+                    if row < len(self.project_config.get('keypoints_name', [])):
+                        self.project_config['keypoints_name'][row] = new_value
                 elif self.EditSkeleton.text().startswith('Save'):
-                    if isinstance(new_value, list) and len(new_value) == 2:
-                        self.project_config['skeleton'][key] = new_value
+                    if row < len(self.project_config.get('skeleton', [])):
+                        self.project_config['skeleton'][row] = [
+                            int(part.strip()) for part in new_value.split('->')
+                        ]
+        except (TypeError, ValueError):
+            # A partially typed edge ("2-") is not a pair yet; the save button re-validates.
+            pass
         finally:
             self._edit_lock = False
 
@@ -717,15 +807,19 @@ class AnnotatorPage(QMainWindow, Ui_Annotator):
         print("Showing help")
     
     def onSaveLabel(self):
-        """Save current annotations to file"""
-        if not self.drawing_label.targets:
-            QMessageBox.warning(self, "Warning", "No annotations to save")
+        """Save current annotations to file.
+
+        An empty target list is written too, as an annotation file with no annotations: that is
+        how a deletion is persisted. Refusing to save it meant "delete all, then save" left the
+        old boxes on disk, and reopening the folder brought them back.
+        """
+        if not self.current_image:
+            QMessageBox.warning(self, "Warning", "No image is open")
             return
-        
-        if self.current_image:
-            self.labels_cache[self.current_image] = {
-                'targets': self.drawing_label.targets.copy()
-            }
+
+        self.labels_cache[self.current_image] = {
+            'targets': self.drawing_label.targets.copy()
+        }
     
         image = {
                 "id": self.current_image_index,
@@ -743,11 +837,14 @@ class AnnotatorPage(QMainWindow, Ui_Annotator):
                     ]
             else:
                 keypoints = []
+            bbox = target.bounding_rect.get('bbox')
             annotation = {
                 "id": target.id,
                 "image_id": self.current_image_index,
                 "category_id": target.bounding_rect.get('category_id'),
-                "bbox": target.bounding_rect.get('bbox'),
+                # `[]` rather than `null` for a point-only target: the loader reads a box back
+                # with `len()`, and `null` made the file unreadable by this same page.
+                "bbox": list(bbox) if bbox else [],
                 "area": target.bounding_rect.get('area'),
                 "iscrowd": int(self.IsCrowd.isChecked()),
                 "keypoints": [*keypoints], 
@@ -759,16 +856,28 @@ class AnnotatorPage(QMainWindow, Ui_Annotator):
         }
         key = self.sorted_keys[self.current_image_index]
         label_file = Path(self.images[key]).with_suffix('.json')
-        with open(label_file, 'w') as f:
-            json.dump(coco_dict, f, indent=4)
+        self._write_json_atomically(label_file, coco_dict)
+        self.statusBar().showMessage(f"已保存 {len(annotations)} 个标注到 {label_file.name}")
+
+    @staticmethod
+    def _write_json_atomically(path, payload):
+        """Write JSON through a temporary file so a crash cannot leave a half-written label."""
+        temporary = Path(path).with_suffix(Path(path).suffix + ".tmp")
+        with open(temporary, 'w', encoding='utf-8') as stream:
+            json.dump(payload, stream, indent=4)
+        os.replace(temporary, path)
     
     def onDeleteLabel(self):
-        """Delete current annotations"""
+        """Delete current annotations and persist the deletion."""
         if not self.drawing_label.targets:
             QMessageBox.warning(self, "Warning", "No annotations to delete")
             return
         self.drawing_label.targets = []
         self.drawing_label._commit_changes()
+        # Written straight away: the button means "this image now has no annotations", and
+        # leaving it in memory only made the deletion look like it had not happened.
+        if self.current_image:
+            self.onSaveLabel()
 
     def onLineWidthChanged(self, value):
         """Handle line width change"""
@@ -784,17 +893,35 @@ class AnnotatorPage(QMainWindow, Ui_Annotator):
     
     def onAddSkeletons(self, value):
         """Handle skeleton link change"""
-        if hasattr(self, 'drawing_label'):
-            self.SkeletonSelection.addItem(f"{value[0]}->{value[1]}")
-            if value not in self.project_config['skeleton']:
-                self.project_config['skeleton'].append(value)
-            with open(self.config_path, "w", encoding="utf-8") as f:
-                yaml.safe_dump(self.project_config, 
-                        f, 
-                        indent=2, 
-                        sort_keys=False, 
-                        default_flow_style=False
-                    )
+        if not hasattr(self, 'drawing_label'):
+            return
+        if not self.config_path:
+            # Drawing without a config open used to raise `KeyError`/`TypeError` on `None`.
+            QMessageBox.warning(
+                self, "Warning",
+                "请先打开项目配置文件（Open Config File），再编辑骨架连接。"
+            )
+            return
+
+        self.SkeletonSelection.addItem(f"{value[0]}->{value[1]}")
+        skeleton = self.project_config.setdefault('skeleton', [])
+        if list(value) not in [list(edge) for edge in skeleton]:
+            # Duplicates used to multiply: the same connection appended again and again, and the
+            # combo grew one entry per redraw.
+            skeleton.append(list(value))
+        # Written atomically, like the labels.
+        temporary = Path(self.config_path).with_suffix(
+            Path(self.config_path).suffix + ".tmp"
+        )
+        with open(temporary, "w", encoding="utf-8") as stream:
+            yaml.safe_dump(
+                self.project_config,
+                stream,
+                indent=2,
+                sort_keys=False,
+                default_flow_style=False
+            )
+        os.replace(temporary, self.config_path)
     
     def onExportFormat(self, format='COCO'):
         """Handle export format change"""
@@ -819,10 +946,41 @@ class AnnotatorPage(QMainWindow, Ui_Annotator):
             
         
     def closeEvent(self, event):
-        """Handle closing of the save dialog"""
+        """Offer to keep unsaved work before the window goes away.
+
+        Closing used to clear the scene and accept, so every annotation not yet saved was lost
+        with nothing to show for it.
+        """
+        if self._has_unsaved_work():
+            answer = QMessageBox.question(
+                self,
+                "未保存的标注",
+                "当前图片的标注尚未保存，是否保存后关闭？",
+                QMessageBox.Save | QMessageBox.Discard | QMessageBox.Cancel,
+                QMessageBox.Cancel,
+            )
+            if answer == QMessageBox.Cancel:
+                event.ignore()
+                return
+            if answer == QMessageBox.Save:
+                self.onSaveLabel()
+
         self.scene.clear()
         self.drawing_label = None
         event.accept()
+
+    def _has_unsaved_work(self):
+        """Whether the current image's labels differ from what is on disk."""
+        if not self.current_image or not self.drawing_label:
+            return False
+        label_file = Path(self.images[self.sorted_keys[self.current_image_index]]).with_suffix(".json")
+        if not label_file.exists():
+            return bool(self.drawing_label.targets)
+        try:
+            saved = json.loads(label_file.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError):
+            return True
+        return len(saved.get("annotations", [])) != len(self.drawing_label.targets)
 
     def resizeEvent(self, event):
         """Maintain aspect ratio when resizing window"""

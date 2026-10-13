@@ -13,10 +13,6 @@
   <property name="windowTitle">
    <string>New Project</string>
   </property>
-  <property name="windowIcon">
-   <iconset>
-    <normaloff>media/logo.png</normaloff>media/logo.png</iconset>
-  </property>
   <layout class="QVBoxLayout" name="CreateNewProjectLayout">
    <item>
     <widget class="QGroupBox" name="BaseConfigGroup">

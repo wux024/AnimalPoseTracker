@@ -32,6 +32,10 @@ class VideoReaderThread(BaseThread):
             self.running = True
             self._lock.unlock()
             fps = self.cap.get(cv2.CAP_PROP_FPS)
+            # A camera commonly reports 0 before it starts streaming, and `1 / 0` used to end the
+            # reader after a single frame -- a preview or a run that stopped on its own.
+            if not fps or fps <= 0:
+                fps = 30.0
             self.status_update.emit("Read started")
             while self.is_running:
                 try:
@@ -48,7 +52,7 @@ class VideoReaderThread(BaseThread):
             error_info = traceback.format_exc()
             self.status_update.emit(f"(VideoReaderThread) Unexpected error: \n{error_info}")
         finally:
-            self.safe_stop()
+            self.request_stop()
             self._release_resources()
 
     def _release_resources(self):
@@ -96,7 +100,7 @@ class PreprocessThread(BaseThread):
             error_info = traceback.format_exc()
             self.status_update.emit(f"(PreprocessThread) Unexpected error: \n{error_info}")
         finally:
-            self.safe_stop()
+            self.request_stop()
 
 
 class InferenceThread(BaseThread):
@@ -136,7 +140,7 @@ class InferenceThread(BaseThread):
             error_info = traceback.format_exc()
             self.status_update.emit(f"(InferenceThread) Unexpected error: \n{error_info}")
         finally:
-            self.safe_stop()
+            self.request_stop()
 
 
 class PostprocessThread(BaseThread):
@@ -167,7 +171,10 @@ class PostprocessThread(BaseThread):
                 try:
                     frame, pred, IM, pre_time, infer_time = self.input_queue.get(timeout=1, block=True)
                     results, post_time = measure_time(self._postprocess_function, pred, IM)
-                    fps = 1.0 / (pre_time + infer_time + post_time + 1e-7)
+                    # Guarded: with a coarse clock every stage could measure 0.0 and the inverse
+                    # came out as ten million "fps" in the overlay.
+                    stage_time = pre_time + infer_time + post_time
+                    fps = 1.0 / stage_time if stage_time > 0 else 0.0
                     results.update(
                         {'preprocess_time': pre_time,
                          'inference_time': infer_time,
@@ -182,7 +189,7 @@ class PostprocessThread(BaseThread):
             error_info = traceback.format_exc()
             self.status_update.emit(f"(PostprocessThread) Unexpected error: \n{error_info}")
         finally:
-            self.safe_stop()
+            self.request_stop()
 
 
 class VisualizeThread(BaseThread):
@@ -224,7 +231,7 @@ class VisualizeThread(BaseThread):
             error_info = traceback.format_exc()
             self.status_update.emit(f"(VisualizeThread) Unexpected error: \n{error_info}")
         finally:
-            self.safe_stop()
+            self.request_stop()
 
 class VideoWriterThread(BaseThread):
     """Thread to run video writing"""
@@ -271,12 +278,19 @@ class VideoWriterThread(BaseThread):
     def run(self):
         fourcc = cv2.VideoWriter_fourcc(*'XVID')
         while True:
-            try:
-                frame = self.frames.get(timeout=1, block=True)
-            except queue.Empty:
-                if self._stop_flag:
+            if self._stop_flag:
+                # Frames already handed over still belong in the file: drain what is queued and
+                # only then leave. Breaking straight out dropped everything the writer had not
+                # consumed yet, and a short run produced no file at all.
+                try:
+                    frame = self.frames.get_nowait()
+                except queue.Empty:
                     break
-                continue
+            else:
+                try:
+                    frame = self.frames.get(timeout=1, block=True)
+                except queue.Empty:
+                    continue
             # Size the writer from the frames themselves. The UI's width/height boxes are what it
             # asked the source for, and a camera is free to hand back another size -- writing
             # those frames into a writer opened at the requested size stretches all of them.
@@ -298,12 +312,19 @@ class VideoWriterThread(BaseThread):
 
     def add_frame(self, frame):
         try:
-            self.frames.put(frame)
+            self.frames.put_nowait(frame)
         except queue.Full:
             pass
 
 
     def safe_stop(self):
+        """Ask the writer to finish, then wait.
+
+        ``stop_flag`` has to be set first: the run loop only leaves through it, so waiting on a
+        writer that was never told to stop blocked the caller forever -- and the caller is the
+        GUI thread on End/close.
+        """
+        self._stop_flag = True
         super().safe_stop()
         self.frame_count = 0
         self._release_resources()
