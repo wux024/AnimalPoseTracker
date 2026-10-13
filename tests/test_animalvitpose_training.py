@@ -405,7 +405,7 @@ class SimCCTrainingTests(unittest.TestCase):
 
     def test_generic_project_defaults_switch_to_the_animalvitpose_recipe(self):
         values, _applied = apply_animalvitpose_defaults({
-            "epochs": 1000,
+            "epochs": 100,
             "batch": 16,
             "imgsz": 640,
             "workers": 8,
@@ -426,6 +426,19 @@ class SimCCTrainingTests(unittest.TestCase):
         self.assertEqual(values["validation_interval"], 10)
         self.assertEqual(values["best_metric"], "coco/AP")
         self.assertEqual(values["ema"], False)
+
+    def test_explicit_1000_epochs_survive_the_recipe(self):
+        # Regression: 1000 was once treated as a "generic default" and silently rewritten
+        # into the ViTPose recipe's 500, so `--epochs 1000` never took effect.
+        values, _applied = apply_animalvitpose_defaults({
+            "epochs": 1000,
+            "batch": 16,
+            "optimizer": "auto",
+        })
+        self.assertEqual(values["epochs"], 1000)
+        # The rest of the recipe still applies to the untouched generic fields.
+        self.assertEqual(values["batch_size"], 64)
+        self.assertEqual(values["optimizer"], "AdamW")
         self.assertEqual(values["amp"], False)
         self.assertEqual(values["early_stopping_patience"], 0)
         self.assertEqual(values["gradient_accumulation_steps"], 1)

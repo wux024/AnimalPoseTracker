@@ -357,7 +357,11 @@ _ALIASES = {
 
 
 _GENERIC_DEFAULTS = {
-    "epochs": (100, 1000),
+    # 100 is the CLI default (a value nobody chose), so a recipe may take it over.
+    # 1000 is NOT a marker of "unchosen": it is both the RTPose template default and a
+    # very common explicit choice -- treating it as generic silently rewrote
+    # `--epochs 1000` into the ViTPose recipe's 500.
+    "epochs": (100,),
     "batch_size": (16,),
     "image_size": (640,),
     "optimizer": ("auto",),
