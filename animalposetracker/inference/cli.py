@@ -59,7 +59,7 @@ def _make_argument_parser() -> argparse.ArgumentParser:
                              "config yaml, sidecar metadata, then the runtime output shapes")
     parser.add_argument("--engine", choices=sorted(_ENGINE_NAMES),
                         help="Inference backend; defaults to the artifact format")
-    parser.add_argument("--device", default="CPU", help="Backend device string (default: CPU)")
+    parser.add_argument("--device", help="Backend device string (e.g. 'AMD CPU'); defaults to the first device the engine offers on this machine's platform")
     parser.add_argument("--bits", default="FP32", choices=("FP32", "FP16", "INT8"),
                         help="Model weight precision used by the backend")
     parser.add_argument("--source", required=True,
@@ -196,6 +196,7 @@ def run(argv=None) -> int:
     output_config = session.output_config
     input_config = session.input_config
     class_names = list(session.class_names)
+    skeleton = tuple(session.skeleton)
     head = session.head
     engine_key = session.engine_key
     pipeline = StreamInferencePipeline(

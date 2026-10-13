@@ -528,5 +528,33 @@ class ConsoleBannerTests(unittest.TestCase):
             self.assertIn("disabled (train from scratch)", banner)
 
 
+class InferenceCliRenderTests(unittest.TestCase):
+    """The one-frame renderer the CLI drives -- the ``skeleton``-NameError regression guard.
+
+    ``infer --output`` used to crash before the first frame because the main flow never
+    defined the ``skeleton`` argument the renderer takes; the flow now assigns it from
+    the session.
+    """
+
+    def test_render_accepts_an_empty_skeleton(self):
+        import numpy as np
+
+        from animalposetracker.inference.cli import _render
+
+        frame = np.zeros((32, 48, 3), dtype=np.uint8)
+        detection = {
+            "bbox_xyxy": [4, 4, 20, 20],
+            "score": 0.9,
+            "class_id": 0,
+            "class_name": "person",
+            "keypoints": [[6, 6, 1], [10, 10, 1], [14, 14, 1]],
+        }
+
+        rendered = _render(frame, [detection], ())
+
+        self.assertEqual(rendered.shape, frame.shape)
+        self.assertFalse((rendered == frame).all(), "nothing was drawn")
+
+
 if __name__ == "__main__":
     unittest.main()

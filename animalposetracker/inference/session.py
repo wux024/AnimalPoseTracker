@@ -13,6 +13,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Dict, List, Mapping, Optional, Sequence, Tuple
 
+from animalposetracker.inference.device_resolution import resolve_device
 from animalposetracker.inference.inferencer import InferenceEngine
 from animalposetracker.inference.stream_inference import StreamInputConfig
 from animalposetracker.postprocessing.nms_params import (
@@ -322,7 +323,7 @@ def build_inference_session(
     weights_path,
     config_path=None,
     engine: Optional[str] = None,
-    device: str = "CPU",
+    device: Optional[str] = None,
     bits: str = "FP32",
     conf: float = DEPLOY_NMS_CONF,
     iou: float = DEPLOY_NMS_IOU,
@@ -336,6 +337,8 @@ def build_inference_session(
         weights_path: Exported artifact (``.onnx``/``.engine``/``.mlpackage``/...).
         config_path: Dataset or project yaml, when a class/keypoint source is needed.
         engine: Backend name; defaults to the one implied by the artifact format.
+        device: Backend device name; ``None`` picks the first device the engine offers on
+            this machine's platform.
         schema: Explicit pose output schema; ``None``/``"auto"`` defers to the config, then the
             sidecar metadata, then the runtime shapes (see ``schema_resolution``).
 
@@ -364,6 +367,7 @@ def build_inference_session(
         )
     input_size = tuple(map(int, metadata.get("input_size") or (imgsz, imgsz)))
 
+    device = resolve_device(ENGINE_NAMES[engine_key], device)
     engine_instance = InferenceEngine(
         config=config_path,
         weights_path=str(weights_path),

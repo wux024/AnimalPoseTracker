@@ -180,7 +180,10 @@ class LetterboxCoreTests(unittest.TestCase):
         self.assertEqual(scale, shared_scale)
         resized_w, resized_h = letterbox_resized_size(7, 5, shared_scale)
         self.assertEqual((left, top), letterbox_padding(10, 8, resized_w, resized_h))
-        self.assertEqual(int(canvas[0, 0, 0]), PAD_VALUE)
+        # This geometry pads only the bottom: the corner pixel is image content (9), and the
+        # first row below the pasted image is the pad (114).
+        self.assertEqual(int(canvas[0, 0, 0]), 9)
+        self.assertEqual(int(canvas[top + resized_h, 0, 0]), PAD_VALUE)
 
         _out, inverse = preprocess_live_frame(image, 10, 8)
         self.assertAlmostEqual(float(np.asarray(inverse)[0][0]), 1.0 / shared_scale, places=5)

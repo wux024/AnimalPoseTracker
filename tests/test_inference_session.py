@@ -368,5 +368,59 @@ class ValidationTests(unittest.TestCase):
         self.assertFalse(report.weights_ok)
 
 
+class DeviceResolutionTests(unittest.TestCase):
+    """The single place that turns "nothing chosen" / the generic "CPU" into a table key.
+
+    Regression: ``--device`` and ``build_inference_session`` used to default to a bare
+    ``"CPU"``, which is no key of the ONNX table, so the ONNX engine raised
+    ``KeyError: 'CPU'`` on its default path.
+    """
+
+    def test_none_picks_the_first_device_of_the_platform(self):
+        from animalposetracker.inference import device_resolution
+
+        with patch.object(device_resolution, "detect_platform", return_value="AMD"):
+            self.assertEqual(device_resolution.resolve_device("ONNX", None), "AMD CPU")
+            self.assertEqual(device_resolution.resolve_device("OpenCV", None), "AMD CPU")
+
+    def test_the_generic_cpu_alias_uses_the_platform_spelling(self):
+        from animalposetracker.inference import device_resolution
+
+        with patch.object(device_resolution, "detect_platform", return_value="AMD"):
+            # ONNX's table has no plain "CPU" key; the platform spelling is what it holds.
+            self.assertEqual(device_resolution.resolve_device("ONNX", "CPU"), "AMD CPU")
+            # OpenCV's table does have "CPU", so the alias stays exactly as given.
+            self.assertEqual(device_resolution.resolve_device("OpenCV", "CPU"), "CPU")
+
+    def test_an_explicit_device_passes_through_unchanged(self):
+        from animalposetracker.inference.device_resolution import resolve_device
+
+        self.assertEqual(resolve_device("ONNX", "NVIDIA GPU TensorRT"), "NVIDIA GPU TensorRT")
+
+    def test_an_engine_with_no_device_on_the_platform_says_so(self):
+        from animalposetracker.inference import device_resolution
+
+        with patch.object(device_resolution, "detect_platform", return_value="AMD"):
+            with self.assertRaises(ValueError) as caught:
+                device_resolution.resolve_device("OpenVINO", None)
+        self.assertIn("OpenVINO", str(caught.exception))
+
+    def test_the_session_builder_resolves_before_constructing_the_engine(self):
+        source = (
+            Path(__file__).parent.parent / "animalposetracker" / "inference" / "session.py"
+        ).read_text(encoding="utf-8")
+        self.assertIn("resolve_device(", source)
+
+    def test_the_inference_package_never_imports_the_gui(self):
+        # Platform detection moved out of the page precisely so this direction stays
+        # one-way: GUI -> inference, never back.
+        package_dir = Path(__file__).parent.parent / "animalposetracker" / "inference"
+        for path in sorted(package_dir.rglob("*.py")):
+            with self.subTest(module=path.name):
+                self.assertNotIn(
+                    "animalposetracker.gui", path.read_text(encoding="utf-8"), path.name
+                )
+
+
 if __name__ == "__main__":
     unittest.main()

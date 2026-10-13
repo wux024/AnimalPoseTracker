@@ -18,6 +18,7 @@ from animalposetracker.utils import (VideoReaderThread, VideoWriterThread,
                                      PreprocessThread, InferenceThread, 
                                      PostprocessThread, VisualizeThread)
 from animalposetracker.inference import ENGINEtoDEVICE
+from animalposetracker.inference.device_resolution import detect_platform
 from animalposetracker.inference.session import (
     ENGINE_NAMES,
     build_inference_session,
@@ -101,7 +102,7 @@ class InferencerPage(QWidget, Ui_Inferencer):
         self._align_labels()
         self._align_display_switches()
 
-        self.platform = self._detect_platform()
+        self.platform = detect_platform()
         self.device_check_results = self._detect_device_availability()
 
         self.tools_disabled()
@@ -712,28 +713,6 @@ class InferencerPage(QWidget, Ui_Inferencer):
         default_engine = engines[0]
         self.EngineSelection.setCurrentText(default_engine)
 
-    def _detect_platform(self):
-        """Detect platform and hardware availability.
-
-        An unrecognised CPU vendor is not an error: it only means the vendor-specific device
-        checks below stay off, which is exactly what an unknown vendor should look like. Raising
-        here aborted the whole page's construction.
-        """
-        try:
-            import cpuinfo
-        except ImportError as exc:
-            raise ImportError("Please install 'py-cpuinfo' module") from exc
-
-        info = cpuinfo.get_cpu_info()
-        vendor = info.get('vendor_id_raw', '') or info.get('vendor_id', '') or ''
-        if vendor == 'GenuineIntel':
-            return 'Intel'
-        if vendor == 'AuthenticAMD':
-            return 'AMD'
-        if 'ARM' in info.get('arch', ''):
-            return 'ARM'
-        return 'Unknown'
-    
     def _detect_device_availability(self):
         """Check if devices are available for each engine and platform"""
         device_check_results = {
