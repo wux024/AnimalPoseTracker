@@ -652,7 +652,7 @@
              </sizepolicy>
             </property>
             <property name="text">
-             <string>Preprocess Time</string>
+             <string>Preprocess</string>
             </property>
            </widget>
           </item>
@@ -665,7 +665,7 @@
              </sizepolicy>
             </property>
             <property name="text">
-             <string>Inference Time</string>
+             <string>Inference</string>
             </property>
            </widget>
           </item>
@@ -678,7 +678,7 @@
              </sizepolicy>
             </property>
             <property name="text">
-             <string>Postprecoess Time</string>
+             <string>Postprocess</string>
             </property>
            </widget>
           </item>

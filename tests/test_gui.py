@@ -913,6 +913,20 @@ class InferencerDecodeTests(unittest.TestCase):
             with self.subTest(layout=layout.objectName()):
                 self.assertLessEqual(max(widths) - min(widths), 2)
 
+    def test_the_two_switch_rows_start_from_the_same_cells(self):
+        # The display group keeps one column rhythm: Save opens the first row at the Designer's
+        # 120, and the FPS switch opens the second row the same way, so both rows start their
+        # second cell at the same x and split what is left between three cells each.
+        page = self._page()
+        page.resize(1194, 800)
+        page.layout().activate()
+        QApplication.processEvents()
+
+        self.assertEqual(page.Save.width(), 120)
+        self.assertEqual(page.FPSShow.width(), 120)
+        self.assertEqual(page.FPSShow.x(), page.Save.x())
+        self.assertEqual(page.PreprocessTime.x(), page.Show.x())
+
     def test_the_left_group_labels_stand_in_one_column(self):
         # Rows read as a table when the labels are all one width: the field column then starts at
         # the same x in every row. Left to their own text, the fields began at 60 in the threshold

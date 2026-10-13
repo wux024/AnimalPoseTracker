@@ -99,6 +99,7 @@ class InferencerPage(QWidget, Ui_Inferencer):
         self._add_tracker_controls()
         self._add_status_line()
         self._align_labels()
+        self._align_display_switches()
 
         self.platform = self._detect_platform()
         self.device_check_results = self._detect_device_availability()
@@ -466,6 +467,16 @@ class InferencerPage(QWidget, Ui_Inferencer):
         width = max(label.sizeHint().width() for label in labels)
         for label in labels:
             label.setFixedWidth(width)
+
+    def _align_display_switches(self):
+        """Give the display group's two switch rows one column rhythm.
+
+        Both rows open with a fixed 120 cell -- Save keeps the width the Designer gave it, and
+        the Font Scale row below starts its slider at 120 as well -- so the FPS switch, the other
+        row's first cell, gets the same 120. Each row then divides what is left between three
+        equal cells, which lines the two rows up column for column.
+        """
+        self.FPSShow.setFixedWidth(120)
 
     def onEnableTrackingStateChanged(self, state):
         """The algorithm picker only means anything while tracking is on."""
