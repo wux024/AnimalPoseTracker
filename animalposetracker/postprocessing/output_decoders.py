@@ -8,8 +8,17 @@ named tensors into a common per-instance result.
 from dataclasses import dataclass
 from typing import Any, List, Mapping, Optional, Sequence, Tuple
 
+# Kept although the suppression itself now lives in `nms_core`: the stream tests patch
+# ``output_decoders.cv2.dnn.NMSBoxes``, so this module's namespace has to keep resolving it.
 import cv2
 import numpy as np
+
+from animalposetracker.postprocessing.nms_core import nms_indices_numpy
+from animalposetracker.postprocessing.nms_params import (
+    DEPLOY_NMS_AGNOSTIC,
+    DEPLOY_NMS_CONF,
+    DEPLOY_NMS_IOU,
+)
 
 
 YOLO_POSE_RAW = "ultralytics_yolo_pose_raw"
@@ -57,9 +66,9 @@ class PoseOutputConfig:
     keypoint_dims: int = 3
     output_names: Tuple[str, ...] = ()
     output_layout: str = "BCN"
-    confidence_threshold: float = 0.25
-    iou_threshold: float = 0.45
-    class_agnostic_nms: bool = True
+    confidence_threshold: float = DEPLOY_NMS_CONF
+    iou_threshold: float = DEPLOY_NMS_IOU
+    class_agnostic_nms: bool = DEPLOY_NMS_AGNOSTIC
     simcc_split_ratio: float = 2.0
     keypoint_channel_semantics: str = "visibility"
 
@@ -235,47 +244,6 @@ def _keypoint_fields(
     return keypoints_xy, third_channel, None
 
 
-def _nms_indices(
-    boxes_xyxy: np.ndarray,
-    scores: np.ndarray,
-    class_ids: np.ndarray,
-    config: PoseOutputConfig,
-) -> np.ndarray:
-    if boxes_xyxy.size == 0:
-        return np.empty((0,), dtype=np.int64)
-    keep: List[int] = []
-    class_groups = [None] if config.class_agnostic_nms else np.unique(class_ids)
-    for class_id in class_groups:
-        indices = (
-            np.arange(len(boxes_xyxy), dtype=np.int64)
-            if class_id is None
-            else np.flatnonzero(class_ids == class_id)
-        )
-        if not len(indices):
-            continue
-        boxes = boxes_xyxy[indices]
-        xywh = np.column_stack(
-            [
-                boxes[:, 0],
-                boxes[:, 1],
-                boxes[:, 2] - boxes[:, 0],
-                boxes[:, 3] - boxes[:, 1],
-            ]
-        )
-        selected = cv2.dnn.NMSBoxes(
-            xywh.tolist(),
-            scores[indices].astype(float).tolist(),
-            float(config.confidence_threshold),
-            float(config.iou_threshold),
-        )
-        if selected is not None:
-            keep.extend(indices[np.asarray(selected, dtype=np.int64).reshape(-1)].tolist())
-    if not keep:
-        return np.empty((0,), dtype=np.int64)
-    keep_array = np.asarray(keep, dtype=np.int64)
-    return keep_array[np.argsort(scores[keep_array])[::-1]]
-
-
 def _decode_yolo_raw(
     outputs: Mapping[str, np.ndarray],
     config: PoseOutputConfig,
@@ -307,7 +275,14 @@ def _decode_yolo_raw(
     decoded_keypoints = [
         _keypoint_fields(values, config, inverse_affine) for values in keypoint_data
     ]
-    keep = _nms_indices(boxes_xyxy, scores, class_ids, config)
+    keep = nms_indices_numpy(
+        boxes_xyxy,
+        scores,
+        class_ids,
+        agnostic=config.class_agnostic_nms,
+        confidence_threshold=config.confidence_threshold,
+        iou_threshold=config.iou_threshold,
+    )
     return [
         PoseInstance(
             bbox_xyxy=boxes_xyxy[index],

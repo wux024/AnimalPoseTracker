@@ -23,6 +23,12 @@ from animalposetracker.project.model_context import (
 )
 from animalposetracker.artifacts import detect_artifact_format, read_artifact_metadata
 from animalposetracker.preprocessing.letterbox import letterbox_image
+from animalposetracker.postprocessing.nms_params import (
+    PREDICT_NMS_AGNOSTIC,
+    PREDICT_NMS_CONF,
+    PREDICT_NMS_IOU,
+    PREDICT_NMS_MAX_DET,
+)
 from animalposetracker.prediction.backends import (
     ModelArtifactBackend,
 )
@@ -926,12 +932,12 @@ def run(argv=None, box_provider: InstanceBoxProvider = None) -> int:
     prediction_confidence = (
         args.conf
         if args.conf is not None
-        else settings_values.get("prediction_confidence", 0.25)
+        else settings_values.get("prediction_confidence", PREDICT_NMS_CONF)
     )
     prediction_iou = (
         args.iou
         if args.iou is not None
-        else settings_values.get("prediction_iou", 0.7)
+        else settings_values.get("prediction_iou", PREDICT_NMS_IOU)
     )
     if not 0.0 <= float(prediction_confidence) <= 1.0:
         raise ValueError("Prediction confidence threshold must be between 0 and 1")
@@ -941,8 +947,8 @@ def run(argv=None, box_provider: InstanceBoxProvider = None) -> int:
         "confidence": float(prediction_confidence),
         "keypoint_confidence": float(settings_values.get("keypoint_score_threshold", 0.25)),
         "iou": float(prediction_iou),
-        "max_detections": int(settings_values.get("max_det", 300)),
-        "agnostic_nms": bool(settings_values.get("agnostic_nms", False)),
+        "max_detections": int(settings_values.get("max_det", PREDICT_NMS_MAX_DET)),
+        "agnostic_nms": bool(settings_values.get("agnostic_nms", PREDICT_NMS_AGNOSTIC)),
         "show_boxes": bool(settings_values.get("show_boxes", True)),
         "show_labels": bool(settings_values.get("show_labels", True)),
         "show_confidence": bool(settings_values.get("show_conf", True)),

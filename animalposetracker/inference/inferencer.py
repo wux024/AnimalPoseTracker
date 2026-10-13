@@ -3,12 +3,10 @@ import cv2
 import numpy as np
 import operator
 import yaml
-import time
 from pathlib import Path
 import os
 
 from .constant import ENGINEtoBackend, OpenCV_TARGETS, EP_PARAMS
-from .utils import measure_time
 
 
 def _static_shape(shape) -> Tuple[int, ...]:
@@ -675,103 +673,6 @@ class InferenceEngine:
             coreml=self._coreml,
         )
 
-    def postprocess(self, pred, IM=[]):
-        """
-        Performs post-processing on the model's output to extract bounding boxes, scores, and class IDs.
-
-        Args:
-            pred (numpy.ndarray): The output of the model.
-            1, 8400, boxes + classes + keypoints * 3 [cx, cy, w, h, conf1, ..., confn, nk*3]
-            for example: for ap10k, it has 50 classes and 17 keypoints, so
-            pred's shape is [1,8400, 4+50+17*3].
-            IM (list): The list of input images to draw detections on.
-
-        Returns:
-            numpy.ndarray: The input image with detections drawn on it.
-        """
-        # Transpose and squeeze the output to match the expected shape
-        if self._coreml:
-            pred = list(pred.values())
-            outputs = np.transpose(np.squeeze(pred[0]))
-        elif self._tensorrt:
-            dim = 4 + len(self.classes) + len(self.keypoints) * 3
-            outputs = np.transpose(pred[0].reshape(dim, -1))
-        else:
-            outputs = np.transpose(np.squeeze(pred[0]))
-
-        # Get the number of rows in the outputs array
-        rows = outputs.shape[0]
-
-        # Lists to store the bounding boxes, scores, and class IDs of the detections
-        boxes = []
-        keypoints_list = []
-        scores = []
-        class_ids = []
-
-        # Iterate over each row in the outputs array
-        for i in range(rows):
-            # Extract the class scores from the current row
-            classes_scores = outputs[i][4:4 + len(self.classes)]
-
-            # Find the maximum score among the class scores
-            max_score = np.amax(classes_scores)
-
-            # If the maximum score is above the confidence threshold
-            if max_score >= self.visualize_config['conf']:
-                # Get the class ID with the highest score
-                class_id = np.argmax(classes_scores)
-
-                # Extract the bounding box coordinates from the current row
-                x, y, w, h = outputs[i][0], outputs[i][1], outputs[i][2], outputs[i][3]
-
-                # Calculate the scaled coordinates of the bounding box
-                left = (x - w * 0.5) * IM[0][0] + IM[0][2]
-                top = (y - h * 0.5) * IM[1][1] + IM[1][2]
-                width = w * IM[0][0]
-                height = h * IM[1][1]
-
-                keypoints = outputs[i][4 + len(self.classes):].reshape(-1, 3)
-                keypoints[:, 0] = keypoints[:, 0] * IM[0][0] + IM[0][2]
-                keypoints[:, 1] = keypoints[:, 1] * IM[1][1] + IM[1][2]
-
-                # Add the class ID, score, and box coordinates to the respective lists
-                class_ids.append(class_id)
-                scores.append(max_score)
-                boxes.append([left, top, width, height])
-                keypoints_list.append(keypoints)
-
-        # Apply non-maximum suppression to filter out overlapping bounding boxes
-        indices = cv2.dnn.NMSBoxes(boxes, scores, 
-                                   self.visualize_config['conf'], 
-                                   self.visualize_config['iou'])
-
-        boxes = np.array(boxes)
-        keypoints_list = np.array(keypoints_list)
-        scores = np.array(scores)
-        class_ids = np.array(class_ids)
-
-        if indices is not None:
-            indices = indices[0] if len(indices) == 1 else indices
-            boxes = boxes[indices]
-            keypoints_list = keypoints_list[indices]
-            class_ids = class_ids[indices]
-            scores = scores[indices]
-            results = {
-                'boxes': boxes,
-                'keypoints_list': keypoints_list,
-                'class_ids': class_ids,
-                'scores': scores,
-            }
-        else:
-            results = {
-                'boxes': None,
-                'keypoints_list': None,
-                'class_ids': None,
-               'scores': None,
-            }
-        # Return the modified input image
-        return results
-    
     def inference(self, img):
         # Run inference using the preprocessed image data
         if self._engine == 'OpenCV':
@@ -869,54 +770,6 @@ class InferenceEngine:
             return trt_outputs
         except ImportError:
             raise ImportError("Please install tensorrt and pycuda to use TensorRT engine.")
-
-    def warmup(self, times: int = 3, with_postprocess: bool = True, verbose: bool = False):
-        """Warm up the model and post-processing ops to remove first-call overhead.
-
-        Why this matters: the first inference on TensorRT / CUDA compiles kernels and allocates
-        device memory, which can be tens of times slower than steady state. NMS and other
-        post-processing ops also pay a one-off cost on their first call. Without warmup, the first
-        frames of the first video run abnormally slow and that cost is included in the FPS
-        statistics, which distorts the reported real-time numbers.
-
-        Must be called after model_init(). Works for all six engines because it goes through the
-        existing preprocess / inference / postprocess dispatch, so no per-backend implementation
-        is required.
-
-        Args:
-            times (int): Number of forward passes. The one-off cost is mostly paid by the first
-                call, so 3 is already enough to stabilize.
-            with_postprocess (bool): Also warm up post-processing (NMS etc.). Keep True.
-            verbose (bool): Print warmup timing.
-
-        Returns:
-            float: Average time per forward pass after warmup, in seconds.
-
-        Raises:
-            RuntimeError: Model has not been loaded yet.
-        """
-        if self.model is None:
-            raise RuntimeError("Model not loaded, call model_init() first.")
-
-        # Build a valid input from a zero image; preprocess scales it to input_width/height
-        dummy = np.zeros((self._input_height, self._input_width, 3), dtype=np.uint8)
-        img, IM = self.preprocess(dummy)
-
-        start = time.perf_counter()
-        for _ in range(max(int(times), 1)):
-            pred = self.inference(img)
-            if with_postprocess:
-                self.postprocess(pred, IM)  # warm up NMS and other post-processing ops
-        elapsed = time.perf_counter() - start
-        avg = elapsed / max(int(times), 1)
-
-        if verbose:
-            print(
-                f"[warmup] engine={self._engine} device={self._device} "
-                f"bits={self._model_bits} times={times} "
-                f"total={elapsed * 1000:.1f} ms  avg={avg * 1000:.2f} ms"
-            )
-        return avg
 
     def draw_detections(self, 
                         img, 
@@ -1111,33 +964,3 @@ class InferenceEngine:
                         font_scale, font_color, thickness, cv2.LINE_AA)
         
         return frame
-    
-
-    def process_frame(self, frame):
-        """
-        Performs inference and returns the output image with drawn detections.
-
-        Returns:
-            output_img: The output image with drawn detections.
-        """
-
-        # Preprocess the image data
-        [img, IM], preprocess_time = measure_time(self.preprocess, frame)
-
-        # Run inference using the preprocessed image data
-
-        pred, inference_time = measure_time(self.inference, img)
-
-
-        # Postprocess the model's output to extract bounding boxes, scores, and class IDs
-        results, postprocess_time = measure_time(self.postprocess, pred, IM)
-
-        results['preprocess_time'] = preprocess_time
-        results['inference_time'] = inference_time
-        results['postprocess_time'] = postprocess_time
-        results['fps'] = 1.0 / (inference_time + postprocess_time + preprocess_time + 1e-7)
-
-        # Visualize the output of the model on the input image
-        frame = self.visualize(frame, results)
-
-        return frame, results

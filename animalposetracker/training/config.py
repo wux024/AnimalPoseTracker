@@ -4,6 +4,13 @@ from dataclasses import asdict, dataclass
 from pathlib import Path
 from typing import Any, Dict, Optional, Union
 
+from animalposetracker.postprocessing.nms_params import (
+    TRAINING_NMS_AGNOSTIC,
+    TRAINING_NMS_CONF,
+    TRAINING_NMS_IOU,
+    TRAINING_NMS_MAX_DET,
+)
+
 
 PathLike = Union[str, Path]
 
@@ -65,11 +72,11 @@ class TrainingConfig:
 
     validation_interval: int = 1
     validation_enabled: bool = True
-    validation_confidence: float = 0.001
-    validation_iou: float = 0.7
-    max_detections: int = 300
+    validation_confidence: float = TRAINING_NMS_CONF
+    validation_iou: float = TRAINING_NMS_IOU
+    max_detections: int = TRAINING_NMS_MAX_DET
     oks_area_mode: str = "annotation"
-    agnostic_nms: bool = False
+    agnostic_nms: bool = TRAINING_NMS_AGNOSTIC
     best_metric: str = "coco/AP"
     best_metric_mode: str = "max"
     early_stopping_patience: int = 300

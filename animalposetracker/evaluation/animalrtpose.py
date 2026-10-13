@@ -15,6 +15,12 @@ from animalposetracker.evaluation.metrics import (
     keypoint_error_metrics_from_coco_matches,
 )
 from animalposetracker.postprocessing.nms import pose_non_max_suppression
+from animalposetracker.postprocessing.nms_params import (
+    TRAINING_NMS_AGNOSTIC,
+    TRAINING_NMS_CONF,
+    TRAINING_NMS_IOU,
+    TRAINING_NMS_MAX_DET,
+)
 
 
 class PoseDetectionValidator:
@@ -23,10 +29,10 @@ class PoseDetectionValidator:
     def __init__(
         self,
         criterion: PoseDetectionLoss,
-        confidence_threshold: float = 0.001,
-        iou_threshold: float = 0.7,
-        max_detections: int = 300,
-        agnostic_nms: bool = False,
+        confidence_threshold: float = TRAINING_NMS_CONF,
+        iou_threshold: float = TRAINING_NMS_IOU,
+        max_detections: int = TRAINING_NMS_MAX_DET,
+        agnostic_nms: bool = TRAINING_NMS_AGNOSTIC,
         plots: bool = False,
         output_dir: Optional[str] = None,
         class_names: Optional[Sequence[str]] = None,

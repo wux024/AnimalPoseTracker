@@ -23,6 +23,11 @@ from animalposetracker.inference.session import (
     pixel_points,
     resolve_num_classes,
 )
+from animalposetracker.postprocessing.nms_params import (
+    DEPLOY_NMS_AGNOSTIC,
+    DEPLOY_NMS_CONF,
+    DEPLOY_NMS_IOU,
+)
 
 
 # The underscore names stay: they are what this module has always exposed, and the tests reach
@@ -59,8 +64,8 @@ def _make_argument_parser() -> argparse.ArgumentParser:
                         help="Model weight precision used by the backend")
     parser.add_argument("--source", required=True,
                         help="Camera index (0, 1, ...), video file path, or stream URL")
-    parser.add_argument("--conf", type=float, default=0.25, help="Confidence threshold")
-    parser.add_argument("--iou", type=float, default=0.45, help="NMS IoU threshold")
+    parser.add_argument("--conf", type=float, default=DEPLOY_NMS_CONF, help="Confidence threshold")
+    parser.add_argument("--iou", type=float, default=DEPLOY_NMS_IOU, help="NMS IoU threshold")
     parser.add_argument("--imgsz", type=int, default=640,
                         help="Fallback square input size when no sidecar metadata exists")
     parser.add_argument("--tracker",
@@ -78,7 +83,7 @@ def _make_argument_parser() -> argparse.ArgumentParser:
                         help="Use class-agnostic NMS")
     parser.add_argument("--class-aware-nms", dest="agnostic_nms", action="store_false",
                         help="Apply NMS separately for each class")
-    parser.set_defaults(agnostic_nms=True)
+    parser.set_defaults(agnostic_nms=DEPLOY_NMS_AGNOSTIC)
     parser.add_argument("--show-boxes", dest="show_boxes", action="store_true")
     parser.add_argument("--no-show-boxes", dest="show_boxes", action="store_false")
     parser.add_argument("--show-labels", dest="show_labels", action="store_true")

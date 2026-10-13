@@ -15,6 +15,11 @@ from typing import Any, Dict, List, Mapping, Optional, Sequence, Tuple
 
 from animalposetracker.inference.inferencer import InferenceEngine
 from animalposetracker.inference.stream_inference import StreamInputConfig
+from animalposetracker.postprocessing.nms_params import (
+    DEPLOY_NMS_AGNOSTIC,
+    DEPLOY_NMS_CONF,
+    DEPLOY_NMS_IOU,
+)
 
 
 ENGINE_NAMES = {
@@ -319,9 +324,9 @@ def build_inference_session(
     engine: Optional[str] = None,
     device: str = "CPU",
     bits: str = "FP32",
-    conf: float = 0.25,
-    iou: float = 0.45,
-    agnostic_nms: bool = True,
+    conf: float = DEPLOY_NMS_CONF,
+    iou: float = DEPLOY_NMS_IOU,
+    agnostic_nms: bool = DEPLOY_NMS_AGNOSTIC,
     schema: Optional[str] = None,
     imgsz: int = 640,
 ) -> InferenceSession:

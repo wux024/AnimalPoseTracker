@@ -13,6 +13,11 @@ from animalposetracker.evaluation.metrics import (
     evaluate_coco_keypoints,
     keypoint_error_metrics,
 )
+from animalposetracker.postprocessing.nms_core import (
+    greedy_suppress,
+    group_by_key,
+    oks_similarity,
+)
 
 class SimCCPoseValidator:
     """Compute MMPose-compatible SimCC decoding and keypoint metrics."""
@@ -203,38 +208,39 @@ class SimCCPoseValidator:
         ``oks_area_mode`` convention, so this threshold and the reported AP agree on the OKS
         scale. AnimalRTPose has no OKS-NMS at all -- it suppresses on box IoU -- so the two heads
         share no NMS area convention.
+
+        The skeleton (group, order, greedy) and the OKS expression itself now come from
+        ``postprocessing.nms_core``; only the per-detection plumbing stays here.
         """
-        grouped = {}
-        for detection in detections:
-            group_key = int(detection["image_id"])
-            grouped.setdefault(group_key, []).append(detection)
+        grouped = group_by_key([int(detection["image_id"]) for detection in detections])
         kept = []
         variances = (self.kpt_oks_sigmas * 2.0) ** 2
-        for instances in grouped.values():
+        for positions in grouped.values():
+            instances = [detections[position] for position in positions]
             order = sorted(
                 range(len(instances)),
                 key=lambda index: instances[index]["score"],
                 reverse=True,
             )
-            image_kept = []
-            while order:
-                selected_index = order[0]
+
+            def suppress(selected_index, rest_indices):
                 selected = instances[selected_index]
-                image_kept.append(selected)
-                selected_keypoints = np.asarray(selected["keypoints"], dtype=np.float32).reshape(-1, 3)
-                remaining = []
-                for candidate_index in order[1:]:
-                    candidate = instances[candidate_index]
-                    candidate_keypoints = np.asarray(candidate["keypoints"], dtype=np.float32).reshape(-1, 3)
-                    delta = candidate_keypoints[:, :2] - selected_keypoints[:, :2]
-                    denominator = (
-                        variances
-                        * ((float(selected["area"]) + float(candidate["area"])) * 0.5 + np.spacing(1))
-                        * 2.0
+                selected_keypoints = np.asarray(
+                    selected["keypoints"], dtype=np.float32
+                ).reshape(-1, 3)
+                return [
+                    oks_similarity(
+                        selected_keypoints,
+                        np.asarray(instances[index]["keypoints"], dtype=np.float32).reshape(-1, 3),
+                        selected["area"],
+                        instances[index]["area"],
+                        variances,
                     )
-                    oks = float(np.exp(-np.sum(delta * delta, axis=1) / denominator).mean())
-                    if oks <= threshold:
-                        remaining.append(candidate_index)
-                order = remaining
-            kept.extend(image_kept)
+                    > threshold
+                    for index in rest_indices
+                ]
+
+            kept.extend(
+                instances[position] for position in greedy_suppress(order, suppress=suppress)
+            )
         return kept

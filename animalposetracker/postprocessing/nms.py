@@ -5,6 +5,14 @@ import time
 
 import torch
 
+from animalposetracker.postprocessing.nms_core import nms_indices_torch
+from animalposetracker.postprocessing.nms_params import (
+    TRAINING_NMS_AGNOSTIC,
+    TRAINING_NMS_CONF,
+    TRAINING_NMS_IOU,
+    TRAINING_NMS_MAX_DET,
+)
+
 try:
     import torchvision
 except (ImportError, RuntimeError):
@@ -14,47 +22,15 @@ except (ImportError, RuntimeError):
 LOGGER = logging.getLogger(__name__)
 
 
-def _nms_indices(boxes: torch.Tensor, scores: torch.Tensor, threshold: float):
-    """Port Ultralytics' TorchNMS.nms greedy suppression loop."""
-    if boxes.numel() == 0:
-        return torch.empty((0,), dtype=torch.int64, device=boxes.device)
-
-    x1, y1, x2, y2 = boxes.unbind(1)
-    areas = (x2 - x1) * (y2 - y1)
-    order = scores.argsort(0, descending=True)
-    keep = torch.zeros(order.numel(), dtype=torch.int64, device=boxes.device)
-    keep_count = 0
-    while order.numel() > 0:
-        current = order[0]
-        keep[keep_count] = current
-        keep_count += 1
-        if order.numel() == 1:
-            break
-
-        remaining = order[1:]
-        xx1 = torch.maximum(x1[current], x1[remaining])
-        yy1 = torch.maximum(y1[current], y1[remaining])
-        xx2 = torch.minimum(x2[current], x2[remaining])
-        yy2 = torch.minimum(y2[current], y2[remaining])
-        intersection = (xx2 - xx1).clamp_(min=0) * (yy2 - yy1).clamp_(min=0)
-        if intersection.sum() == 0:
-            order = remaining
-            continue
-        overlap = intersection / (areas[current] + areas[remaining] - intersection)
-        order = remaining[overlap <= threshold]
-
-    return keep[:keep_count]
-
-
 def pose_non_max_suppression(
     predictions: torch.Tensor,
     num_classes: int,
     num_keypoints: int,
     keypoint_dimensions: int,
-    confidence_threshold: float = 0.001,
-    iou_threshold: float = 0.7,
-    max_detections: int = 300,
-    agnostic: bool = False,
+    confidence_threshold: float = TRAINING_NMS_CONF,
+    iou_threshold: float = TRAINING_NMS_IOU,
+    max_detections: int = TRAINING_NMS_MAX_DET,
+    agnostic: bool = TRAINING_NMS_AGNOSTIC,
 ):
     """Apply Ultralytics PoseValidator's multi-label box NMS to pose predictions."""
     if not 0.0 <= confidence_threshold <= 1.0:
@@ -118,7 +94,7 @@ def pose_non_max_suppression(
         if use_torchvision:
             keep = torchvision.ops.nms(nms_boxes, scores, iou_threshold)
         else:
-            keep = _nms_indices(nms_boxes, scores, iou_threshold)
+            keep = nms_indices_torch(nms_boxes, scores, iou_threshold)
         image_prediction = image_prediction[keep[:max_detections]]
 
         keypoints = image_prediction[:, 6:].reshape(
