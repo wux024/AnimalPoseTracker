@@ -413,7 +413,6 @@ class SimCCTrainingTests(unittest.TestCase):
             "lr0": 0.01,
             "weight_decay": 5e-4,
             "amp": True,
-            "patience": 300,
             "pretrained": True,
         })
         self.assertEqual(values["epochs"], 500)
@@ -440,11 +439,18 @@ class SimCCTrainingTests(unittest.TestCase):
         self.assertEqual(values["batch_size"], 64)
         self.assertEqual(values["optimizer"], "AdamW")
         self.assertEqual(values["amp"], False)
-        self.assertEqual(values["early_stopping_patience"], 0)
+        self.assertEqual(values["early_stopping_patience"], 300)
         self.assertEqual(values["gradient_accumulation_steps"], 1)
         self.assertIn("mae_pretrain_vit_small_20230913.pth", values["pretrained_weights"])
         typed = TrainingConfig.from_mapping(values)
         self.assertEqual(typed.pretrained_weights, values["pretrained_weights"])
+
+    def test_explicit_300_patience_survives(self):
+        # Same lesson as epochs: a written patience value is the user's choice; the recipe
+        # only fills 0 when the key is absent.
+        values, applied = apply_animalvitpose_defaults({"epochs": 1000, "patience": 300})
+        self.assertNotIn("early_stopping_patience", applied)
+        self.assertEqual(values["patience"], 300)
 
     def test_vit_layer_decay_groups_match_mmpose_layer_order(self):
         class TinyBackbone(torch.nn.Module):

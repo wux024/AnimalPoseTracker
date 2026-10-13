@@ -370,7 +370,9 @@ _GENERIC_DEFAULTS = {
     "seed": (0,),
     "log_interval": (20,),
     "warmup_epochs": (3.0,),
-    "early_stopping_patience": (300,),
+    # Early stopping stays out of this table on purpose: a missing value means "keep the
+    # recipe default (0 = run to the end)", and any written value is the user's own --
+    # the same lesson as the epochs marker below.
     "ema": (True,),
     "amp": (True,),
 }
