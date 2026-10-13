@@ -228,6 +228,16 @@ def _create_project(args: argparse.Namespace) -> AnimalPoseTrackerProject:
         for key, value in dataset_config.items()
         if key not in {"kpt_shape", "flip_idx", "names", "skeleton", "kpt_oks_sigmas"}
     })
+    # The template's left/right swap table has to travel with the project: without it the
+    # derived dataset.yaml keeps the identity mapping, and fliplr then mirrors keypoint
+    # coordinates without swapping their left/right labels.
+    template_flip = dataset_config.get("flip_idx")
+    if (
+        isinstance(template_flip, (list, tuple))
+        and len(template_flip) == keypoint_count
+        and sorted(int(index) for index in template_flip) == list(range(keypoint_count))
+    ):
+        project.dataset_config["flip_idx"] = [int(index) for index in template_flip]
     project.dataset_config["path"] = str(dataset_root)
     project.other_config.update({
         "val": True,

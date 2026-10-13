@@ -104,6 +104,45 @@ class CommandDispatcherTests(unittest.TestCase):
                 saved_other["training"]["shared"]["runtime"]["pretrained"]
             )
 
+    def test_project_create_keeps_the_templates_flip_table(self):
+        # The create flow carries the template's shape keys into the project; flip_idx has to
+        # travel with them, or fliplr augmentation mirrors coordinates without swapping the
+        # left/right labels.
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            root = Path(temporary_directory)
+            dataset_yaml = root / "twoperson.yaml"
+            dataset_yaml.write_text(yaml.safe_dump({
+                "path": "unused",
+                "train": "images/train",
+                "val": "images/val",
+                "test": "images/test",
+                "kpt_shape": [2, 3],
+                "flip_idx": [1, 0],
+                "names": {0: "person"},
+                "skeleton": [[0, 1]],
+            }), encoding="utf-8")
+            workspace = root / "workspace"
+            dataset_root = root / "dataset"
+
+            with patch("sys.stdout"):
+                result = main([
+                    "create",
+                    "--dataset", str(dataset_yaml),
+                    "--dataset-root", str(dataset_root),
+                    "--workspace", str(workspace),
+                    "--name", "twoperson",
+                    "--worker", "test",
+                    "--model", "AnimalRTPose",
+                    "--scale", "N",
+                    "--date", "20261013-190000",
+                    "--no-pretrained",
+                ])
+
+            project = workspace / "twoperson-test-AnimalRTPose-N-20261013-190000"
+            self.assertEqual(result, 0)
+            saved_data = yaml.safe_load((project / "configs" / "dataset.yaml").read_text(encoding="utf-8"))
+            self.assertEqual(saved_data["flip_idx"], [1, 0])
+
     def test_no_arguments_prints_help(self):
         with patch("sys.stdout"):
             self.assertEqual(main([]), 0)

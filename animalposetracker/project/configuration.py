@@ -137,9 +137,22 @@ class ProjectConfigurationMixin:
         if not isinstance(sigmas, (list, tuple)) or len(sigmas) != keypoints:
             sigmas = [1.0 / keypoints] * keypoints
 
+        # A caller may have brought a real left/right swap table with it (the CLI create flow
+        # hands over the template's); keep it, and fall back to the identity mapping only when
+        # there is nothing usable to keep.
+        existing_flip = self.dataset_config.get("flip_idx")
+        if (
+            isinstance(existing_flip, (list, tuple))
+            and len(existing_flip) == keypoints
+            and sorted(int(index) for index in existing_flip) == list(range(keypoints))
+        ):
+            flip_idx = [int(index) for index in existing_flip]
+        else:
+            flip_idx = list(range(keypoints))
+
         self.dataset_config.update({
             "kpt_shape": [keypoints, 3 if self.project_config.get("visible") else 2],
-            "flip_idx": list(range(keypoints)),
+            "flip_idx": flip_idx,
             "names": dict(enumerate(class_names)),
             "skeleton": [
                 list(connection) for connection in (self.project_config.get("skeleton") or [])
