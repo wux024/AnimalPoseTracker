@@ -243,6 +243,44 @@ class BuildSessionTests(unittest.TestCase):
         self.assertEqual(session.head, "SimCCHead")
         self.assertEqual(session.kpt_shape, (5, 3))
 
+    def test_a_declared_preprocessing_block_reaches_the_configs(self):
+        # AnimalViTPose sidecars declare the mmpose normalization and the graph bakes
+        # none of it; dropping the declared values silently feeds the pose model raw
+        # pixels, which decodes into keypoints scattered across the whole frame.
+        session = self._build(
+            config_mapping=PROJECT_STYLE,
+            metadata={
+                "head": "SimCCHead",
+                "kpt_shape": [5, 3],
+                "outputs": ["simcc_x", "simcc_y"],
+                "pixel_mean": [123.675, 116.28, 103.53],
+                "pixel_std": [58.395, 57.12, 57.375],
+                "bbox_padding": 1.25,
+                "simcc_split_ratio": 2.0,
+            },
+            topdown=True,
+        )
+
+        self.assertEqual(session.input_config.pixel_mean, (123.675, 116.28, 103.53))
+        self.assertEqual(session.input_config.pixel_std, (58.395, 57.12, 57.375))
+        self.assertEqual(session.input_config.bbox_padding, 1.25)
+        self.assertEqual(session.output_config.simcc_split_ratio, 2.0)
+
+    def test_without_a_declared_block_the_neutral_values_stay(self):
+        session = self._build(
+            config_mapping=PROJECT_STYLE,
+            metadata={
+                "head": "SimCCHead",
+                "kpt_shape": [5, 3],
+                "outputs": ["simcc_x", "simcc_y"],
+            },
+            topdown=True,
+        )
+
+        self.assertEqual(session.input_config.pixel_mean, (0.0, 0.0, 0.0))
+        self.assertEqual(session.input_config.pixel_std, (1.0, 1.0, 1.0))
+        self.assertEqual(session.output_config.simcc_split_ratio, 2.0)
+
     def test_the_engine_receives_the_resolved_backend_and_bits(self):
         self._build(
             metadata={"kpt_shape": [4, 3], "schema": "ultralytics_yolo_pose_raw"},

@@ -429,11 +429,20 @@ def build_inference_session(
         confidence_threshold=conf,
         iou_threshold=iou,
         class_agnostic_nms=agnostic_nms,
+        # Declared by SimCC exports; the neutral 2.0 stays as the fallback.
+        simcc_split_ratio=float(metadata.get("simcc_split_ratio") or 2.0),
     )
     input_config = StreamInputConfig(
         input_size=input_size,
         preprocess_mode="engine",
         color_order=str(metadata.get("color_order", "RGB")),
+        # The mmpose-family exports declare this normalization and bake none of it
+        # into the graph, so the top-down crop has to apply it: without the declared
+        # values the pose model silently decodes raw pixels into scattered keypoints.
+        # Artifacts that declare nothing keep the neutral values, exactly as before.
+        pixel_mean=tuple(metadata.get("pixel_mean") or (0.0, 0.0, 0.0)),
+        pixel_std=tuple(metadata.get("pixel_std") or (1.0, 1.0, 1.0)),
+        bbox_padding=float(metadata.get("bbox_padding") or 1.25),
     )
     return InferenceSession(
         engine=engine_instance,
