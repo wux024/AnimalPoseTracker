@@ -45,11 +45,15 @@ dependencies = [
     "scipy>=1.4.1",
     "py-cpuinfo", 
     "scikit-learn>=1.3.2", 
-    "onnxruntime>=1.10.0",
+    # ONNX runtime is an either/or choice: the CPU package and onnxruntime-gpu
+    # are separate distributions that provide the same `onnxruntime` module, so
+    # pinning one here silently clobbers the other. Pick one via the extras below.
     "tqdm>=4.64.0",
 ]
 
 [project.optional-dependencies]
+onnx-cpu = ["onnxruntime>=1.10.0"]
+onnx-gpu = ["onnxruntime-gpu>=1.10.0"]
 gui = [
     "PySide6>=6.2.4",
     "PyCameraList>=1.0.0; platform_system == 'Windows'",
