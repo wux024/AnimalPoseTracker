@@ -12,6 +12,7 @@ import sys
 import time
 from pathlib import Path
 
+import yaml
 from tqdm import tqdm
 
 from animalposetracker.inference.session import (
@@ -41,6 +42,72 @@ _instance_to_record = instance_to_record
 _pixel_points = pixel_points
 
 
+# The run-time keys an infer configuration file may carry, in the canonical
+# spellings (the parser's dest names). Data-description keys ride along in the
+# same file for the session to read and are skipped here.
+_INFER_FILE_KEYS = frozenset({
+    "weights", "detector_weights", "engine", "device", "bits", "imgsz",
+    "source", "conf", "iou", "agnostic_nms", "detector_conf",
+    "detector_box_format", "detector_coord_mode", "detector_preprocess_mode",
+    "schema", "show_boxes", "show_labels", "show_keypoints", "show_skeletons",
+    "line_width", "point_radius", "tracker", "pose_filter",
+    "filter_window", "filter_polyorder", "filter_confidence", "filter_max_gap",
+    "output", "records", "show", "max_frames",
+})
+_DATA_DESCRIPTION_KEYS = frozenset({
+    "names", "classes_name", "keypoints_name", "keypoints", "skeleton",
+    "kpt_shape", "visible", "output_schema", "poser", "detector",
+    # dataset-style keys, for a file borrowed from a dataset.yaml
+    "path", "train", "val", "test", "annotation_format", "flip_idx",
+    "kpt_oks_sigmas", "keypoint_names", "upper_body_ids", "lower_body_ids",
+})
+
+
+def _infer_file_values(config_path) -> dict:
+    """Run-time values from an inference file; unknown keys warn.
+
+    The inferencer reads no project configuration -- this file (any path the
+    operator points ``--config`` at, template: ``--write-template``) is a
+    plain two-layer default set: the command line beats it, it beats the
+    built-in defaults. Data-description keys stay untouched here; the
+    session reads them from the same file.
+    """
+    if not config_path:
+        return {}
+    path = Path(config_path).expanduser()
+    if not path.is_file():
+        raise FileNotFoundError(f"Inference config does not exist: {path}")
+    with path.open("r", encoding="utf-8") as stream:
+        mapping = yaml.safe_load(stream) or {}
+    if not isinstance(mapping, dict):
+        raise ValueError(f"Expected a YAML mapping in {path}")
+
+    values = {}
+    for key, value in mapping.items():
+        key = str(key)
+        if key in _INFER_FILE_KEYS:
+            values[key] = value
+        elif key not in _DATA_DESCRIPTION_KEYS:
+            print(f"warning: unknown key {key!r} in {path}; ignored", file=sys.stderr)
+    return values
+
+
+def _write_template(destination) -> int:
+    """Copy the packaged infer template out (or print it with ``-``)."""
+    from animalposetracker.cfg import CFG_DIR
+
+    template_path = CFG_DIR / "infer.example.yaml"
+    content = template_path.read_text(encoding="utf-8")
+    if str(destination) == "-":
+        print(content, end="")
+        return 0
+    target = Path(destination).expanduser()
+    target.parent.mkdir(parents=True, exist_ok=True)
+    target.write_text(content, encoding="utf-8")
+    print(f"Template written: {target}")
+    return 0
+
+
 def _make_argument_parser() -> argparse.ArgumentParser:
     # Imported lazily: this package loads its backends on demand (see
     # inference/__init__.py), and the decoder module pulls in cv2/numpy.
@@ -50,8 +117,9 @@ def _make_argument_parser() -> argparse.ArgumentParser:
         prog="animalpose-cli infer",
         description="Run live pose inference on a camera, video file, or stream URL.",
     )
-    parser.add_argument("--weights", required=True,
-                        help="Exported model artifact (.onnx, .engine, .mlpackage, ...)")
+    parser.add_argument("--weights",
+                        help="Exported model artifact (.onnx, .engine, .mlpackage, ...); "
+                             "may also be set as 'weights' in the --config file")
     parser.add_argument("--detector-weights",
                         help="Detector ONNX that enables the two-stage top-down stream "
                              "(for example an RT-DETR export)")
@@ -70,7 +138,14 @@ def _make_argument_parser() -> argparse.ArgumentParser:
                         help="Detector preprocessing: 'stretch' (RT-DETR) or "
                              "'letterbox' (YOLO family)")
     parser.add_argument("--config",
-                        help="Dataset or project YAML providing class names, skeleton and kpt_shape")
+                        help="Infer configuration file: data description (names / kpt_shape / ...) "
+                             "and/or run-time defaults (conf / device / ...); the command line wins "
+                             "(template: --write-template)")
+    parser.add_argument(
+        "--write-template", dest="write_template", nargs="?", const="infer.example.yaml",
+        metavar="PATH",
+        help="Write the infer configuration template (default: ./infer.example.yaml) and exit",
+    )
     parser.add_argument("--schema", default="auto", choices=("auto",) + SUPPORTED_YOLO_SCHEMAS,
                         help="Pose output schema of the artifact; 'auto' resolves it from the "
                              "config yaml, sidecar metadata, then the runtime output shapes")
@@ -79,8 +154,9 @@ def _make_argument_parser() -> argparse.ArgumentParser:
     parser.add_argument("--device", help="Backend device string (e.g. 'AMD CPU'); defaults to the first device the engine offers on this machine's platform")
     parser.add_argument("--bits", default="FP32", choices=("FP32", "FP16", "INT8"),
                         help="Model weight precision used by the backend")
-    parser.add_argument("--source", required=True,
-                        help="Camera index (0, 1, ...), video file path, or stream URL")
+    parser.add_argument("--source",
+                        help="Camera index (0, 1, ...), video file path, or stream URL; "
+                             "may also be set as 'source' in the --config file")
     parser.add_argument("--conf", type=float, default=DEPLOY_NMS_CONF, help="Confidence threshold")
     parser.add_argument("--iou", type=float, default=DEPLOY_NMS_IOU, help="NMS IoU threshold")
     parser.add_argument("--imgsz", type=int, default=640,
@@ -185,7 +261,27 @@ def _print_infer_banner(rows) -> None:
 
 
 def run(argv=None) -> int:
-    args = _make_argument_parser().parse_args(argv)
+    parser = _make_argument_parser()
+    # One probe pass first: --write-template must not demand the required
+    # arguments, and an inference file's values become the parser defaults
+    # before the real parse -- so explicit flags still win.
+    probe, _unknown = parser.parse_known_args(argv)
+    if probe.write_template is not None:
+        return _write_template(probe.write_template)
+    parser.set_defaults(**_infer_file_values(probe.config))
+    args = parser.parse_args(argv)
+    # `source: 0` is a camera index, not an absence -- check for the empty
+    # value, not for falsiness.
+    if args.weights is None or not str(args.weights).strip():
+        raise ValueError(
+            "--weights is required: name the exported artifact, or set "
+            "'weights' in the --config file"
+        )
+    if args.source is None or not str(args.source).strip():
+        raise ValueError(
+            "--source is required: a camera index, video path or stream URL, "
+            "or set 'source' in the --config file"
+        )
     weights_path = Path(args.weights).expanduser().resolve()
     if weights_path.suffix.lower() == ".pt":
         raise ValueError(
@@ -365,3 +461,7 @@ def run(argv=None) -> int:
         f"({frame_index / elapsed:.1f} fps)"
     )
     return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(run())

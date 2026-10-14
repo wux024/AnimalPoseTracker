@@ -40,7 +40,8 @@ def _run_validation(argv: Sequence[str]) -> int:
         description="Validate a pose checkpoint on the configured validation split.",
         epilog=(
             "Validation accepts the same config override options as `train`, including "
-            "--batch, --imgsz, --workers, --device, --conf, --iou, and --max-det."
+            "--batch-size, --image-size, --num-workers, --device, "
+            "--validation-confidence, --validation-iou, and --max-detections."
         ),
     )
     parser.add_argument("--config", default="configs/runtime.yaml")

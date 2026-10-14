@@ -95,31 +95,41 @@ AnimalPoseTracker provides unified `train`, `val`, `predict`, and `export` comma
 
 ```bash
 animalpose-cli --help
-animalpose-cli create --dataset trimouse --workspace projects --name smoke --worker user --model AnimalRTPose --scale N --date demo --epochs 100 --batch 8 --imgsz 640 --optimizer AdamW --lr0 0.001 --no-amp
+animalpose-cli create --dataset trimouse --workspace projects --name smoke --worker user --model AnimalRTPose --scale N --date demo --epochs 100 --batch-size 8 --image-size 640 --optimizer AdamW --learning-rate 0.001 --no-amp
 animalpose-cli load projects/smoke-user-AnimalRTPose-N-demo
-animalpose-cli train --config configs/other.yaml
-animalpose-cli val --config configs/other.yaml --weights runs/train/weights/best.pt
-animalpose-cli predict --config configs/other.yaml --weights runs/train/weights/best.pt --split test --conf 0.25 --iou 0.7 --max-det 300
-animalpose-cli export --config configs/other.yaml --weights runs/train/weights/best.pt --format onnx --dynamic --opset 17 --simplify
+animalpose-cli train --config configs/runtime.yaml
+animalpose-cli val --config configs/runtime.yaml --weights runs/train/weights/best.pt
+animalpose-cli predict --config configs/runtime.yaml --weights runs/train/weights/best.pt --split test --conf 0.25 --iou 0.7 --max-detections 300
+animalpose-cli export --config configs/runtime.yaml --weights runs/train/weights/best.pt --format onnx --dynamic --opset 17 --simplify
 ```
 
-Training options can be overridden for one run without editing `other.yaml`:
+Training options can be overridden for one run without editing `configs/runtime.yaml`:
 
 ```bash
-animalpose-cli train --config configs/other.yaml --epochs 1000 --batch 8 --imgsz 640 --device 0 --workers 8
+animalpose-cli train --config configs/runtime.yaml --epochs 1000 --batch-size 8 --image-size 640 --device 0 --num-workers 8
 ```
 
 Prediction options such as confidence/IoU thresholds, maximum detections, drawing, tracking and smoothing can also be passed on the command line. Export options such as precision, dynamic input, opset and simplification can be passed the same way. For example:
 
 ```bash
-animalpose-cli predict --config configs/other.yaml --weights runs/train/weights/best.pt --source images/ --conf 0.4 --no-show-boxes --tracker bytetrack --track-buffer 45
-animalpose-cli export --config configs/other.yaml --weights runs/train/weights/best.pt --format onnx --imgsz 640 --dynamic --opset 17 --no-simplify
-animalpose-cli val --config configs/other.yaml --weights runs/train/weights/best.pt --batch 8 --imgsz 640 --conf 0.001 --iou 0.7
+animalpose-cli predict --config configs/runtime.yaml --weights runs/train/weights/best.pt --source images/ --conf 0.4 --no-show-boxes --tracker bytetrack --track-track-buffer 45
+animalpose-cli export --config configs/runtime.yaml --weights runs/train/weights/best.pt --format onnx --image-size 640 --dynamic --opset 17 --no-simplify
+animalpose-cli val --config configs/runtime.yaml --weights runs/train/weights/best.pt --batch-size 8 --image-size 640 --validation-confidence 0.001 --validation-iou 0.7
 ```
 
-Use `animalpose-cli <command> --help` to see a workflow's options. For train, val, predict and export, command-line values take precedence over `other.yaml` for that run and are not written back to the file. Omitted values continue to come from the project config or the command's documented default. The `animalpose-cli` commands work without GUI dependencies; install `.[gui]` to use the `animalposetracker` GUI command.
+Use `animalpose-cli <command> --help` to see a workflow's options. For train, val, predict and export, command-line values take precedence over `configs/runtime.yaml` for that run and are not written back to the file. Omitted values continue to come from the runtime config or the command's documented default. The `animalpose-cli` commands work without GUI dependencies; install `.[gui]` to use the `animalposetracker` GUI command.
 
-`create` accepts the training settings supported by `train` and saves only explicitly supplied values into the new project's `configs/other.yaml`; omitted options retain the selected model's defaults. `load` accepts a project directory, `project.yaml`, or `configs/other.yaml`, validates the project and its model/data config paths, and prints a summary without opening the GUI or modifying files.
+`create` accepts the training settings supported by `train` and saves only explicitly supplied values into the new project's `configs/runtime.yaml`; omitted options retain the selected model's defaults. `load` accepts a project directory, `project.yaml`, or `configs/runtime.yaml`, validates the project and its model/data config paths, and prints a summary without opening the GUI or modifying files.
+
+`animalpose-cli infer` is the deployment-side runtime: it runs an exported artifact (`.onnx`, `.engine`, `.mlpackage`, ...) on a camera, video file, or stream URL, and reads no project configuration at all. Its own yaml is the whole configuration surface — weights, engine and device, source, thresholds, drawing, tracking and filtering, alongside the class/keypoint description (`names` / `kpt_shape` / `skeleton`) that decodes the model's output tensor. Generate the documented template, edit a copy, and point the run at it:
+
+```bash
+animalpose-cli infer --write-template                  # writes ./infer.example.yaml
+animalpose-cli infer --config infer.yaml               # weights, source, thresholds come from the file
+animalpose-cli infer --config infer.yaml --conf 0.4    # an explicit flag wins for that run
+```
+
+`--write-template -` prints the template instead of writing it. Values in the file become that run's defaults; a key the file does not define and the data description does not use is reported on stderr and ignored. `--weights` and `--source` have no built-in defaults: either the file or the command line must supply them. Infer refuses `.pt` checkpoints — export first (`animalpose-cli export`), or use `predict` for checkpoints.
 
 `train` exit codes: `0` when training reaches `epochs` **and** when early stopping ends it (an exhausted `early_stopping_patience` is a normal completion — `best.pt` is final), `130` only when the run was interrupted by an external request (`SIGINT`/`SIGTERM` or the `.animalposetracker_training_stop` marker), and `1` on error. Chain `val`/`export` behind `train` in a `set -e` script: early stopping no longer aborts the pipeline.
 
