@@ -429,8 +429,8 @@ def split_dataset_sklearn(image_paths,
     sample_count = len(image_paths)
     if sample_count < 3:
         raise ValueError(
-            f"至少需要 3 张图片才能划分 train/val/test，当前只有 {sample_count} 张。"
-            "请多标注几张后再切分。"
+            f"At least 3 images are needed to split train/val/test; only {sample_count} available. "
+            "Label a few more before splitting."
         )
 
     # First split to separate test set

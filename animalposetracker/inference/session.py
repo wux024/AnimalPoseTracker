@@ -191,28 +191,33 @@ def load_inference_config(config_arg):
 def read_inference_config(config_arg) -> InferenceConfigSummary:
     """Read a config file a human picked, and insist on what the decoder needs.
 
-    The messages are Chinese and name the offending key: they surface directly in the GUI, and
+    The messages name the offending key: they surface directly in the GUI, and
     the failure they describe is impossible to guess from the numpy error it would otherwise
     turn into several layers down.
     """
     if config_arg is None:
-        raise ValueError("请先选择配置文件（project.yaml 或 dataset.yaml）。")
+        raise ValueError("Select a configuration file first (project.yaml or dataset.yaml).")
 
     mapping = _read_config_mapping(config_arg)
     if not mapping:
-        raise ValueError(f"配置文件是空的或不是 YAML 映射：{config_arg}")
+        raise ValueError(f"The configuration file is empty or not a YAML mapping: {config_arg}")
 
     summary = _parse_inference_config(mapping)
     if not summary.class_names:
         raise ValueError(
-            "配置文件缺少类别名：需要 classes_name（项目风格）或 names（数据集风格）。"
+            "The configuration file has no class names: expected classes_name "
+            "(project style) or names (dataset style)."
         )
     if not summary.num_keypoints:
         raise ValueError(
-            "配置文件缺少关键点数量：需要 keypoints_name（项目风格）或 kpt_shape（数据集风格）。"
+            "The configuration file has no keypoint count: expected keypoints_name "
+            "(project style) or kpt_shape (dataset style)."
         )
     if summary.kpt_shape is None:
-        raise ValueError("配置文件的关键点数量无法解析：请检查 kpt_shape 或 keypoints_name。")
+        raise ValueError(
+            "Could not parse the keypoint count from the configuration file: "
+            "check kpt_shape or keypoints_name."
+        )
 
     if summary.weights_path or summary.detector_weights_path:
         base = Path(config_arg).expanduser().resolve().parent
@@ -290,9 +295,9 @@ def validate_inference_selection(
         })
         if out_of_range:
             warnings.append(
-                "配置文件的 skeleton 含越界关键点索引 "
-                f"{', '.join(str(index) for index in out_of_range)}"
-                f"（关键点数为 {summary.num_keypoints}），这些连线不会被画出。"
+                "The configuration file's skeleton references out-of-range keypoint indices "
+                f"{', '.join(str(index) for index in out_of_range)} "
+                f"(the keypoint count is {summary.num_keypoints}); those links will not be drawn."
             )
 
     metadata: Mapping[str, Any] = {}
@@ -301,28 +306,31 @@ def validate_inference_selection(
         try:
             metadata = read_artifact_metadata(weights_path) or {}
         except Exception as error:  # a corrupt sidecar must not take the dialog down
-            weights_errors.append(f"权重文件的元数据无法解析：{error}")
+            weights_errors.append(f"Could not parse the weights metadata: {error}")
 
         if not weights_errors:
             head = metadata_head(metadata)
             if head == "SimCCHead" and detector_path is None:
                 weights_errors.append(
-                    f"{weights_path} 是 SimCCHead（AnimalViTPose）模型，需要二阶段（检测器 + 姿态）"
-                    "才能运行：请选择检测器（Select Detector），并把 Mode 切到 Two-stage。"
-                    "（命令行下同样可以改用 `animalposetracker predict`。）"
+                    f"{weights_path} is a SimCCHead (AnimalViTPose) model; it needs the "
+                    "two-stage setup (detector + poser) to run: select a detector "
+                    "(Select Detector) and switch Mode to Two-stage. (On the command line, "
+                    "`animalposetracker predict` also works.)"
                 )
         errors.extend(weights_errors)
 
         if not metadata:
             warnings.append(
-                "权重未附带 sidecar 元数据；输出布局与关键点形状将依赖配置文件与运行时推断。"
+                "The weights carry no sidecar metadata; the output layout and keypoint shape "
+                "will fall back to the configuration file and runtime inference."
             )
         elif summary is not None and summary.kpt_shape and metadata.get("kpt_shape"):
             sidecar_shape = tuple(int(value) for value in metadata["kpt_shape"])
             if tuple(int(value) for value in summary.kpt_shape) != sidecar_shape:
                 warnings.append(
-                    f"配置文件的关键点形状 {tuple(summary.kpt_shape)} 与权重元数据的 "
-                    f"{sidecar_shape} 不一致；解码将按配置文件解析。"
+                    f"The configuration file's keypoint shape {tuple(summary.kpt_shape)} "
+                    f"disagrees with the weights metadata's {sidecar_shape}; "
+                    "decoding will follow the configuration file."
                 )
 
     return InferenceSelectionReport(

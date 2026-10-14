@@ -69,8 +69,8 @@ class ProjectFilesMixin:
         existing = self._project_path / "project.yaml"
         if existing.exists():
             raise FileExistsError(
-                f"项目目录已存在，未做任何改动：{self._project_path}\n"
-                "请换一个项目名称、worker，或换一个保存位置。"
+                f"Project directory already exists; nothing was changed: {self._project_path}\n"
+                "Use another project name, worker, or save location."
             )
         self._create_project_structure()
         self.load_config_file()

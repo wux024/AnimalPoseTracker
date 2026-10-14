@@ -261,8 +261,9 @@ class InferencerPage(QWidget, Ui_Inferencer):
         # here because ui_inferencer.py is generated.
         self.Save.setText("Save Video")
         self.Save.setToolTip(
-            "把渲染后的画面写成 runs/inference/output.avi。"
-            "逐帧姿态记录始终保存到 runs/inference/records.json，与命令行 `infer --records` 同形"
+            "Write the rendered frames to runs/inference/output.avi. "
+            "Per-frame pose records always go to runs/inference/records.json, "
+            "in the same shape `infer --records` writes"
         )
 
         # Save has to leave its old row by hand: a layout keeps its own item list, and Qt will not
@@ -298,7 +299,7 @@ class InferencerPage(QWidget, Ui_Inferencer):
         self.DetectorConf.setMaximum(1.0)
         self.DetectorConf.setSingleStep(0.01)
         self.DetectorConf.setValue(0.5)
-        self.DetectorConf.setToolTip("检测器置信度门槛：只留高于它的框（仅二阶段生效，跑着也能调）")
+        self.DetectorConf.setToolTip("Detector confidence threshold: keep only boxes above it (two-stage only; adjustable while running)")
         self.DetectorConfLabel = QLabel("Detector Conf", self.ShowToolsGroup)
 
         self.DetectorConfLayout = QHBoxLayout()
@@ -327,13 +328,13 @@ class InferencerPage(QWidget, Ui_Inferencer):
         self.EnableFilter = QCheckBox(self.BaseToolsGroup)
         self.EnableFilter.setObjectName("EnableFilter")
         self.EnableFilter.setText("Filter")
-        self.EnableFilter.setToolTip("跑完对整段轨迹平滑一次：只改存下来的记录，不改实时画面")
+        self.EnableFilter.setToolTip("Smooth the whole trajectory once when the run ends: only the saved records change, not the live picture")
 
         self.FilterMethod = QComboBox(self.BaseToolsGroup)
         self.FilterMethod.setObjectName("FilterMethod")
         self.FilterMethod.setMinimumSize(QSize(0, 25))
         self.FilterMethod.addItems(["median", "savgol"])
-        self.FilterMethod.setToolTip("median = 中值平滑；savgol = Savitzky-Golay 拟合")
+        self.FilterMethod.setToolTip("median = median smoothing; savgol = Savitzky-Golay fit")
 
         self.FilterValuesLayout = QHBoxLayout()
         self.FilterValuesLayout.setObjectName("FilterValuesLayout")
@@ -351,22 +352,22 @@ class InferencerPage(QWidget, Ui_Inferencer):
             return widget
 
         self.FilterWindow = spin(
-            QSpinBox(self.BaseToolsGroup), "FilterWindow", "win", 5, 999, "平滑窗口帧数"
+            QSpinBox(self.BaseToolsGroup), "FilterWindow", "win", 5, 999, "Smoothing window in frames"
         )
         self.FilterPolyorder = spin(
             QSpinBox(self.BaseToolsGroup), "FilterPolyorder", "poly", 2, 99,
-            "Savitzky-Golay 多项式阶数（仅 savgol 用）",
+            "Savitzky-Golay polynomial order (savgol only)",
         )
         # Prefixed `kpt`, not `conf`: the decode threshold in the row above is also a confidence.
         self.FilterConfidence = spin(
             QDoubleSpinBox(self.BaseToolsGroup), "FilterConfidence", "kpt", 0.25, 1.0,
-            "低于此置信度的关键点不参与平滑（与解码的 Conf 不是同一个）",
+            "Keypoints below this confidence are left out of smoothing (not the decode Conf)",
         )
         self.FilterConfidence.setSingleStep(0.05)
         self.FilterConfidence.setDecimals(2)
         self.FilterMaxGap = spin(
             QSpinBox(self.BaseToolsGroup), "FilterMaxGap", "gap", 0, 999,
-            "允许插值的最大缺失帧数（0 = 不插）",
+            "Largest missing-frame gap to interpolate (0 = no interpolation)",
         )
 
         for widget in self._filter_controls():
@@ -385,13 +386,13 @@ class InferencerPage(QWidget, Ui_Inferencer):
         self.EnableTracking.setObjectName("EnableTracking")
         self.EnableTracking.setText("Track")
         self.EnableTracking.setToolTip(
-            "逐帧跟踪目标：画面标签会带上 track ID，保存的记录里也会带 track_id"
+            "Track targets frame by frame: canvas labels gain a track id, and the saved records carry a track_id"
         )
         self.TrackerAlgorithm = QComboBox(self.BaseToolsGroup)
         self.TrackerAlgorithm.setObjectName("TrackerAlgorithm")
         self.TrackerAlgorithm.setMinimumSize(QSize(0, 25))
         self.TrackerAlgorithm.addItems(list(ALGORITHMS))
-        self.TrackerAlgorithm.setToolTip("跟踪算法，与命令行 `infer --tracker` 是同一份清单")
+        self.TrackerAlgorithm.setToolTip("Tracking algorithm; the same list the command line's `infer --tracker` accepts")
         self.TrackerAlgorithm.setEnabled(False)
 
         # The Designer file leaves an empty TrackerLayout in the left group's engine/device block:
@@ -557,7 +558,7 @@ class InferencerPage(QWidget, Ui_Inferencer):
             # Records without track ids are refused by the workflow. The controls already prevent
             # that pairing, so this is the belt to their braces -- and it must not cost a whole
             # run's records on the way out.
-            QMessageBox.warning(self, "整段平滑未执行", str(error))
+            QMessageBox.warning(self, "Smoothing not applied", str(error))
             records = self.records
 
         output_dir = Path.cwd() / "runs" / "inference"
@@ -568,10 +569,10 @@ class InferencerPage(QWidget, Ui_Inferencer):
                 json.dumps(records, ensure_ascii=False, indent=2) + "\n", encoding="utf-8"
             )
         except OSError as error:
-            QMessageBox.warning(self, "保存记录失败", f"无法写入逐帧记录：\n{error}")
+            QMessageBox.warning(self, "Saving records failed", f"Could not write the per-frame records:\n{error}")
             return
-        note = "（已平滑）" if smoothing else ""
-        self.thread_status(f"逐帧记录已写入 {target}{note}（{len(records)} 帧）")
+        note = " (smoothed)" if smoothing else ""
+        self.thread_status(f"Per-frame records written to {target}{note} ({len(records)} frames)")
 
     def onSelectConfigureClicked(self):
         """
@@ -643,22 +644,22 @@ class InferencerPage(QWidget, Ui_Inferencer):
         if not stage_ok:
             if self._two_stage and not self._weights_is_simcc:
                 self.thread_status(
-                    "二阶段需要 SimCC（AnimalViTPose）姿态权重：请换姿态权重或切回 One-stage"
+                    "Two-stage needs SimCC (AnimalViTPose) pose weights: pick different pose weights or switch back to One-stage"
                 )
             elif self._two_stage:
-                self.thread_status("二阶段模式：请选择检测器（Select Detector）")
+                self.thread_status("Two-stage mode: select a detector (Select Detector)")
             else:
                 self.thread_status(
-                    "SimCC（AnimalViTPose）权重需要二阶段：请把 Mode 切到 Two-stage"
+                    "SimCC (AnimalViTPose) weights need two-stage: switch Mode to Two-stage"
                 )
 
         for warning in report.warnings:
-            self.thread_status(f"警告：{warning}")
+            self.thread_status(f"Warning: {warning}")
         if report.errors and show_dialog:
             detail = "\n".join(report.errors)
             if report.warnings:
-                detail += "\n\n另外注意：\n" + "\n".join(report.warnings)
-            QMessageBox.critical(self, "配置校验失败", detail)
+                detail += "\n\nAlso note:\n" + "\n".join(report.warnings)
+            QMessageBox.critical(self, "Configuration check failed", detail)
             
 
     def onSelectPoserClicked(self):
@@ -717,7 +718,7 @@ class InferencerPage(QWidget, Ui_Inferencer):
             self._weights_ready = False
             self.Start.setEnabled(False)
             self._clear_selections()
-            QMessageBox.critical(self, "配置校验失败", "\n".join(report.errors))
+            QMessageBox.critical(self, "Configuration check failed", "\n".join(report.errors))
             return
 
         self._enable_widgets()
@@ -735,9 +736,9 @@ class InferencerPage(QWidget, Ui_Inferencer):
             # (a TensorRT engine on a box with no NVIDIA GPU, for instance). Reported instead of
             # raising, which only printed a traceback.
             QMessageBox.warning(
-                self, "没有可用引擎",
-                f"{file_ext} 产物在这台机器上没有可用的推理引擎，"
-                "请换一个已安装运行时的格式（如 ONNX）。"
+                self, "No usable engine",
+                f"{file_ext} artifacts have no usable inference engine on this machine; "
+                "choose a format whose runtime is installed (for example ONNX)."
             )
             self._clear_selections()
             self._refresh_start_state(show_dialog=False)
@@ -768,10 +769,10 @@ class InferencerPage(QWidget, Ui_Inferencer):
         """Adopt a detector file; no detector at all is what keeps the run one-stage."""
         detector = Path(file_path)
         if not detector.is_file():
-            QMessageBox.warning(self, "检测器无效", f"找不到检测器文件：\n{detector}")
+            QMessageBox.warning(self, "Invalid detector", f"Detector file not found:\n{detector}")
             return
         self.detector_path = str(detector)
-        self.thread_status(f"已选择检测器：{detector.name}")
+        self.thread_status(f"Detector selected: {detector.name}")
         # A pose model refused a moment ago only because the detector was missing deserves its
         # full pass now -- otherwise Start could light with the engine combos never populated.
         if self.weights_path and not self._weights_ready:
@@ -833,7 +834,7 @@ class InferencerPage(QWidget, Ui_Inferencer):
         self._refresh_start_state(show_dialog=False)
 
     def _refresh_decode_param_states(self, active=None):
-        """Light only the decode boxes the current mode uses (有作用才亮)."""
+        """Light only the decode boxes the current mode uses (lit only when they have an effect)."""
         if active is None:
             active = self._decode_params_active
         self._decode_params_active = bool(active)
@@ -875,9 +876,9 @@ class InferencerPage(QWidget, Ui_Inferencer):
             # A format nothing can run is a message for the user, not an exception out of a slot:
             # PySide6 only prints those, so the window simply did nothing.
             QMessageBox.warning(
-                self, "不支持的格式",
-                f"不支持的文件格式：{file_ext or '（无扩展名）'}\n"
-                "请选择 ONNX / OpenVINO / TensorRT / CANN / CoreML 产物。"
+                self, "Unsupported format",
+                f"Unsupported file format: {file_ext or '(no extension)'}\n"
+                "Choose an ONNX / OpenVINO / TensorRT / CANN / CoreML artifact."
             )
             return
 
@@ -1178,7 +1179,7 @@ class InferencerPage(QWidget, Ui_Inferencer):
         except Exception as exc:
             # The fallback used to be silent, with the reason only in a console a packaged GUI
             # does not have: the boxes going back to the defaults looked like a normal result.
-            self.thread_status(f"无法读取相机参数（{exc}），已回落到默认 640×480 / 30 FPS")
+            self.thread_status(f"Could not read the camera parameters ({exc}); falling back to the default 640x480 / 30 FPS")
             self._set_camera_setup()
         
     def onCameraVideosSelectionChanged(self):
@@ -1800,7 +1801,7 @@ class InferencerPage(QWidget, Ui_Inferencer):
             if not self.weights_path or not self.data_config_path:
                 # The builder indexes both paths; without them it failed with a raw TypeError
                 # that the dialog then showed verbatim.
-                QMessageBox.warning(self, "无法启动推理", "请先选择配置文件与权重文件。")
+                QMessageBox.warning(self, "Cannot start inference", "Select the configuration file and the weights first.")
                 return
             self._init_visualization_config()
             # One call assembles the artifact, the schema and the decode contract -- the same
@@ -1844,9 +1845,9 @@ class InferencerPage(QWidget, Ui_Inferencer):
                     )
             except Exception as error:
                 # Whatever the artifact and the config cannot support together (an unknown
-                # keypoint count, a SimCC artifact, an unreadable file) is reported here, in
-                # Chinese, instead of surfacing as a numpy failure inside a worker thread.
-                QMessageBox.critical(self, "无法启动推理", f"无法启动推理：\n{error}")
+                # keypoint count, a SimCC artifact, an unreadable file) is reported here
+                # instead of surfacing as a numpy failure inside a worker thread.
+                QMessageBox.critical(self, "Cannot start inference", f"Cannot start inference:\n{error}")
                 return
             self._build_palettes()
             # One run, one buffer: the frame indices the records carry start at zero again.

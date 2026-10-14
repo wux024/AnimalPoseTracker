@@ -141,7 +141,7 @@ class ConfigParsingTests(unittest.TestCase):
             with self.assertRaises(ValueError) as raised:
                 read_inference_config(str(path))
 
-        self.assertIn("类别名", str(raised.exception))
+        self.assertIn("class names", str(raised.exception))
 
     def test_read_inference_config_insists_on_the_keypoint_count(self):
         with tempfile.TemporaryDirectory() as temporary:
@@ -149,13 +149,13 @@ class ConfigParsingTests(unittest.TestCase):
             with self.assertRaises(ValueError) as raised:
                 read_inference_config(str(path))
 
-        self.assertIn("关键点数量", str(raised.exception))
+        self.assertIn("keypoint count", str(raised.exception))
 
     def test_read_inference_config_without_a_path(self):
         with self.assertRaises(ValueError) as raised:
             read_inference_config(None)
 
-        self.assertIn("配置文件", str(raised.exception))
+        self.assertIn("configuration file", str(raised.exception))
 
 
 class BuildSessionTests(unittest.TestCase):
@@ -395,11 +395,11 @@ class ValidationTests(unittest.TestCase):
         self.assertTrue(report.config_ok)
         self.assertTrue(report.weights_ok)
 
-    def test_a_config_without_class_names_is_refused_in_chinese(self):
+    def test_a_config_without_class_names_is_refused(self):
         config, _weights = self._pair({"kpt_shape": [4, 3]})
         report = validate_inference_selection(config, None)
 
-        self.assertIn("类别名", " ".join(report.errors))
+        self.assertIn("class names", " ".join(report.errors))
         self.assertFalse(report.config_ok)
         self.assertFalse(report.weights_ok)  # nothing to run yet
 
@@ -407,7 +407,7 @@ class ValidationTests(unittest.TestCase):
         config, _weights = self._pair({"names": {0: "cat"}})
         report = validate_inference_selection(config, None)
 
-        self.assertIn("关键点数量", " ".join(report.errors))
+        self.assertIn("keypoint count", " ".join(report.errors))
 
     def test_a_simcc_artifact_is_refused_while_selecting(self):
         config, weights = self._pair(DATASET_STYLE, {"head": "SimCCHead", "kpt_shape": [4, 3]})
@@ -447,21 +447,21 @@ class ValidationTests(unittest.TestCase):
         report = validate_inference_selection(config, weights)
 
         self.assertEqual(report.errors, ())
-        self.assertIn("不一致", " ".join(report.warnings))
+        self.assertIn("disagrees", " ".join(report.warnings))
 
     def test_a_skeleton_index_beyond_the_keypoints_warns(self):
         config, _weights = self._pair({**DATASET_STYLE, "skeleton": [[0, 1], [3, 9]]})
         report = validate_inference_selection(config, None)
 
         self.assertEqual(report.errors, ())
-        self.assertIn("越界", " ".join(report.warnings))
+        self.assertIn("out-of-range", " ".join(report.warnings))
         self.assertIn("9", " ".join(report.warnings))
 
     def test_a_corrupt_sidecar_becomes_a_message(self):
         config, weights = self._pair(DATASET_STYLE, sidecar_text="{not json at all")
         report = validate_inference_selection(config, weights)
 
-        self.assertIn("无法解析", " ".join(report.errors))
+        self.assertIn("Could not parse", " ".join(report.errors))
         self.assertFalse(report.weights_ok)
 
 

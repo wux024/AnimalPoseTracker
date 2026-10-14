@@ -889,8 +889,8 @@ class AnimalPoseTrackerPage(QMainWindow, Ui_AnimalPoseTracker):
             # beside the running one -- it raised RuntimeError inside the click. Labelling has its
             # own page, so point the user there instead.
             QMessageBox.information(
-                self, "手动抽帧",
-                "手动抽帧请在标注工具里进行：点击 “Start Label Frames”。"
+                self, "Manual frame extraction",
+                'Manual frame extraction happens in the annotator: click "Start Label Frames".'
             )
             return
         if self._extract_thread is not None and self._extract_thread.isRunning():
@@ -1255,10 +1255,11 @@ class AnimalPoseTrackerPage(QMainWindow, Ui_AnimalPoseTracker):
         if returncode in (0, None):
             return
         if returncode == 130:
-            self.statusBar().showMessage("训练已按请求停止，检查点已保存。")
+            self.statusBar().showMessage("Training stopped as requested; the checkpoint was saved.")
             return
         self.statusBar().showMessage(
-            f"训练异常退出（退出码 {returncode}）。详见项目 runs 目录下的训练日志。"
+            f"Training exited unexpectedly (exit code {returncode}); "
+            "see the training log under the project's runs directory."
         )
 
     @staticmethod
@@ -1330,7 +1331,7 @@ class AnimalPoseTrackerPage(QMainWindow, Ui_AnimalPoseTracker):
         if self.project.process is None:
             # Disabling the button first meant a stray click left it permanently dead, because
             # nothing ever re-enabled it when no run was there to stop.
-            self.statusBar().showMessage("当前没有正在进行的训练。")
+            self.statusBar().showMessage("No training run is in progress.")
             return
         self.EndTrain.setEnabled(False)
         self.project.request_training_stop()
@@ -1345,8 +1346,9 @@ class AnimalPoseTrackerPage(QMainWindow, Ui_AnimalPoseTracker):
         """
         if self.project.process is not None and self.project.process.poll() is None:
             QMessageBox.warning(
-                self, "已有任务在运行",
-                f"当前正在运行「{self.current_mode or '未知'}」，请先结束它再开始新的任务。",
+                self, "Another task is running",
+                f"{self.current_mode or 'unknown'} is currently running; "
+                "finish it before starting a new task.",
             )
             return
         self.current_mode = mode
@@ -1358,7 +1360,7 @@ class AnimalPoseTrackerPage(QMainWindow, Ui_AnimalPoseTracker):
             # the buttons flipped left the tab unusable until the application was restarted.
             self._toggle_buttons(mode, start=True)
             self.current_mode = None
-            QMessageBox.critical(self, "无法启动", f"任务启动失败：\n{error}")
+            QMessageBox.critical(self, "Cannot start", f"Failed to start the task:\n{error}")
             return
         self._start_check_thread()
 

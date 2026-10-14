@@ -581,9 +581,10 @@ class AnnotatorPage(QMainWindow, Ui_Annotator):
             if not self._keypoint_row_is_removable(index):
                 QMessageBox.warning(
                     self, "Warning",
-                    f"关键点 {item.text(1)}（序号 {index}）之后还有被引用的关键点。\n"
-                    "删除它会让后面的关键点序号前移，已有标注与骨架连接将指向别的关键点。\n"
-                    "请先删除相关标注与骨架连接。"
+                    f"Keypoints that come after {item.text(1)} (index {index}) are still referenced.\n"
+                    "Deleting it shifts the indices of the keypoints that follow, so existing "
+                    "annotations and skeleton links would point at other keypoints.\n"
+                    "Delete the related annotations and skeleton links first."
                 )
                 return
         
@@ -887,7 +888,7 @@ class AnnotatorPage(QMainWindow, Ui_Annotator):
         key = self.sorted_keys[self.current_image_index]
         label_file = Path(self.images[key]).with_suffix('.json')
         self._write_json_atomically(label_file, coco_dict)
-        self.statusBar().showMessage(f"已保存 {len(annotations)} 个标注到 {label_file.name}")
+        self.statusBar().showMessage(f"Saved {len(annotations)} annotations to {label_file.name}")
 
     @staticmethod
     def _write_json_atomically(path, payload):
@@ -929,7 +930,7 @@ class AnnotatorPage(QMainWindow, Ui_Annotator):
             # Drawing without a config open used to raise `KeyError`/`TypeError` on `None`.
             QMessageBox.warning(
                 self, "Warning",
-                "请先打开项目配置文件（Open Config File），再编辑骨架连接。"
+                "Open the project configuration file (Open Config File) before editing skeleton links."
             )
             return
 
@@ -984,8 +985,8 @@ class AnnotatorPage(QMainWindow, Ui_Annotator):
         if self._has_unsaved_work():
             answer = QMessageBox.question(
                 self,
-                "未保存的标注",
-                "当前图片的标注尚未保存，是否保存后关闭？",
+                "Unsaved annotations",
+                "This image's annotations have not been saved. Save before closing?",
                 QMessageBox.Save | QMessageBox.Discard | QMessageBox.Cancel,
                 QMessageBox.Cancel,
             )

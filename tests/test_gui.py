@@ -194,7 +194,7 @@ class InferencerControlTests(unittest.TestCase):
 
             self.assertFalse(page._config_ready)
             self.assertFalse(page.Start.isEnabled())
-            self.assertIn("类别名", box.critical.call_args.args[2])
+            self.assertIn("class names", box.critical.call_args.args[2])
 
     def test_reselecting_a_broken_config_turns_start_off_again(self):
         with tempfile.TemporaryDirectory() as temporary:
@@ -1380,13 +1380,13 @@ class InferencerDecodeTests(unittest.TestCase):
 
         with patch.object(page, "_get_source", return_value="video.mp4"), patch(
             "animalposetracker.gui.inferencerpage.build_inference_session",
-            side_effect=ValueError("是 SimCCHead 模型"),
+            side_effect=ValueError("is a SimCCHead model"),
         ), patch.object(page, "_init_inference_threads") as threads, patch(
             "animalposetracker.gui.inferencerpage.QMessageBox"
         ) as box:
             page.onStartClicked()
 
-        self.assertIn("无法启动推理", box.critical.call_args.args[2])
+        self.assertIn("Cannot start inference", box.critical.call_args.args[2])
         threads.assert_not_called()
         self.assertIsNone(page.session)  # the run never began
 
@@ -1858,7 +1858,7 @@ class TrainingMonitorTests(unittest.TestCase):
 
         page._check_process()
 
-        self.assertIn("停止", page.statusBar().currentMessage())
+        self.assertIn("stopped", page.statusBar().currentMessage())
 
     def test_an_error_is_reported_with_its_code(self):
         page = AnimalPoseTrackerPage()

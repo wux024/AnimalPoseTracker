@@ -279,22 +279,22 @@ class CreateNewProjectPage(ProjectFormBase, QWidget, Ui_CreateNewProject):
     def _validate_form(self, project_config):
         """Return a user-facing complaint, or None when the form can be submitted."""
         if not project_config["project_name"].strip():
-            return "请填写项目名称。"
+            return "Enter a project name."
         if not project_config["worker"].strip():
-            return "请填写 worker 名称。"
+            return "Enter a worker name."
         if not self.LocationPathDisplay.text().strip():
-            return "请选择项目保存位置。"
+            return "Choose a project location."
         if project_config["keypoints"] < 1:
-            return "关键点数量至少为 1。"
+            return "The keypoint count must be at least 1."
         if project_config["classes"] < 1:
-            return "类别数量至少为 1。"
+            return "The class count must be at least 1."
         return None
 
     def onCreateProjectClicked(self):
         project_config = self.getAllProjectConfig()
         complaint = self._validate_form(project_config)
         if complaint is not None:
-            QMessageBox.warning(self, "无法创建项目", complaint)
+            QMessageBox.warning(self, "Cannot create project", complaint)
             return
 
         project_identity = {
@@ -324,8 +324,8 @@ class CreateNewProjectPage(ProjectFormBase, QWidget, Ui_CreateNewProject):
             # A half-created project on disk with no message was the old behaviour: the folder
             # stayed, the main window never advanced, and only a console traceback appeared.
             QMessageBox.critical(
-                self, "创建项目失败",
-                f"项目创建失败：\n{error}"
+                self, "Project creation failed",
+                f"Project creation failed:\n{error}"
             )
             if not existed_before:
                 self._rollback_project()
