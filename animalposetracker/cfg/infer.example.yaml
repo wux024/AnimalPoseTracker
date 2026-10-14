@@ -1,67 +1,71 @@
-# AnimalPoseTracker · infer configuration template
+# AnimalPoseTracker -- infer configuration template
 # -----------------------------------------------------------------
-# 推理器（animalpose-cli infer）的配置模板。拷贝本文件，按需去掉注释
-# 修改值，然后用 --config 传入：
+# The inference runtime's config template (animalpose-cli infer).
+# Copy this file, uncomment and edit the values you need, then pass
+# it with --config:
 #
 #   animalpose-cli infer --weights model.onnx --source video.mp4 \
 #       --config infer.example.yaml
 #
-# 优先级：命令行 > 本文件 > 内置默认。只写你要改的键即可；下面列出
-# 全部可配键及其默认值。重新生成这份模板：
+# Precedence: command line > this file > built-in defaults. Write
+# only the keys you want to change; every configurable key with its
+# default is listed below. Regenerate this template with:
 #   animalpose-cli infer --write-template [PATH]
-# 推理器不读任何项目配置：这份 yaml、模型产物及其 sidecar 就是它的全部。
+# The inferencer reads no project configuration: this yaml, the
+# model artifact and its sidecar metadata are all it sees.
 #
-# 键名沿用与工程侧一致的概念拼写（conf / iou / device ...）；数据描述
-# （names / kpt_shape / skeleton 等）也可以写在本文件里。
+# Keys use the same canonical spellings as the project workflows
+# (conf / iou / device ...); the data description (names / kpt_shape
+# / skeleton and friends) may also live in this file.
 
-# ---- 模型与后端（通常直接在命令行给）-----------------------------
-# weights: model.onnx              # 导出的模型产物（.onnx / .engine / ...）
-# detector_weights: detector.onnx  # 二阶段检测器（给了它才启用 top-down 流）
-# engine: onnx                     # 推理后端；默认按产物格式自动选择
-# device: auto                     # 设备：auto / cpu / cuda:0 / "NVIDIA GPU" / ...
-# bits: FP32                       # 精度：FP32 / FP16 / INT8
-# imgsz: 640                       # 产物未带 sidecar 时的回退输入尺寸
+# ---- Model and backend (usually given on the command line) --------
+# weights: model.onnx              # exported artifact (.onnx / .engine / ...)
+# detector_weights: detector.onnx  # second-stage detector (enables the top-down stream)
+# engine: onnx                     # inference backend; defaults to the artifact format
+# device: auto                     # auto / cpu / cuda:0 / "NVIDIA GPU" / ...
+# bits: FP32                       # FP32 / FP16 / INT8
+# imgsz: 640                       # fallback input size when the artifact carries no sidecar
 
-# ---- 输入 ---------------------------------------------------------
-# source: video.mp4                # 摄像头序号（0）/ 视频文件 / 流地址
+# ---- Input ---------------------------------------------------------
+# source: video.mp4                # camera index (0) / video file / stream URL
 
-# ---- 阈值 ----------------------------------------------------------
-# conf: 0.25                       # 姿态置信度阈值
-# iou: 0.45                        # NMS IoU（仅 raw 输出格式消费）
-# agnostic_nms: true               # 类无关 NMS
-# detector_conf: 0.5               # 二阶段检测器置信度
+# ---- Thresholds ----------------------------------------------------
+# conf: 0.25                       # pose confidence threshold
+# iou: 0.45                        # NMS IoU (consumed by raw output layouts only)
+# agnostic_nms: true               # class-agnostic NMS
+# detector_conf: 0.5               # second-stage detector confidence
 
-# ---- 二阶段检测器的产物约定（一般不用改）--------------------------
+# ---- Second-stage detector conventions (rarely changed) ------------
 # detector_box_format: cxcywh         # cxcywh / xyxy
 # detector_coord_mode: normalized     # normalized / pixels
 # detector_preprocess_mode: stretch   # stretch / letterbox
 
-# ---- 姿态输出格式 --------------------------------------------------
+# ---- Pose output layout --------------------------------------------
 # schema: auto                     # auto / ultralytics_yolo_pose_raw / ..._nms / ...
 
-# ---- 渲染 -----------------------------------------------------------
-# show_boxes: true                 # 画框
-# show_labels: true                # 画类别
-# show_keypoints: true             # 画关键点
-# show_skeletons: true             # 画骨架连线
-# line_width: 2                    # 线条宽度
-# point_radius: 4                  # 关键点半径
+# ---- Rendering -----------------------------------------------------
+# show_boxes: true                 # draw boxes
+# show_labels: true                # draw class labels
+# show_keypoints: true             # draw keypoints
+# show_skeletons: true             # draw skeleton lines
+# line_width: 2                    # line width
+# point_radius: 4                  # keypoint radius
 
-# ---- 跟踪与时序滤波（视频）----------------------------------------
+# ---- Tracking and temporal filtering (video) -----------------------
 # tracker: bytetrack               # bytetrack / botsort / ocsort / deepocsort / fasttrack / tracktrack
 # pose_filter: none                # none / median / savgol
-# filter_window: 5                 # 平滑窗口帧数
-# filter_polyorder: 2              # Savitzky-Golay 多项式阶数
-# filter_confidence: 0.25          # 滤波可信阈值
-# filter_max_gap: 0                # 最大插值缺失帧数
+# filter_window: 5                 # smoothing window in frames
+# filter_polyorder: 2              # Savitzky-Golay polynomial order
+# filter_confidence: 0.25          # filter confidence threshold
+# filter_max_gap: 0                # maximum missing-frame gap to interpolate
 
-# ---- 输出 -----------------------------------------------------------
-# output: rendered.mp4             # 渲染视频输出路径
-# records: records.json            # 逐帧姿态/跟踪记录输出路径
-# show: false                      # 弹窗显示（有桌面环境时）
-# max_frames:                      # 跑到 N 帧后停止
+# ---- Output --------------------------------------------------------
+# output: rendered.mp4             # rendered video output path
+# records: records.json            # per-frame pose/tracking records output path
+# show: false                      # pop up a window (where a desktop is available)
+# max_frames:                      # stop after this many frames
 
-# ---- 数据描述（也可写在本文件；数据键与上面的运行键共存）-----------
+# ---- Data description (also allowed here; data keys coexist with the run keys) ----
 # names: {0: animal}
 # kpt_shape: [17, 3]
 # skeleton: []

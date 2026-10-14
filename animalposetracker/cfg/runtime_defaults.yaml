@@ -1,7 +1,9 @@
-# 运行参数默认值 —— common / predict / export 三个作用域。
-# 对应《配置概念字典（W0）》（2026-10-14 定稿）§3/§4/§5。
-# train 的默认值在 training.yaml；infer 的默认值住中性常量模块（不进本文件）。
-# 键名以字典为准；本文件是这些键的唯一默认值来源（代码不再复制默认字面量）。
+# Runtime parameter defaults -- the common / predict / export scopes.
+# Mirrors the W0 concept dictionary (2026-10-14), sections 3/4/5.
+# Train defaults live in training.yaml; the infer defaults live in the neutral
+# constants module (not in this file).
+# Key names follow the dictionary; this file is the single source of their
+# default values (code no longer copies default literals).
 
 common:
   device: auto
@@ -33,7 +35,7 @@ predict:
     window_length: 5
     polyorder: 2
     max_gap: 0
-    confidence_threshold:      # null = 继承 keypoint_confidence
+    confidence_threshold:      # null = inherit keypoint_confidence
 
 export:
   format:

@@ -432,7 +432,7 @@ class KeyframeExtractor:
             unique_labels = np.unique(labels)
             saved_count = 0
             for label in unique_labels:
-                if label == -1:  # 噪声点
+                if label == -1:  # noise
                     continue
                 cluster_frames = X[labels == label]
                 centroid = np.mean(cluster_frames, axis=0)

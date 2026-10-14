@@ -42,8 +42,8 @@ class RegistryShapeTests(unittest.TestCase):
             seen.add(address)
 
     def test_the_registry_covers_the_audited_key_set(self):
-        # 93 train + 5 common + 21 predict + 11 export = 130 (概念字典 §2-§5,
-        # plus common.selected_weights for the GUI model picker).
+        # 93 train + 5 common + 21 predict + 11 export = 130 (the concept
+        # dictionary, sections 2-5, plus common.selected_weights for the GUI).
         # Update both the registry and this count together.
         self.assertEqual(len(FIELDS), 130)
         self.assertEqual(len(fields(scope="train")), 93)
