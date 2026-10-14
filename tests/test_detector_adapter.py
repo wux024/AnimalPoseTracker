@@ -3,7 +3,7 @@
 These tests do not need a real ONNX file: they build the adapter via
 ``object.__new__`` and plug in a fake session that returns fixed (1, N, 6)
 rows, so the focus stays on the coordinate math, the class/score filtering and
-the "declared conventions" (coord_mode / preprocess_mode).
+the "declared conventions" (coord_mode / preprocess_mode / box_format).
 """
 
 import unittest
@@ -41,6 +41,7 @@ def _adapter(rows, *, width=100, height=50, **kwargs):
     adapter.max_det = kwargs.pop("max_det", 300)
     adapter.coord_mode = kwargs.pop("coord_mode", "normalized")
     adapter.preprocess_mode = kwargs.pop("preprocess_mode", "stretch")
+    adapter.box_format = kwargs.pop("box_format", "cxcywh")
     adapter.session = _FakeSession(rows)
     adapter.input_name = "images"
     return adapter, np.zeros((height, width, 3), dtype=np.uint8)
@@ -101,6 +102,27 @@ class DetectorAdapterGeometryTests(unittest.TestCase):
             atol=1e-4,
         )
 
+    def test_xyxy_rows_decode_like_the_equivalent_cxcywh_rows(self):
+        # End-to-end YOLO exports (nms=False) emit [x1, y1, x2, y2, score,
+        # class] in letterbox pixels; the same box written in RT-DETR centre
+        # form must decode identically.
+        as_xyxy, frame = _adapter(
+            [[160, 240, 480, 400, 0.9, 0.0]],
+            coord_mode="pixels",
+            preprocess_mode="letterbox",
+            box_format="xyxy",
+        )
+        as_cxcywh, _ = _adapter(
+            [[320, 320, 320, 160, 0.9, 0.0]],
+            coord_mode="pixels",
+            preprocess_mode="letterbox",
+        )
+        np.testing.assert_allclose(
+            as_xyxy.predict_boxes(frame)[0].bbox_xyxy,
+            as_cxcywh.predict_boxes(frame)[0].bbox_xyxy,
+            atol=1e-4,
+        )
+
     def test_score_threshold_and_class_filter(self):
         rows = [
             [0.5, 0.5, 0.2, 0.2, 0.4, 0.0],  # below threshold
@@ -111,12 +133,14 @@ class DetectorAdapterGeometryTests(unittest.TestCase):
         boxes = adapter.predict_boxes(frame)
         self.assertEqual(len(boxes), 1)
 
-    def test_invalid_coord_or_preprocess_mode_rejected(self):
+    def test_invalid_coord_preprocess_or_box_format_rejected(self):
         with patch("onnxruntime.InferenceSession"):
             with self.assertRaises(ValueError):
                 OnnxDetectorAdapter(Path(__file__), coord_mode="nope")
             with self.assertRaises(ValueError):
                 OnnxDetectorAdapter(Path(__file__), preprocess_mode="nope")
+            with self.assertRaises(ValueError):
+                OnnxDetectorAdapter(Path(__file__), box_format="nope")
 
 
 class DetectorProviderSelectionTests(unittest.TestCase):

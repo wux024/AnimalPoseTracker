@@ -57,6 +57,18 @@ def _make_argument_parser() -> argparse.ArgumentParser:
                              "(for example an RT-DETR export)")
     parser.add_argument("--detector-conf", type=float, default=0.5,
                         help="Detector confidence threshold for top-down streaming")
+    parser.add_argument("--detector-box-format", dest="detector_box_format",
+                        choices=("cxcywh", "xyxy"), default="cxcywh",
+                        help="Row form of the detector boxes: 'cxcywh' (RT-DETR) or "
+                             "'xyxy' (the NMS-free YOLO exports)")
+    parser.add_argument("--detector-coord-mode", dest="detector_coord_mode",
+                        choices=("normalized", "pixels"), default="normalized",
+                        help="Detector coordinates: 'normalized' (RT-DETR) or "
+                             "'pixels' of the network input (YOLO family)")
+    parser.add_argument("--detector-preprocess-mode", dest="detector_preprocess_mode",
+                        choices=("stretch", "letterbox"), default="stretch",
+                        help="Detector preprocessing: 'stretch' (RT-DETR) or "
+                             "'letterbox' (YOLO family)")
     parser.add_argument("--config",
                         help="Dataset or project YAML providing class names, skeleton and kpt_shape")
     parser.add_argument("--schema", default="auto", choices=("auto",) + SUPPORTED_YOLO_SCHEMAS,
@@ -213,6 +225,9 @@ def run(argv=None) -> int:
         detector = OnnxDetectorAdapter(
             Path(args.detector_weights).expanduser().resolve(),
             conf_threshold=args.detector_conf,
+            box_format=args.detector_box_format,
+            coord_mode=args.detector_coord_mode,
+            preprocess_mode=args.detector_preprocess_mode,
         )
         input_mode = "topdown"
     pipeline = StreamInferencePipeline(

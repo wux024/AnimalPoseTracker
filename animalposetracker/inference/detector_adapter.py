@@ -7,16 +7,19 @@ module imports a training framework -- only onnxruntime, numpy and OpenCV.
 
 Contract: any detector that can be described as
 
-* output shape ``(1, N, 6)`` in ``[cx, cy, w, h, score, class]`` order,
+* output shape ``(1, N, 6)``, in ``[cx, cy, w, h, score, class]`` order for
+  ``box_format="cxcywh"`` (RT-DETR exports) or ``[x1, y1, x2, y2, score,
+  class]`` for ``box_format="xyxy"`` (the NMS-free YOLO exports, e.g. YOLO26 /
+  YOLOv10 exported with ``nms=False``),
 * a coordinate convention (``normalized`` like RT-DETR, or ``pixels`` of the
-  network input like the raw YOLO family), and
+  network input like the YOLO family), and
 * a preprocessing convention (``stretch`` resize, or ``letterbox`` resize with
   padding),
 
-plugs in through :class:`OnnxDetectorAdapter` with those two declarations.
-The defaults reproduce the RT-DETR stream export (verified against the
-official postprocess: stretch-resize preprocessing, normalized coordinates,
-multiply by the source size, no NMS on the way out).
+plugs in through :class:`OnnxDetectorAdapter` with those declarations. The
+defaults reproduce the RT-DETR stream export (verified against the official
+postprocess: stretch-resize preprocessing, normalized coordinates, multiply by
+the source size, no NMS on the way out).
 
 The ONNX session prefers ``CUDAExecutionProvider`` whenever the installed
 onnxruntime build offers it (``onnxruntime-gpu``) and falls back to plain CPU
@@ -35,6 +38,7 @@ from animalposetracker.inference.stream_inference import DetectorBox
 
 _COORD_MODES = ("normalized", "pixels")
 _PREPROCESS_MODES = ("stretch", "letterbox")
+_BOX_FORMATS = ("cxcywh", "xyxy")
 
 #: Session provider preference: the GPU when this onnxruntime build has one,
 #: plain CPU otherwise. A two-stage stream on a CPU-only build spends most of
@@ -64,6 +68,7 @@ class OnnxDetectorAdapter:
         providers: Optional[Sequence[str]] = None,
         coord_mode: str = "normalized",
         preprocess_mode: str = "stretch",
+        box_format: str = "cxcywh",
     ):
         import onnxruntime as ort  # local import keeps this module import-light
 
@@ -75,6 +80,8 @@ class OnnxDetectorAdapter:
             raise ValueError(f"coord_mode must be one of {_COORD_MODES}")
         if preprocess_mode not in _PREPROCESS_MODES:
             raise ValueError(f"preprocess_mode must be one of {_PREPROCESS_MODES}")
+        if box_format not in _BOX_FORMATS:
+            raise ValueError(f"box_format must be one of {_BOX_FORMATS}")
         self.onnx_path = Path(onnx_path)
         if not self.onnx_path.is_file():
             raise FileNotFoundError(f"detector ONNX not found: {self.onnx_path}")
@@ -84,6 +91,7 @@ class OnnxDetectorAdapter:
         self.max_det = int(max_det)
         self.coord_mode = coord_mode
         self.preprocess_mode = preprocess_mode
+        self.box_format = box_format
         self.providers = (
             list(providers) if providers else _default_providers(ort.get_available_providers())
         )
@@ -140,12 +148,17 @@ class OnnxDetectorAdapter:
         height, width = frame.shape[:2]
         scale = float(self.input_size) if self.coord_mode == "normalized" else 1.0
         boxes = []
-        for cx, cy, box_w, box_h, score, class_id in kept:
-            # 1) to network-canvas pixels, 2) undo padding/ratio -> source frame
-            x1 = ((cx - box_w * 0.5) * scale - pad_x) / ratio_x
-            y1 = ((cy - box_h * 0.5) * scale - pad_y) / ratio_y
-            x2 = ((cx + box_w * 0.5) * scale - pad_x) / ratio_x
-            y2 = ((cy + box_h * 0.5) * scale - pad_y) / ratio_y
+        for a, b, c, d, score, class_id in kept:
+            # 1) to network-canvas corner form, 2) undo padding/ratio -> source frame
+            if self.box_format == "xyxy":
+                x1c, y1c, x2c, y2c = a, b, c, d
+            else:  # cxcywh
+                x1c, y1c = a - c * 0.5, b - d * 0.5
+                x2c, y2c = a + c * 0.5, b + d * 0.5
+            x1 = (x1c * scale - pad_x) / ratio_x
+            y1 = (y1c * scale - pad_y) / ratio_y
+            x2 = (x2c * scale - pad_x) / ratio_x
+            y2 = (y2c * scale - pad_y) / ratio_y
             x1, y1 = max(x1, 0.0), max(y1, 0.0)
             x2, y2 = min(x2, float(width)), min(y2, float(height))
             if x2 <= x1 or y2 <= y1:

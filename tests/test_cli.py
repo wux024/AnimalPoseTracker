@@ -609,8 +609,15 @@ class InferenceCliTopdownWiringTests(unittest.TestCase):
         calls = {"session": {}, "detector": {}, "pipeline": {}}
 
         class _FakeDetector:
-            def __init__(self, path, *, conf_threshold):
-                calls["detector"] = {"path": Path(path), "conf_threshold": conf_threshold}
+            def __init__(self, path, *, conf_threshold, box_format="cxcywh",
+                         coord_mode="normalized", preprocess_mode="stretch"):
+                calls["detector"] = {
+                    "path": Path(path),
+                    "conf_threshold": conf_threshold,
+                    "box_format": box_format,
+                    "coord_mode": coord_mode,
+                    "preprocess_mode": preprocess_mode,
+                }
 
         class _FakePipeline:
             def __init__(self, engine, output_config, *, input_mode, input_config,
@@ -661,6 +668,19 @@ class InferenceCliTopdownWiringTests(unittest.TestCase):
         self.assertIsNotNone(calls["pipeline"]["detector"])
         self.assertEqual(calls["detector"]["conf_threshold"], 0.6)
         self.assertEqual(calls["detector"]["path"].name, "rtdetr.onnx")
+
+    def test_detector_convention_flags_reach_the_adapter(self):
+        calls = self._run_infer([
+            "--detector-weights", "yolo26n.onnx",
+            "--detector-box-format", "xyxy",
+            "--detector-coord-mode", "pixels",
+            "--detector-preprocess-mode", "letterbox",
+        ])
+
+        detector = calls["detector"]
+        self.assertEqual(detector["box_format"], "xyxy")
+        self.assertEqual(detector["coord_mode"], "pixels")
+        self.assertEqual(detector["preprocess_mode"], "letterbox")
 
     def test_without_a_detector_the_stream_stays_full_frame(self):
         calls = self._run_infer()
