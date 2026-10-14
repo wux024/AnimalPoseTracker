@@ -296,10 +296,8 @@ class InferencerControlTests(unittest.TestCase):
             config_path.write_text(
                 "names: {0: probe}\n"
                 "kpt_shape: [2, 3]\n"
-                "poser:\n"
-                "  weights: poser.onnx\n"
-                "detector:\n"
-                "  weights: detector.onnx\n",
+                "poser_weights: poser.onnx\n"
+                "detector_weights: detector.onnx\n",
                 encoding="utf-8",
             )
 
@@ -351,10 +349,8 @@ class InferencerControlTests(unittest.TestCase):
             config_path.write_text(
                 "names: {0: probe}\n"
                 "kpt_shape: [2, 3]\n"
-                "poser:\n"
-                "  weights: simcc.onnx\n"
-                "detector:\n"
-                "  weights: det.onnx\n",
+                "poser_weights: simcc.onnx\n"
+                "detector_weights: det.onnx\n",
                 encoding="utf-8",
             )
 

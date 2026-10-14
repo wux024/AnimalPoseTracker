@@ -4,7 +4,7 @@
 # Copy this file, uncomment and edit the values you need, then pass
 # it with --config:
 #
-#   animalpose-cli infer --weights model.onnx --source video.mp4 \
+#   animalpose-cli infer --poser-weights model.onnx --source video.mp4 \
 #       --config infer.example.yaml
 #
 # Precedence: command line > this file > built-in defaults. Write
@@ -19,7 +19,7 @@
 # / skeleton and friends) may also live in this file.
 
 # ---- Model and backend (usually given on the command line) --------
-# weights: model.onnx              # exported artifact (.onnx / .engine / ...)
+# poser_weights: model.onnx       # exported pose artifact (.onnx / .engine / ...)
 # detector_weights: detector.onnx  # second-stage detector (enables the top-down stream)
 # engine: onnx                     # inference backend; defaults to the artifact format
 # device: auto                     # auto / cpu / cuda:0 / "NVIDIA GPU" / ...

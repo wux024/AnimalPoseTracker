@@ -58,8 +58,8 @@ class CommandDispatcherTests(unittest.TestCase):
         inference_cli = ModuleType("animalposetracker.inference.cli")
         inference_cli.run = Mock(return_value=3)
         with patch.dict("sys.modules", {"animalposetracker.inference.cli": inference_cli}):
-            self.assertEqual(main(["infer", "--weights", "m.onnx", "--source", "0"]), 3)
-            inference_cli.run.assert_called_once_with(["--weights", "m.onnx", "--source", "0"])
+            self.assertEqual(main(["infer", "--poser-weights", "m.onnx", "--source", "0"]), 3)
+            inference_cli.run.assert_called_once_with(["--poser-weights", "m.onnx", "--source", "0"])
 
     def test_project_create_writes_project_from_dataset_yaml(self):
         with tempfile.TemporaryDirectory() as temporary_directory:
@@ -494,7 +494,7 @@ class InferCliTests(unittest.TestCase):
     def test_infer_parser_defaults(self):
         from animalposetracker.inference.cli import _make_argument_parser
 
-        args = _make_argument_parser().parse_args(["--weights", "m.onnx", "--source", "0"])
+        args = _make_argument_parser().parse_args(["--poser-weights", "m.onnx", "--source", "0"])
         self.assertEqual(args.conf, 0.25)
         self.assertEqual(args.iou, 0.45)
         self.assertEqual(args.pose_filter, "none")
@@ -509,7 +509,7 @@ class InferCliTests(unittest.TestCase):
         for schema in SUPPORTED_YOLO_SCHEMAS:
             with self.subTest(schema=schema):
                 args = _make_argument_parser().parse_args([
-                    "--weights", "m.onnx", "--source", "0", "--schema", schema,
+                    "--poser-weights", "m.onnx", "--source", "0", "--schema", schema,
                 ])
                 self.assertEqual(args.schema, schema)
 
@@ -520,7 +520,7 @@ class InferCliTests(unittest.TestCase):
             with self.subTest(schema=schema):
                 with self.assertRaises(SystemExit):
                     _make_argument_parser().parse_args([
-                        "--weights", "m.onnx", "--source", "0", "--schema", schema,
+                        "--poser-weights", "m.onnx", "--source", "0", "--schema", schema,
                     ])
 
 
@@ -649,7 +649,7 @@ class InferenceCliTopdownWiringTests(unittest.TestCase):
             def release(self):
                 pass
 
-        argv = ["--weights", "pose.onnx", "--source", "clip.mp4", *extra_arguments]
+        argv = ["--poser-weights", "pose.onnx", "--source", "clip.mp4", *extra_arguments]
         with patch.object(cli, "build_inference_session", _fake_session), \
                 patch("animalposetracker.inference.detector_adapter.OnnxDetectorAdapter", _FakeDetector), \
                 patch("animalposetracker.inference.stream_inference.StreamInferencePipeline", _FakePipeline), \

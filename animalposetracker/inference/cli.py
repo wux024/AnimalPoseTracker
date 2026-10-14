@@ -47,7 +47,7 @@ _pixel_points = pixel_points
 # spellings (the parser's dest names). Data-description keys ride along in the
 # same file for the session to read and are skipped here.
 _INFER_FILE_KEYS = frozenset({
-    "weights", "detector_weights", "engine", "device", "bits", "imgsz",
+    "poser_weights", "detector_weights", "engine", "device", "bits", "imgsz",
     "source", "conf", "iou", "agnostic_nms", "detector_conf",
     "detector_box_format", "detector_coord_mode", "detector_preprocess_mode",
     "schema", "show_boxes", "show_labels", "show_keypoints", "show_skeletons",
@@ -57,7 +57,7 @@ _INFER_FILE_KEYS = frozenset({
 })
 _DATA_DESCRIPTION_KEYS = frozenset({
     "names", "classes_name", "keypoints_name", "keypoints", "skeleton",
-    "kpt_shape", "visible", "output_schema", "poser", "detector",
+    "kpt_shape", "visible", "output_schema",
     # dataset-style keys, for a file borrowed from a dataset.yaml
     "path", "train", "val", "test", "annotation_format", "flip_idx",
     "kpt_oks_sigmas", "keypoint_names", "upper_body_ids", "lower_body_ids",
@@ -118,9 +118,9 @@ def _make_argument_parser() -> argparse.ArgumentParser:
         prog="animalpose-cli infer",
         description="Run live pose inference on a camera, video file, or stream URL.",
     )
-    parser.add_argument("--weights",
-                        help="Exported model artifact (.onnx, .engine, .mlpackage, ...); "
-                             "may also be set as 'weights' in the --config file")
+    parser.add_argument("--poser-weights",
+                        help="Exported pose model artifact (.onnx, .engine, .mlpackage, ...); "
+                             "may also be set as 'poser_weights' in the --config file")
     parser.add_argument("--detector-weights",
                         help="Detector ONNX that enables the two-stage top-down stream "
                              "(for example an RT-DETR export)")
@@ -273,17 +273,17 @@ def run(argv=None) -> int:
     args = parser.parse_args(argv)
     # `source: 0` is a camera index, not an absence -- check for the empty
     # value, not for falsiness.
-    if args.weights is None or not str(args.weights).strip():
+    if args.poser_weights is None or not str(args.poser_weights).strip():
         raise ValueError(
-            "--weights is required: name the exported artifact, or set "
-            "'weights' in the --config file"
+            "--poser-weights is required: name the exported artifact, or set "
+            "'poser_weights' in the --config file"
         )
     if args.source is None or not str(args.source).strip():
         raise ValueError(
             "--source is required: a camera index, video path or stream URL, "
             "or set 'source' in the --config file"
         )
-    weights_path = Path(args.weights).expanduser().resolve()
+    weights_path = Path(args.poser_weights).expanduser().resolve()
     if weights_path.suffix.lower() == ".pt":
         raise ValueError(
             "infer runs exported artifacts; export first (animalpose-cli export) "
@@ -366,7 +366,7 @@ def run(argv=None) -> int:
     if args.tracker and args.pose_filter != "none":
         tracking_desc += f" + {args.pose_filter} filter"
     _print_infer_banner([
-        ("Weights", str(weights_path)),
+        ("Poser weights", str(weights_path)),
         ("Engine", f"{_ENGINE_NAMES[engine_key]} ({args.bits}, {args.device})"),
         ("Head", head),
         # Surfaced because 'auto' resolution can settle on a schema the caller did

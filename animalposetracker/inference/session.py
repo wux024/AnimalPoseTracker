@@ -54,9 +54,9 @@ class InferenceConfigSummary:
     skeleton: Tuple[Tuple[int, int], ...] = ()
     kpt_shape: Optional[Tuple[int, int]] = None
     schema: Optional[str] = None
-    #: Pose-model weights the config declares (``poser.weights``), for the page to adopt.
+    #: Pose-model weights the config declares (``poser_weights``), for the page to adopt.
     weights_path: Optional[str] = None
-    #: Detector weights the config declares (``detector.weights``); its presence means the
+    #: Detector weights the config declares (``detector_weights``); its presence means the
     #: run is a two-stage one.
     detector_weights_path: Optional[str] = None
 
@@ -118,8 +118,8 @@ def _parse_inference_config(mapping: Mapping[str, Any]) -> InferenceConfigSummar
     A dataset yaml carries ``names``/``kpt_shape``; a project yaml carries
     ``classes_name``/``keypoints_name``/``visible`` and no shape at all, so its keypoint count
     has to be derived. Both are accepted because both are what a user reasonably points at.
-    Either may also declare the model weights to adopt: ``poser.weights`` and
-    ``detector.weights`` (raw values here; the strict reader resolves them against the config
+    Either may also declare the model weights to adopt: ``poser_weights`` and
+    ``detector_weights`` (raw values here; the strict reader resolves them against the config
     file's directory).
     """
     class_names = _as_name_list(mapping.get("names") or mapping.get("classes_name"))
@@ -139,14 +139,12 @@ def _parse_inference_config(mapping: Mapping[str, Any]) -> InferenceConfigSummar
     raw_schema = mapping.get("schema") or mapping.get("output_schema")
     schema = str(raw_schema).strip().lower() if raw_schema else None
 
-    poser_section = mapping.get("poser") or {}
-    detector_section = mapping.get("detector") or {}
     weights_path = None
-    if isinstance(poser_section, Mapping) and poser_section.get("weights"):
-        weights_path = str(poser_section["weights"])
+    if mapping.get("poser_weights"):
+        weights_path = str(mapping["poser_weights"])
     detector_weights_path = None
-    if isinstance(detector_section, Mapping) and detector_section.get("weights"):
-        detector_weights_path = str(detector_section["weights"])
+    if mapping.get("detector_weights"):
+        detector_weights_path = str(mapping["detector_weights"])
 
     return InferenceConfigSummary(
         class_names=tuple(class_names),

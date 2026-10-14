@@ -114,8 +114,8 @@ class ConfigParsingTests(unittest.TestCase):
                 "dataset.yaml",
                 {
                     **DATASET_STYLE,
-                    "poser": {"weights": "poser.onnx"},
-                    "detector": {"weights": "detector.onnx"},
+                    "poser_weights": "poser.onnx",
+                    "detector_weights": "detector.onnx",
                 },
             )
             summary = read_inference_config(str(path))

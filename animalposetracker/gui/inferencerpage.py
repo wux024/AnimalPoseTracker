@@ -673,7 +673,7 @@ class InferencerPage(QWidget, Ui_Inferencer):
             
 
     def onSelectPoserClicked(self):
-        """Open file dialog to select model weights and 
+        """Open file dialog to select the poser weights and
         auto-configure supported engines and devices.
 
         Supported Engines:
@@ -692,7 +692,7 @@ class InferencerPage(QWidget, Ui_Inferencer):
         options = QFileDialog.Options()
         file_path, _ = QFileDialog.getOpenFileName(
             self,
-            "Select Model Weights",
+            "Select Poser Weights",
             "",
             "All Supported Formats (*.xml *.onnx *.om *.engine *.mlmodel *.mlpackage);;"
             "ONNX (*.onnx);;"
@@ -813,8 +813,9 @@ class InferencerPage(QWidget, Ui_Inferencer):
 
         The NMS-free YOLO exports (``nms=False``) speak pixels + letterbox + xyxy; the RT-DETR
         family speaks normalized + stretch + cxcywh, which is also the fallback when the name
-        says nothing. Explicit declarations in the config's ``detector:`` section will sit
-        above these presets once that wiring lands; the file name is what there is today.
+        says nothing. The explicit ``detector_box_format`` / ``detector_coord_mode`` /
+        ``detector_preprocess_mode`` declarations will sit above these presets once that
+        wiring lands; the file name is what there is today.
         """
         name = Path(detector_path).name.lower()
         if "yolo" in name:
@@ -1811,7 +1812,7 @@ class InferencerPage(QWidget, Ui_Inferencer):
             if not self.weights_path or not self.data_config_path:
                 # The builder indexes both paths; without them it failed with a raw TypeError
                 # that the dialog then showed verbatim.
-                QMessageBox.warning(self, "Cannot start inference", "Select the configuration file and the weights first.")
+                QMessageBox.warning(self, "Cannot start inference", "Select the configuration file and the poser weights first.")
                 return
             self._init_visualization_config()
             # One call assembles the artifact, the schema and the decode contract -- the same

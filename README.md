@@ -121,15 +121,15 @@ Use `animalpose-cli <command> --help` to see a workflow's options. For train, va
 
 `create` accepts the training settings supported by `train` and saves only explicitly supplied values into the new project's `configs/runtime.yaml`; omitted options retain the selected model's defaults. `load` accepts a project directory, `project.yaml`, or `configs/runtime.yaml`, validates the project and its model/data config paths, and prints a summary without opening the GUI or modifying files.
 
-`animalpose-cli infer` is the deployment-side runtime: it runs an exported artifact (`.onnx`, `.engine`, `.mlpackage`, ...) on a camera, video file, or stream URL, and reads no project configuration at all. Its own yaml is the whole configuration surface — weights, engine and device, source, thresholds, drawing, tracking and filtering, alongside the class/keypoint description (`names` / `kpt_shape` / `skeleton`) that decodes the model's output tensor. Generate the documented template, edit a copy, and point the run at it:
+`animalpose-cli infer` is the deployment-side runtime: it runs an exported artifact (`.onnx`, `.engine`, `.mlpackage`, ...) on a camera, video file, or stream URL, and reads no project configuration at all. Its own yaml is the whole configuration surface — poser weights, engine and device, source, thresholds, drawing, tracking and filtering, alongside the class/keypoint description (`names` / `kpt_shape` / `skeleton`) that decodes the model's output tensor. Generate the documented template, edit a copy, and point the run at it:
 
 ```bash
 animalpose-cli infer --write-template                  # writes ./infer.example.yaml
-animalpose-cli infer --config infer.yaml               # weights, source, thresholds come from the file
+animalpose-cli infer --config infer.yaml               # poser weights, source, thresholds come from the file
 animalpose-cli infer --config infer.yaml --conf 0.4    # an explicit flag wins for that run
 ```
 
-`--write-template -` prints the template instead of writing it. Values in the file become that run's defaults; a key the file does not define and the data description does not use is reported on stderr and ignored. `--weights` and `--source` have no built-in defaults: either the file or the command line must supply them. Infer refuses `.pt` checkpoints — export first (`animalpose-cli export`), or use `predict` for checkpoints.
+`--write-template -` prints the template instead of writing it. Values in the file become that run's defaults; a key the file does not define and the data description does not use is reported on stderr and ignored. `--poser-weights` and `--source` have no built-in defaults: either the file or the command line must supply them. Infer refuses `.pt` checkpoints — export first (`animalpose-cli export`), or use `predict` for checkpoints.
 
 `train` exit codes: `0` when training reaches `epochs` **and** when early stopping ends it (an exhausted `early_stopping_patience` is a normal completion — `best.pt` is final), `130` only when the run was interrupted by an external request (`SIGINT`/`SIGTERM` or the `.animalposetracker_training_stop` marker), and `1` on error. Chain `val`/`export` behind `train` in a `set -e` script: early stopping no longer aborts the pipeline.
 
@@ -203,7 +203,7 @@ conda activate animalposetracker
 animalpose-inferencer
 ```
 
-3. You can choose the configuration file and the weights file. The software will automatically show the available inference engines and devices.
+3. You can choose the configuration file and the poser weights file. The software will automatically show the available inference engines and devices.
 
 The configuration file describes the classes and the keypoints. Either style is accepted: a project yaml (`classes_name` / `keypoints_name` / `skeleton`, which is what a project created by this toolbox writes) or a dataset yaml (`names` / `kpt_shape` / `skeleton`). These three keys are not only labels — their counts tell the decoder how the model's output tensor is laid out, so a configuration that disagrees with the artifact shifts the keypoint block and decodes nonsense. Both files are therefore checked as soon as they are picked:
 
