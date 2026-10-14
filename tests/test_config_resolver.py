@@ -165,6 +165,39 @@ class ResolverTests(unittest.TestCase):
         self.assertFalse(predict_tree["tracking"]["enabled"])
         self.assertEqual(predict_tree["confidence"], 0.25)
 
+    def test_registered_train_keys_point_at_real_defaults(self):
+        # A key's group decides where a command-line override lands; if the
+        # group disagrees with the defaults tree, the profile default silently
+        # re-decides the value. Pin the alignment for every registered key.
+        from animalposetracker.config.defaults import default_subtree
+        from animalposetracker.training.profiles import train_key_targets
+
+        tree = default_subtree("train")
+
+        def exists(parts):
+            node = tree
+            for part in parts:
+                if not isinstance(node, dict) or part not in node:
+                    return False
+                node = node[part]
+            return True
+
+        missing = []
+        for key, path in train_key_targets("AnimalRTPose").items():
+            if key in ("model", "data"):
+                continue  # derived from the project structure, never stored
+            parts = path.split(".")[1:]
+            if parts[0] == "models":
+                candidates = [
+                    ["models", model, *parts[2:]]
+                    for model in ("AnimalRTPose", "AnimalViTPose")
+                ]
+            else:
+                candidates = [parts]
+            if not any(exists(candidate) for candidate in candidates):
+                missing.append(path)
+        self.assertEqual(missing, [])
+
     def test_changed_from_defaults_ignores_snapshot_values(self):
         # A project snapshot carries every registered key; only values that
         # actually differ from the package defaults count as changed.

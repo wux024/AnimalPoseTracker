@@ -18,6 +18,8 @@ shared:
     save: true
     save_period: 0 # 0 disables periodic checkpoints
     pretrained: true
+    pretrained_weights:
+    channels_last:
     verbose: true
     resume: false
     resume_from:

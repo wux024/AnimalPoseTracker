@@ -111,8 +111,10 @@ def _make_argument_parser() -> argparse.ArgumentParser:
     parser.add_argument("--no-show-skeletons", dest="show_skeletons", action="store_false")
     parser.add_argument("--line-width", type=int, default=2,
                         help="Rendered bounding box and skeleton line width")
-    parser.add_argument("--point-radius", "--kpt-radius", dest="point_radius", type=int, default=4,
+    parser.add_argument("--point-radius", dest="point_radius", type=int, default=4,
                         help="Rendered keypoint radius")
+    parser.add_argument("--kpt-radius", dest="point_radius", type=int, default=4,
+                        help="deprecated alias of --point-radius")
     parser.set_defaults(show_boxes=True, show_labels=True, show_keypoints=True, show_skeletons=True)
     parser.add_argument("--show", action="store_true",
                         help="Display the rendered stream in a window")

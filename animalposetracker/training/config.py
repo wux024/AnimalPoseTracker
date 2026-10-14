@@ -238,7 +238,7 @@ class TrainingConfig:
         values: Dict[str, Any],
         project_dir: Optional[PathLike] = None,
     ) -> "TrainingConfig":
-        """Build from a mapping, including an existing ``configs/other.yaml``."""
+        """Build from a mapping (the resolved flat values the CLI hands over)."""
         values = dict(values or {})
         root = Path(project_dir or values.get("project_dir") or ".").expanduser().resolve()
 
@@ -260,7 +260,7 @@ class TrainingConfig:
 
         # Canonical spellings first, the historical flat names second (the
         # resolver feeds canonical keys; checkpoint configs and the legacy
-        # other.yaml path still speak the old ones).
+        # checkpoint configs still speak the old ones).
         time_hours = values.get("time_hours", values.get("time"))
         validation_confidence = values.get("confidence", values.get("conf"))
 

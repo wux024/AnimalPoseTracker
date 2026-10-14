@@ -27,6 +27,10 @@ def _make_create_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="animalpose-cli create",
         description="Create a project from a dataset YAML without copying the dataset.",
+        epilog=(
+            "Short spellings (--batch, --imgsz, --lr0, ...) remain accepted as "
+            "deprecated aliases; the full names are canonical."
+        ),
     )
     parser.add_argument(
         "--dataset",
@@ -60,20 +64,26 @@ def _make_create_parser() -> argparse.ArgumentParser:
         if name in excluded_fields or name == "cache":
             continue
         dest = "augmentation_scale" if name == "scale" else name
-        if name == "scale":
-            flags = ("--augment-scale",)
-        else:
-            flags = tuple(dict.fromkeys((f"--{name.replace('_', '-')}", *_CLI_ALIASES.get(name, ()))))
         value_type = field_types[name]
-        if value_type is bool:
-            _add_bool_options(parser, flags, dest)
-        elif name == "scale":
+        if name == "scale":
             parser.add_argument(
-                *flags, dest=dest, type=value_type, default=argparse.SUPPRESS,
+                "--augment-scale", dest=dest, type=value_type, default=argparse.SUPPRESS,
                 help="Training scale augmentation; --scale selects the model scale.",
             )
+            continue
+        primary = f"--{name.replace('_', '-')}"
+        aliases = _CLI_ALIASES.get(name, ())
+        if value_type is bool:
+            _add_bool_options(parser, (primary,), dest)
+            for alias in aliases:
+                _add_bool_options(parser, (alias,), dest, deprecated_for=primary)
         else:
-            parser.add_argument(*flags, dest=dest, type=value_type, default=argparse.SUPPRESS)
+            parser.add_argument(primary, dest=dest, type=value_type, default=argparse.SUPPRESS)
+            for alias in aliases:
+                parser.add_argument(
+                    alias, dest=dest, type=value_type, default=argparse.SUPPRESS,
+                    help=f"deprecated alias of {primary}",
+                )
 
     parser.add_argument("--cache", nargs="?", const=True, type=_parse_cache_value,
                         default=argparse.SUPPRESS)
@@ -89,7 +99,7 @@ def _make_create_parser() -> argparse.ArgumentParser:
         metavar="PATH",
         help=(
             "Start from pretrained weights. Optionally record a local "
-            "checkpoint path in configs/other.yaml; nothing is checked or "
+            "checkpoint path in configs/runtime.yaml; nothing is checked or "
             "downloaded at create time."
         ),
     )
@@ -103,7 +113,7 @@ def _make_create_parser() -> argparse.ArgumentParser:
     )
     pretrained.add_argument(
         "--pretrained-weights", dest="pretrained_weights", default=argparse.SUPPRESS,
-        help="Record a local checkpoint path in configs/other.yaml.",
+        help="Record a local checkpoint path in configs/runtime.yaml.",
     )
     parser.add_argument("--no-gradient-clip", dest="gradient_clip_norm",
                         action="store_const", const=None, default=argparse.SUPPRESS)

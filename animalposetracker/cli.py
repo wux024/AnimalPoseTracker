@@ -43,7 +43,7 @@ def _run_validation(argv: Sequence[str]) -> int:
             "--batch, --imgsz, --workers, --device, --conf, --iou, and --max-det."
         ),
     )
-    parser.add_argument("--config", default="configs/other.yaml")
+    parser.add_argument("--config", default="configs/runtime.yaml")
     parser.add_argument("--weights", required=True)
     parser.add_argument("--output-dir")
     values, overrides = parser.parse_known_args(list(argv))

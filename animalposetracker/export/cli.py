@@ -241,7 +241,7 @@ def run(argv=None) -> int:
         config.output_dir = output_root / (args.name or "export")
     else:
         # Export runs get their own namespace instead of inheriting the
-        # training run name (project/name = runs/train) from other.yaml.
+        # training run name (project/name = runs/train) from the runtime config.
         config.output_dir = context["project_dir"] / "runs" / "export"
     config.output_dir = unique_output_directory(
         config.output_dir,

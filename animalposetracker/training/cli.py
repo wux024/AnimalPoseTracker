@@ -376,14 +376,16 @@ _CLI_SPECIAL_TYPES = {
 }
 
 
-def _add_bool_options(parser: argparse.ArgumentParser, flags, dest: str) -> None:
+def _add_bool_options(parser: argparse.ArgumentParser, flags, dest: str, deprecated_for: str = None) -> None:
+    help_text = f"deprecated alias of {deprecated_for}" if deprecated_for else None
     for flag in flags:
         parser.add_argument(
             flag, dest=dest, nargs="?", const=True, type=_parse_bool_value,
-            default=argparse.SUPPRESS,
+            default=argparse.SUPPRESS, help=help_text,
         )
         negative = "--no-" + flag[2:]
-        parser.add_argument(negative, dest=dest, action="store_const", const=False, default=argparse.SUPPRESS)
+        parser.add_argument(negative, dest=dest, action="store_const", const=False,
+                            default=argparse.SUPPRESS, help=help_text)
 
 
 def _collect_cli_overrides(args):
@@ -452,6 +454,10 @@ def _make_argument_parser() -> argparse.ArgumentParser:
         prog="animalpose-cli train",
         description="Train a pose model with AnimalPoseTracker's PyTorch training engine.",
         formatter_class=argparse.ArgumentDefaultsHelpFormatter,
+        epilog=(
+            "Short spellings (--batch, --imgsz, --lr0, ...) remain accepted as "
+            "deprecated aliases; the full names are canonical."
+        ),
     )
     parser.add_argument(
         "--config",
@@ -479,12 +485,20 @@ def _make_argument_parser() -> argparse.ArgumentParser:
         name = item.name
         if name in _CLI_INTERNAL_FIELDS or name in {"cache", "pretrained_weights"}:
             continue
-        flags = tuple(dict.fromkeys((f"--{name.replace('_', '-')}", *_CLI_ALIASES.get(name, ()))))
+        primary = f"--{name.replace('_', '-')}"
+        aliases = _CLI_ALIASES.get(name, ())
         value_type = _CLI_SPECIAL_TYPES.get(name, type(item.default))
         if value_type is bool:
-            _add_bool_options(parser, flags, name)
+            _add_bool_options(parser, (primary,), name)
+            for alias in aliases:
+                _add_bool_options(parser, (alias,), name, deprecated_for=primary)
         else:
-            parser.add_argument(*flags, dest=name, type=value_type, default=argparse.SUPPRESS)
+            parser.add_argument(primary, dest=name, type=value_type, default=argparse.SUPPRESS)
+            for alias in aliases:
+                parser.add_argument(
+                    alias, dest=name, type=value_type, default=argparse.SUPPRESS,
+                    help=f"deprecated alias of {primary}",
+                )
 
     parser.add_argument("--cache", nargs="?", const=True, type=_parse_cache_value, default=argparse.SUPPRESS)
     parser.add_argument("--no-cache", dest="cache", action="store_const", const=False, default=argparse.SUPPRESS)

@@ -608,8 +608,12 @@ def _make_argument_parser():
     parser.add_argument("--name", help="Prediction run name inside the output root")
     parser.add_argument("--device", help="Inference device; defaults to the project setting")
     parser.add_argument(
-        "--imgsz", "--image-size", dest="image_size", type=int,
+        "--image-size", dest="image_size", type=int,
         help="Square input size for YOLO pose models; defaults to the project or artifact size",
+    )
+    parser.add_argument(
+        "--imgsz", dest="image_size", type=int,
+        help="deprecated alias of --image-size",
     )
     parser.add_argument(
         "--conf",
@@ -621,8 +625,10 @@ def _make_argument_parser():
         type=float,
         help="Prediction NMS IoU threshold (default: 0.7)",
     )
-    parser.add_argument("--max-det", "--max-detections", dest="max_det", type=int,
+    parser.add_argument("--max-detections", dest="max_det", type=int,
                         help="Maximum detections per image")
+    parser.add_argument("--max-det", dest="max_det", type=int,
+                        help="deprecated alias of --max-detections")
     parser.add_argument(
         "--keypoint-score-threshold", type=float,
         help="Hide keypoints below this confidence threshold",
@@ -647,11 +653,15 @@ def _make_argument_parser():
             default=None,
         )
     parser.add_argument("--kpt-line", dest="show_skeletons", nargs="?", const=True,
-                        type=_parse_bool_value, default=None)
+                        type=_parse_bool_value, default=None,
+                        help="deprecated alias of --show-skeletons")
     parser.add_argument("--no-kpt-line", dest="show_skeletons", action="store_const",
-                        const=False, default=None)
+                        const=False, default=None,
+                        help="deprecated alias of --no-show-skeletons")
     parser.add_argument("--line-width", type=int)
-    parser.add_argument("--kpt-radius", "--point-radius", dest="point_radius", type=int)
+    parser.add_argument("--point-radius", dest="point_radius", type=int)
+    parser.add_argument("--kpt-radius", dest="point_radius", type=int,
+                        help="deprecated alias of --point-radius")
     parser.add_argument("--exist-ok", nargs="?", const=True, type=_parse_bool_value, default=None)
     parser.add_argument("--no-exist-ok", dest="exist_ok", action="store_const", const=False,
                         default=None)

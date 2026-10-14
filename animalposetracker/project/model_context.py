@@ -8,10 +8,7 @@ import yaml
 
 from animalposetracker.training.checkpoint import load_model_weights
 from animalposetracker.training.config import TrainingConfig
-from animalposetracker.training.profiles import (
-    configure_animalvitpose_model,
-    flatten_project_training_config,
-)
+from animalposetracker.training.profiles import configure_animalvitpose_model
 
 
 def read_yaml_mapping(path: Path) -> Dict[str, Any]:
@@ -52,33 +49,6 @@ def unique_output_directory(path: Path, exist_ok: bool = False) -> Path:
         index += 1
 
 
-def load_project_context(config_path: Path) -> Tuple[TrainingConfig, Dict[str, Any]]:
-    """Read a project's training, data and model context without loading PyTorch weights."""
-    config_path = Path(config_path).expanduser().resolve()
-    project_dir = config_path.parent.parent
-    project_path = project_dir / "project.yaml"
-    project_values = read_yaml_mapping(project_path) if project_path.is_file() else {}
-    other_values = flatten_project_training_config(
-        read_yaml_mapping(config_path),
-        model_type=project_values.get("model_type"),
-    )
-    config = TrainingConfig.from_mapping(other_values, project_dir=project_dir)
-    if config.model is None or not config.model.is_file():
-        raise FileNotFoundError(f"Model configuration does not exist: {config.model}")
-    if config.data is None or not config.data.is_file():
-        raise FileNotFoundError(f"Dataset configuration does not exist: {config.data}")
-    context = {
-        "project_dir": project_dir,
-        "project": project_values,
-        "other": other_values,
-        "dataset": read_yaml_mapping(config.data),
-        "model_spec": read_yaml_mapping(config.model),
-        "weights": None,
-        "load_report": None,
-    }
-    return config, context
-
-
 def configure_project_model_spec(config: TrainingConfig, context: Dict[str, Any]):
     """Materialize model architecture values from the project, model and dataset configs."""
     from animalposetracker.nn.model_config import head_config, set_simcc_keypoint_count
@@ -111,8 +81,8 @@ def configure_project_model_spec(config: TrainingConfig, context: Dict[str, Any]
 def _instantiate_and_load(config, context, model_spec, head_name, scale, weights_path, device=None):
     """Build the model from the resolved spec, load its weights, finish the context.
 
-    Split out of ``load_project_model`` so both the legacy (other.yaml) and the
-    new-format (runtime.yaml) loaders share one assembly path.
+    The one assembly path every project flow shares; the runtime context
+    loader feeds it (refactor wave W3 retired the legacy other.yaml twin).
     """
     import torch
 
@@ -142,33 +112,18 @@ def _instantiate_and_load(config, context, model_spec, head_name, scale, weights
     return model
 
 
-def load_project_model(
-    config_path: Path,
-    weights_path: Path,
-    device: Optional[str] = None,
-) -> Tuple[Any, TrainingConfig, Dict[str, Any]]:
-    """Build a project model, load its weights, and return model/config/context."""
-    config, context = load_project_context(config_path)
-    model_spec, head_name, scale = configure_project_model_spec(config, context)
-    model = _instantiate_and_load(
-        config, context, model_spec, head_name, scale, weights_path, device=device
-    )
-    return model, config, context
-
-
 def load_project_runtime_context(
     project_dir,
     resolved=None,
 ) -> Tuple[TrainingConfig, Dict[str, Any]]:
-    """Load a project's context from the new-format configuration.
+    """Load a project's context from its runtime configuration.
 
-    The sibling of :func:`load_project_context` for flows that have migrated
-    onto ``configs/runtime.yaml`` (``export`` is the first). The training
-    config keeps the same shape downstream code already consumes --
+    The one loader every project flow uses (train / predict / export / load).
+    The training config keeps the shape downstream code consumes --
     ``image_size`` / ``device`` / ``single_cls`` / ``model`` / ``data`` -- but
     every value comes through the config package, so the context can say
-    where it came from. The legacy path stays untouched until the remaining
-    flows migrate (refactor wave W3).
+    where it came from. Callers that resolved the scopes themselves pass the
+    result in; otherwise common / train / export are resolved here.
     """
     from animalposetracker.config import ConfigFormatError, resolve_scopes
 
@@ -226,9 +181,7 @@ def load_project_runtime_model(
 
 
 __all__ = [
-    "load_project_model",
     "load_project_runtime_model",
-    "load_project_context",
     "load_project_runtime_context",
     "configure_project_model_spec",
     "read_yaml_mapping",
