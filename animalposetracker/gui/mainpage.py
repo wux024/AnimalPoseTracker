@@ -27,35 +27,11 @@ from animalposetracker.gui import (DARK_THEME_PATH, LIGHT_THEME_PATH,
                                    WELCOME_PATH)
 
 # The parameter trees come from the Designer files, which mirror every knob the reference
-# toolkits expose under those names. Only the ones this backend reads belong on screen: a row
-# nothing consumes is a knob that silently does nothing, and a row whose key is missing from the
-# project's runtime.yaml raises the moment it is edited.
-_DROPPED_CONFIGURE_KEYS = {
-    "TrainingConfigureEdit": frozenset({"overlap_mask", "mask_ratio", "dropout"}),
-    "EvaluateConfigure": frozenset({
-        "save_json", "save_hybrid", "save_txt", "save_conf", "save_crop", "augment",
-    }),
-    "InferenceConfigure": frozenset({
-        "vid_stride", "stream_buffer", "visualize", "augment", "retina_masks", "embed",
-        "stream", "show", "save_frame", "save_txt", "save_conf", "save_crop",
-        "show_label", "font_size", "font", "pil", "masks", "probs", "filename",
-        "color_mode", "txt_color",
-    }),
-}
-
-# Rows the backend reads that the Designer file has no entry for, as ``(key, default)``. A dotted
-# key addresses one field of a nested mapping in runtime.yaml (``tracking: {enabled: ...}``), which
-# is the shape the prediction pipeline reads; the default seeds a project that predates the key.
-_ADDED_CONFIGURE_KEYS = {
-    "InferenceConfigure": (
-        ("tracking.enabled", False),
-        ("tracking.algorithm", "bytetrack"),
-        ("pose_filter.method", "none"),
-        ("pose_filter.window_length", 5),
-        ("pose_filter.polyorder", 2),
-        ("pose_filter.max_gap", 0),
-    ),
-}
+# toolkits expose under those names. What belongs on screen is derived from the key registry,
+# not from hand-kept lists: a Designer row whose name no registered key owns (as its canonical
+# key or a legacy spelling) is dropped at startup, and every key flagged `tree_row` gains the
+# row the Designer file never had. A row nothing consumes is a knob that silently does nothing,
+# and a row whose key is missing from the project's runtime.yaml raises the moment it is edited.
 
 # Rows whose value comes from a fixed set, so the value column offers them instead of asking for
 # them to be typed. Booleans need no entry here: any row whose config value is a bool gets the
@@ -63,17 +39,11 @@ _ADDED_CONFIGURE_KEYS = {
 _CONFIGURE_KEY_CHOICES = {
     "cache": ("True", "False", "ram", "disk"),
     "pose_filter.method": ("none", "median", "savgol"),
-    "split": ("train", "val", "test"),
 }
 
 # Rows that look boolean in the config but also accept free text, so they keep the text editor:
 # `pretrained` names a checkpoint when it is a string (`TrainingConfig.from_mapping`).
 _FREETEXT_CONFIGURE_KEYS = frozenset({"pretrained"})
-
-# Rows the backend does read, but under a different key than the Designer file uses.
-_RENAMED_CONFIGURE_KEYS = {
-    "InferenceConfigure": {"conf": "prediction_confidence", "iou": "prediction_iou"},
-}
 
 
 class _FrameExtractionThread(QThread):
@@ -363,10 +333,10 @@ class AnimalPoseTrackerPage(QMainWindow, Ui_AnimalPoseTracker):
     def _gui_runtime_tables(self):
         """Form-row spelling -> runtime.yaml path, per scope.
 
-        Transition shim for this wave: the forms keep their historical row
-        names (``workers``, ``imgsz``, ``conf`` ...) and each row maps onto
-        the canonical runtime path it edits. The metadata-driven forms in
-        the next wave replace this table wholesale.
+        The forms keep their historical row names (``workers``, ``imgsz``, ``conf`` ...) and
+        each row maps onto the canonical runtime path it edits. The mapping is built from the
+        registry's keys and legacy spellings, so every row keeps pointing at the right place
+        as keys are renamed.
         """
         cached = getattr(self, "_gui_runtime_tables_cache", None)
         if cached is not None:
@@ -452,29 +422,39 @@ class AnimalPoseTrackerPage(QMainWindow, Ui_AnimalPoseTracker):
         return ()
 
     def _shape_configure_trees(self):
-        """Make each parameter tree match what this backend reads: drop, rename and add rows.
+        """Make each parameter tree match what this backend reads: drop foreign rows, add flagged ones.
 
-        Runs at startup rather than being baked into the generated ``ui_*.py``: those files are
-        rebuilt from the Designer sources, which would bring every dropped row straight back and
-        lose every added one.
+        Derived from the key registry rather than hand-kept lists, so a form row and the key it
+        edits cannot drift apart. Runs at startup rather than being baked into the generated
+        ``ui_*.py``: those files are rebuilt from the Designer sources, which would bring every
+        dropped row straight back and lose every added one.
         """
-        for tree_name, dropped in _DROPPED_CONFIGURE_KEYS.items():
+        from animalposetracker.config.schema import fields as schema_fields
+
+        known = set()
+        for field in schema_fields():
+            known.add(field.key)
+            known.update(field.legacy)
+
+        for tree_name in self._RUNTIME_TREE_SCOPES:
             tree = getattr(self, tree_name)
-            renamed = _RENAMED_CONFIGURE_KEYS.get(tree_name, {})
             for index in reversed(range(tree.topLevelItemCount())):
                 item = tree.topLevelItem(index)
-                key = item.text(0)
-                if key in dropped:
+                if item.text(0) not in known:
                     tree.takeTopLevelItem(index)
-                elif key in renamed:
-                    item.setText(0, renamed[key])
 
-        for tree_name, added in _ADDED_CONFIGURE_KEYS.items():
-            tree = getattr(self, tree_name)
-            for key, _default in added:
-                item = QTreeWidgetItem()
-                item.setText(0, key)
-                tree.addTopLevelItem(item)
+        tree_for_scope = {}
+        for tree_name, scopes in self._RUNTIME_TREE_SCOPES.items():
+            tree_for_scope.setdefault(scopes[0], tree_name)
+        for field in schema_fields():
+            if not field.tree_row:
+                continue
+            tree_name = tree_for_scope.get(field.scope)
+            if tree_name is None:
+                continue
+            item = QTreeWidgetItem()
+            item.setText(0, f"{field.group}.{field.key}" if field.group else field.key)
+            getattr(self, tree_name).addTopLevelItem(item)
 
         # Kept on self: Qt does not take ownership of the delegate, and a collected one would
         # silently drop every dropdown back to a text editor.

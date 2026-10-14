@@ -35,6 +35,7 @@ import cv2
 import numpy as np
 
 from animalposetracker.inference.stream_inference import DetectorBox
+from animalposetracker.postprocessing.nms_params import DEPLOY_DETECTOR_CONF
 
 _COORD_MODES = ("normalized", "pixels")
 _PREPROCESS_MODES = ("stretch", "letterbox")
@@ -62,7 +63,7 @@ class OnnxDetectorAdapter:
         onnx_path,
         *,
         input_size: int = 640,
-        conf_threshold: float = 0.5,
+        conf_threshold: float = DEPLOY_DETECTOR_CONF,
         class_ids: Optional[Sequence[int]] = (0,),  # person by default
         max_det: int = 300,
         providers: Optional[Sequence[str]] = None,

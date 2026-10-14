@@ -514,15 +514,16 @@ class ConfigureTreeTests(unittest.TestCase):
         },
         "EvaluateConfigure": {
             "data", "batch", "imgsz", "conf", "iou", "max_det", "half", "device", "dnn",
-            "plots", "rect", "split", "project", "name", "profile", "verbose", "workers",
+            "plots", "project", "name", "profile", "verbose", "workers",
             "agnostic_nms", "single_cls",
         },
         "InferenceConfigure": {
-            "source", "prediction_confidence", "prediction_iou", "imgsz", "half", "device",
-            "batch", "max_det", "agnostic_nms", "classes", "project", "name", "verbose",
+            "source", "conf", "iou", "imgsz", "half", "device",
+            "batch", "max_det", "agnostic_nms", "project", "name", "verbose",
             "save", "show_conf", "show_boxes", "line_width", "kpt_radius", "kpt_line",
-            # Added by mainpage: the prediction pipeline reads these, the Designer file has no
-            # row for them, and the dotted names address the nested mappings in runtime.yaml.
+            # Appended from the registry's `tree_row` flags: the prediction pipeline reads
+            # these, the Designer file has no row for them, and the dotted names address the
+            # nested mappings in runtime.yaml.
             "tracking.enabled", "tracking.algorithm",
             "pose_filter.method", "pose_filter.window_length", "pose_filter.polyorder",
             "pose_filter.max_gap",
@@ -547,13 +548,20 @@ class ConfigureTreeTests(unittest.TestCase):
             with self.subTest(tree=tree_name):
                 self.assertEqual(self._keys(getattr(page, tree_name)), expected)
 
-    def test_prediction_thresholds_are_fully_qualified(self):
-        # `conf`/`iou` are read as validation thresholds, not prediction ones; prediction reads
-        # prediction_confidence/prediction_iou, so those are the keys the tree has to carry.
+    def test_prediction_thresholds_land_in_the_prediction_section(self):
+        # The inference page's `conf`/`iou` rows are prediction thresholds: they must resolve
+        # into the predict section, while the evaluate page keeps its own validation pair.
         page = AnimalPoseTrackerPage()
-        keys = self._keys(page.InferenceConfigure)
-        self.assertNotIn("conf", keys)
-        self.assertNotIn("iou", keys)
+        self.assertEqual(
+            page._runtime_path_for_gui_key("conf", "InferenceConfigure"), "predict.confidence")
+        self.assertEqual(
+            page._runtime_path_for_gui_key("iou", "InferenceConfigure"), "predict.iou")
+        self.assertEqual(
+            page._runtime_path_for_gui_key("conf", "EvaluateConfigure"),
+            "train.models.AnimalRTPose.validation.confidence")
+        self.assertEqual(
+            page._runtime_path_for_gui_key("iou", "EvaluateConfigure"),
+            "train.models.AnimalRTPose.validation.iou")
 
     def test_editing_any_offered_row_does_not_raise(self):
         page = AnimalPoseTrackerPage()
@@ -674,7 +682,6 @@ class ConfigureTreeTests(unittest.TestCase):
             ("bytetrack", "botsort", "ocsort", "deepocsort", "fasttrack", "tracktrack"),
         )
         self.assertEqual(page.configure_choices("pose_filter.method"), ("none", "median", "savgol"))
-        self.assertEqual(page.configure_choices("split"), ("train", "val", "test"))
         # `cache` accepts two words besides a bool, so it is listed rather than derived.
         self.assertEqual(page.configure_choices("cache"), ("True", "False", "ram", "disk"))
         # Numbers and paths stay free text.

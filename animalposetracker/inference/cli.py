@@ -25,6 +25,7 @@ from animalposetracker.inference.session import (
     resolve_num_classes,
 )
 from animalposetracker.postprocessing.nms_params import (
+    DEPLOY_DETECTOR_CONF,
     DEPLOY_NMS_AGNOSTIC,
     DEPLOY_NMS_CONF,
     DEPLOY_NMS_IOU,
@@ -123,7 +124,7 @@ def _make_argument_parser() -> argparse.ArgumentParser:
     parser.add_argument("--detector-weights",
                         help="Detector ONNX that enables the two-stage top-down stream "
                              "(for example an RT-DETR export)")
-    parser.add_argument("--detector-conf", type=float, default=0.5,
+    parser.add_argument("--detector-conf", type=float, default=DEPLOY_DETECTOR_CONF,
                         help="Detector confidence threshold for top-down streaming")
     parser.add_argument("--detector-box-format", dest="detector_box_format",
                         choices=("cxcywh", "xyxy"), default="cxcywh",

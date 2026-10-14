@@ -30,6 +30,11 @@ from animalposetracker.inference.session import (
 )
 from animalposetracker.postprocessing.output_decoders import decode_pose_outputs
 from animalposetracker.rendering import INFERENCE_STYLE, draw_instance, pixel_box
+from animalposetracker.postprocessing.nms_params import (
+    DEPLOY_DETECTOR_CONF,
+    DEPLOY_NMS_CONF,
+    DEPLOY_NMS_IOU,
+)
 class InferencerPage(QWidget, Ui_Inferencer):
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -114,6 +119,11 @@ class InferencerPage(QWidget, Ui_Inferencer):
         self._add_status_line()
         self._align_labels()
         self._align_display_switches()
+
+        # The decode numbers come from the shared deployment constants, not from the Designer
+        # file: changing the constant moves the page with it.
+        self.IoU.setValue(DEPLOY_NMS_IOU)
+        self.Conf.setValue(DEPLOY_NMS_CONF)
 
         self.platform = detect_platform()
         self.device_check_results = self._detect_device_availability()
@@ -298,7 +308,7 @@ class InferencerPage(QWidget, Ui_Inferencer):
         self.DetectorConf.setObjectName("DetectorConf")
         self.DetectorConf.setMaximum(1.0)
         self.DetectorConf.setSingleStep(0.01)
-        self.DetectorConf.setValue(0.5)
+        self.DetectorConf.setValue(DEPLOY_DETECTOR_CONF)
         self.DetectorConf.setToolTip("Detector confidence threshold: keep only boxes above it (two-stage only; adjustable while running)")
         self.DetectorConfLabel = QLabel("Detector Conf", self.ShowToolsGroup)
 

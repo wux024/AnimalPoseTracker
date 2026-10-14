@@ -27,6 +27,9 @@ Terminology (mirrors the W0 concept dictionary, 2026-10-14):
   when the run finishes).
 - ``visibility``: where the GUI shows the key -- ``form`` (regular),
   ``advanced`` (advanced/collapsed), ``hidden`` (the GUI does not show it).
+- ``tree_row``: the Designer file carries no row for the key, and the
+  configure tree appends one at startup (the tracking / temporal-filter
+  controls came after the form was drawn).
 - ``legacy``: spellings that appear in pre-refactor files or older CLI flags.
   NOT used for compatibility reads (old files are rejected); used to turn a
   stray old spelling into a helpful error message.
@@ -83,6 +86,7 @@ class Field:
     apply: str = "build"
     visibility: str = "form"
     legacy: Tuple[str, ...] = ()
+    tree_row: bool = False
 
     def __post_init__(self) -> None:
         if isinstance(self.type, type):
@@ -116,8 +120,9 @@ def _f(
     apply: str = "build",
     visibility: str = "form",
     legacy: Sequence[str] = (),
+    tree_row: bool = False,
 ) -> Field:
-    return Field(key, scope, group, type, note, apply, visibility, tuple(legacy))
+    return Field(key, scope, group, type, note, apply, visibility, tuple(legacy), tree_row)
 
 
 # ---------------------------------------------------------------------------
@@ -245,7 +250,7 @@ FIELDS: Tuple[Field, ...] = (
     # predict
     # ------------------------------------------------------------------
     _f("source", "predict", "", str, "Default input source (image / video / directory / glob)", visibility="form"),
-    _f("confidence", "predict", "", float, "Prediction confidence threshold", apply="live", visibility="form", legacy=("prediction_confidence",)),
+    _f("confidence", "predict", "", float, "Prediction confidence threshold", apply="live", visibility="form", legacy=("prediction_confidence", "conf")),
     _f("iou", "predict", "", float, "Prediction NMS IoU", apply="live", visibility="form", legacy=("prediction_iou",)),
     _f("max_det", "predict", "", int, "Max detections per image", apply="live", visibility="form"),
     _f("agnostic_nms", "predict", "", bool, "Class-agnostic NMS", apply="live", visibility="form"),
@@ -258,12 +263,12 @@ FIELDS: Tuple[Field, ...] = (
     _f("show_skeletons", "predict", "", bool, "Draw skeleton lines", apply="live", visibility="form", legacy=("kpt_line",)),
     _f("line_width", "predict", "", int, "Box/skeleton line width", apply="live", visibility="form"),
     _f("point_radius", "predict", "", int, "Keypoint radius", apply="live", visibility="form", legacy=("kpt_radius",)),
-    _f("enabled", "predict", "tracking", bool, "Cross-frame tracking switch", visibility="form"),
-    _f("algorithm", "predict", "tracking", str, "Tracking algorithm (six options, e.g. bytetrack)", visibility="form"),
-    _f("method", "predict", "pose_filter", str, "Temporal smoothing method: none / median / savgol", apply="run_end", visibility="form"),
-    _f("window_length", "predict", "pose_filter", int, "Smoothing window length in frames", apply="run_end", visibility="form"),
-    _f("polyorder", "predict", "pose_filter", int, "Savitzky-Golay polynomial order", apply="run_end", visibility="form"),
-    _f("max_gap", "predict", "pose_filter", int, "Maximum missing-frame gap to interpolate", apply="run_end", visibility="form"),
+    _f("enabled", "predict", "tracking", bool, "Cross-frame tracking switch", visibility="form", tree_row=True),
+    _f("algorithm", "predict", "tracking", str, "Tracking algorithm (six options, e.g. bytetrack)", visibility="form", tree_row=True),
+    _f("method", "predict", "pose_filter", str, "Temporal smoothing method: none / median / savgol", apply="run_end", visibility="form", tree_row=True),
+    _f("window_length", "predict", "pose_filter", int, "Smoothing window length in frames", apply="run_end", visibility="form", tree_row=True),
+    _f("polyorder", "predict", "pose_filter", int, "Savitzky-Golay polynomial order", apply="run_end", visibility="form", tree_row=True),
+    _f("max_gap", "predict", "pose_filter", int, "Maximum missing-frame gap to interpolate", apply="run_end", visibility="form", tree_row=True),
     _f("confidence_threshold", "predict", "pose_filter", float, "Filter confidence threshold; null = inherit keypoint_confidence", apply="run_end", visibility="form"),
 
     # ------------------------------------------------------------------
