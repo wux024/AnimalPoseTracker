@@ -143,6 +143,32 @@ class MetadataSchemaTests(unittest.TestCase):
             resolve(metadata={"schema": RTMPOSE_SIMCC})
 
 
+class TopdownUnlockTests(unittest.TestCase):
+    """SimCC stops being reserved once the caller injects a detector.
+
+    The inferencer's top-down branch can only be built with an injected detector
+    provider, so the caller (``--detector-weights``) unlocks the schema explicitly
+    and everything else keeps being rejected.
+    """
+
+    def test_reserved_schema_is_accepted_when_topdown_is_allowed(self):
+        resolved = resolve(metadata={"schema": RTMPOSE_SIMCC}, allow_topdown=True)
+        self.assertEqual(resolved, (RTMPOSE_SIMCC, None))
+
+    def test_a_simcc_head_sidecar_resolves_when_topdown_is_allowed(self):
+        resolved = resolve(metadata={"head": "SimCCHead"}, allow_topdown=True)
+        self.assertEqual(resolved, (RTMPOSE_SIMCC, None))
+
+    def test_the_unlock_stays_closed_by_default(self):
+        with self.assertRaises(ValueError):
+            resolve(metadata={"head": "SimCCHead"})
+
+    def test_rtmo_stays_reserved_even_in_topdown_mode(self):
+        # Only SimCC has a wired decoder for the two-stage stream; RTMO does not.
+        with self.assertRaises(ValueError):
+            resolve(metadata={"schema": RTMO_MMDEPLOY}, allow_topdown=True)
+
+
 class ShapeInferenceTests(unittest.TestCase):
     """Precedence level 3: read the layout off the runtime output shape."""
 

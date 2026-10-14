@@ -595,5 +595,81 @@ class InferenceCliRenderTests(unittest.TestCase):
         self.assertFalse((rendered == frame).all(), "nothing was drawn")
 
 
+class InferenceCliTopdownWiringTests(unittest.TestCase):
+    """``--detector-weights`` has to switch the stream to the top-down branch.
+
+    Everything behind the switch (the session builder, the ONNX adapter, the
+    pipeline) is replaced with recorders: this test owns the wiring, not the
+    runtime.
+    """
+
+    def _run_infer(self, extra_arguments=()):
+        import animalposetracker.inference.cli as cli
+
+        calls = {"session": {}, "detector": {}, "pipeline": {}}
+
+        class _FakeDetector:
+            def __init__(self, path, *, conf_threshold):
+                calls["detector"] = {"path": Path(path), "conf_threshold": conf_threshold}
+
+        class _FakePipeline:
+            def __init__(self, engine, output_config, *, input_mode, input_config,
+                         detector, tracker, class_names):
+                calls["pipeline"] = {"input_mode": input_mode, "detector": detector}
+
+        def _fake_session(**kwargs):
+            calls["session"] = dict(kwargs)
+            return SimpleNamespace(
+                engine=object(),
+                output_config=SimpleNamespace(schema="mmpose_rtmpose_simcc"),
+                input_config=object(),
+                class_names=("person",),
+                skeleton=(),
+                head="SimCCHead",
+                engine_key="onnx",
+            )
+
+        class _FakeCapture:
+            def isOpened(self):
+                return True
+
+            def read(self):
+                return False, None  # an empty source ends the loop after zero frames
+
+            def get(self, _property):
+                return 0
+
+            def release(self):
+                pass
+
+        argv = ["--weights", "pose.onnx", "--source", "clip.mp4", *extra_arguments]
+        with patch.object(cli, "build_inference_session", _fake_session), \
+                patch("animalposetracker.inference.detector_adapter.OnnxDetectorAdapter", _FakeDetector), \
+                patch("animalposetracker.inference.stream_inference.StreamInferencePipeline", _FakePipeline), \
+                patch("cv2.VideoCapture", return_value=_FakeCapture()):
+            result = cli.run(argv)
+        self.assertEqual(result, 0)
+        return calls
+
+    def test_detector_weights_enable_the_topdown_stream(self):
+        calls = self._run_infer([
+            "--detector-weights", "rtdetr.onnx", "--detector-conf", "0.6",
+        ])
+
+        self.assertTrue(calls["session"]["topdown"])
+        self.assertEqual(calls["pipeline"]["input_mode"], "topdown")
+        self.assertIsNotNone(calls["pipeline"]["detector"])
+        self.assertEqual(calls["detector"]["conf_threshold"], 0.6)
+        self.assertEqual(calls["detector"]["path"].name, "rtdetr.onnx")
+
+    def test_without_a_detector_the_stream_stays_full_frame(self):
+        calls = self._run_infer()
+
+        self.assertFalse(calls["session"]["topdown"])
+        self.assertEqual(calls["pipeline"]["input_mode"], "full_frame")
+        self.assertIsNone(calls["pipeline"]["detector"])
+        self.assertEqual(calls["detector"], {})
+
+
 if __name__ == "__main__":
     unittest.main()

@@ -330,6 +330,7 @@ def build_inference_session(
     agnostic_nms: bool = DEPLOY_NMS_AGNOSTIC,
     schema: Optional[str] = None,
     imgsz: int = 640,
+    topdown: bool = False,
 ) -> InferenceSession:
     """Load an artifact and work out exactly how to decode what it emits.
 
@@ -385,11 +386,12 @@ def build_inference_session(
     head = str(metadata.get("head") or "")
     if not head:
         head = "SimCCHead" if "simcc_x" in tuple(metadata.get("outputs") or ()) else "YOLOPoseHead"
-    if head == "SimCCHead":
+    if head == "SimCCHead" and not topdown:
         raise ValueError(
             f"{weights_path} holds a SimCCHead (AnimalViTPose) model, and the inferencer cannot "
             "run one: top-down decoding needs a separate detector, which it has no way to "
-            "supply. Run it through `animalposetracker predict` instead."
+            "supply. Run it through `animalposetracker predict`, or pass `--detector-weights` "
+            "to enable the two-stage stream."
         )
 
     # A YOLOPoseHead artifact can emit any of the three ultralytics layouts. The explicit
@@ -401,6 +403,7 @@ def build_inference_session(
         output_shapes=getattr(engine_instance, "_runtime_output_shapes", {}) or {},
         num_keypoints=kpt_shape[0],
         keypoint_dims=kpt_shape[1],
+        allow_topdown=topdown,
     )
     if inferred_num_classes is not None:
         num_classes = inferred_num_classes

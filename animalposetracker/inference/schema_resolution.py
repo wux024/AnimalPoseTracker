@@ -23,6 +23,7 @@ from typing import Any, Mapping, Optional, Sequence, Tuple
 import warnings
 
 from animalposetracker.postprocessing.output_decoders import (
+    RTMPOSE_SIMCC,
     SUPPORTED_OUTPUT_SCHEMAS,
     YOLO_POSE_END2END,
     YOLO_POSE_NMS,
@@ -52,6 +53,7 @@ def resolve_output_schema(
     output_shapes: Optional[Mapping[str, Sequence[int]]] = None,
     num_keypoints: int,
     keypoint_dims: int = 3,
+    allow_topdown: bool = False,
 ) -> Tuple[str, Optional[int]]:
     """Return ``(schema, inferred_num_classes)`` for one artifact.
 
@@ -84,11 +86,11 @@ def resolve_output_schema(
 
     configured = _clean_schema_name(explicit_schema)
     if configured is not None:
-        return _validated(configured), None
+        return _validated(configured, allow_topdown=allow_topdown), None
 
     declared = _declared_schema(metadata or {})
     if declared is not None:
-        return _validated(declared), None
+        return _validated(declared, allow_topdown=allow_topdown), None
 
     inferred = _infer_from_shapes(
         output_shapes or {},
@@ -117,9 +119,13 @@ def _clean_schema_name(value: Any) -> Optional[str]:
     return text
 
 
-def _validated(schema: str) -> str:
+def _validated(schema: str, *, allow_topdown: bool = False) -> str:
     """Reject schemas the inferencer cannot actually run, with a precise reason."""
     if schema in SUPPORTED_YOLO_SCHEMAS:
+        return schema
+    # RTMPose/SimCC belongs to the top-down branch: it can only run when a detector
+    # provider was injected, so the caller unlocks it explicitly.
+    if allow_topdown and schema == RTMPOSE_SIMCC:
         return schema
     if schema in SUPPORTED_OUTPUT_SCHEMAS:
         raise ValueError(
@@ -133,6 +139,9 @@ def _validated(schema: str) -> str:
 
 def _declared_schema(metadata: Mapping[str, Any]) -> Optional[str]:
     """Schema the artifact's sidecar declares, if any."""
+    declared_head = str(metadata.get("head") or "")
+    if declared_head == "SimCCHead":
+        return RTMPOSE_SIMCC
     for key in ("schema", "output_schema"):
         declared = _clean_schema_name(metadata.get(key))
         if declared is not None:

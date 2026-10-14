@@ -222,6 +222,26 @@ class BuildSessionTests(unittest.TestCase):
             })
 
         self.assertIn("predict", str(raised.exception))
+        # The refusal names the unlock, so the message is also the documentation
+        # for the two-stage stream.
+        self.assertIn("--detector-weights", str(raised.exception))
+
+    def test_a_simcc_artifact_builds_when_topdown_is_enabled(self):
+        # The CLI passes topdown=True when --detector-weights names a detector; the
+        # same artifact is refused without it (see the test above).
+        session = self._build(
+            config_mapping=PROJECT_STYLE,
+            metadata={
+                "head": "SimCCHead",
+                "kpt_shape": [5, 3],
+                "outputs": ["simcc_x", "simcc_y"],
+            },
+            topdown=True,
+        )
+
+        self.assertEqual(session.schema, "mmpose_rtmpose_simcc")
+        self.assertEqual(session.head, "SimCCHead")
+        self.assertEqual(session.kpt_shape, (5, 3))
 
     def test_the_engine_receives_the_resolved_backend_and_bits(self):
         self._build(

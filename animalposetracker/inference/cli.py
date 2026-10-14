@@ -52,6 +52,11 @@ def _make_argument_parser() -> argparse.ArgumentParser:
     )
     parser.add_argument("--weights", required=True,
                         help="Exported model artifact (.onnx, .engine, .mlpackage, ...)")
+    parser.add_argument("--detector-weights",
+                        help="Detector ONNX that enables the two-stage top-down stream "
+                             "(for example an RT-DETR export)")
+    parser.add_argument("--detector-conf", type=float, default=0.5,
+                        help="Detector confidence threshold for top-down streaming")
     parser.add_argument("--config",
                         help="Dataset or project YAML providing class names, skeleton and kpt_shape")
     parser.add_argument("--schema", default="auto", choices=("auto",) + SUPPORTED_YOLO_SCHEMAS,
@@ -191,6 +196,7 @@ def run(argv=None) -> int:
         agnostic_nms=args.agnostic_nms,
         schema=args.schema,
         imgsz=args.imgsz,
+        topdown=bool(args.detector_weights),
     )
     engine = session.engine
     output_config = session.output_config
@@ -199,11 +205,22 @@ def run(argv=None) -> int:
     skeleton = tuple(session.skeleton)
     head = session.head
     engine_key = session.engine_key
+    detector = None
+    input_mode = "full_frame"
+    if args.detector_weights:
+        from animalposetracker.inference.detector_adapter import OnnxDetectorAdapter
+
+        detector = OnnxDetectorAdapter(
+            Path(args.detector_weights).expanduser().resolve(),
+            conf_threshold=args.detector_conf,
+        )
+        input_mode = "topdown"
     pipeline = StreamInferencePipeline(
         engine,
         output_config,
-        input_mode="full_frame",
+        input_mode=input_mode,
         input_config=input_config,
+        detector=detector,
         tracker=args.tracker,
         class_names=class_names,
     )
