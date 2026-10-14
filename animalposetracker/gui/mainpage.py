@@ -26,12 +26,11 @@ from animalposetracker.gui import (DARK_THEME_PATH, LIGHT_THEME_PATH,
                                    LOGO_PATH_TRANSPARENT, LOGO_PATH, LOGO_SMALL_PATH,
                                    WELCOME_PATH)
 
-# The parameter trees come from the Designer files, which mirror every knob the reference
-# toolkits expose under those names. What belongs on screen is derived from the key registry,
-# not from hand-kept lists: a Designer row whose name no registered key owns (as its canonical
-# key or a legacy spelling) is dropped at startup, and every key flagged `tree_row` gains the
-# row the Designer file never had. A row nothing consumes is a knob that silently does nothing,
-# and a row whose key is missing from the project's runtime.yaml raises the moment it is edited.
+# The configure trees are generated from the key registry: each tree lists the keys whose
+# `views` annotation names its view (see config/schema.py), so a new key shows up in the GUI
+# the moment the registry declares it -- the Designer files no longer decide what is on
+# screen. A row whose key the project does not carry yet shows as locked instead of
+# pretending to be editable.
 
 # Rows whose value comes from a fixed set, so the value column offers them instead of asking for
 # them to be typed. Booleans need no entry here: any row whose config value is a bool gets the
@@ -44,6 +43,17 @@ _CONFIGURE_KEY_CHOICES = {
 # Rows that look boolean in the config but also accept free text, so they keep the text editor:
 # `pretrained` names a checkpoint when it is a string (`TrainingConfig.from_mapping`).
 _FREETEXT_CONFIGURE_KEYS = frozenset({"pretrained"})
+
+
+def _configure_row_name(field) -> str:
+    """The row name a key gets on the forms.
+
+    The key itself, group-qualified for the grouped non-train scopes
+    (``pose_filter.method``) whose group is a user-facing name.
+    """
+    if field.group and field.scope != "train":
+        return f"{field.group}.{field.key}"
+    return field.key
 
 
 class _FrameExtractionThread(QThread):
@@ -148,7 +158,7 @@ class AnimalPoseTrackerPage(QMainWindow, Ui_AnimalPoseTracker):
 
         self.ConfigureFile.setEditTriggers(QTreeWidget.DoubleClicked | QTreeWidget.EditKeyPressed)
         self.TrainingConfigureEdit.setEditTriggers(QTreeWidget.DoubleClicked | QTreeWidget.EditKeyPressed)
-        self._shape_configure_trees()
+        self.generate_configure_trees()
 
         # Restore the theme the user last chose instead of always starting light.
         saved_theme = QSettings("Northeast Normal University", "AnimalPoseTracker").value("theme")
@@ -320,72 +330,53 @@ class AnimalPoseTrackerPage(QMainWindow, Ui_AnimalPoseTracker):
             container = nested
         container.setdefault(parts[-1], default)
 
-    # Which runtime scope each parameter tree edits first (a row also falls
-    # back to the train scope: batch / imgsz / fraction show up in several
-    # trees but describe the training run).
-    _RUNTIME_TREE_SCOPES = {
-        "TrainingConfigureEdit": ("train",),
-        "EvaluateConfigure": ("train",),
-        "InferenceConfigure": ("predict",),
-        "ExportConfigure": ("export",),
+    # Which registry view fills each parameter tree. A key appears in a tree when its
+    # `views` annotation names that view (see config/schema.py).
+    _TREE_VIEWS = {
+        "TrainingConfigureEdit": "train",
+        "EvaluateConfigure": "evaluate",
+        "InferenceConfigure": "infer",
+        "ExportConfigure": "export",
     }
 
     def _gui_runtime_tables(self):
-        """Form-row spelling -> runtime.yaml path, per scope.
+        """Row name -> runtime.yaml path, per tree; generated from the registry's views.
 
-        The forms keep their historical row names (``workers``, ``imgsz``, ``conf`` ...) and
-        each row maps onto the canonical runtime path it edits. The mapping is built from the
-        registry's keys and legacy spellings, so every row keeps pointing at the right place
-        as keys are renamed.
+        The row name is the key itself (group-qualified for grouped non-train scopes); the
+        path is where that key lives in the runtime tree.
         """
         cached = getattr(self, "_gui_runtime_tables_cache", None)
         if cached is not None:
             return cached
 
         from animalposetracker.config.schema import fields as schema_fields
-        from animalposetracker.training.profiles import train_key_targets
+        from animalposetracker.training.profiles import train_field_path
 
-        model_type = str(self.project.project_config.get("model_type") or "AnimalRTPose")
-        targets = train_key_targets(model_type)
-
-        train_table = {}
-        for field in schema_fields(scope="train"):
-            path = targets.get(field.key)
-            if path is None:
-                continue
-            train_table.setdefault(field.key, path)
-            for legacy in field.legacy:
-                train_table.setdefault(legacy, path)
-
-        tables = {"train": train_table, "predict": {}, "export": {}, "common": {}}
-        for scope in ("predict", "export"):
-            for field in schema_fields(scope=scope):
-                key_name = f"{field.group}.{field.key}" if field.group else field.key
-                path = f"{scope}.{key_name}"
-                tables[scope].setdefault(key_name, path)
-                tables[scope].setdefault(field.key, path)
-                for legacy in field.legacy:
-                    tables[scope].setdefault(legacy, path)
-        for key in ("device", "project", "name", "exist_ok"):
-            tables["common"][key] = f"common.{key}"
-
+        model_type = self.project.project_config.get("model_type")
+        tables = {}
+        for tree_name, view in self._TREE_VIEWS.items():
+            rows = {}
+            for field in schema_fields():
+                if view not in field.views:
+                    continue
+                if field.scope == "train":
+                    path = train_field_path(field, model_type)
+                else:
+                    name = f"{field.group}.{field.key}" if field.group else field.key
+                    path = f"{field.scope}.{name}"
+                if path is None:
+                    continue
+                rows.setdefault(_configure_row_name(field), path)
+            tables[tree_name] = rows
         self._gui_runtime_tables_cache = tables
         return tables
 
     def _runtime_path_for_gui_key(self, key, tree_name):
-        """The runtime path one form row edits, or None (row shows as locked)."""
-        tables = self._gui_runtime_tables()
-        for scope in self._RUNTIME_TREE_SCOPES.get(tree_name, ()):
-            if key in tables[scope]:
-                return tables[scope][key]
-        if key in tables["common"]:
-            return tables["common"][key]
-        if key in tables["train"]:
-            return tables["train"][key]
-        return None
+        """The runtime path one generated row edits, or None."""
+        return self._gui_runtime_tables().get(tree_name, {}).get(key)
 
     def _runtime_location(self, key, tree_name):
-        """``(container, leaf)`` for a form row in the runtime tree."""
+        """``(container, leaf)`` for a tree row in the runtime tree."""
         path = self._runtime_path_for_gui_key(key, tree_name)
         if path is None:
             return None, None
@@ -393,10 +384,10 @@ class AnimalPoseTrackerPage(QMainWindow, Ui_AnimalPoseTracker):
 
     def _runtime_location_any(self, key):
         """``(container, leaf)`` without a tree context (the choice delegate)."""
-        tables = self._gui_runtime_tables()
-        for scope in ("train", "predict", "export", "common"):
-            if key in tables[scope]:
-                return self._resolve_other_key(self.project.runtime_config, tables[scope][key])
+        for tree_name in self._TREE_VIEWS:
+            path = self._runtime_path_for_gui_key(key, tree_name)
+            if path is not None:
+                return self._resolve_other_key(self.project.runtime_config, path)
         return None, None
 
     def configure_choices(self, key):
@@ -421,40 +412,24 @@ class AnimalPoseTrackerPage(QMainWindow, Ui_AnimalPoseTracker):
             return ("True", "False")
         return ()
 
-    def _shape_configure_trees(self):
-        """Make each parameter tree match what this backend reads: drop foreign rows, add flagged ones.
+    def generate_configure_trees(self):
+        """Fill each parameter tree from the registry's `views` annotations.
 
-        Derived from the key registry rather than hand-kept lists, so a form row and the key it
-        edits cannot drift apart. Runs at startup rather than being baked into the generated
-        ``ui_*.py``: those files are rebuilt from the Designer sources, which would bring every
-        dropped row straight back and lose every added one.
+        The Designer files no longer decide what is on screen: every row comes from a
+        registered key, so a new key shows up in the GUI the moment the registry declares
+        its views. The Designer rows are cleared away first -- the generated set is truth.
         """
         from animalposetracker.config.schema import fields as schema_fields
 
-        known = set()
-        for field in schema_fields():
-            known.add(field.key)
-            known.update(field.legacy)
-
-        for tree_name in self._RUNTIME_TREE_SCOPES:
+        for tree_name, view in self._TREE_VIEWS.items():
             tree = getattr(self, tree_name)
-            for index in reversed(range(tree.topLevelItemCount())):
-                item = tree.topLevelItem(index)
-                if item.text(0) not in known:
-                    tree.takeTopLevelItem(index)
-
-        tree_for_scope = {}
-        for tree_name, scopes in self._RUNTIME_TREE_SCOPES.items():
-            tree_for_scope.setdefault(scopes[0], tree_name)
-        for field in schema_fields():
-            if not field.tree_row:
-                continue
-            tree_name = tree_for_scope.get(field.scope)
-            if tree_name is None:
-                continue
-            item = QTreeWidgetItem()
-            item.setText(0, f"{field.group}.{field.key}" if field.group else field.key)
-            getattr(self, tree_name).addTopLevelItem(item)
+            tree.clear()
+            for field in schema_fields():
+                if view not in field.views:
+                    continue
+                item = QTreeWidgetItem()
+                item.setText(0, _configure_row_name(field))
+                tree.addTopLevelItem(item)
 
         # Kept on self: Qt does not take ownership of the delegate, and a collected one would
         # silently drop every dropdown back to a text editor.
@@ -470,11 +445,9 @@ class AnimalPoseTrackerPage(QMainWindow, Ui_AnimalPoseTracker):
     def initialize_other_config(self):
         """Fill the parameter trees from the project's runtime configuration.
 
-        Each row is looked up in the runtime tree through the path table (the
-        historical row spelling maps onto the canonical runtime path). A row
-        without a mapping -- a derived value like ``data``/``model``, or a
-        key this project does not carry -- shows as locked instead of
-        pretending to be editable.
+        Each row is looked up in the runtime tree through its path table entry. A row whose
+        key the project does not carry -- a derived value like ``data``/``model``, or a key
+        the project predates -- shows as locked instead of pretending to be editable.
         """
         trees = (
             "TrainingConfigureEdit",

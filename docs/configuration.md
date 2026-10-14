@@ -27,7 +27,10 @@ defaults, resolver, writer); nothing else reads or writes the project YAMLs.
 ## Adding or changing a key
 
 1. Register it in `animalposetracker/config/schema.py` (name, scope, group,
-   type, apply level, GUI visibility, one-line note).
+   type, apply level, GUI visibility, one-line note) and list the configure
+   forms it belongs to in `views` (`train` / `evaluate` / `infer` / `export`)
+   -- the GUI's parameter trees are generated from that annotation, so a key
+   with `views` shows up on those forms with no other change.
 2. Give it a default in `cfg/training.yaml` or `cfg/runtime_defaults.yaml`.
 3. Run the tests (`tests/test_config_schema.py` checks the two stay aligned)
    and refresh this document:

@@ -191,6 +191,25 @@ def flatten_train_values(resolved, model_type: Optional[str]):
     return values, origins
 
 
+def train_field_path(field, model_type: Optional[str]) -> Optional[str]:
+    """The dotted runtime path one registered train key edits, or ``None`` without a home.
+
+    The single-key companion of ``train_key_targets``; the GUI's generated configure
+    rows resolve their paths through it too, so both stay on one rule.
+    """
+    model = "AnimalViTPose" if str(model_type or "").casefold() == "animalvitpose" else "AnimalRTPose"
+    if field.group == "shared.runtime":
+        return f"train.shared.runtime.{field.key}"
+    if field.group == "shared.training":
+        return f"train.shared.training.{field.key}"
+    if field.group == "metrics":
+        return f"train.metrics.{field.key}"
+    if field.group.startswith("models."):
+        section = field.group.split(".", 1)[1]
+        return f"train.models.{model}.{section}.{field.key}"
+    return None
+
+
 def train_key_targets(model_type: Optional[str]) -> Dict[str, str]:
     """Canonical flat key -> the dotted path that decides it (last one wins).
 
@@ -199,18 +218,11 @@ def train_key_targets(model_type: Optional[str]) -> Dict[str, str]:
     """
     from animalposetracker.config.schema import fields
 
-    model = "AnimalViTPose" if str(model_type or "").casefold() == "animalvitpose" else "AnimalRTPose"
     targets: Dict[str, str] = {}
     for field in fields(scope="train"):
-        if field.group == "shared.runtime":
-            targets[field.key] = f"train.shared.runtime.{field.key}"
-        elif field.group == "shared.training":
-            targets[field.key] = f"train.shared.training.{field.key}"
-        elif field.group == "metrics":
-            targets[field.key] = f"train.metrics.{field.key}"
-        elif field.group.startswith("models."):
-            section = field.group.split(".", 1)[1]
-            targets[field.key] = f"train.models.{model}.{section}.{field.key}"
+        path = train_field_path(field, model_type)
+        if path is not None:
+            targets[field.key] = path
     return targets
 
 
@@ -227,6 +239,7 @@ __all__ = [
     "configure_animalvitpose_model",
     "flatten_train_values",
     "train_key_targets",
+    "train_field_path",
     "train_scope_prefixes",
     "normalize_animalvitpose_scale",
 ]

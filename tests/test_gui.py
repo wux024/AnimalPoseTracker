@@ -505,33 +505,35 @@ class ConfigureTreeTests(unittest.TestCase):
     # every addition or removal to be a deliberate decision.
     EXPECTED = {
         "TrainingConfigureEdit": {
-            "model", "data", "epochs", "time", "patience", "batch", "imgsz", "save",
-            "save_period", "cache", "device", "workers", "project", "name", "pretrained",
-            "optimizer", "seed", "cos_lr", "close_mosaic", "resume", "amp", "fraction",
-            "profile", "lr0", "lrf", "momentum", "weight_decay", "warmup_epochs",
-            "warmup_momentum", "warmup_bias_lr", "box", "cls", "dfl", "pose", "kobj", "nbs",
-            "val", "plots",
+            "model", "data", "num_workers", "time_hours", "cache", "fraction", "profile",
+            "plots", "validation_enabled", "save", "save_period", "pretrained", "resume",
+            "early_stopping_patience", "epochs", "batch_size", "image_size", "optimizer",
+            "learning_rate", "final_lr_factor", "momentum", "weight_decay", "warmup_epochs",
+            "warmup_momentum", "warmup_bias_lr", "nominal_batch_size", "cosine_schedule",
+            "amp", "close_mosaic", "seed", "box_loss_weight", "class_loss_weight",
+            "distribution_loss_weight", "keypoint_loss_weight", "visibility_loss_weight",
+            "device", "project", "name",
         },
         "EvaluateConfigure": {
-            "data", "batch", "imgsz", "conf", "iou", "max_det", "half", "device", "dnn",
-            "plots", "project", "name", "profile", "verbose", "workers",
-            "agnostic_nms", "single_cls",
+            "data", "num_workers", "profile", "plots", "verbose", "single_cls",
+            "batch_size", "image_size", "confidence", "iou", "max_det", "agnostic_nms",
+            "device", "project", "name",
         },
         "InferenceConfigure": {
-            "source", "conf", "iou", "imgsz", "half", "device",
-            "batch", "max_det", "agnostic_nms", "project", "name", "verbose",
-            "save", "show_conf", "show_boxes", "line_width", "kpt_radius", "kpt_line",
-            # Appended from the registry's `tree_row` flags: the prediction pipeline reads
-            # these, the Designer file has no row for them, and the dotted names address the
-            # nested mappings in runtime.yaml.
+            "save", "verbose", "batch_size", "image_size", "device", "project", "name",
+            "source", "confidence", "iou", "max_det", "agnostic_nms", "show_conf",
+            "show_boxes", "show_skeletons", "line_width", "point_radius",
+            # Grouped rows keep their group-qualified names (the tracking / temporal-filter
+            # blocks in runtime.yaml).
             "tracking.enabled", "tracking.algorithm",
             "pose_filter.method", "pose_filter.window_length", "pose_filter.polyorder",
             "pose_filter.max_gap",
         },
-        # Untouched: every export option is read by the export pipeline.
+        # Smaller than the others: only the keys flagged for the export view.
         "ExportConfigure": {
-            "format", "imgsz", "keras", "optimize", "half", "int8", "dynamic", "simplify",
-            "opset", "workspace", "nms", "batch", "device", "data", "fraction",
+            "data", "fraction", "batch_size", "image_size", "device",
+            "format", "half", "dynamic", "simplify", "opset", "workspace", "optimize",
+            "int8", "keras", "nms",
         },
     }
 
@@ -549,15 +551,15 @@ class ConfigureTreeTests(unittest.TestCase):
                 self.assertEqual(self._keys(getattr(page, tree_name)), expected)
 
     def test_prediction_thresholds_land_in_the_prediction_section(self):
-        # The inference page's `conf`/`iou` rows are prediction thresholds: they must resolve
-        # into the predict section, while the evaluate page keeps its own validation pair.
+        # The inference page's `confidence`/`iou` rows are prediction thresholds: they must
+        # resolve into the predict section, while the evaluate page keeps its validation pair.
         page = AnimalPoseTrackerPage()
         self.assertEqual(
-            page._runtime_path_for_gui_key("conf", "InferenceConfigure"), "predict.confidence")
+            page._runtime_path_for_gui_key("confidence", "InferenceConfigure"), "predict.confidence")
         self.assertEqual(
             page._runtime_path_for_gui_key("iou", "InferenceConfigure"), "predict.iou")
         self.assertEqual(
-            page._runtime_path_for_gui_key("conf", "EvaluateConfigure"),
+            page._runtime_path_for_gui_key("confidence", "EvaluateConfigure"),
             "train.models.AnimalRTPose.validation.confidence")
         self.assertEqual(
             page._runtime_path_for_gui_key("iou", "EvaluateConfigure"),
@@ -632,26 +634,26 @@ class ConfigureTreeTests(unittest.TestCase):
         training = {"models": {"AnimalRTPose": {"training": {"image_size": 640}}}}
         page.project.runtime_config["train"] = training
         page.initialize_other_config()
-        row = self._row(page.InferenceConfigure, "imgsz")
+        row = self._row(page.InferenceConfigure, "image_size")
         self.assertEqual(row.text(1), "640")
         self.assertTrue(bool(row.flags() & Qt.ItemIsEditable))
 
         training["models"]["AnimalRTPose"]["training"].pop("image_size")
         page.initialize_other_config()
-        row = self._row(page.InferenceConfigure, "imgsz")
+        row = self._row(page.InferenceConfigure, "image_size")
         self.assertEqual(row.text(1), "")
         self.assertFalse(bool(row.flags() & Qt.ItemIsEditable))
 
         training["models"]["AnimalRTPose"]["training"]["image_size"] = 512
         page.initialize_other_config()
-        row = self._row(page.InferenceConfigure, "imgsz")
+        row = self._row(page.InferenceConfigure, "image_size")
         self.assertEqual(row.text(1), "512")
         self.assertTrue(bool(row.flags() & Qt.ItemIsEditable))
 
     def test_edit_mode_keeps_a_row_the_project_lacks_locked(self):
         # Edit mode used to unlock every row, including the ones an edit to which is dropped.
         page = AnimalPoseTrackerPage()
-        # `imgsz` is carried by the train profile -> editable; `save` lives in a
+        # `image_size` is carried by the train profile -> editable; `save` lives in a
         # section this tree does not carry -> stays locked.
         page.project.runtime_config["train"] = {
             "models": {"AnimalRTPose": {"training": {"image_size": 640}}}
@@ -659,7 +661,7 @@ class ConfigureTreeTests(unittest.TestCase):
         page.initialize_other_config()
         page.EditInferenceParameters.click()  # "Edit ..." -> edit mode
         self.assertTrue(
-            bool(self._row(page.InferenceConfigure, "imgsz").flags() & Qt.ItemIsEditable)
+            bool(self._row(page.InferenceConfigure, "image_size").flags() & Qt.ItemIsEditable)
         )
         self.assertFalse(
             bool(self._row(page.InferenceConfigure, "save").flags() & Qt.ItemIsEditable)
@@ -718,7 +720,7 @@ class ConfigureTreeTests(unittest.TestCase):
             [selected.itemText(index) for index in range(selected.count())], ["True", "False"]
         )
         # A row with no fixed set still opens the plain text editor.
-        self.assertIsInstance(self._editor(page, tree, "imgsz"), QLineEdit)
+        self.assertIsInstance(self._editor(page, tree, "image_size"), QLineEdit)
 
 
 @unittest.skipUnless(QApplication is not None, "PySide6 (the gui extra) is not installed")
