@@ -28,7 +28,7 @@ from animalposetracker.gui import (DARK_THEME_PATH, LIGHT_THEME_PATH,
 
 # The configure trees are generated from the key registry: each tree lists the keys whose
 # `views` annotation names its view (see config/schema.py), so a new key shows up in the GUI
-# the moment the registry declares it -- the Designer files no longer decide what is on
+# the moment the registry declares it -- the ui modules no longer decide what is on
 # screen. A row whose key the project does not carry yet shows as locked instead of
 # pretending to be editable.
 
@@ -122,8 +122,8 @@ class AnimalPoseTrackerPage(QMainWindow, Ui_AnimalPoseTracker):
         """Initialize the controls of the main page"""
 
         self.sub_page = None
-        # Set here rather than in the Designer file: the icon and the logo are files on disk, and a
-        # path baked into `ui_*.py` breaks the moment the sources are regenerated.
+        # Set here rather than in the ui module: the icon and the logo are files on disk, and a
+        # path baked into the module would break on any other machine.
         self.setWindowIcon(QIcon(LOGO_SMALL_PATH))
         self.Logo.setPixmap(QPixmap(LOGO_PATH_TRANSPARENT))
         # Declared here, not only in _start_check_thread: End Evaluate/Inference read it, and on a
@@ -415,9 +415,9 @@ class AnimalPoseTrackerPage(QMainWindow, Ui_AnimalPoseTracker):
     def generate_configure_trees(self):
         """Fill each parameter tree from the registry's `views` annotations.
 
-        The Designer files no longer decide what is on screen: every row comes from a
+        The ui modules no longer decide what is on screen: every row comes from a
         registered key, so a new key shows up in the GUI the moment the registry declares
-        its views. The Designer rows are cleared away first -- the generated set is truth.
+        its views. The module's drawn rows are cleared away first -- the generated set is truth.
         """
         from animalposetracker.config.schema import fields as schema_fields
 

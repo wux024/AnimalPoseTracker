@@ -23,8 +23,8 @@ class CreateNewProjectPage(ProjectFormBase, QWidget, Ui_CreateNewProject):
     def initialize_controls(self):
         """Initialize all UI controls based on project configuration"""
 
-        # Set here rather than in the Designer file: the icon is a file on disk, and a path baked
-        # into `ui_*.py` breaks as soon as the sources are regenerated.
+        # Set here rather than in the ui module: the icon is a file on disk, and a path baked
+        # into the module would break on any other machine.
         self.setWindowIcon(QIcon(LOGO_SMALL_PATH))
         self.project = AnimalPoseTrackerProject()
         self.project.local_path = Path.cwd()

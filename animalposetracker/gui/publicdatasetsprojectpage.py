@@ -20,8 +20,8 @@ class PublicDatasetProjectPage(ProjectFormBase, QWidget, Ui_PublicDatasetProject
     
     def initialize_controls(self):
 
-        # Set here rather than in the Designer file: the icon is a file on disk, and a path baked
-        # into `ui_*.py` breaks as soon as the sources are regenerated.
+        # Set here rather than in the ui module: the icon is a file on disk, and a path baked
+        # into the module would break on any other machine.
         self.setWindowIcon(QIcon(LOGO_SMALL_PATH))
         self.project = AnimalPoseTrackerProject()
         # The first entry in the list, not a hard-coded name: the page used to open on whatever

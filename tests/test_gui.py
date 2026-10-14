@@ -493,8 +493,7 @@ class ConfigureTreeTests(unittest.TestCase):
 
     A row whose key is not in the project's runtime.yaml raises the moment it is edited, and a
     row whose key nothing consumes is a knob that silently does nothing. The trees are generated
-    from the Designer files, which mirror the full set of reference-toolkit options, so mainpage
-    prunes them at startup.
+    from the key registry's `views` annotations, so only registered keys reach the screen.
     """
 
     # The exact rows each tree should end up with. Editing this list is the point: it forces
@@ -1168,7 +1167,7 @@ class InferencerDecodeTests(unittest.TestCase):
         )
         self.assertIs(left.itemAt(1).layout(), page.BaseModelsLayout)
         # Rows 3 and 4 hold the two optional stages and the filter's values. The tracker's row is
-        # the empty TrackerLayout the Designer file left in the engine/device block, moved up and
+        # the empty TrackerLayout the ui module leaves in the engine/device block, moved up and
         # filled -- not a second layout wearing the same name.
         self.assertIs(left.itemAt(2).layout(), page.TrackerLayout)
         self.assertIs(left.itemAt(3).layout(), page.FilterValuesLayout)
@@ -1181,7 +1180,7 @@ class InferencerDecodeTests(unittest.TestCase):
         self.assertIs(left.itemAt(5).layout(), page.CameraParametersLayout)
         self.assertIs(left.itemAt(6).layout(), page.EngineDeviceLayout)
         self.assertIs(left.itemAt(7).layout(), page.StartEndLayout)
-        # Tracking moved out of that row, leaving the three pairs the Designer file drew.
+        # Tracking moved out of that row, leaving the three pairs the ui module drew.
         self.assertEqual(
             [page.EngineDeviceLayout.itemAt(index).layout() for index in range(3)],
             [page.ModelBitsLayout, page.EngineLayout, page.DeviceLayout],
@@ -1204,8 +1203,8 @@ class InferencerDecodeTests(unittest.TestCase):
         # Seven rows: the decode trio, the two switch rows and the four the sliders sit in.
         self.assertEqual(right.count(), 7)
 
-    def test_the_rows_fill_their_group_the_way_the_designer_drew_them(self):
-        # The Designer file gives this group's controls an expanding width, so a row divides its
+    def test_the_rows_fill_their_group_the_way_the_form_lays_them_out(self):
+        # The ui module gives this group's controls an expanding width, so a row divides its
         # group between its cells -- that is the look the page has always had, and the one to keep.
         # A pass that clamped every control to one cell width and padded the row instead shrank the
         # controls to their text and left the right half of each row empty.
@@ -1227,7 +1226,7 @@ class InferencerDecodeTests(unittest.TestCase):
                 self.assertEqual(getattr(page, attribute).maximumWidth(), 16777215)
 
         # A trailing stretch would pack a row against the left edge. No row has one, the rows the
-        # Designer file drew included: they divide the group, they do not hug its left side.
+        # ui module drew included: they divide the group, they do not hug its left side.
         for layout in (
             page.BaseConfigureLayout, page.BaseModelsLayout, page.DecodeParamsLayout,
             page.TrackerLayout,
@@ -1251,7 +1250,7 @@ class InferencerDecodeTests(unittest.TestCase):
                 self.assertLessEqual(max(widths) - min(widths), 2)
 
     def test_the_two_switch_rows_start_from_the_same_cells(self):
-        # The display group keeps one column rhythm: Save opens the first row at the Designer's
+        # The display group keeps one column rhythm: Save opens the first row at the module's
         # 120, and the FPS switch opens the second row the same way, so both rows start their
         # second cell at the same x and split what is left between three cells each.
         page = self._page()
@@ -1304,7 +1303,7 @@ class InferencerDecodeTests(unittest.TestCase):
         # A widget or a row that sits in no layout draws nothing, and in the source it reads as
         # something that was meant to be mounted and never was. Two rows had been left that way:
         # the row the thresholds moved out of, and a second TrackerLayout that took over the
-        # Designer file's slot without ever being added to a row itself.
+        # module's slot without ever being added to a row itself.
         page = self._page()
         reachable_layouts, reachable_widgets = set(), set()
 
@@ -2319,60 +2318,14 @@ class ThemeTests(unittest.TestCase):
 
 
 @unittest.skipUnless(QApplication is not None, "PySide6 (the gui extra) is not installed")
-class GeneratedUiTests(unittest.TestCase):
-    """The checked-in `ui_*.py` must be what `pyside6-uic` produces from the `.ui` sources."""
+class UiModuleTests(unittest.TestCase):
+    """The `ui_*.py` modules are the GUI's source of truth.
 
-    @classmethod
-    def setUpClass(cls):
-        cls.application = QApplication.instance() or QApplication([])
+    The Designer `.ui` sources were retired on 2026-10-15; the modules are maintained
+    directly now, so the old "in sync with the generated output" check is gone with them.
+    """
 
-    def test_the_generated_files_are_in_sync_with_their_sources(self):
-        import shutil
-        import subprocess
-        import sys
-
-        uic = shutil.which("pyside6-uic")
-        if uic is None:
-            # `pyside6-uic` ships beside the interpreter that has PySide6, but is not always on
-            # PATH; the running environment is the one that matters. On Windows it lives in the
-            # environment's `Scripts` directory rather than next to `python.exe`.
-            interpreter_directory = Path(sys.executable).parent
-            for directory in (interpreter_directory, interpreter_directory / "Scripts"):
-                for name in ("pyside6-uic.exe", "pyside6-uic"):
-                    candidate = directory / name
-                    if candidate.exists():
-                        uic = str(candidate)
-                        break
-                if uic is not None:
-                    break
-        if uic is None:
-            self.skipTest("pyside6-uic was not found")
-
-        root = Path(__file__).resolve().parent.parent
-        ui_directory = root / "animalposetracker" / "gui" / "ui"
-
-        with tempfile.TemporaryDirectory() as temporary:
-            for source in sorted(ui_directory.glob("*.ui")):
-                name = source.stem
-                generated = root / "animalposetracker" / "gui" / f"ui_{name}.py"
-                target = Path(temporary) / f"ui_{name}.py"
-
-                subprocess.run(
-                    [uic, str(source), "-o", str(target)],
-                    check=True, capture_output=True, timeout=120,
-                )
-
-                # The header names the file uic was handed, which differs run to run.
-                def body(path):
-                    return [
-                        line for line in path.read_text(encoding="utf-8").splitlines()
-                        if line.strip() and not line.startswith("#")
-                    ]
-
-                with self.subTest(form=name):
-                    self.assertEqual(body(target), body(generated))
-
-    def test_no_generated_file_hard_codes_a_machine_path(self):
+    def test_no_ui_module_hard_codes_a_machine_path(self):
         root = Path(__file__).resolve().parent.parent
         for generated in sorted((root / "animalposetracker" / "gui").glob("ui_*.py")):
             text = generated.read_text(encoding="utf-8")

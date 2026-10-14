@@ -48,8 +48,8 @@ class InferencerPage(QWidget, Ui_Inferencer):
         """Initialize all buttons and dependent controls"""
         os.chdir(Path.cwd())
 
-        # Set here rather than in the Designer file: the icon is a file on disk, and a path baked
-        # into `ui_*.py` breaks as soon as the sources are regenerated.
+        # Set here rather than in the ui module: the icon is a file on disk, and a path baked
+        # into the module would break on any other machine.
         self.setWindowIcon(QIcon(LOGO_SMALL_PATH))
 
         # constants
@@ -120,8 +120,8 @@ class InferencerPage(QWidget, Ui_Inferencer):
         self._align_labels()
         self._align_display_switches()
 
-        # The decode numbers come from the shared deployment constants, not from the Designer
-        # file: changing the constant moves the page with it.
+        # The decode numbers come from the shared deployment constants, not from the numbers
+        # the form module ships: changing the constant moves the page with it.
         self.IoU.setValue(DEPLOY_NMS_IOU)
         self.Conf.setValue(DEPLOY_NMS_CONF)
 
@@ -268,7 +268,7 @@ class InferencerPage(QWidget, Ui_Inferencer):
         would have been a lone checkbox in a row of its own.
         """
         # "Save" alone read as ambiguous while there was also a records switch. The label is set
-        # here because ui_inferencer.py is generated.
+        # here rather than in the ui module.
         self.Save.setText("Save Video")
         self.Save.setToolTip(
             "Write the rendered frames to runs/inference/output.avi. "
@@ -356,7 +356,7 @@ class InferencerPage(QWidget, Ui_Inferencer):
             widget.setValue(value)
             widget.setToolTip(tooltip)
             # Height only: the width is the row's to divide, as it is for every control the
-            # Designer file drew in this group.
+            # ui module lays out in this group.
             widget.setMinimumSize(QSize(0, 25))
             self.FilterValuesLayout.addWidget(widget)
             return widget
@@ -405,7 +405,7 @@ class InferencerPage(QWidget, Ui_Inferencer):
         self.TrackerAlgorithm.setToolTip("Tracking algorithm; the same list the command line's `infer --tracker` accepts")
         self.TrackerAlgorithm.setEnabled(False)
 
-        # The Designer file leaves an empty TrackerLayout in the left group's engine/device block:
+        # The ui module leaves an empty TrackerLayout in the left group's engine/device block:
         # a slot kept for a tracker row that no longer belongs there. The slot is reused for the
         # row rather than replaced -- it already carries the right name, and a layout that is in no
         # layout at all draws nothing while reading like an oversight. Qt will not insert a layout
@@ -505,7 +505,7 @@ class InferencerPage(QWidget, Ui_Inferencer):
         """Put the left group's labels in one column, wide enough for the longest of them.
 
         Rows read as a table when the labels stand in a column and the fields all start at the same
-        x. The Designer file does that for the display group (its label column is a fixed 120). The
+        x. The ui module does that for the display group (its label column is a fixed 120). The
         left group's labels were left to their own text instead, so the field column began at 60 in
         the threshold row, 74 in the camera row and 101 in the engine row.
         """
@@ -531,7 +531,7 @@ class InferencerPage(QWidget, Ui_Inferencer):
     def _align_display_switches(self):
         """Give the display group's two switch rows one column rhythm.
 
-        Both rows open with a fixed 120 cell -- Save keeps the width the Designer gave it, and
+        Both rows open with a fixed 120 cell -- Save keeps the width the module gave it, and
         the Font Scale row below starts its slider at 120 as well -- so the FPS switch, the other
         row's first cell, gets the same 120. Each row then divides what is left between three
         equal cells, which lines the two rows up column for column.

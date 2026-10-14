@@ -101,7 +101,6 @@ version = { attr = "animalposetracker.__version__" }
 
 [tool.setuptools.exclude-package-data]
 animalposetracker = [
-    "**/*.ui",
     "**/__pycache__/*"
 ]
 

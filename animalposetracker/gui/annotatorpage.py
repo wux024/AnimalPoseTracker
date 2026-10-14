@@ -29,8 +29,8 @@ class AnnotatorPage(QMainWindow, Ui_Annotator):
     def initialize_controls(self):
         """Initialize UI controls and state"""
         os.chdir(Path.cwd())
-        # Set here rather than in the Designer file: the icon is a file on disk, and a path baked
-        # into `ui_*.py` breaks as soon as the sources are regenerated.
+        # Set here rather than in the ui module: the icon is a file on disk, and a path baked
+        # into the module would break on any other machine.
         self.setWindowIcon(QIcon(LOGO_SMALL_PATH))
         self.project_config = {}
         self.images = {}
