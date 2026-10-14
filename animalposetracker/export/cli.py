@@ -10,8 +10,13 @@ import torch
 
 from animalposetracker.nn.head import SimCCHead, YOLOPoseHead
 from animalposetracker.artifacts import EXPORT_FORMATS
+from animalposetracker.config import default_subtree, resolve_scopes
+from animalposetracker.config.resolver import project_dir_from
 from .backends import export_with_backend
-from animalposetracker.project.model_context import load_project_model, unique_output_directory
+from animalposetracker.project.model_context import (
+    load_project_runtime_model,
+    unique_output_directory,
+)
 
 
 class _ExportAdapter(torch.nn.Module):
@@ -38,14 +43,18 @@ def _make_argument_parser():
         prog="animalpose-cli export",
         description="Export AnimalPoseTracker checkpoints without the YOLO CLI.",
     )
-    parser.add_argument("--config", default="configs/other.yaml")
+    parser.add_argument(
+        "--config",
+        default="configs/runtime.yaml",
+        help="Project directory or its configs/runtime.yaml (new-format projects)",
+    )
     parser.add_argument("--weights", required=True)
     parser.add_argument("--output-dir", help="Override the export directory")
     parser.add_argument("--project", help="Run output root, relative to the project directory")
     parser.add_argument("--name", help="Export run name inside the output root")
     parser.add_argument(
         "--format",
-        help="Explicit deployment format; may also be set as application.format in the project config",
+        help="Explicit deployment format; may also be set as export.format in configs/runtime.yaml",
     )
     parser.add_argument("--device", help="Export device; defaults to the project setting")
     parser.add_argument("--imgsz", "--image-size", dest="image_size", type=int,
@@ -124,27 +133,34 @@ def _resolve_export_format(requested, configured):
     value = requested if requested is not None else configured
     if value is None or not str(value).strip():
         raise ValueError(
-            "No export format selected. Pass --format <format> or set application.format "
-            "in configs/other.yaml. Training checkpoints are already saved as .pt."
+            "No export format selected. Pass --format <format> or set export.format "
+            "in configs/runtime.yaml. Training checkpoints are already saved as .pt."
         )
     return str(value).strip().lower()
 
 
 def run(argv=None) -> int:
     args = _make_argument_parser().parse_args(argv)
-    config_path = Path(args.config).expanduser().resolve()
-    model, config, context = load_project_model(
-        config_path, args.weights, device=args.device
-    )
-    context["dataset_config_path"] = config.data
-    values = context["other"]
+    project_dir = project_dir_from(args.config)
+    # Explicit command-line values become the resolver's top layer, so every
+    # final value can say whether it came from the defaults, the project file
+    # or this command.
+    overrides = {}
+    if args.format is not None:
+        overrides["export.format"] = args.format
+    if args.device is not None:
+        overrides["common.device"] = args.device
     for name in (
         "opset", "workspace", "rknn_target", "half", "dynamic", "simplify",
         "optimize", "int8", "nms", "keras", "exist_ok",
     ):
         value = getattr(args, name)
         if value is not None:
-            values[name] = value
+            overrides[f"export.{name}"] = value
+    resolved = resolve_scopes(project_dir, ("common", "train", "export"), overrides=overrides)
+    model, config, context = load_project_runtime_model(project_dir, args.weights, resolved)
+    context["dataset_config_path"] = config.data
+    values = dict(context["runtime"])
     if args.image_size is not None:
         requested_size = int(args.image_size)
         head_name = context["head_name"]
@@ -188,9 +204,24 @@ def run(argv=None) -> int:
             raise ValueError(f"{option} is not supported for {export_format} export")
     if bool(values.get("keras", False)):
         raise NotImplementedError("Keras SavedModel export is not implemented; use format=saved_model")
-    if values.get("opset") is not None and "opset" not in format_options[export_format]:
+    # An option whose value equals the package default was never chosen by
+    # anyone -- the defaults must not trip the "this option does not apply"
+    # guards (opset/workspace now carry real defaults; the old file spelled
+    # them as null/0, which the guards read as "unset" by accident).
+    export_defaults = default_subtree("export")
+    opset_value = values.get("opset")
+    if (
+        opset_value is not None
+        and opset_value != export_defaults.get("opset")
+        and "opset" not in format_options[export_format]
+    ):
         raise ValueError(f"opset does not apply to {export_format} export")
-    if bool(values.get("workspace", 0)) and "workspace" not in format_options[export_format]:
+    workspace_value = values.get("workspace")
+    if (
+        bool(workspace_value)
+        and workspace_value != export_defaults.get("workspace")
+        and "workspace" not in format_options[export_format]
+    ):
         raise ValueError("workspace is only meaningful for TensorRT export")
     if export_format == "engine" and bool(values.get("int8", False)):
         raise NotImplementedError("TensorRT INT8 requires a representative calibration loader")
@@ -244,16 +275,26 @@ def run(argv=None) -> int:
         project = context.get("project") or {}
         model_type = str(project.get("model_type") or "model")
         model_scale = str(project.get("model_scale") or "")
-        print()
-        print(environment_line())
-        print()
-        print(format_summary_block([
+        rows = [
             ("Model", f"{model_type}-{model_scale}".rstrip("-")),
             ("Weights", str(context["weights"])),
             ("Format", export_format),
             ("Device", str(context["device"])),
             ("Output", str(output_path)),
-        ]))
+        ]
+        cli_values = resolved.cli_overrides()
+        if cli_values:
+            rows.append((
+                "Overrides",
+                ", ".join(
+                    f"{path.split('.', 1)[-1]}={value}"
+                    for path, value in sorted(cli_values.items())
+                ),
+            ))
+        print()
+        print(environment_line())
+        print()
+        print(format_summary_block(rows))
         print()
 
     half = bool(values.get("half", False))

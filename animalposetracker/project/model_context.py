@@ -108,17 +108,15 @@ def configure_project_model_spec(config: TrainingConfig, context: Dict[str, Any]
     return model_spec, head_name, scale
 
 
-def load_project_model(
-    config_path: Path,
-    weights_path: Path,
-    device: Optional[str] = None,
-) -> Tuple[Any, TrainingConfig, Dict[str, Any]]:
-    """Build a project model, load its weights, and return model/config/context."""
+def _instantiate_and_load(config, context, model_spec, head_name, scale, weights_path, device=None):
+    """Build the model from the resolved spec, load its weights, finish the context.
+
+    Split out of ``load_project_model`` so both the legacy (other.yaml) and the
+    new-format (runtime.yaml) loaders share one assembly path.
+    """
     import torch
 
     from animalposetracker.nn import build_model
-    config, context = load_project_context(config_path)
-    model_spec, head_name, scale = configure_project_model_spec(config, context)
 
     model = build_model(model_spec, scale=scale)
     target_device = resolve_device(torch, device or config.device)
@@ -141,12 +139,97 @@ def load_project_model(
         "weights": weights_path,
         "load_report": load_report,
     })
+    return model
+
+
+def load_project_model(
+    config_path: Path,
+    weights_path: Path,
+    device: Optional[str] = None,
+) -> Tuple[Any, TrainingConfig, Dict[str, Any]]:
+    """Build a project model, load its weights, and return model/config/context."""
+    config, context = load_project_context(config_path)
+    model_spec, head_name, scale = configure_project_model_spec(config, context)
+    model = _instantiate_and_load(
+        config, context, model_spec, head_name, scale, weights_path, device=device
+    )
+    return model, config, context
+
+
+def load_project_runtime_context(
+    project_dir,
+    resolved=None,
+) -> Tuple[TrainingConfig, Dict[str, Any]]:
+    """Load a project's context from the new-format configuration.
+
+    The sibling of :func:`load_project_context` for flows that have migrated
+    onto ``configs/runtime.yaml`` (``export`` is the first). The training
+    config keeps the same shape downstream code already consumes --
+    ``image_size`` / ``device`` / ``single_cls`` / ``model`` / ``data`` -- but
+    every value comes through the config package, so the context can say
+    where it came from. The legacy path stays untouched until the remaining
+    flows migrate (refactor wave W3).
+    """
+    from animalposetracker.config import ConfigFormatError, resolve_scopes
+
+    project_dir = Path(project_dir).expanduser().resolve()
+    project_path = project_dir / "project.yaml"
+    project_values = read_yaml_mapping(project_path) if project_path.is_file() else {}
+    if resolved is None:
+        resolved = resolve_scopes(project_dir, scopes=("common", "train", "export"))
+
+    model_type = str(project_values.get("model_type") or "AnimalRTPose")
+    model_path = project_dir / "configs" / "model.yaml"
+    data_path = project_dir / "configs" / "dataset.yaml"
+
+    image_size = resolved.value(f"train.models.{model_type}.training.image_size")
+    if image_size is None:
+        raise ConfigFormatError(
+            f"No image_size is defined for model type {model_type!r} "
+            f"in the resolved train profiles"
+        )
+    values = {
+        "model": str(model_path),
+        "data": str(data_path),
+        "device": resolved.value("common.device", "auto"),
+        "image_size": image_size,
+        "single_cls": resolved.value("train.shared.training.single_cls", False),
+    }
+    config = TrainingConfig.from_mapping(values, project_dir=project_dir)
+    if config.model is None or not config.model.is_file():
+        raise FileNotFoundError(f"Model configuration does not exist: {config.model}")
+    if config.data is None or not config.data.is_file():
+        raise FileNotFoundError(f"Dataset configuration does not exist: {config.data}")
+    context = {
+        "project_dir": project_dir,
+        "project": project_values,
+        "resolved": resolved,
+        "runtime": {**resolved.flat_for("export"), **resolved.flat_for("common")},
+        "dataset": read_yaml_mapping(data_path),
+        "model_spec": read_yaml_mapping(model_path),
+        "weights": None,
+        "load_report": None,
+    }
+    return config, context
+
+
+def load_project_runtime_model(
+    project_dir,
+    weights_path: Path,
+    resolved=None,
+) -> Tuple[Any, TrainingConfig, Dict[str, Any]]:
+    """New-format twin of :func:`load_project_model` (see the context loader)."""
+    config, context = load_project_runtime_context(project_dir, resolved=resolved)
+    model_spec, head_name, scale = configure_project_model_spec(config, context)
+    model = _instantiate_and_load(config, context, model_spec, head_name, scale, weights_path)
     return model, config, context
 
 
 __all__ = [
     "load_project_model",
+    "load_project_runtime_model",
     "load_project_context",
+    "load_project_runtime_context",
     "configure_project_model_spec",
     "read_yaml_mapping",
     "resolve_device",

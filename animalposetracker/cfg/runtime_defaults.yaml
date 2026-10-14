@@ -1,0 +1,48 @@
+# 运行参数默认值 —— common / predict / export 三个作用域。
+# 对应《配置概念字典（W0）》（2026-10-14 定稿）§3/§4/§5。
+# train 的默认值在 training.yaml；infer 的默认值住中性常量模块（不进本文件）。
+# 键名以字典为准；本文件是这些键的唯一默认值来源（代码不再复制默认字面量）。
+
+common:
+  device: auto
+  project: runs
+  name: train
+  exist_ok: false
+
+predict:
+  source:
+  confidence: 0.25
+  iou: 0.7
+  max_det: 300
+  agnostic_nms: false
+  keypoint_confidence: 0.25
+  dnn: false
+  show_labels: true
+  show_conf: true
+  show_boxes: true
+  show_keypoints: true
+  show_skeletons: false
+  line_width: 2
+  point_radius: 4
+  tracking:
+    enabled: false
+    algorithm: bytetrack
+  pose_filter:
+    method: none
+    window_length: 5
+    polyorder: 2
+    max_gap: 0
+    confidence_threshold:      # null = 继承 keypoint_confidence
+
+export:
+  format:
+  half: false
+  dynamic: false
+  simplify: true
+  opset: 17
+  workspace: 4.0
+  rknn_target: rk3588
+  optimize: false
+  int8: false
+  keras: false
+  nms: false

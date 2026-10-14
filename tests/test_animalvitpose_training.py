@@ -1201,6 +1201,19 @@ class SimCCTrainingTests(unittest.TestCase):
             project.other_config["imgsz"] = 32
             project.save_configs("other")
 
+            # The new-format runtime config: export reads it (refactor wave W1);
+            # the small test model's size lives in the train profile.
+            (root / "configs" / "runtime.yaml").write_text(
+                yaml.safe_dump(
+                    {
+                        "train": {"models": {"AnimalViTPose": {"training": {"image_size": 32}}}},
+                        "export": {"format": "onnx"},
+                    },
+                    sort_keys=False,
+                ),
+                encoding="utf-8",
+            )
+
             config, context = load_project_context(root / "configs" / "other.yaml")
             model_spec, _head_name, scale = configure_project_model_spec(config, context)
             model = build_model(model_spec, scale=scale)
@@ -1223,7 +1236,7 @@ class SimCCTrainingTests(unittest.TestCase):
 
             export_dir = root / "runs" / "test-export"
             run_export([
-                "--config", str(root / "configs" / "other.yaml"),
+                "--config", str(root / "configs" / "runtime.yaml"),
                 "--weights", str(checkpoint),
                 "--output-dir", str(export_dir),
                 "--format", "torchscript",
@@ -1246,14 +1259,11 @@ class SimCCTrainingTests(unittest.TestCase):
             self.assertEqual(exported_metadata["model_format"], "torchscript")
             self.assertEqual(len(exported_results[0]["predictions"]), 1)
 
-            project.other_config["format"] = "onnx"
-            project.other_config["simplify"] = True
-            project.save_configs("other")
-            onnx_config, onnx_context = load_project_context(root / "configs" / "other.yaml")
-            self.assertEqual(onnx_context["other"].get("format"), "onnx")
+            # The format comes from configs/runtime.yaml (export section); no
+            # --format flag here, so a successful export proves it was read.
             onnx_dir = root / "runs" / "test-onnx-export"
             run_export([
-                "--config", str(root / "configs" / "other.yaml"),
+                "--config", str(root / "configs" / "runtime.yaml"),
                 "--weights", str(checkpoint),
                 "--output-dir", str(onnx_dir),
             ])
