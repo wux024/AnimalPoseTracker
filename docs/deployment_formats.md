@@ -8,7 +8,7 @@ For AnimalViTPose, external images without labels need an instance box provider.
 
 ## Artifact formats
 
-`Project.export()` exports from a native `.pt`/`.pth` checkpoint. `.pt` remains the native checkpoint format; it is a prediction input, not an export target. Other targets are selected with `format` in `configs/other.yaml`.
+`Project.export()` exports from a native `.pt`/`.pth` checkpoint. `.pt` remains the native checkpoint format; it is a prediction input, not an export target. Other targets are selected with `format` in `configs/runtime.yaml`.
 
 | Format | Export target | Project prediction | Runtime/converter requirement |
 |---|---|---|---|

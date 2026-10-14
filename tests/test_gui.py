@@ -495,7 +495,7 @@ class InferencerControlTests(unittest.TestCase):
 class ConfigureTreeTests(unittest.TestCase):
     """The parameter trees must only offer keys the backend actually reads.
 
-    A row whose key is not in the project's other.yaml raises the moment it is edited, and a
+    A row whose key is not in the project's runtime.yaml raises the moment it is edited, and a
     row whose key nothing consumes is a knob that silently does nothing. The trees are generated
     from the Designer files, which mirror the full set of reference-toolkit options, so mainpage
     prunes them at startup.
@@ -522,7 +522,7 @@ class ConfigureTreeTests(unittest.TestCase):
             "batch", "max_det", "agnostic_nms", "classes", "project", "name", "verbose",
             "save", "show_conf", "show_boxes", "line_width", "kpt_radius", "kpt_line",
             # Added by mainpage: the prediction pipeline reads these, the Designer file has no
-            # row for them, and the dotted names address the nested mappings in other.yaml.
+            # row for them, and the dotted names address the nested mappings in runtime.yaml.
             "tracking.enabled", "tracking.algorithm",
             "pose_filter.method", "pose_filter.window_length", "pose_filter.polyorder",
             "pose_filter.max_gap",

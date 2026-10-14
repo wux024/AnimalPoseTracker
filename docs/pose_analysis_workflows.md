@@ -28,26 +28,27 @@ This video chain works directly with AnimalRTPose. AnimalViTPose video
 prediction still needs instance boxes; Python callers can supply a
 `DetectorBoxProvider` through `predict_cli.run(..., box_provider=...)`.
 
-The same options can be kept in `configs/other.yaml`:
+The same options can be kept in the project's `configs/runtime.yaml`:
 
 ```yaml
-tracking:
-  enabled: true
-  algorithm: bytetrack
-  track_buffer: 30
-  gmc_method: none
-
-pose_filter:
-  method: median
-  window_length: 5
-  polyorder: 2
-  confidence_threshold: 0.25
+predict:
+  tracking:
+    enabled: true
+    algorithm: bytetrack
+  pose_filter:
+    method: median
+    window_length: 5
+    polyorder: 2
+    confidence_threshold: 0.25
 ```
 
 If a pose filter is requested without an explicit tracker, the workflow uses
-ByteTrack so that filtering is performed separately for each identity. Set
-`gmc_method` to a supported camera-motion method only when video frames are
-available; the project video workflow supplies those frames to the tracker.
+ByteTrack so that filtering is performed separately for each identity. Tracker
+tuning beyond `enabled` and `algorithm` (`track_buffer`, `gmc_method`, ...) is
+not part of the runtime configuration; pass it on the command line's
+`--track-*` flags. Set `gmc_method` to a supported camera-motion method only
+when video frames are available; the project video workflow supplies those
+frames to the tracker.
 Filtering smooths detections that exist in the tracked sequence. It does not
 invent boxes or pose detections for missed frames.
 
