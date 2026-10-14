@@ -155,14 +155,12 @@ class ProjectJobsMixin:
             output_root / "predict",
             exist_ok=bool(self.get_runtime_value("common.exist_ok", False)),
         )
-        # NOTE: prediction still reads the legacy config in this wave; it
-        # migrates onto runtime.yaml together with the GUI forms (next wave).
         cmd = [
             sys.executable,
             "-m",
             "animalposetracker.prediction.cli",
             "--config",
-            "configs/other.yaml",
+            "configs/runtime.yaml",
             "--weights",
             str(model_path),
             "--output-dir",

@@ -153,6 +153,30 @@ class ResolverTests(unittest.TestCase):
         self.assertNotIn("device", export_flat)  # that one lives in common
         self.assertEqual(resolved.flat_for("common")["device"], "auto")
 
+    def test_nested_for_rebuilds_mapping_blocks(self):
+        with TemporaryDirectory() as temporary:
+            root = _make_project(temporary, {"predict": {"pose_filter": {"method": "savgol"}}})
+            resolved = resolve_scopes(root, ("predict",))
+
+        predict_tree = resolved.nested_for("predict")
+        self.assertEqual(predict_tree["pose_filter"]["method"], "savgol")
+        self.assertEqual(predict_tree["pose_filter"]["window_length"], 5)
+        self.assertIsInstance(predict_tree["tracking"], dict)
+        self.assertFalse(predict_tree["tracking"]["enabled"])
+        self.assertEqual(predict_tree["confidence"], 0.25)
+
+    def test_changed_from_defaults_ignores_snapshot_values(self):
+        # A project snapshot carries every registered key; only values that
+        # actually differ from the package defaults count as changed.
+        with TemporaryDirectory() as temporary:
+            root = _make_project(
+                temporary,
+                {"export": {"format": "onnx", "opset": 17}},  # 17 is the default
+            )
+            resolved = resolve_scopes(root, ("export",))
+
+        self.assertEqual(resolved.changed_from_defaults(), {"export.format": "onnx"})
+
     def test_train_profiles_merge_per_model(self):
         with TemporaryDirectory() as temporary:
             root = _make_project(

@@ -365,6 +365,16 @@ def run_load(argv=None) -> int:
     print(f"Dataset config: {config.data}")
     print(f"Classes: {class_count}")
     print(f"Keypoints: {keypoint_shape}")
+    # Which values actually differ from the package defaults, so "why is it
+    # X" has an answer without reading the YAML (the project snapshot carries
+    # every registered key; only real changes are listed).
+    resolved = context.get("resolved")
+    if resolved is not None:
+        changed = resolved.changed_from_defaults()
+        if changed:
+            print("Values that differ from the package defaults:")
+            for path, value in sorted(changed.items()):
+                print(f"  {path} = {value}")
     return 0
 
 

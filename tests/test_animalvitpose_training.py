@@ -1085,17 +1085,13 @@ class SimCCTrainingTests(unittest.TestCase):
         self.assertEqual(len(records), 1)
         self.assertEqual(records[0]["class_name"], "mouse")
 
-    @unittest.skip(
-        "prediction migrates onto runtime.yaml in the next wave; "
-        "this end-to-end chain returns with it"
-    )
     def test_animalvitpose_project_prediction_runs_from_annotated_dataset_split(self):
         from animalposetracker.nn import build_model
         from animalposetracker.export.cli import run as run_export
         from animalposetracker.prediction.cli import run as run_prediction
         from animalposetracker.project.model_context import (
             configure_project_model_spec,
-            load_project_context,
+            load_project_runtime_context,
         )
 
         with tempfile.TemporaryDirectory() as temporary_directory:
@@ -1194,30 +1190,20 @@ class SimCCTrainingTests(unittest.TestCase):
             }
             model_path = root / "configs" / "model.yaml"
             model_path.write_text(yaml.safe_dump(model_values, sort_keys=False), encoding="utf-8")
-            project.other_config["imgsz"] = 32
-            project.save_configs("other")
+            # The runtime config ships with the project; pin the small test
+            # model's size and the export format on it.
+            project.set_runtime_value("train.models.AnimalViTPose.training.image_size", 32)
+            project.set_runtime_value("export.format", "onnx")
+            project.save_configs("runtime")
 
-            # The new-format runtime config: export reads it (refactor wave W1);
-            # the small test model's size lives in the train profile.
-            (root / "configs" / "runtime.yaml").write_text(
-                yaml.safe_dump(
-                    {
-                        "train": {"models": {"AnimalViTPose": {"training": {"image_size": 32}}}},
-                        "export": {"format": "onnx"},
-                    },
-                    sort_keys=False,
-                ),
-                encoding="utf-8",
-            )
-
-            config, context = load_project_context(root / "configs" / "other.yaml")
+            config, context = load_project_runtime_context(root)
             model_spec, _head_name, scale = configure_project_model_spec(config, context)
             model = build_model(model_spec, scale=scale)
             checkpoint = root / "test-weights.pt"
             torch.save({"state_dict": model.state_dict()}, checkpoint)
             output_dir = root / "runs" / "test-predictions"
             run_prediction([
-                "--config", str(root / "configs" / "other.yaml"),
+                "--config", str(root / "configs" / "runtime.yaml"),
                 "--weights", str(checkpoint),
                 "--output-dir", str(output_dir),
             ])
@@ -1241,7 +1227,7 @@ class SimCCTrainingTests(unittest.TestCase):
             self.assertTrue(torchscript_weights.is_file())
             exported_prediction_dir = root / "runs" / "exported-model-predictions"
             run_prediction([
-                "--config", str(root / "configs" / "other.yaml"),
+                "--config", str(root / "configs" / "runtime.yaml"),
                 "--weights", str(torchscript_weights),
                 "--split", "val",
                 "--output-dir", str(exported_prediction_dir),
@@ -1267,7 +1253,7 @@ class SimCCTrainingTests(unittest.TestCase):
             self.assertTrue(onnx_weights.is_file())
             onnx_prediction_dir = root / "runs" / "onnx-predictions"
             run_prediction([
-                "--config", str(root / "configs" / "other.yaml"),
+                "--config", str(root / "configs" / "runtime.yaml"),
                 "--weights", str(onnx_weights),
                 "--split", "val",
                 "--output-dir", str(onnx_prediction_dir),

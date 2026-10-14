@@ -14,10 +14,12 @@ import cv2
 import numpy as np
 from tqdm import tqdm
 
+from animalposetracker.config import resolve_scopes
+from animalposetracker.config.resolver import project_dir_from
 from animalposetracker.project.model_context import (
     configure_project_model_spec,
-    load_project_context,
-    load_project_model,
+    load_project_runtime_context,
+    load_project_runtime_model,
     read_yaml_mapping,
     unique_output_directory,
 )
@@ -227,9 +229,9 @@ def _make_topdown_dataset(config, context, split):
         config.data,
         split=split,
         input_size=(width, height),
-        sigma=float(context["other"].get("label_sigma", 6.0)),
+        sigma=float(context["resolved"].flat_for("train").get("label_sigma", 6.0)),
         split_ratio=context["simcc_split_ratio"],
-        cache=context["other"].get("cache", False),
+        cache=context["resolved"].flat_for("train").get("cache", False),
         preprocessing_config=context["preprocessing"],
     )
 
@@ -584,7 +586,11 @@ def _make_argument_parser():
         prog="animalpose-cli predict",
         description="Predict AnimalRTPose or AnimalViTPose on a project dataset split.",
     )
-    parser.add_argument("--config", default="configs/other.yaml")
+    parser.add_argument(
+        "--config",
+        default="configs/runtime.yaml",
+        help="Project directory or its configs/runtime.yaml (new-format projects)",
+    )
     parser.add_argument("--weights", required=True, help="Pose checkpoint, exported artifact, or Triton model URL")
     parser.add_argument(
         "--source",
@@ -656,7 +662,7 @@ def _make_argument_parser():
         help="Optionally track video detections with this AnimalPoseTracker algorithm",
     )
     tracker_group.add_argument("--no-tracker", dest="disable_tracker", action="store_true",
-                               help="Disable a tracker enabled in other.yaml")
+                               help="Disable a tracker enabled in configs/runtime.yaml")
     parser.add_argument(
         "--pose-filter",
         choices=("none", "median", "savgol"),
@@ -748,6 +754,13 @@ def run(argv=None, box_provider: InstanceBoxProvider = None) -> int:
 
     args = _make_argument_parser().parse_args(argv)
     config_path = Path(args.config).expanduser().resolve()
+    project_dir = project_dir_from(config_path)
+    overrides = {}
+    if args.device is not None:
+        overrides["common.device"] = args.device
+    resolved = resolve_scopes(
+        project_dir, ("common", "train", "predict"), overrides=overrides
+    )
     remote_model = str(args.weights).startswith(("http://", "grpc://"))
     weights_path = (
         str(args.weights) if remote_model else Path(args.weights).expanduser().resolve()
@@ -756,8 +769,8 @@ def run(argv=None, box_provider: InstanceBoxProvider = None) -> int:
     artifact_format = detect_artifact_format(weights_path, artifact_metadata)
 
     if artifact_format == "pt":
-        model, config, context = load_project_model(
-            config_path, weights_path, device=args.device
+        model, config, context = load_project_runtime_model(
+            project_dir, weights_path, resolved
         )
         # Fold Conv + BatchNorm for inference, matching ultralytics' PyTorch inference
         # backend (its predictor passes fuse=True to AutoBackend, which fuses on load).
@@ -773,7 +786,7 @@ def run(argv=None, box_provider: InstanceBoxProvider = None) -> int:
             context["topdown_input_size"] = tuple(map(int, head.input_size))
             context["simcc_split_ratio"] = float(head.simcc_split_ratio)
     else:
-        config, context = load_project_context(config_path)
+        config, context = load_project_runtime_context(project_dir, resolved=resolved)
         model_spec, head_name, scale = configure_project_model_spec(config, context)
         context.update({
             "model_spec": model_spec,
@@ -789,7 +802,7 @@ def run(argv=None, box_provider: InstanceBoxProvider = None) -> int:
             artifact_format,
             context["device"],
             metadata=artifact_metadata,
-            use_opencv_dnn=bool(context["other"].get("dnn", False)),
+            use_opencv_dnn=bool(resolved.flat_for("predict").get("dnn", False)),
         )
         if head_name == "SimCCHead":
             head_args = model_spec["head"][-1][3]
@@ -828,11 +841,10 @@ def run(argv=None, box_provider: InstanceBoxProvider = None) -> int:
         context["preprocessing"] = dict(context["model_spec"].get("preprocessing") or {})
 
     project_dir = context["project_dir"]
-    source_value = args.source or context["other"].get("source")
+    predict_values = context["resolved"].nested_for("predict")
+    source_value = args.source or predict_values.get("source")
     dataset_predict = source_value is None
     split_request = args.split
-    if split_request == "auto" and context["other"].get("predict_split"):
-        split_request = str(context["other"]["predict_split"])
     data_dataset = None
     topdown_dataset = None
     if head_name == "SimCCHead":
@@ -918,26 +930,29 @@ def run(argv=None, box_provider: InstanceBoxProvider = None) -> int:
         config.output_dir = output_root / (args.name or "predict")
     else:
         # Prediction runs get their own namespace instead of inheriting the
-        # training run name (project/name = runs/train) from other.yaml.
+        # training run name (project/name = runs/train) from the runtime config.
         config.output_dir = context["project_dir"] / "runs" / "predict"
     config.output_dir = unique_output_directory(
         config.output_dir,
         exist_ok=bool(
-            context["other"].get("exist_ok", False)
+            context["resolved"].flat_for("common").get("exist_ok", False)
             if args.exist_ok is None else args.exist_ok
         ),
     )
 
-    settings_values = context["other"]
+    settings_values = {
+        **context["resolved"].nested_for("predict"),
+        **context["resolved"].nested_for("common"),
+    }
     prediction_confidence = (
         args.conf
         if args.conf is not None
-        else settings_values.get("prediction_confidence", PREDICT_NMS_CONF)
+        else settings_values.get("confidence", PREDICT_NMS_CONF)
     )
     prediction_iou = (
         args.iou
         if args.iou is not None
-        else settings_values.get("prediction_iou", PREDICT_NMS_IOU)
+        else settings_values.get("iou", PREDICT_NMS_IOU)
     )
     if not 0.0 <= float(prediction_confidence) <= 1.0:
         raise ValueError("Prediction confidence threshold must be between 0 and 1")
@@ -945,7 +960,7 @@ def run(argv=None, box_provider: InstanceBoxProvider = None) -> int:
         raise ValueError("Prediction NMS IoU threshold must be between 0 and 1")
     settings = {
         "confidence": float(prediction_confidence),
-        "keypoint_confidence": float(settings_values.get("keypoint_score_threshold", 0.25)),
+        "keypoint_confidence": float(settings_values.get("keypoint_confidence", 0.25)),
         "iou": float(prediction_iou),
         "max_detections": int(settings_values.get("max_det", PREDICT_NMS_MAX_DET)),
         "agnostic_nms": bool(settings_values.get("agnostic_nms", PREDICT_NMS_AGNOSTIC)),
@@ -953,8 +968,8 @@ def run(argv=None, box_provider: InstanceBoxProvider = None) -> int:
         "show_labels": bool(settings_values.get("show_labels", True)),
         "show_confidence": bool(settings_values.get("show_conf", True)),
         "show_keypoints": bool(settings_values.get("show_keypoints", True)),
-        "show_skeletons": bool(settings_values.get("kpt_line", False)),
-        "point_radius": int(settings_values.get("kpt_radius") or 4),
+        "show_skeletons": bool(settings_values.get("show_skeletons", False)),
+        "point_radius": int(settings_values.get("point_radius") or 4),
         "line_width": int(settings_values.get("line_width") or 2),
     }
     cli_settings = {
@@ -974,7 +989,7 @@ def run(argv=None, box_provider: InstanceBoxProvider = None) -> int:
     settings.update({key: value for key, value in cli_settings.items() if value is not None})
     tracking_value = settings_values.get("tracking") or {}
     if not isinstance(tracking_value, dict):
-        raise TypeError("other.yaml tracking settings must be a mapping")
+        raise TypeError("predict.tracking settings must be a mapping")
     tracking_settings = dict(tracking_value)
     tracking_enabled = bool(tracking_settings.pop("enabled", False))
     configured_tracker = tracking_settings.pop("algorithm", None)
@@ -991,7 +1006,7 @@ def run(argv=None, box_provider: InstanceBoxProvider = None) -> int:
     if isinstance(filter_value, str):
         filter_value = {"method": filter_value}
     if not isinstance(filter_value, dict):
-        raise TypeError("other.yaml pose_filter settings must be a mapping or filter name")
+        raise TypeError("predict.pose_filter settings must be a mapping or filter name")
     pose_filter_settings = dict(filter_value)
     filter_method = str(
         args.pose_filter or pose_filter_settings.get("method", "none")

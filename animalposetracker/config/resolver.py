@@ -56,10 +56,11 @@ class ConfigFormatError(ValueError):
 
 @dataclass(frozen=True)
 class ResolvedValue:
-    """One final value and where it came from."""
+    """One final value, where it came from, and the package default behind it."""
 
     value: Any
     source: str  # "default" | "project" | "cli"
+    default: Any = None  # the value the package defaults would have supplied
 
 
 @dataclass(frozen=True)
@@ -97,12 +98,44 @@ class ResolvedScopes:
             if entry.source == "cli"
         }
 
+    def nested_for(self, scope: str) -> Dict[str, Any]:
+        """The scope's values rebuilt as a nested mapping.
+
+        Consumers that read a mapping block whole (``predict.tracking``) get
+        the same shape the config file carries, with the three layers already
+        merged into every leaf.
+        """
+        prefix = f"{scope}."
+        nested: Dict[str, Any] = {}
+        for path, entry in self.values.items():
+            if not path.startswith(prefix):
+                continue
+            parts = path[len(prefix):].split(".")
+            node = nested
+            for part in parts[:-1]:
+                node = node.setdefault(part, {})
+            node[parts[-1]] = entry.value
+        return nested
+
     def project_values(self) -> Dict[str, Any]:
         """Only the values the project file re-decided."""
         return {
             path: entry.value
             for path, entry in self.values.items()
             if entry.source == "project"
+        }
+
+    def changed_from_defaults(self) -> Dict[str, Any]:
+        """Values a layer above the defaults actually re-decided.
+
+        A project snapshot carries every registered key, so "source is
+        project" alone says nothing; a value counts only when it differs from
+        what the package defaults would have supplied.
+        """
+        return {
+            path: entry.value
+            for path, entry in self.values.items()
+            if entry.source != "default" and entry.value != entry.default
         }
 
 
@@ -201,6 +234,13 @@ def _check_project_keys(scope: str, subtree: Mapping[str, Any], source_name: str
 # resolution
 # ---------------------------------------------------------------------------
 
+def _default_behind(entry: Optional[ResolvedValue]) -> Any:
+    """The package default an entry shadows (for change tracking)."""
+    if entry is None:
+        return None
+    return entry.value if entry.source == "default" else entry.default
+
+
 def resolve_scopes(
     project_dir,
     scopes: Sequence[str],
@@ -234,7 +274,12 @@ def resolve_scopes(
             raise ConfigFormatError(f"Section '{scope}' in {source_name} must be a mapping")
         _check_project_keys(scope, subtree, source_name)
         for path, value in _flatten(subtree).items():
-            merged[f"{scope}.{path}"] = ResolvedValue(deepcopy(value), "project")
+            key = f"{scope}.{path}"
+            merged[key] = ResolvedValue(
+                deepcopy(value),
+                "project",
+                default=_default_behind(merged.get(key)),
+            )
 
     for path, value in (overrides or {}).items():
         scope = str(path).split(".", 1)[0]
@@ -246,7 +291,12 @@ def resolve_scopes(
         if scope not in scopes:
             continue  # an override for a scope we were not asked to resolve
         _check_override_path(str(path))
-        merged[str(path)] = ResolvedValue(value, "cli")
+        key = str(path)
+        merged[key] = ResolvedValue(
+            value,
+            "cli",
+            default=_default_behind(merged.get(key)),
+        )
 
     return ResolvedScopes(values=merged)
 
