@@ -573,11 +573,14 @@ class ConfigureTreeTests(unittest.TestCase):
         raise AssertionError(f"{key} is not in the tree")
 
     def test_editing_a_nested_row_updates_the_nested_mapping(self):
-        # `other.yaml` holds tracking and pose_filter as mappings, so the rows address one field
-        # of each; writing the row has to land inside the mapping the pipeline reads.
+        # runtime.yaml holds tracking and pose_filter as mapping blocks, so the rows
+        # address one field of each; writing the row has to land inside the mapping
+        # the pipeline reads.
         page = AnimalPoseTrackerPage()
-        page.project.other_config["tracking"] = {"enabled": False, "algorithm": "bytetrack"}
-        page.project.other_config["pose_filter"] = {"method": "none", "window_length": 5}
+        page.project.runtime_config["predict"] = {
+            "tracking": {"enabled": False, "algorithm": "bytetrack"},
+            "pose_filter": {"method": "none", "window_length": 5},
+        }
         page.initialize_other_config()
 
         tree = page.InferenceConfigure
@@ -585,38 +588,53 @@ class ConfigureTreeTests(unittest.TestCase):
         self._row(tree, "tracking.enabled").setText(1, "True")
         self._row(tree, "pose_filter.window_length").setText(1, "9")
 
-        self.assertIs(page.project.other_config["tracking"]["enabled"], True)
-        self.assertEqual(page.project.other_config["pose_filter"]["window_length"], 9)
+        self.assertIs(page.project.runtime_config["predict"]["tracking"]["enabled"], True)
+        self.assertEqual(
+            page.project.runtime_config["predict"]["pose_filter"]["window_length"], 9
+        )
 
-    def test_a_project_predating_the_nested_keys_gets_editable_rows(self):
-        # Projects saved before these keys existed must still be able to turn tracking on.
+    def test_the_nested_rows_are_editable_from_the_runtime_snapshot(self):
+        # tracking / pose_filter ship in the runtime snapshot, so their rows are
+        # editable on a fresh project and an edit lands inside the mapping.
         page = AnimalPoseTrackerPage()
-        page.project.other_config.clear()
+        page.project.runtime_config["predict"] = {
+            "tracking": {"enabled": False, "algorithm": "bytetrack"},
+            "pose_filter": {"method": "none"},
+        }
         page.initialize_other_config()
 
-        self.assertEqual(page.project.other_config["tracking"]["enabled"], False)
-        self.assertEqual(page.project.other_config["pose_filter"]["method"], "none")
+        self.assertEqual(page.project.runtime_config["predict"]["tracking"]["enabled"], False)
 
         self._row(page.InferenceConfigure, "tracking.enabled").setText(1, "True")
-        self.assertIs(page.project.other_config["tracking"]["enabled"], True)
+        self.assertIs(page.project.runtime_config["predict"]["tracking"]["enabled"], True)
+        # A row whose mapping the tree lacks stays locked instead of pretending.
+        page.project.runtime_config["predict"].pop("tracking")
+        page.initialize_other_config()
+        self.assertFalse(
+            bool(
+                self._row(page.InferenceConfigure, "tracking.enabled").flags()
+                & Qt.ItemIsEditable
+            )
+        )
 
     def test_a_row_the_project_lacks_is_cleared_and_locked(self):
         # Switching projects: a row the newly opened project does not carry used to keep the
         # previous project's value and stay editable, while an edit to it was discarded on save.
         page = AnimalPoseTrackerPage()
-        page.project.other_config["imgsz"] = 640
+        training = {"models": {"AnimalRTPose": {"training": {"image_size": 640}}}}
+        page.project.runtime_config["train"] = training
         page.initialize_other_config()
         row = self._row(page.InferenceConfigure, "imgsz")
         self.assertEqual(row.text(1), "640")
         self.assertTrue(bool(row.flags() & Qt.ItemIsEditable))
 
-        page.project.other_config.pop("imgsz", None)
+        training["models"]["AnimalRTPose"]["training"].pop("image_size")
         page.initialize_other_config()
         row = self._row(page.InferenceConfigure, "imgsz")
         self.assertEqual(row.text(1), "")
         self.assertFalse(bool(row.flags() & Qt.ItemIsEditable))
 
-        page.project.other_config["imgsz"] = 512
+        training["models"]["AnimalRTPose"]["training"]["image_size"] = 512
         page.initialize_other_config()
         row = self._row(page.InferenceConfigure, "imgsz")
         self.assertEqual(row.text(1), "512")
@@ -625,8 +643,11 @@ class ConfigureTreeTests(unittest.TestCase):
     def test_edit_mode_keeps_a_row_the_project_lacks_locked(self):
         # Edit mode used to unlock every row, including the ones an edit to which is dropped.
         page = AnimalPoseTrackerPage()
-        page.project.other_config["imgsz"] = 640  # carried by the project -> editable
-        page.project.other_config.pop("save", None)  # not carried -> stays locked
+        # `imgsz` is carried by the train profile -> editable; `save` lives in a
+        # section this tree does not carry -> stays locked.
+        page.project.runtime_config["train"] = {
+            "models": {"AnimalRTPose": {"training": {"image_size": 640}}}
+        }
         page.initialize_other_config()
         page.EditInferenceParameters.click()  # "Edit ..." -> edit mode
         self.assertTrue(
@@ -662,8 +683,10 @@ class ConfigureTreeTests(unittest.TestCase):
 
     def test_boolean_rows_are_recognised_from_the_config_value(self):
         page = AnimalPoseTrackerPage()
-        page.project.other_config["tracking"] = {"enabled": False}
-        page.project.other_config["epochs"] = 10
+        page.project.runtime_config["predict"] = {"tracking": {"enabled": False}}
+        page.project.runtime_config["train"] = {
+            "models": {"AnimalRTPose": {"training": {"epochs": 10}}}
+        }
 
         self.assertEqual(page.configure_choices("tracking.enabled"), ("True", "False"))
         self.assertEqual(page.configure_choices("epochs"), ())
@@ -676,7 +699,9 @@ class ConfigureTreeTests(unittest.TestCase):
 
     def test_the_value_column_edits_with_a_dropdown_when_there_are_choices(self):
         page = AnimalPoseTrackerPage()
-        page.project.other_config["tracking"] = {"enabled": True, "algorithm": "bytetrack"}
+        page.project.runtime_config["predict"] = {
+            "tracking": {"enabled": True, "algorithm": "bytetrack"}
+        }
         page.initialize_other_config()
         tree = page.InferenceConfigure
 

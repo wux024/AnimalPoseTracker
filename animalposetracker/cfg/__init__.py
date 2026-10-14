@@ -4,7 +4,6 @@ FILE_DIR = Path(__file__).resolve()
 CFG_DIR = FILE_DIR.parent
 DATA_DIR = CFG_DIR / 'datasets'
 MODEL_DIR = CFG_DIR /'models'
-DEFAULT_CFG_PATH = CFG_DIR / 'default.yaml'
 TRAINING_CFG_PATH = CFG_DIR / 'training.yaml'
 
 MODEL_YAML_PATHS = {

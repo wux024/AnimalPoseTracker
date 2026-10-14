@@ -572,7 +572,7 @@ class ReviewFixTests(unittest.TestCase):
             weights = project.project_path / "runs" / "train" / "weights" / "best.pt"
             weights.parent.mkdir(parents=True)
             weights.write_bytes(b"placeholder")
-            project.other_config["model"] = str(weights)
+            project.set_runtime_value("common.selected_weights", str(weights))
 
             with patch.object(project, "_execute_command") as execute:
                 output_dir = project.predict(

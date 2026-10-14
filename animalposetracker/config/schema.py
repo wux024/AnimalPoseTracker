@@ -239,6 +239,7 @@ FIELDS: Tuple[Field, ...] = (
     _f("project", "common", "", str, "运行输出根目录", visibility="form"),
     _f("name", "common", "", str, "运行名（输出在 project/name 下）", visibility="form"),
     _f("exist_ok", "common", "", bool, "允许写进已存在的输出目录", visibility="form"),
+    _f("selected_weights", "common", "", str, "为评估/预测/导出显式选择的权重或产物路径（GUI 模型选择）", visibility="hidden"),
 
     # ------------------------------------------------------------------
     # predict

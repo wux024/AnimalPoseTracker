@@ -258,6 +258,12 @@ class TrainingConfig:
         if pretrained is None and isinstance(values.get("pretrained"), str):
             pretrained = values["pretrained"]
 
+        # Canonical spellings first, the historical flat names second (the
+        # resolver feeds canonical keys; checkpoint configs and the legacy
+        # other.yaml path still speak the old ones).
+        time_hours = values.get("time_hours", values.get("time"))
+        validation_confidence = values.get("confidence", values.get("conf"))
+
         resume_from = values.get("resume_from")
         resume = values.get("resume", False)
         if resume_from is None and isinstance(resume, str):
@@ -274,7 +280,7 @@ class TrainingConfig:
             "pretrained_weights": pretrained,
             "output_dir": output_dir,
             "epochs": values.get("epochs", 100),
-            "time_hours": None if values.get("time") is None else float(values["time"]),
+            "time_hours": None if time_hours is None else float(time_hours),
             "batch_size": batch_size,
             "validation_batch_size": (
                 None if values.get("validation_batch_size") is None
@@ -333,9 +339,9 @@ class TrainingConfig:
             "seed": values.get("seed", 0),
             "deterministic": values.get("deterministic", True),
             "validation_interval": values.get("validation_interval", 1),
-            "validation_enabled": values.get("val", True),
+            "validation_enabled": values.get("validation_enabled", values.get("val", True)),
             "validation_confidence": (
-                0.001 if values.get("conf") is None else float(values.get("conf"))
+                0.001 if validation_confidence is None else float(validation_confidence)
             ),
             "validation_iou": float(values.get("iou", 0.7)),
             "max_detections": int(values.get("max_det", 300)),

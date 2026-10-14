@@ -23,9 +23,11 @@ from .profiles import (
     ANIMALVITPOSE_PREPROCESSING,
     ANIMALVITPOSE_VALIDATION,
     KEYPOINT_METRICS,
-    apply_animalvitpose_defaults,
-    flatten_project_training_config,
+    apply_animalvitpose_recipe,
+    flatten_train_values,
+    train_key_targets,
 )
+from animalposetracker.config import project_dir_from, resolve_scopes
 from animalposetracker.nn.model_config import head_config, set_simcc_keypoint_count
 
 
@@ -93,7 +95,7 @@ def _resolve_project_default_pretrained(project_dir: Path, project_values: Dict[
         raise FileNotFoundError(
             f"Pretrained weights not found: {candidate}\n"
             "Place the checkpoint at that path, record an explicit path in "
-            "configs/other.yaml (pretrained: /path/to/checkpoint.pt), or set "
+            "configs/runtime.yaml (pretrained: /path/to/checkpoint.pt), or set "
             "pretrained: false to train from scratch."
         )
     return candidate
@@ -190,13 +192,9 @@ def _launch_distributed(
     """Launch one local training process per selected GPU with torch.distributed."""
     import torch
 
-    project_dir = config_path.parent.parent
-    project_config_path = project_dir / "project.yaml"
-    project_values = _read_mapping(project_config_path) if project_config_path.is_file() else {}
-    config_values = flatten_project_training_config(
-        _read_mapping(config_path),
-        model_type=project_values.get("model_type"),
-    )
+    project_dir = project_dir_from(config_path)
+    # Only the device is needed here; it lives in the shared section.
+    config_values = resolve_scopes(project_dir, ("common",)).flat_for("common")
     device_ids = _device_ids(device if device is not None else config_values.get("device"))
     if not torch.cuda.is_available():
         raise RuntimeError("Multiple GPU devices were selected, but this PyTorch environment has no CUDA")
@@ -342,11 +340,9 @@ _CLI_ALIASES = {
     "scale": ("--augment-scale",),
 }
 
-_CLI_CONFIG_KEY_ALIASES = {
-    "time_hours": "time",
-    "validation_enabled": "val",
-    "validation_confidence": "conf",
-    "validation_iou": "iou",
+# Field name -> canonical key, only where the two spellings differ.
+_CLI_FIELD_TO_CANONICAL = {
+    "validation_confidence": "confidence",
     "max_detections": "max_det",
 }
 
@@ -359,7 +355,7 @@ _CLI_COMMAND_FIELDS = tuple(
     if item.name not in _CLI_INTERNAL_FIELDS
 )
 _CLI_FIELD_TO_KEY = {
-    name: _CLI_CONFIG_KEY_ALIASES.get(name, name)
+    name: _CLI_FIELD_TO_CANONICAL.get(name, name)
     for name in _CLI_COMMAND_FIELDS
 }
 _CLI_SPECIAL_TYPES = {
@@ -391,6 +387,12 @@ def _add_bool_options(parser: argparse.ArgumentParser, flags, dest: str) -> None
 
 
 def _collect_cli_overrides(args):
+    """The values this command line spelled out, in canonical keys.
+
+    Returns ``(values, fields)``: ``values`` keyed by canonical name (what the
+    resolver speaks) and ``fields`` keyed by the config object's field names
+    (what the resume whitelist speaks).
+    """
     values = {}
     for field_name in _CLI_COMMAND_FIELDS:
         if hasattr(args, field_name):
@@ -407,19 +409,42 @@ def _collect_cli_overrides(args):
     if hasattr(args, "pretrained_weights"):
         values["pretrained_weights"] = args.pretrained_weights
 
-    inherited = os.environ.get(_CLI_OVERRIDE_ENV)
-    if inherited:
-        inherited_values = json.loads(inherited)
-        if not isinstance(inherited_values, dict):
-            raise ValueError(f"{_CLI_OVERRIDE_ENV} must contain a JSON mapping")
-        inherited_values.update(values)
-        values = inherited_values
     fields = {
         field_name: values[key]
         for field_name, key in _CLI_FIELD_TO_KEY.items()
         if key in values
     }
     return values, fields
+
+
+def _build_train_overrides(cli_values, model_type):
+    """Anchor flat command-line values on the registry's dotted paths.
+
+    The path is the one the flatten actually reads the value from, so an
+    override lands where it decides -- ``seed`` on the ViTPose recipe, for
+    instance, not on the shared default it would shadow.
+    """
+    targets = train_key_targets(model_type)
+    overrides = {}
+    for name, value in cli_values.items():
+        if name in ("device", "project", "name", "exist_ok"):
+            overrides[f"common.{name}"] = value
+            continue
+        path = targets.get(name)
+        if path is not None:
+            overrides[path] = value
+    return overrides
+
+
+def _inherited_override_paths() -> Dict[str, Any]:
+    """Overrides handed to a distributed child process (dotted paths)."""
+    inherited = os.environ.get(_CLI_OVERRIDE_ENV)
+    if not inherited:
+        return {}
+    values = json.loads(inherited)
+    if not isinstance(values, dict):
+        raise ValueError(f"{_CLI_OVERRIDE_ENV} must contain a JSON mapping")
+    return {str(key): value for key, value in values.items()}
 
 
 def _make_argument_parser() -> argparse.ArgumentParser:
@@ -430,8 +455,8 @@ def _make_argument_parser() -> argparse.ArgumentParser:
     )
     parser.add_argument(
         "--config",
-        default="configs/other.yaml",
-        help="Path to the project's training configuration.",
+        default="configs/runtime.yaml",
+        help="Project directory or its configs/runtime.yaml (new-format projects).",
     )
     parser.add_argument(
         "--resume", "--resume-from", dest="resume",
@@ -494,14 +519,21 @@ def run(argv=None) -> int:
     rank = 0
     try:
         config_path = Path(args.config).expanduser().resolve()
-        project_dir = config_path.parent.parent
+        project_dir = project_dir_from(config_path)
         project_config_path = project_dir / "project.yaml"
         project_values = _read_mapping(project_config_path) if project_config_path.is_file() else {}
-        values = flatten_project_training_config(
-            _read_mapping(config_path),
-            model_type=project_values.get("model_type"),
-        )
-        values.update(cli_override_values)
+        model_type = str(project_values.get("model_type") or "AnimalRTPose")
+
+        overrides = {
+            **_inherited_override_paths(),
+            **_build_train_overrides(cli_override_values, model_type),
+        }
+        resolved = resolve_scopes(project_dir, ("common", "train"), overrides=overrides)
+        values, _origins = flatten_train_values(resolved, model_type)
+        if values.get("model") is None:
+            values["model"] = str(project_dir / "configs" / "model.yaml")
+        if values.get("data") is None:
+            values["data"] = str(project_dir / "configs" / "dataset.yaml")
         if args.validate_only:
             if args.resume:
                 raise ValueError("--resume cannot be combined with --validate-only")
@@ -509,7 +541,7 @@ def run(argv=None) -> int:
                 raise ValueError("--validate-only requires --weights")
             if int(os.environ.get("WORLD_SIZE", "1")) > 1:
                 raise ValueError("Validation-only mode currently requires a single process")
-            values["val"] = True
+            values["validation_enabled"] = True
             values["pretrained"] = False
             values["pretrained_weights"] = None
             values["resume"] = False
@@ -581,7 +613,7 @@ def run(argv=None) -> int:
                     args.resume,
                     output_dir=values.get("output_dir"),
                     device=values.get("device"),
-                    cli_overrides=cli_override_values,
+                    cli_overrides=overrides,
                 )
         resume_config = None
         if args.resume:
@@ -628,14 +660,13 @@ def run(argv=None) -> int:
                 model_spec = _read_mapping(candidate_model_path)
                 head_name, _head_entry = head_config(model_spec)
                 if head_name == "SimCCHead":
-                    values, profile_defaults = apply_animalvitpose_defaults(
+                    values, profile_defaults = apply_animalvitpose_recipe(
                         values,
                         model_scale=scale,
                         model_config=model_spec,
                     )
-                    values.update(cli_override_values)
         if args.validate_only:
-            values["val"] = True
+            values["validation_enabled"] = True
             values["pretrained"] = False
             values["pretrained_weights"] = None
             values["resume"] = False

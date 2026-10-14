@@ -363,6 +363,30 @@ class AnnotatorPage(QMainWindow, Ui_Annotator):
             QMessageBox.warning(self, "Error", f"Failed to load image: {str(e)}")
 
     # Additional methods (unchanged from original)
+    @staticmethod
+    def _normalize_shape_config(config):
+        """Expose the three edited lists regardless of the file's spelling.
+
+        The shape's home is dataset.yaml now (``names`` as a mapping); this
+        page still edits the historical ``classes_name`` / ``keypoints_name``
+        / ``skeleton`` lists, so accept both spellings on the way in and
+        write the file's own spelling back out.
+        """
+        normalized = dict(config or {})
+        class_names = normalized.get("classes_name")
+        if not class_names:
+            names = normalized.get("names")
+            if isinstance(names, dict):
+                class_names = [str(value) for _, value in sorted(names.items())]
+            elif isinstance(names, (list, tuple)):
+                class_names = [str(value) for value in names]
+        normalized["classes_name"] = list(class_names or [])
+        if not normalized.get("keypoints_name"):
+            shape = normalized.get("kpt_shape") or [0]
+            normalized["keypoints_name"] = [f"kpt_{index}" for index in range(int(shape[0]))]
+        normalized.setdefault("skeleton", [])
+        return normalized
+
     def onOpenConfigFile(self):
         """Handle opening configuration file with safety checks"""
         file_path, _ = QFileDialog.getOpenFileName(
@@ -376,7 +400,7 @@ class AnnotatorPage(QMainWindow, Ui_Annotator):
             self.config_path = file_path
             with open(file_path, 'r', encoding='utf-8') as f:
                 # Use safe loader instead of FullLoader
-                self.project_config = yaml.safe_load(f)
+                self.project_config = self._normalize_shape_config(yaml.safe_load(f))
             
             self.EditKeypoints.setEnabled(True)
             self.EditSkeleton.setEnabled(True)
@@ -703,8 +727,14 @@ class AnnotatorPage(QMainWindow, Ui_Annotator):
             elif config_type =='skeleton':
                 self.project_config['skeleton'] = updated_data
             
+            document = dict(self.project_config)
+            if "kpt_shape" in document:
+                # A dataset.yaml keeps its own spelling: the class names live
+                # there as a mapping, not as this page's editing list.
+                document["names"] = dict(enumerate(document.get("classes_name") or []))
+                document.pop("classes_name", None)
             with open(self.config_path, "w", encoding="utf-8") as f:
-                yaml.safe_dump(self.project_config, 
+                yaml.safe_dump(document, 
                         f, 
                         indent=2, 
                         sort_keys=False, 

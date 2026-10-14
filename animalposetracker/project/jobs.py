@@ -12,22 +12,21 @@ import tempfile
 import subprocess
 import sys
 
-from animalposetracker.cfg import DATA_YAML_PATHS, MODEL_YAML_PATHS, DEFAULT_CFG_PATH
 
 
 class ProjectJobsMixin:
-    def _update_and_save_config(self, mode, name, model=False, pretrained=False):
-        """Update and save configuration."""
-        if not model:
-            new_model = str(self._project_path / "configs" / "model.yaml")
-            self.update_config("other", {"pretrained": pretrained})
-        else:
-            new_model = self.project_path / "runs" / "train" / "weights" / "best.pt"
-            self.update_config("other", {"pretrained": False})
-        self.update_config("other", {"mode": mode})
-        self.update_config("other", {"name": name})
-        self.update_config("other", {"model": str(new_model)})
-        self._save_config("other")
+    def _update_and_save_config(self, name, model=False, pretrained=False):
+        """Record what the training worker reads for this run.
+
+        The name picks the run directory; a best.pt start means pruning the
+        pretrained flag. (The old model/mode fields are gone: the model path
+        is derived from the project structure now.)
+        """
+        if model:
+            pretrained = False
+        self.set_runtime_value("train.shared.runtime.pretrained", pretrained)
+        self.set_runtime_value("common.name", name)
+        self.save_configs("runtime")
 
     def _execute_command(self, cmd):
         """Execute a command using subprocess."""
@@ -38,18 +37,18 @@ class ProjectJobsMixin:
         """Train the model with AnimalPoseTracker's own PyTorch training worker."""
         from animalposetracker.project.model_context import unique_output_directory
 
-        pretrained = self.other_config.get("pretrained")
-        self._update_and_save_config("train", "train", pretrained=pretrained)
+        pretrained = self.get_runtime_value("train.shared.runtime.pretrained")
+        self._update_and_save_config("train", pretrained=pretrained)
         self._detect_pretrained()
-        run_root = Path(self.other_config.get("project") or "runs").expanduser()
+        run_root = Path(self.get_runtime_value("common.project", "runs")).expanduser()
         if not run_root.is_absolute():
             run_root = self._project_path / run_root
         run_path = unique_output_directory(
-            run_root / str(self.other_config.get("name") or "train"),
-            exist_ok=bool(self.other_config.get("exist_ok", False)),
+            run_root / str(self.get_runtime_value("common.name", "train")),
+            exist_ok=bool(self.get_runtime_value("common.exist_ok", False)),
         )
-        self.other_config["name"] = run_path.name
-        self._save_config("other")
+        self.set_runtime_value("common.name", run_path.name)
+        self.save_configs("runtime")
         self.training_event_path = run_path / "training.jsonl"
         self._training_event_offset = (
             self.training_event_path.stat().st_size if self.training_event_path.is_file() else 0
@@ -62,7 +61,7 @@ class ProjectJobsMixin:
             "-m",
             "animalposetracker.training.cli",
             "--config",
-            "configs/other.yaml",
+            "configs/runtime.yaml",
         ]
         self._execute_command(cmd)
 
@@ -110,7 +109,7 @@ class ProjectJobsMixin:
         from animalposetracker.project.model_context import unique_output_directory
 
         weights_path = self._resolve_project_weights()
-        run_root = Path(self.other_config.get("project") or "runs").expanduser()
+        run_root = Path(self.get_runtime_value("common.project", "runs")).expanduser()
         if not run_root.is_absolute():
             run_root = self._project_path / run_root
         # The validator reports through the same structured events the trainer emits, so point at
@@ -118,7 +117,7 @@ class ProjectJobsMixin:
         # Handing over a path that does not exist yet keeps the CLI's own uniquifying pass from
         # renaming it behind our back.
         run_path = unique_output_directory(
-            run_root / "val", exist_ok=bool(self.other_config.get("exist_ok", False))
+            run_root / "val", exist_ok=bool(self.get_runtime_value("common.exist_ok", False))
         )
         self.training_event_path = run_path / "training.jsonl"
         self._training_event_offset = 0
@@ -127,7 +126,7 @@ class ProjectJobsMixin:
             "-m",
             "animalposetracker.training.cli",
             "--config",
-            "configs/other.yaml",
+            "configs/runtime.yaml",
             "--validate-only",
             "--weights",
             str(weights_path.resolve()),
@@ -148,14 +147,16 @@ class ProjectJobsMixin:
 
         model_path = self._resolve_project_prediction_model()
         if inference_source is None:
-            inference_source = self.other_config.get("source")
-        output_root = Path(self.other_config.get("project") or "runs").expanduser()
+            inference_source = self.get_runtime_value("predict.source")
+        output_root = Path(self.get_runtime_value("common.project", "runs")).expanduser()
         if not output_root.is_absolute():
             output_root = self._project_path / output_root
         self.prediction_output_dir = unique_output_directory(
             output_root / "predict",
-            exist_ok=bool(self.other_config.get("exist_ok", False)),
+            exist_ok=bool(self.get_runtime_value("common.exist_ok", False)),
         )
+        # NOTE: prediction still reads the legacy config in this wave; it
+        # migrates onto runtime.yaml together with the GUI forms (next wave).
         cmd = [
             sys.executable,
             "-m",
@@ -174,7 +175,7 @@ class ProjectJobsMixin:
                 else [inference_source]
             )
             cmd.extend(["--source", *[str(value) for value in source_values]])
-        prediction_split = split or self.other_config.get("predict_split")
+        prediction_split = split or self.get_runtime_value("predict.split")
         if prediction_split:
             cmd.extend(["--split", str(prediction_split)])
         if tracker:
@@ -208,7 +209,7 @@ class ProjectJobsMixin:
         if not resume_path:
             resume_path = str(self.project_path / "runs" / "train" / "weights" / "last.pt")
         checkpoint_path = Path(resume_path).expanduser().resolve()
-        self._update_and_save_config("train", "train", pretrained=False)
+        self._update_and_save_config("train", pretrained=False)
         self.training_event_path = checkpoint_path.parent.parent / "training.jsonl"
         self._training_event_offset = (
             self.training_event_path.stat().st_size if self.training_event_path.is_file() else 0
@@ -221,7 +222,7 @@ class ProjectJobsMixin:
             "-m",
             "animalposetracker.training.cli",
             "--config",
-            "configs/other.yaml",
+            "configs/runtime.yaml",
             "--resume",
             str(resume_path),
         ]
@@ -235,7 +236,7 @@ class ProjectJobsMixin:
             "-m",
             "animalposetracker.export.cli",
             "--config",
-            "configs/other.yaml",
+            "configs/runtime.yaml",
             "--weights",
             str(weights_path),
             "--output-dir",

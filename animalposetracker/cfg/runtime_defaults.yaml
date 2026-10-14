@@ -8,6 +8,7 @@ common:
   project: runs
   name: train
   exist_ok: false
+  selected_weights:      # GUI model selection; null = use runs/<name>/weights/best.pt
 
 predict:
   source:

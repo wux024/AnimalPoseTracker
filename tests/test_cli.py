@@ -23,14 +23,14 @@ from animalposetracker.training.events import TrainingEvent
 class CommandDispatcherTests(unittest.TestCase):
     def test_train_forwards_arguments(self):
         with patch("animalposetracker.training.cli.run", return_value=0) as run:
-            self.assertEqual(main(["train", "--config", "project/configs/other.yaml"]), 0)
-        run.assert_called_once_with(["--config", "project/configs/other.yaml"])
+            self.assertEqual(main(["train", "--config", "project/configs/runtime.yaml"]), 0)
+        run.assert_called_once_with(["--config", "project/configs/runtime.yaml"])
 
     def test_val_selects_validation_only_mode(self):
         with patch("animalposetracker.training.cli.run", return_value=0) as run:
-            self.assertEqual(main(["val", "--config", "project/configs/other.yaml", "--weights", "best.pt"]), 0)
+            self.assertEqual(main(["val", "--config", "project/configs/runtime.yaml", "--weights", "best.pt"]), 0)
         run.assert_called_once_with([
-            "--validate-only", "--config", "project/configs/other.yaml", "--weights", "best.pt",
+            "--validate-only", "--config", "project/configs/runtime.yaml", "--weights", "best.pt",
         ])
 
     def test_val_help_is_specific_to_validation(self):
@@ -95,13 +95,13 @@ class CommandDispatcherTests(unittest.TestCase):
             self.assertEqual(result, 0)
             self.assertTrue((project / "project.yaml").is_file())
             self.assertTrue((project / "configs" / "model.yaml").is_file())
-            self.assertTrue((project / "configs" / "other.yaml").is_file())
+            self.assertTrue((project / "configs" / "runtime.yaml").is_file())
             saved_data = yaml.safe_load((project / "configs" / "dataset.yaml").read_text(encoding="utf-8"))
             self.assertEqual(saved_data["path"], str(dataset_root.resolve()))
             self.assertEqual(saved_data["annotation_format"], "yolo")
-            saved_other = yaml.safe_load((project / "configs" / "other.yaml").read_text(encoding="utf-8"))
+            saved_runtime = yaml.safe_load((project / "configs" / "runtime.yaml").read_text(encoding="utf-8"))
             self.assertFalse(
-                saved_other["training"]["shared"]["runtime"]["pretrained"]
+                saved_runtime["train"]["shared"]["runtime"]["pretrained"]
             )
 
     def test_project_create_keeps_the_templates_flip_table(self):
@@ -246,8 +246,8 @@ def _run_create(root: Path, *extra_args):
     with patch("sys.stdout"):
         result = main(argv)
     project = workspace / "trimouse-test-AnimalRTPose-N-20261009-120000"
-    saved_other = yaml.safe_load((project / "configs" / "other.yaml").read_text(encoding="utf-8"))
-    return result, saved_other
+    saved_runtime = yaml.safe_load((project / "configs" / "runtime.yaml").read_text(encoding="utf-8"))
+    return result, saved_runtime
 
 
 class ProjectCreatePretrainedTests(unittest.TestCase):
@@ -258,26 +258,26 @@ class ProjectCreatePretrainedTests(unittest.TestCase):
                 AnimalPoseTrackerProject, "_detect_pretrained",
                 side_effect=AssertionError("create must not resolve pretrained weights"),
             ):
-                result, saved_other = _run_create(root)
+                result, saved_runtime = _run_create(root)
             self.assertEqual(result, 0)
-            self.assertTrue(saved_other["training"]["shared"]["runtime"]["pretrained"])
+            self.assertTrue(saved_runtime["train"]["shared"]["runtime"]["pretrained"])
 
     def test_create_records_explicit_pretrained_path(self):
         with tempfile.TemporaryDirectory() as temporary_directory:
             root = Path(temporary_directory)
             weights_path = root / "weights" / "animalrtpose-n.pt"
-            result, saved_other = _run_create(root, "--pretrained", str(weights_path))
+            result, saved_runtime = _run_create(root, "--pretrained", str(weights_path))
             self.assertEqual(result, 0)
             self.assertEqual(
-                saved_other["training"]["shared"]["runtime"]["pretrained"],
+                saved_runtime["train"]["shared"]["runtime"]["pretrained"],
                 str(weights_path),
             )
 
     def test_create_no_pretrained_flag_still_records_false(self):
         with tempfile.TemporaryDirectory() as temporary_directory:
-            result, saved_other = _run_create(Path(temporary_directory), "--no-pretrained")
+            result, saved_runtime = _run_create(Path(temporary_directory), "--no-pretrained")
             self.assertEqual(result, 0)
-            self.assertFalse(saved_other["training"]["shared"]["runtime"]["pretrained"])
+            self.assertFalse(saved_runtime["train"]["shared"]["runtime"]["pretrained"])
 
 
 class DefaultPretrainedResolutionTests(unittest.TestCase):

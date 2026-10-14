@@ -12,7 +12,6 @@ import tempfile
 import subprocess
 import sys
 
-from animalposetracker.cfg import DATA_YAML_PATHS, MODEL_YAML_PATHS, DEFAULT_CFG_PATH
 
 
 class ProjectFilesMixin:
@@ -73,10 +72,6 @@ class ProjectFilesMixin:
                 f"项目目录已存在，未做任何改动：{self._project_path}\n"
                 "请换一个项目名称、worker，或换一个保存位置。"
             )
-        # Shape the dataset config from the project inputs first: CONFIG_TYPES is a set, so the
-        # per-config creators run in an arbitrary order, and create_model_config reads
-        # dataset_config['kpt_shape'] on the way through.
-        self._sync_dataset_config_from_project()
         self._create_project_structure()
         self.load_config_file()
 

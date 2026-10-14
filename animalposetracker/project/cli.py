@@ -118,7 +118,6 @@ def _collect_create_training_overrides(args) -> dict:
         _CLI_FIELD_TO_KEY,
         _CLI_INTERNAL_FIELDS,
     )
-    from animalposetracker.training.profiles import _PROJECT_KEY_ALIASES
 
     excluded_fields = _CLI_INTERNAL_FIELDS | {
         "model", "data", "pretrained_weights", "project_dir", "output_dir",
@@ -131,8 +130,7 @@ def _collect_create_training_overrides(args) -> dict:
             continue
         dest = "augmentation_scale" if name == "scale" else name
         if hasattr(args, dest):
-            key = _CLI_FIELD_TO_KEY[name]
-            values[_PROJECT_KEY_ALIASES.get(key, key)] = getattr(args, dest)
+            values[_CLI_FIELD_TO_KEY[name]] = getattr(args, dest)
     if hasattr(args, "cache"):
         values["cache"] = args.cache
     if hasattr(args, "pretrained"):
@@ -239,14 +237,13 @@ def _create_project(args: argparse.Namespace) -> AnimalPoseTrackerProject:
     ):
         project.dataset_config["flip_idx"] = [int(index) for index in template_flip]
     project.dataset_config["path"] = str(dataset_root)
-    project.other_config.update({
-        "val": True,
-        "plots": True,
-        "project": "runs",
-        "name": "train",
-        "exist_ok": False,
-    })
-    project.other_config.update(_collect_create_training_overrides(args))
+    # Defaults the create flow pins for this project's training runs.
+    project.set_runtime_value("train.shared.runtime.validation_enabled", True)
+    project.set_runtime_value("train.shared.runtime.plots", True)
+    project.set_runtime_value("common.project", "runs")
+    project.set_runtime_value("common.name", "train")
+    project.set_runtime_value("common.exist_ok", False)
+    project.apply_runtime_overrides(_collect_create_training_overrides(args))
     # Pretrained weight resolution is deferred to training time so project
     # creation never performs file checks or network downloads.
     project.save_configs("all")
@@ -261,12 +258,17 @@ def _print_create_banner(args, project: AnimalPoseTrackerProject, dataset_root: 
         format_summary_block,
     )
 
-    class_names = project.project_config.get("classes_name") or []
-    keypoints = project.project_config.get("keypoints")
-    training = project.other_config
-    pretrained = training.get("pretrained", False)
-    if training.get("pretrained_weights") and pretrained is not False:
-        pretrained = training["pretrained_weights"]
+    class_names = list((project.dataset_config.get("names") or {}).values())
+    kpt_shape = project.dataset_config.get("kpt_shape") or [None]
+    keypoints = kpt_shape[0]
+    train_tree = project.runtime_config.get("train") or {}
+    runtime_shared = (train_tree.get("shared") or {}).get("runtime") or {}
+    model_type = str(project.project_config.get("model_type") or "AnimalRTPose")
+    profile = ((train_tree.get("models") or {}).get(model_type) or {}).get("training") or {}
+    common = project.runtime_config.get("common") or {}
+    pretrained = runtime_shared.get("pretrained", False)
+    if runtime_shared.get("pretrained_weights") and pretrained is not False:
+        pretrained = runtime_shared["pretrained_weights"]
     print()
     print(environment_line())
     print()
@@ -279,16 +281,16 @@ def _print_create_banner(args, project: AnimalPoseTrackerProject, dataset_root: 
         ("Classes", f"{len(class_names)} ({', '.join(map(str, class_names))})"),
         (
             "Training",
-            f"epochs={training.get('epochs', '?')} "
-            f"batch={training.get('batch', training.get('batch_size', '?'))} "
-            f"imgsz={training.get('imgsz', training.get('image_size', '?'))} "
-            f"workers={training.get('workers', training.get('num_workers', '?'))} "
-            f"device={training.get('device', '?')}",
+            f"epochs={profile.get('epochs', '?')} "
+            f"batch={profile.get('batch_size', '?')} "
+            f"imgsz={profile.get('image_size', '?')} "
+            f"workers={runtime_shared.get('num_workers', '?')} "
+            f"device={common.get('device', '?')}",
         ),
         ("Pretrained", describe_pretrained(pretrained)),
     ]))
     print()
-    print(f"Next: animalpose-cli train --config {project.project_path / 'configs' / 'other.yaml'}")
+    print(f"Next: animalpose-cli train --config {project.project_path / 'configs' / 'runtime.yaml'}")
 
 
 def _make_load_parser() -> argparse.ArgumentParser:
@@ -298,7 +300,7 @@ def _make_load_parser() -> argparse.ArgumentParser:
     )
     parser.add_argument(
         "project_path",
-        help="Project directory, project.yaml, or configs/other.yaml",
+        help="Project directory, project.yaml, or configs/runtime.yaml",
     )
     return parser
 
@@ -313,27 +315,27 @@ def run_load(argv=None) -> int:
         project_dir = selected_path.parent
     elif (
         selected_path.is_file()
-        and selected_path.name.casefold() == "other.yaml"
+        and selected_path.name.casefold() == "runtime.yaml"
         and selected_path.parent.name.casefold() == "configs"
     ):
         project_dir = selected_path.parent.parent
     else:
         parser.error(
             "project path must be a project directory, its project.yaml, "
-            "or configs/other.yaml"
+            "or configs/runtime.yaml"
         )
 
     project_config_path = project_dir / "project.yaml"
-    other_config_path = project_dir / "configs" / "other.yaml"
+    runtime_config_path = project_dir / "configs" / "runtime.yaml"
     try:
         if not project_config_path.is_file():
             raise FileNotFoundError(f"Project config does not exist: {project_config_path}")
-        if not other_config_path.is_file():
-            raise FileNotFoundError(f"Training config does not exist: {other_config_path}")
+        if not runtime_config_path.is_file():
+            raise FileNotFoundError(f"Runtime config does not exist: {runtime_config_path}")
 
         from animalposetracker.project.model_context import (
             configure_project_model_spec,
-            load_project_context,
+            load_project_runtime_context,
             read_yaml_mapping,
         )
 
@@ -347,7 +349,7 @@ def run_load(argv=None) -> int:
             raise ValueError(
                 f"Project config is missing required fields: {', '.join(missing_fields)}"
             )
-        config, context = load_project_context(other_config_path)
+        config, context = load_project_runtime_context(project_dir)
         _model_spec, _head_name, _scale = configure_project_model_spec(config, context)
     except (OSError, TypeError, ValueError, NotImplementedError, yaml.YAMLError) as exc:
         parser.error(f"Could not load project at {project_dir}: {exc}")

@@ -4,14 +4,14 @@ from datetime import datetime
 from pathlib import Path
 from typing import Optional, List, Dict, Any, Union
 
-from animalposetracker.cfg import DATA_YAML_PATHS, MODEL_YAML_PATHS, DEFAULT_CFG_PATH
+from animalposetracker.cfg import DATA_YAML_PATHS, MODEL_YAML_PATHS
 from .configuration import ProjectConfigurationMixin
 from .files import ProjectFilesMixin
 from .weights import ProjectWeightsMixin, _download_google_drive_checkpoint
 from .jobs import ProjectJobsMixin
 
 class AnimalPoseTrackerProject(ProjectConfigurationMixin, ProjectFilesMixin, ProjectWeightsMixin, ProjectJobsMixin):
-    CONFIG_TYPES = {"project", "dataset", "model", "other"}
+    CONFIG_TYPES = {"project", "dataset", "model", "runtime"}
 
     DEFAULT_DIRS = [
         "",
@@ -92,6 +92,13 @@ class AnimalPoseTrackerProject(ProjectConfigurationMixin, ProjectFilesMixin, Pro
         if kpt_oks_sigmas is None:
             kpt_oks_sigmas = [1.0 / keypoints] * keypoints  # Default uniform distribution
 
+        # The dataset mapping must cover exactly the classes the model outputs;
+        # a caller can hold fewer name rows than the count asks for.
+        classes_name = [
+            *list(classes_name)[:classes],
+            *[f"class{index + 1}" for index in range(len(classes_name), classes)],
+        ]
+
         self.project_config = {
             "project_path": None,
             "project_name": project_name,
@@ -99,12 +106,6 @@ class AnimalPoseTrackerProject(ProjectConfigurationMixin, ProjectFilesMixin, Pro
             "model_type": model_type,
             "model_scale": model_scale,
             "date": date if date is not None else datetime.now().strftime(r"%Y%m%d"),
-            "keypoints": keypoints,
-            "visible": visible,
-            "classes": classes,
-            "keypoints_name": keypoints_name or [f"kpt_{i}" for i in range(keypoints)],
-            "skeleton": skeleton or [],
-            "classes_name": classes_name,
             "sources": [str(s) for s in sources] if sources else [],
         }
 
@@ -119,6 +120,10 @@ class AnimalPoseTrackerProject(ProjectConfigurationMixin, ProjectFilesMixin, Pro
             'skeleton': skeleton or [],
             'kpt_oks_sigmas': kpt_oks_sigmas,
         }
+        if keypoints_name is not None:
+            # The dataset file is the keypoint names' home now; the project
+            # file keeps identity only.
+            self.dataset_config["keypoints_name"] = [str(name) for name in keypoints_name]
 
         self.model_config = {
             'nc': classes,
@@ -128,9 +133,9 @@ class AnimalPoseTrackerProject(ProjectConfigurationMixin, ProjectFilesMixin, Pro
             'head': None,
         }
 
-        # include trian, val and inference config here
-        self.other_config = {}
-        self._other_training_tree = None
+        # The project's runtime configuration (configs/runtime.yaml): filled
+        # by create_runtime_config at creation, or by load_config_file.
+        self.runtime_config = {}
 
         # Generate project path and initialize configurations
         self.local_path = Path(local_path) if local_path else Path.cwd()

@@ -139,14 +139,28 @@ def convert_labels_to_coco(labels_path, project_config, output_dir=None):
             f"Skipped {skipped_annotations} annotation(s) with no bounding box "
             "while converting to COCO format."
         )
+    # The shape's home is dataset.yaml (``names`` as a mapping) while the
+    # historical project spelling carried the three lists; accept both.
+    class_names = project_config.get("classes_name")
+    if class_names is None:
+        names = project_config.get("names")
+        if isinstance(names, dict):
+            class_names = [str(value) for _, value in sorted(names.items())]
+        else:
+            class_names = list(names or [])
+    keypoints_name = project_config.get("keypoints_name")
+    if not keypoints_name:
+        shape = project_config.get("kpt_shape") or [0]
+        keypoints_name = [f"kpt_{index}" for index in range(int(shape[0]))]
+    skeleton = project_config.get("skeleton") or []
     coco["categories"] = [
         {
             "supercategory": "",
             "id": i+1,
             "name": name,
-            "keypoints": project_config["keypoints_name"],
-            "skeleton": project_config["skeleton"]
-        } for i, name in enumerate(project_config["classes_name"])
+            "keypoints": keypoints_name,
+            "skeleton": skeleton
+        } for i, name in enumerate(class_names)
     ]
     
     # Write output file

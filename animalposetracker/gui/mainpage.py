@@ -29,7 +29,7 @@ from animalposetracker.gui import (DARK_THEME_PATH, LIGHT_THEME_PATH,
 # The parameter trees come from the Designer files, which mirror every knob the reference
 # toolkits expose under those names. Only the ones this backend reads belong on screen: a row
 # nothing consumes is a knob that silently does nothing, and a row whose key is missing from the
-# project's other.yaml raises the moment it is edited.
+# project's runtime.yaml raises the moment it is edited.
 _DROPPED_CONFIGURE_KEYS = {
     "TrainingConfigureEdit": frozenset({"overlap_mask", "mask_ratio", "dropout"}),
     "EvaluateConfigure": frozenset({
@@ -44,7 +44,7 @@ _DROPPED_CONFIGURE_KEYS = {
 }
 
 # Rows the backend reads that the Designer file has no entry for, as ``(key, default)``. A dotted
-# key addresses one field of a nested mapping in other.yaml (``tracking: {enabled: ...}``), which
+# key addresses one field of a nested mapping in runtime.yaml (``tracking: {enabled: ...}``), which
 # is the shape the prediction pipeline reads; the default seeds a project that predates the key.
 _ADDED_CONFIGURE_KEYS = {
     "InferenceConfigure": (
@@ -350,6 +350,85 @@ class AnimalPoseTrackerPage(QMainWindow, Ui_AnimalPoseTracker):
             container = nested
         container.setdefault(parts[-1], default)
 
+    # Which runtime scope each parameter tree edits first (a row also falls
+    # back to the train scope: batch / imgsz / fraction show up in several
+    # trees but describe the training run).
+    _RUNTIME_TREE_SCOPES = {
+        "TrainingConfigureEdit": ("train",),
+        "EvaluateConfigure": ("train",),
+        "InferenceConfigure": ("predict",),
+        "ExportConfigure": ("export",),
+    }
+
+    def _gui_runtime_tables(self):
+        """Form-row spelling -> runtime.yaml path, per scope.
+
+        Transition shim for this wave: the forms keep their historical row
+        names (``workers``, ``imgsz``, ``conf`` ...) and each row maps onto
+        the canonical runtime path it edits. The metadata-driven forms in
+        the next wave replace this table wholesale.
+        """
+        cached = getattr(self, "_gui_runtime_tables_cache", None)
+        if cached is not None:
+            return cached
+
+        from animalposetracker.config.schema import fields as schema_fields
+        from animalposetracker.training.profiles import train_key_targets
+
+        model_type = str(self.project.project_config.get("model_type") or "AnimalRTPose")
+        targets = train_key_targets(model_type)
+
+        train_table = {}
+        for field in schema_fields(scope="train"):
+            path = targets.get(field.key)
+            if path is None:
+                continue
+            train_table.setdefault(field.key, path)
+            for legacy in field.legacy:
+                train_table.setdefault(legacy, path)
+
+        tables = {"train": train_table, "predict": {}, "export": {}, "common": {}}
+        for scope in ("predict", "export"):
+            for field in schema_fields(scope=scope):
+                key_name = f"{field.group}.{field.key}" if field.group else field.key
+                path = f"{scope}.{key_name}"
+                tables[scope].setdefault(key_name, path)
+                tables[scope].setdefault(field.key, path)
+                for legacy in field.legacy:
+                    tables[scope].setdefault(legacy, path)
+        for key in ("device", "project", "name", "exist_ok"):
+            tables["common"][key] = f"common.{key}"
+
+        self._gui_runtime_tables_cache = tables
+        return tables
+
+    def _runtime_path_for_gui_key(self, key, tree_name):
+        """The runtime path one form row edits, or None (row shows as locked)."""
+        tables = self._gui_runtime_tables()
+        for scope in self._RUNTIME_TREE_SCOPES.get(tree_name, ()):
+            if key in tables[scope]:
+                return tables[scope][key]
+        if key in tables["common"]:
+            return tables["common"][key]
+        if key in tables["train"]:
+            return tables["train"][key]
+        return None
+
+    def _runtime_location(self, key, tree_name):
+        """``(container, leaf)`` for a form row in the runtime tree."""
+        path = self._runtime_path_for_gui_key(key, tree_name)
+        if path is None:
+            return None, None
+        return self._resolve_other_key(self.project.runtime_config, path)
+
+    def _runtime_location_any(self, key):
+        """``(container, leaf)`` without a tree context (the choice delegate)."""
+        tables = self._gui_runtime_tables()
+        for scope in ("train", "predict", "export", "common"):
+            if key in tables[scope]:
+                return self._resolve_other_key(self.project.runtime_config, tables[scope][key])
+        return None, None
+
     def configure_choices(self, key):
         """The fixed set of values a parameter row accepts, or ``()`` when it takes free text.
 
@@ -367,7 +446,7 @@ class AnimalPoseTrackerPage(QMainWindow, Ui_AnimalPoseTracker):
             from animalposetracker.tracking.config import ALGORITHMS
 
             return tuple(ALGORITHMS)
-        container, leaf = self._resolve_other_key(self.project.other_config, key)
+        container, leaf = self._runtime_location_any(key)
         if container is not None and isinstance(container[leaf], bool):
             return ("True", "False")
         return ()
@@ -409,27 +488,29 @@ class AnimalPoseTrackerPage(QMainWindow, Ui_AnimalPoseTracker):
             getattr(self, tree_name).setItemDelegateForColumn(1, self._configure_delegate)
 
     def initialize_other_config(self):
-        """Initialize the other config"""
-        for _tree_name, added in _ADDED_CONFIGURE_KEYS.items():
-            for key, default in added:
-                # A project saved before the key existed still has to be editable, and an edit to
-                # a key the config does not carry is discarded.
-                self._ensure_other_key(self.project.other_config, key, default)
-        self.TrainingConfigureEdit.blockSignals(True)
-        self.EvaluateConfigure.blockSignals(True)
-        self.InferenceConfigure.blockSignals(True)
-        self.ExportConfigure.blockSignals(True)
-        iterators = []
-        iterators.append(QTreeWidgetItemIterator(self.TrainingConfigureEdit))
-        iterators.append(QTreeWidgetItemIterator(self.EvaluateConfigure))
-        iterators.append(QTreeWidgetItemIterator(self.InferenceConfigure))
-        iterators.append(QTreeWidgetItemIterator(self.ExportConfigure))
-        for iterator in iterators:
+        """Fill the parameter trees from the project's runtime configuration.
+
+        Each row is looked up in the runtime tree through the path table (the
+        historical row spelling maps onto the canonical runtime path). A row
+        without a mapping -- a derived value like ``data``/``model``, or a
+        key this project does not carry -- shows as locked instead of
+        pretending to be editable.
+        """
+        trees = (
+            "TrainingConfigureEdit",
+            "EvaluateConfigure",
+            "InferenceConfigure",
+            "ExportConfigure",
+        )
+        for tree_name in trees:
+            getattr(self, tree_name).blockSignals(True)
+        for tree_name in trees:
+            iterator = QTreeWidgetItemIterator(getattr(self, tree_name))
             while iterator.value():
                     item = iterator.value()
                     key = item.text(0)  # First column contains parameter names, dotted if nested
-                    # Only update if the key exists in project config
-                    container, leaf = self._resolve_other_key(self.project.other_config, key)
+                    # Only update if the key exists in the runtime config
+                    container, leaf = self._runtime_location(key, tree_name)
                     if container is not None:
                         item.setText(1, str(container[leaf]))
                         item.setFlags(item.flags() | Qt.ItemIsEditable)
@@ -444,10 +525,8 @@ class AnimalPoseTrackerPage(QMainWindow, Ui_AnimalPoseTracker):
                         item.setData(1, Qt.ForegroundRole, QColor(150, 150, 150))
                         item.setToolTip(1, f"'{key}' is not present in this project's configuration")
                     iterator += 1 
-        self.TrainingConfigureEdit.blockSignals(False)
-        self.EvaluateConfigure.blockSignals(False)
-        self.InferenceConfigure.blockSignals(False)
-        self.ExportConfigure.blockSignals(False)
+        for tree_name in trees:
+            getattr(self, tree_name).blockSignals(False)
 
     def loadRecentProjects(self):
         """Load saved projects from QSettings"""
@@ -644,7 +723,7 @@ class AnimalPoseTrackerPage(QMainWindow, Ui_AnimalPoseTracker):
             QMessageBox.warning(
                 self, 
                 "Invalid Configuration Type", 
-                "Please select a valid configuration type (project, dataset, model or other)"
+                "Please select a valid configuration type (project, dataset, model or runtime)"
             )
             return
         self.config_type = config_type
@@ -868,7 +947,7 @@ class AnimalPoseTrackerPage(QMainWindow, Ui_AnimalPoseTracker):
         if not yolo_path.exists() and not coco_path.exists():
             self.statusBar().showMessage("Stating export process...")
             if self.SaveCOCO.isChecked():
-                convert_labels_to_coco(extracted_path, self.project.project_config)
+                convert_labels_to_coco(extracted_path, self.project.dataset_config)
                 self.statusBar().showMessage("COCO dataset export complete.")
             if self.SaveYOLO.isChecked():
                 convert_labels_to_yolo(extracted_path)
@@ -1034,7 +1113,9 @@ class AnimalPoseTrackerPage(QMainWindow, Ui_AnimalPoseTracker):
             if is_edit_mode:
                 # EDIT MODE: Enable editing unless this project does not carry the key -- that
                 # row stays locked, or an edit to it would be silently discarded on save.
-                container, _leaf = self._resolve_other_key(self.project.other_config, item.text(0))
+                container, _leaf = self._runtime_location(
+                    item.text(0), tree_widget.objectName()
+                )
                 if container is not None:
                     item.setFlags(item.flags() | Qt.ItemIsEditable)
             else:
@@ -1044,7 +1125,7 @@ class AnimalPoseTrackerPage(QMainWindow, Ui_AnimalPoseTracker):
         
         if not is_edit_mode:
             # Save changes to config file
-            self.project.save_configs("other")
+            self.project.save_configs("runtime")
 
         # Toggle button text for next action
         new_button_text = f"Save {parameter_type} Parameters" if is_edit_mode else f"Edit {parameter_type} Parameters"
@@ -1098,11 +1179,13 @@ class AnimalPoseTrackerPage(QMainWindow, Ui_AnimalPoseTracker):
                 return value  # Return original string if all conversions fail
         
     def onOtherConfigureEdited(self, item, column):
-        """Slot function for handling other parameters editing"""
+        """Slot function for handling runtime parameter editing"""
         if column == 1:
             new_value = item.text(1)
             key = item.text(0)
-            container, leaf = self._resolve_other_key(self.project.other_config, key)
+            tree = item.treeWidget()
+            tree_name = tree.objectName() if tree is not None else ""
+            container, leaf = self._runtime_location(key, tree_name)
             if container is not None:
                 container[leaf] = self.convert_value(new_value)
             else:
@@ -1369,7 +1452,8 @@ class AnimalPoseTrackerPage(QMainWindow, Ui_AnimalPoseTracker):
             filter="PyTorch Weights (*.pt *.pth);;All Files (*)"
         )
         if file_path:
-            self.project.update_config("other", {"model": file_path})
+            self.project.set_runtime_value("common.selected_weights", file_path)
+            self.project.save_configs("runtime")
 
     def onStartExport(self):
         """Slot for starting export"""

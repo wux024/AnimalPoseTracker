@@ -95,11 +95,6 @@ _PROJECT_KEY_ALIASES = {
 _MODEL_PROFILES = TRAINING_PROFILES.get("models", {})
 ANIMALRTPOSE_PROFILE = _MODEL_PROFILES.get("AnimalRTPose", {})
 ANIMALVITPOSE_PROFILE = _MODEL_PROFILES.get("AnimalViTPose", {})
-ANIMALVITPOSE_RECIPE = {
-    **_shared_profile_values(TRAINING_PROFILES),
-    **dict(ANIMALVITPOSE_PROFILE.get("training", {})),
-    **dict(ANIMALVITPOSE_PROFILE.get("loss", {})),
-}
 ANIMALVITPOSE_VARIANTS = dict(ANIMALVITPOSE_MODEL_DEFAULTS.get("model_variants", {}))
 ANIMALVITPOSE_SIMCC = dict(ANIMALVITPOSE_MODEL_DEFAULTS.get("simcc", {}))
 ANIMALVITPOSE_VALIDATION = dict(ANIMALVITPOSE_PROFILE.get("validation", {}))
@@ -346,88 +341,35 @@ def configure_animalvitpose_model(model_spec: Dict[str, Any], scale: str, image_
     return variant_name
 
 
-_ALIASES = {
-    "batch_size": ("batch_size", "batch"),
-    "image_size": ("image_size", "imgsz"),
-    "learning_rate": ("learning_rate", "lr0"),
-    "num_workers": ("num_workers", "workers"),
-    "validation_interval": ("validation_interval", "val_interval"),
-    "early_stopping_patience": ("early_stopping_patience", "patience"),
-}
-
-
-_GENERIC_DEFAULTS = {
-    # 100 is the CLI default (a value nobody chose), so a recipe may take it over.
-    # 1000 is NOT a marker of "unchosen": it is both the RTPose template default and a
-    # very common explicit choice -- treating it as generic silently rewrote
-    # `--epochs 1000` into the ViTPose recipe's 500.
-    "epochs": (100,),
-    "batch_size": (16,),
-    "image_size": (640,),
-    "optimizer": ("auto",),
-    "learning_rate": (1e-2,),
-    "weight_decay": (5e-4,),
-    "seed": (0,),
-    "log_interval": (20,),
-    "warmup_epochs": (3.0,),
-    # Early stopping stays out of this table on purpose: a missing value means "keep the
-    # recipe default (0 = run to the end)", and any written value is the user's own --
-    # the same lesson as the epochs marker below.
-    "ema": (True,),
-    "amp": (True,),
-}
-
-
-def _same_default(value: Any, defaults: Iterable[Any]) -> bool:
-    for default in defaults:
-        if isinstance(value, (int, float)) and isinstance(default, (int, float)):
-            if abs(float(value) - float(default)) <= 1e-12:
-                return True
-        elif value == default:
-            return True
-    return False
-
-
-def apply_animalvitpose_defaults(
+def apply_animalvitpose_recipe(
     values: Dict[str, Any],
     model_scale: str = "small",
     model_config: Optional[Mapping[str, Any]] = None,
 ) -> Tuple[Dict[str, Any], list]:
-    """Apply the MMPose recipe where the project still contains generic defaults.
+    """Fill the two ViTPose recipe values that are not plain defaults.
 
-    Non-default project settings remain authoritative, so users can still tune the shared
-    training form for a particular experiment.
+    The recipe's hyper-parameters now live in training.yaml's ViTPose profile
+    (resolved before this runs), so only the two dynamic pieces remain: the
+    per-scale layer-decay default and the MAE pretrained URL. Both are filled
+    only when the value is still absent -- a user-given value is never
+    rewritten, which retires the old "value == generic default" heuristic
+    (the one that once rewrote an explicit ``--epochs 1000`` into 500).
     """
     resolved = dict(values or {})
-    recipe = dict(ANIMALVITPOSE_RECIPE)
-    layer_decay_by_scale = recipe.pop("layer_decay_rate_by_scale", {}) or {}
     scale_name = normalize_animalvitpose_scale(model_scale)
     applied = []
-    for key, recipe_value in recipe.items():
-        aliases = _ALIASES.get(key, (key,))
-        present = [(alias, resolved[alias]) for alias in aliases if alias in resolved]
-        if not present:
-            resolved[key] = recipe_value
-            applied.append(key)
-            continue
-
-        markers = _GENERIC_DEFAULTS.get(key)
-        is_default = markers is not None and all(
-            _same_default(value, markers) for _alias, value in present
-        )
-        if is_default:
-            resolved[key] = recipe_value
-            applied.append(key)
 
     # Layer decay is an optimizer choice, so its per-size defaults stay in the
     # training profile instead of being mixed into the model architecture yaml.
-    if resolved.get("layer_decay_rate") is None and scale_name in layer_decay_by_scale:
-        resolved["layer_decay_rate"] = layer_decay_by_scale[scale_name]
-        applied.append("layer_decay_rate")
+    if resolved.get("layer_decay_rate") is None:
+        profile_training = dict(ANIMALVITPOSE_PROFILE.get("training", {}) or {})
+        by_scale = profile_training.get("layer_decay_rate_by_scale") or {}
+        if scale_name in by_scale:
+            resolved["layer_decay_rate"] = by_scale[scale_name]
+            applied.append("layer_decay_rate")
 
-    # The MMPose configs initialize the ViT backbone from the matching MAE checkpoint.
-    # A user-provided local/remote checkpoint remains authoritative; ``pretrained: false``
-    # explicitly disables the default initialization.
+    # The MMPose configs initialize the ViT backbone from the matching MAE
+    # checkpoint; ``pretrained: false`` explicitly disables it.
     if not resolved.get("pretrained_weights"):
         pretrained_setting = resolved.get("pretrained")
         if isinstance(pretrained_setting, str) and pretrained_setting.strip():
@@ -442,8 +384,78 @@ def apply_animalvitpose_defaults(
     return resolved, applied
 
 
+def train_scope_prefixes(model_type: Optional[str]) -> Tuple[Tuple[str, str], ...]:
+    """The train section's flattening order, last one wins.
+
+    Shared settings first, then the active model's profile; ``metrics`` keys
+    ride along at the end so the evaluator reads them from the same mapping.
+    """
+    model = "AnimalViTPose" if str(model_type or "").casefold() == "animalvitpose" else "AnimalRTPose"
+    return (
+        ("shared.runtime", "train.shared.runtime."),
+        ("shared.training", "train.shared.training."),
+        (f"models.{model}.training", f"train.models.{model}.training."),
+        (f"models.{model}.loss", f"train.models.{model}.loss."),
+        (f"models.{model}.augmentation", f"train.models.{model}.augmentation."),
+        (f"models.{model}.validation", f"train.models.{model}.validation."),
+        ("metrics", "train.metrics."),
+    )
+
+
+def flatten_train_values(resolved, model_type: Optional[str]):
+    """Flatten a resolved train scope for the trainer.
+
+    Returns ``(values, origins)``: the canonical spellings the trainer's
+    config object consumes, and -- per key -- the dotted path the winning
+    value came from (the command line is re-anchored through these origins,
+    so an override lands on the section that actually decides). The four
+    shared keys (device / project / name / exist_ok) ride along from the
+    ``common`` section.
+    """
+    values: Dict[str, Any] = {}
+    origins: Dict[str, str] = {}
+    for _group, prefix in train_scope_prefixes(model_type):
+        for path, entry in resolved.values.items():
+            if not path.startswith(prefix):
+                continue
+            key = path[len(prefix):]
+            if "." in key:
+                continue  # only leaves flatten; nested tables stay tables
+            values[key] = entry.value
+            origins[key] = path
+    for key in ("device", "project", "name", "exist_ok"):
+        path = f"common.{key}"
+        entry = resolved.values.get(path)
+        if entry is not None:
+            values[key] = entry.value
+            origins[key] = path
+    return values, origins
+
+
+def train_key_targets(model_type: Optional[str]) -> Dict[str, str]:
+    """Canonical flat key -> the dotted path that decides it (last one wins).
+
+    Used to anchor command-line overrides and to place creation-time values
+    into the project's runtime tree.
+    """
+    from animalposetracker.config.schema import fields
+
+    model = "AnimalViTPose" if str(model_type or "").casefold() == "animalvitpose" else "AnimalRTPose"
+    targets: Dict[str, str] = {}
+    for field in fields(scope="train"):
+        if field.group == "shared.runtime":
+            targets[field.key] = f"train.shared.runtime.{field.key}"
+        elif field.group == "shared.training":
+            targets[field.key] = f"train.shared.training.{field.key}"
+        elif field.group == "metrics":
+            targets[field.key] = f"train.metrics.{field.key}"
+        elif field.group.startswith("models."):
+            section = field.group.split(".", 1)[1]
+            targets[field.key] = f"train.models.{model}.{section}.{field.key}"
+    return targets
+
+
 __all__ = [
-    "ANIMALVITPOSE_RECIPE",
     "ANIMALVITPOSE_VARIANTS",
     "ANIMALVITPOSE_MODEL_DEFAULTS",
     "ANIMALVITPOSE_SIMCC",
@@ -452,9 +464,12 @@ __all__ = [
     "ANIMALVITPOSE_VALIDATION",
     "KEYPOINT_METRICS",
     "ANIMALRTPOSE_PROFILE",
-    "apply_animalvitpose_defaults",
+    "apply_animalvitpose_recipe",
     "configure_animalvitpose_model",
     "flatten_project_training_config",
+    "flatten_train_values",
+    "train_key_targets",
+    "train_scope_prefixes",
     "materialize_project_training_config",
     "nested_other_config_from_flat",
     "normalize_animalvitpose_scale",

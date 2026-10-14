@@ -104,7 +104,7 @@ import tempfile
 import subprocess
 import sys
 
-from animalposetracker.cfg import DATA_YAML_PATHS, MODEL_YAML_PATHS, DEFAULT_CFG_PATH
+from animalposetracker.cfg import DATA_YAML_PATHS, MODEL_YAML_PATHS
 
 
 class ProjectWeightsMixin:
@@ -113,7 +113,7 @@ class ProjectWeightsMixin:
         Detects if a pre-trained model is available for the current project.
         If so, it updates the "pretrain" parameter in the "other" config.
         """
-        pretrained = self.other_config.get("pretrained")
+        pretrained = self.get_runtime_value("train.shared.runtime.pretrained")
         if not pretrained:
             return
 
@@ -150,8 +150,8 @@ class ProjectWeightsMixin:
                         pretrained_urls = (yaml.safe_load(stream) or {}).get("pretrained_urls", {})
             url = pretrained_urls.get(str(model_scale).lower())
             if url is None:
-                self.update_config("other", {"pretrained": False})
-                self._save_config("other")
+                self.set_runtime_value("train.shared.runtime.pretrained", False)
+                self.save_configs("runtime")
                 return
             try:
                 self._download_pretrained_checkpoint(url, weights_path)
@@ -161,12 +161,12 @@ class ProjectWeightsMixin:
                     f"Failed to download AnimalRTPose-{model_scale} pretrained weights from {url}: {exc}"
                 ) from exc
 
-        self.update_config("other", {"pretrained": str(weights_path)})
-        self._save_config("other")
+        self.set_runtime_value("train.shared.runtime.pretrained", str(weights_path))
+        self.save_configs("runtime")
 
     def _resolve_project_weights(self, allow_onnx: bool = False) -> Path:
         """Use an explicitly selected checkpoint or the configured best checkpoint."""
-        selected_model = Path(str(self.other_config.get("model") or "")).expanduser()
+        selected_model = Path(str(self.get_runtime_value("common.selected_weights") or "")).expanduser()
         if selected_model.suffix.lower() in {".pt", ".pth"}:
             return (selected_model if selected_model.is_absolute()
                     else self._project_path / selected_model).resolve()
@@ -178,15 +178,15 @@ class ProjectWeightsMixin:
                 "Native project evaluation, prediction and export require a PyTorch .pt/.pth checkpoint"
             )
 
-        run_root = Path(self.other_config.get("project") or "runs").expanduser()
+        run_root = Path(self.get_runtime_value("common.project", "runs")).expanduser()
         if not run_root.is_absolute():
             run_root = self._project_path / run_root
-        run_name = str(self.other_config.get("name") or "train")
+        run_name = str(self.get_runtime_value("common.name", "train"))
         return (run_root / run_name / "weights" / "best.pt").resolve()
 
     def _resolve_project_prediction_model(self) -> Union[Path, str]:
         """Resolve a native checkpoint or an exported model artifact for project prediction."""
-        selected_value = str(self.other_config.get("model") or "").strip()
+        selected_value = str(self.get_runtime_value("common.selected_weights") or "").strip()
         if selected_value.startswith(("http://", "grpc://")):
             return selected_value
         selected_model = Path(selected_value).expanduser()

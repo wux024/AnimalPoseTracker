@@ -297,7 +297,14 @@ class CreateNewProjectPage(ProjectFormBase, QWidget, Ui_CreateNewProject):
             QMessageBox.warning(self, "无法创建项目", complaint)
             return
 
-        self.project.update_config("project", project_config)
+        project_identity = {
+            key: value for key, value in project_config.items()
+            if key not in {"keypoints", "visible", "classes", "keypoints_name", "classes_name"}
+        }
+        self.project.update_config("project", project_identity)
+        # The shape lives in dataset.yaml now (the project file keeps identity):
+        # mirror the form's shape inputs there before the project is created.
+        self._refresh_dataset_shape()
         self.project.local_path = Path(self.LocationPathDisplay.text())
         # Recorded before the attempt: rollback may only remove a directory this call created,
         # never a project that was already there (an existing one is refused, not overwritten).
@@ -341,21 +348,42 @@ class CreateNewProjectPage(ProjectFormBase, QWidget, Ui_CreateNewProject):
         except OSError:
             pass
         
+    def _refresh_dataset_shape(self):
+        """Mirror the form's shape inputs onto the dataset config.
+
+        The dataset file is the shape's single source now, so every shape
+        edit (keypoint count, class count, name lists, visibility) lands
+        there; flip_idx and the OKS sigmas follow the count.
+        """
+        keypoints_count = max(int(self.KeypointConfig.value()), 1)
+        class_names = self._fit_names(
+            self.class_manager.get_list_data(), int(self.ClassConfig.value()), "class"
+        )
+        keypoint_names = self._fit_names(
+            self.keypoint_manager.get_list_data(), keypoints_count, "keypoint"
+        )
+        self.project.dataset_config.setdefault("keypoints_name", [])
+        self.project.update_config("dataset", {
+            "kpt_shape": [keypoints_count, 3 if self.VisibleSelection.isChecked() else 2],
+            "flip_idx": list(range(keypoints_count)),
+            "kpt_oks_sigmas": [1.0 / keypoints_count] * keypoints_count,
+            "names": dict(enumerate(class_names)),
+            "keypoints_name": keypoint_names,
+        })
+
     def onKeypointConfigChanged(self, keypoints):
-        self.project.update_config("project", {"keypoints": keypoints})
-        
+        self._refresh_dataset_shape()
+
     def onClassConfigChanged(self, classes):
-        self.project.update_config("project", {"classes": classes})
-        
+        self._refresh_dataset_shape()
+
     def onKeypointChanged(self):
         """Handler for keypoint input change"""
-        keypoint_names = self.keypoint_manager.get_list_data()
-        self.project.update_config("project", {"keypoints_name": keypoint_names})
+        self._refresh_dataset_shape()
 
     def onClassChanged(self):
         """Handler for class input change"""
-        class_names = self.class_manager.get_list_data()
-        self.project.update_config("project", {"classes_name": class_names})
+        self._refresh_dataset_shape()
     
 
         

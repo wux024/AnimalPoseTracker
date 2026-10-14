@@ -1,6 +1,5 @@
 """Project projectconfiguration responsibilities."""
 
-from copy import deepcopy
 from datetime import datetime
 from pathlib import Path
 from typing import Optional, List, Dict, Any, Union
@@ -13,7 +12,7 @@ import subprocess
 import sys
 import yaml
 
-from animalposetracker.cfg import DATA_YAML_PATHS, MODEL_YAML_PATHS, DEFAULT_CFG_PATH
+from animalposetracker.cfg import DATA_YAML_PATHS, MODEL_YAML_PATHS
 
 
 class ProjectConfigurationMixin:
@@ -45,7 +44,7 @@ class ProjectConfigurationMixin:
             "project": self._project_path / "project.yaml",
             "dataset": self._project_path / "configs" / "dataset.yaml",
             "model": self._project_path / "configs" / "model.yaml",
-            "other": self._project_path / "configs" / "other.yaml",
+            "runtime": self._project_path / "configs" / "runtime.yaml",
         }
 
         for config_type, config_file in config_files.items():
@@ -60,37 +59,26 @@ class ProjectConfigurationMixin:
 
         self._create_project_structure()
         self._load_config_from_file("dataset", DATA_YAML_PATHS[dataname])
-
-        # Update project config based on dataset
-        self.project_config.update({
-            "classes": len(self.dataset_config['names'].keys()),
-            "classes_name": list(self.dataset_config['names'].values()),
-            "keypoints": self.dataset_config['kpt_shape'][0],
-            "keypoints_name": [f"kpt_{i}" for i in range(self.dataset_config['kpt_shape'][0])],
-            "skeleton": self.dataset_config['skeleton'],
-            "visible": self.dataset_config['kpt_shape'][1] == 3
-        })
-
         self._update_configs_from_dataset()
         self.load_config_file()
 
     def _update_configs_from_dataset(self) -> None:
-        """Update configurations based on dataset settings."""
-        self.update_config("project", self.dataset_config)
+        """Update configurations based on dataset settings.
+
+        The dataset file is the shape's single source now: the project file
+        keeps identity only, and the model file takes its output shape from
+        the dataset here.
+        """
         self.update_config("project", {"project_path": str(self._project_path)})
         self.update_config("dataset", {'path': str(self._project_path / "datasets")})
         self._sync_model_config_from_dataset()
-        self.other_config.update({
-            'model': str(self._project_path / "configs" / "model.yaml"),
-            'data': str(self._project_path / "configs" / "dataset.yaml")
-        })
         self.save_configs()
 
     def _sync_model_config_from_dataset(self) -> None:
         """Keep the model YAML's output shape aligned with the project dataset."""
         model_nc = (
             1 if self.project_config.get("model_type") == "AnimalViTPose"
-            else self.project_config["classes"]
+            else len(self.dataset_config.get("names") or {}) or 1
         )
         self.model_config.update({
             'nc': model_nc,
@@ -108,58 +96,6 @@ class ProjectConfigurationMixin:
         if head_args[0] != "num_keypoints":
             head_args[0] = int(self.dataset_config['kpt_shape'][0])
 
-    def _sync_dataset_config_from_project(self) -> None:
-        """Derive the dataset YAML's shape keys from the project's keypoint/class inputs.
-
-        ``create_dataset_config`` writes whatever ``__init__`` defaulted to, so a caller that
-        only edits the project config -- which is exactly what the new-project form does --
-        would leave dataset.yaml at the built-in 17-keypoint/1-class default while claiming a
-        different shape everywhere else. Training reads ``kpt_shape`` straight out of that
-        file, so the two have to agree before any config is written.
-        """
-        keypoints = int(self.project_config.get("keypoints") or 0)
-        if keypoints <= 0:
-            raise ValueError("project_config must define at least one keypoint")
-
-        class_count = int(self.project_config.get("classes") or 0)
-        class_names = [str(name) for name in (self.project_config.get("classes_name") or [])]
-        class_count = class_count or len(class_names) or 1
-        # Pad or trim so the names mapping always covers exactly the classes the model outputs;
-        # the form can hold fewer name rows than the spin box asks for.
-        class_names = [
-            *class_names[:class_count],
-            *[f"class{index + 1}" for index in range(len(class_names), class_count)],
-        ]
-
-        # A dataset YAML handed in by the CLI may carry explicit OKS sigmas; only replace a
-        # vector that cannot belong to this keypoint count.
-        sigmas = self.dataset_config.get("kpt_oks_sigmas")
-        if not isinstance(sigmas, (list, tuple)) or len(sigmas) != keypoints:
-            sigmas = [1.0 / keypoints] * keypoints
-
-        # A caller may have brought a real left/right swap table with it (the CLI create flow
-        # hands over the template's); keep it, and fall back to the identity mapping only when
-        # there is nothing usable to keep.
-        existing_flip = self.dataset_config.get("flip_idx")
-        if (
-            isinstance(existing_flip, (list, tuple))
-            and len(existing_flip) == keypoints
-            and sorted(int(index) for index in existing_flip) == list(range(keypoints))
-        ):
-            flip_idx = [int(index) for index in existing_flip]
-        else:
-            flip_idx = list(range(keypoints))
-
-        self.dataset_config.update({
-            "kpt_shape": [keypoints, 3 if self.project_config.get("visible") else 2],
-            "flip_idx": flip_idx,
-            "names": dict(enumerate(class_names)),
-            "skeleton": [
-                list(connection) for connection in (self.project_config.get("skeleton") or [])
-            ],
-            "kpt_oks_sigmas": list(sigmas),
-        })
-
     def load_project_config(self, config_path: Union[str, Path]) -> None:
         """Load a project configuration from file."""
         self._load_config_from_file("project", config_path)
@@ -172,25 +108,6 @@ class ProjectConfigurationMixin:
         try:
             with open(file_path, "r", encoding="utf-8") as f:
                 config = yaml.safe_load(f) or {}
-                if config_type == "project":
-                    # OKS sigmas have one source of truth in dataset.yaml.
-                    config.pop("kpt_oks_sigmas", None)
-                if config_type == "other":
-                    # Drop the obsolete YOLO task selector from both new and
-                    # pre-existing project configs as they are loaded.
-                    config.pop("task", None)
-                if config_type == "other" and isinstance(config.get("training"), dict):
-                    from animalposetracker.training.profiles import flatten_project_training_config
-
-                    self._other_training_tree = deepcopy(config["training"])
-                    config = flatten_project_training_config(
-                        config,
-                        model_type=self.project_config.get("model_type"),
-                    )
-                elif config_type == "other":
-                    from animalposetracker.training.profiles import TRAINING_PROFILES
-
-                    self._other_training_tree = deepcopy(TRAINING_PROFILES)
                 setattr(self, f"{config_type}_config", config)
         except (IOError, yaml.YAMLError) as e:
             raise RuntimeError(f"Failed to load {config_type} config: {e}")
@@ -211,14 +128,6 @@ class ProjectConfigurationMixin:
     def _save_config(self, config_type: str) -> None:
         """Save a single configuration to file."""
         config = getattr(self, f"{config_type}_config")
-        if config_type == "other" and self._other_training_tree is not None:
-            from animalposetracker.training.profiles import nested_other_config_from_flat
-
-            config = nested_other_config_from_flat(
-                config,
-                self._other_training_tree,
-                model_type=self.project_config.get("model_type", "AnimalRTPose"),
-            )
         config_path = (
             self._project_path / f"{config_type}.yaml"
             if config_type == "project"
@@ -274,22 +183,56 @@ class ProjectConfigurationMixin:
             self._project_path = self._generate_project_path()
             config["project_path"] = str(self._project_path)
 
-    def create_other_config(self) -> None:
-        """Create any other missing configurations."""
-        self._load_config_from_file("other", DEFAULT_CFG_PATH)
+    def create_runtime_config(self) -> None:
+        """Create the runtime configuration from the package defaults.
 
-        from animalposetracker.training.profiles import (
-            TRAINING_PROFILES,
-            project_training_defaults,
-        )
+        A snapshot, not a diff: the project file carries every registered
+        default so it reads (and edits) without consulting the package, and a
+        later package update never rewrites a project's behaviour silently.
+        """
+        from animalposetracker.config import default_subtree
+
+        self.runtime_config = {
+            "common": default_subtree("common"),
+            "train": default_subtree("train"),
+            "predict": default_subtree("predict"),
+            "export": default_subtree("export"),
+        }
+        self._save_config("runtime")
+
+    def set_runtime_value(self, dotted_path: str, value: Any) -> None:
+        """Write one value into the runtime tree by dotted path."""
+        parts = [part for part in str(dotted_path).split(".") if part]
+        if len(parts) < 2 or parts[0] not in self.runtime_config:
+            raise ValueError(f"Unknown runtime path: {dotted_path}")
+        node = self.runtime_config
+        for part in parts[:-1]:
+            node = node.setdefault(part, {})
+        node[parts[-1]] = value
+
+    def get_runtime_value(self, dotted_path: str, default: Any = None) -> Any:
+        """Read one value from the runtime tree by dotted path."""
+        node = self.runtime_config
+        for part in str(dotted_path).split("."):
+            if not isinstance(node, dict) or part not in node:
+                return default
+            node = node[part]
+        return node
+
+    def apply_runtime_overrides(self, values: Dict[str, Any]) -> None:
+        """Place flat create-time values into the runtime tree.
+
+        Command-line spellings are canonical now; each key lands in the
+        section the trainer's flatten actually reads it from.
+        """
+        from animalposetracker.training.profiles import train_key_targets
 
         model_type = self.project_config.get("model_type", "AnimalRTPose")
-        self.other_config.update(project_training_defaults(model_type))
-        self._other_training_tree = deepcopy(TRAINING_PROFILES)
-
-        self.other_config.update({
-            'model': str(self._project_path / "configs" / "model.yaml"),
-            'data': str(self._project_path / "configs" / "dataset.yaml")
-        })
-
-        self._save_config("other")
+        targets = train_key_targets(model_type)
+        for key, value in (values or {}).items():
+            if key in ("device", "project", "name", "exist_ok"):
+                self.set_runtime_value(f"common.{key}", value)
+            elif key in ("pretrained", "pretrained_weights"):
+                self.set_runtime_value(f"train.shared.runtime.{key}", value)
+            elif key in targets:
+                self.set_runtime_value(targets[key], value)
