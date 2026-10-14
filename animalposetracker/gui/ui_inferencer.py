@@ -61,14 +61,14 @@ class Ui_Inferencer(object):
 
         self.BaseConfigureLayout.addWidget(self.SelectConfigure)
 
-        self.SelectWeights = QPushButton(self.BaseToolsGroup)
-        self.SelectWeights.setObjectName(u"SelectWeights")
-        sizePolicy2.setHeightForWidth(self.SelectWeights.sizePolicy().hasHeightForWidth())
-        self.SelectWeights.setSizePolicy(sizePolicy2)
-        self.SelectWeights.setMinimumSize(QSize(0, 25))
-        self.SelectWeights.setMaximumSize(QSize(16777215, 25))
+        self.ModeToggle = QPushButton(self.BaseToolsGroup)
+        self.ModeToggle.setObjectName(u"ModeToggle")
+        sizePolicy2.setHeightForWidth(self.ModeToggle.sizePolicy().hasHeightForWidth())
+        self.ModeToggle.setSizePolicy(sizePolicy2)
+        self.ModeToggle.setMinimumSize(QSize(0, 25))
+        self.ModeToggle.setMaximumSize(QSize(16777215, 25))
 
-        self.BaseConfigureLayout.addWidget(self.SelectWeights)
+        self.BaseConfigureLayout.addWidget(self.ModeToggle)
 
         self.CameraORVideos = QRadioButton(self.BaseToolsGroup)
         self.CameraORVideos.setObjectName(u"CameraORVideos")
@@ -79,6 +79,29 @@ class Ui_Inferencer(object):
 
 
         self.BaseToolsLayout.addLayout(self.BaseConfigureLayout)
+
+        self.BaseModelsLayout = QHBoxLayout()
+        self.BaseModelsLayout.setObjectName(u"BaseModelsLayout")
+        self.SelectDetector = QPushButton(self.BaseToolsGroup)
+        self.SelectDetector.setObjectName(u"SelectDetector")
+        sizePolicy2.setHeightForWidth(self.SelectDetector.sizePolicy().hasHeightForWidth())
+        self.SelectDetector.setSizePolicy(sizePolicy2)
+        self.SelectDetector.setMinimumSize(QSize(0, 25))
+        self.SelectDetector.setMaximumSize(QSize(16777215, 25))
+
+        self.BaseModelsLayout.addWidget(self.SelectDetector)
+
+        self.SelectPoser = QPushButton(self.BaseToolsGroup)
+        self.SelectPoser.setObjectName(u"SelectPoser")
+        sizePolicy2.setHeightForWidth(self.SelectPoser.sizePolicy().hasHeightForWidth())
+        self.SelectPoser.setSizePolicy(sizePolicy2)
+        self.SelectPoser.setMinimumSize(QSize(0, 25))
+        self.SelectPoser.setMaximumSize(QSize(16777215, 25))
+
+        self.BaseModelsLayout.addWidget(self.SelectPoser)
+
+
+        self.BaseToolsLayout.addLayout(self.BaseModelsLayout)
 
         self.CameraVideosLayout = QHBoxLayout()
         self.CameraVideosLayout.setObjectName(u"CameraVideosLayout")
@@ -306,7 +329,7 @@ class Ui_Inferencer(object):
         self.IoU.setObjectName(u"IoU")
         self.IoU.setMaximum(1.000000000000000)
         self.IoU.setSingleStep(0.010000000000000)
-        self.IoU.setValue(0.700000000000000)
+        self.IoU.setValue(0.450000000000000)
 
         self.IoULayout.addWidget(self.IoU)
 
@@ -536,8 +559,10 @@ class Ui_Inferencer(object):
         Inferencer.setWindowTitle(QCoreApplication.translate("Inferencer", u"AnimalPoseInference", None))
         self.BaseToolsGroup.setTitle("")
         self.SelectConfigure.setText(QCoreApplication.translate("Inferencer", u"Select Configure", None))
-        self.SelectWeights.setText(QCoreApplication.translate("Inferencer", u"Select Weights", None))
+        self.ModeToggle.setText(QCoreApplication.translate("Inferencer", u"Mode: One-stage", None))
         self.CameraORVideos.setText(QCoreApplication.translate("Inferencer", u"Use Video", None))
+        self.SelectDetector.setText(QCoreApplication.translate("Inferencer", u"Select Detector", None))
+        self.SelectPoser.setText(QCoreApplication.translate("Inferencer", u"Select Poser", None))
         self.CameraVideosSelection.setItemText(0, QCoreApplication.translate("Inferencer", u"...", None))
         self.CameraVideosSelection.setItemText(1, QCoreApplication.translate("Inferencer", u"Select video file...", None))
 

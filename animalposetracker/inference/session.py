@@ -9,7 +9,7 @@ and this module is the part of that promise the callers share.
 Nothing here trains, and nothing here imports torch: the inferencer is deployment-side code.
 """
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from pathlib import Path
 from typing import Any, Dict, List, Mapping, Optional, Sequence, Tuple
 
@@ -54,6 +54,11 @@ class InferenceConfigSummary:
     skeleton: Tuple[Tuple[int, int], ...] = ()
     kpt_shape: Optional[Tuple[int, int]] = None
     schema: Optional[str] = None
+    #: Pose-model weights the config declares (``poser.weights``), for the page to adopt.
+    weights_path: Optional[str] = None
+    #: Detector weights the config declares (``detector.weights``); its presence means the
+    #: run is a two-stage one.
+    detector_weights_path: Optional[str] = None
 
     @property
     def num_classes(self) -> int:
@@ -93,12 +98,29 @@ def _as_name_list(raw_names) -> List[str]:
     return [str(item) for item in (raw_names or [])]
 
 
+def metadata_head(metadata: Mapping[str, Any]) -> str:
+    """The pose head an artifact's sidecar declares.
+
+    Sidecars written by this project name the head outright; foreign exports that only show
+    their ``simcc_x``/``simcc_y`` pair are still recognisable, and anything else is the
+    ultralytics-style YOLO pose head. One function so the loader, the selection check and the
+    page cannot disagree about what a SimCC artifact is.
+    """
+    head = str(metadata.get("head") or "")
+    if not head:
+        head = "SimCCHead" if "simcc_x" in tuple(metadata.get("outputs") or ()) else "YOLOPoseHead"
+    return head
+
+
 def _parse_inference_config(mapping: Mapping[str, Any]) -> InferenceConfigSummary:
     """Interpret one config mapping, accepting either the project or the dataset spelling.
 
     A dataset yaml carries ``names``/``kpt_shape``; a project yaml carries
     ``classes_name``/``keypoints_name``/``visible`` and no shape at all, so its keypoint count
     has to be derived. Both are accepted because both are what a user reasonably points at.
+    Either may also declare the model weights to adopt: ``poser.weights`` and
+    ``detector.weights`` (raw values here; the strict reader resolves them against the config
+    file's directory).
     """
     class_names = _as_name_list(mapping.get("names") or mapping.get("classes_name"))
     keypoints_name = tuple(str(name) for name in (mapping.get("keypoints_name") or []))
@@ -116,12 +138,24 @@ def _parse_inference_config(mapping: Mapping[str, Any]) -> InferenceConfigSummar
 
     raw_schema = mapping.get("schema") or mapping.get("output_schema")
     schema = str(raw_schema).strip().lower() if raw_schema else None
+
+    poser_section = mapping.get("poser") or {}
+    detector_section = mapping.get("detector") or {}
+    weights_path = None
+    if isinstance(poser_section, Mapping) and poser_section.get("weights"):
+        weights_path = str(poser_section["weights"])
+    detector_weights_path = None
+    if isinstance(detector_section, Mapping) and detector_section.get("weights"):
+        detector_weights_path = str(detector_section["weights"])
+
     return InferenceConfigSummary(
         class_names=tuple(class_names),
         keypoints_name=keypoints_name,
         skeleton=skeleton,
         kpt_shape=kpt_shape,
         schema=schema,
+        weights_path=weights_path,
+        detector_weights_path=detector_weights_path,
     )
 
 
@@ -179,6 +213,21 @@ def read_inference_config(config_arg) -> InferenceConfigSummary:
         )
     if summary.kpt_shape is None:
         raise ValueError("配置文件的关键点数量无法解析：请检查 kpt_shape 或 keypoints_name。")
+
+    if summary.weights_path or summary.detector_weights_path:
+        base = Path(config_arg).expanduser().resolve().parent
+
+        def _against_config(value: Optional[str]) -> Optional[str]:
+            if value is None:
+                return None
+            path = Path(value).expanduser()
+            return str(path if path.is_absolute() else base / path)
+
+        summary = replace(
+            summary,
+            weights_path=_against_config(summary.weights_path),
+            detector_weights_path=_against_config(summary.detector_weights_path),
+        )
     return summary
 
 
@@ -201,8 +250,13 @@ class InferenceSelectionReport:
     weights_ok: bool = False
 
 
-def validate_inference_selection(config_path, weights_path=None) -> InferenceSelectionReport:
+def validate_inference_selection(
+    config_path, weights_path=None, detector_path=None
+) -> InferenceSelectionReport:
     """Check a config file against an optional artifact, without loading either.
+
+    ``detector_path`` says a detector is on hand, which is what makes a SimCC artifact a
+    usable pair instead of a dead end: the top-down stream runs it, and nothing else can.
 
     Two things this deliberately does not do. It never initialises an engine -- that is the
     Start button's job, and doing it here would load a backend on every file dialog. And it
@@ -250,14 +304,12 @@ def validate_inference_selection(config_path, weights_path=None) -> InferenceSel
             weights_errors.append(f"权重文件的元数据无法解析：{error}")
 
         if not weights_errors:
-            head = str(metadata.get("head") or "")
-            if not head and "simcc_x" in tuple(metadata.get("outputs") or ()):
-                head = "SimCCHead"
-            if head == "SimCCHead":
+            head = metadata_head(metadata)
+            if head == "SimCCHead" and detector_path is None:
                 weights_errors.append(
-                    f"{weights_path} 是 SimCCHead（AnimalViTPose）模型，推理器无法运行："
-                    "自上而下的解码需要一个额外的检测器，推理器没有地方提供它。"
-                    "请改用 `animalposetracker predict`。"
+                    f"{weights_path} 是 SimCCHead（AnimalViTPose）模型，需要二阶段（检测器 + 姿态）"
+                    "才能运行：请选择检测器（Select Detector），并把 Mode 切到 Two-stage。"
+                    "（命令行下同样可以改用 `animalposetracker predict`。）"
                 )
         errors.extend(weights_errors)
 
@@ -383,9 +435,7 @@ def build_inference_session(
     )
     engine_instance.model_init()
 
-    head = str(metadata.get("head") or "")
-    if not head:
-        head = "SimCCHead" if "simcc_x" in tuple(metadata.get("outputs") or ()) else "YOLOPoseHead"
+    head = metadata_head(metadata)
     if head == "SimCCHead" and not topdown:
         raise ValueError(
             f"{weights_path} holds a SimCCHead (AnimalViTPose) model, and the inferencer cannot "

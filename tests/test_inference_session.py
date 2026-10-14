@@ -105,6 +105,36 @@ class ConfigParsingTests(unittest.TestCase):
         self.assertEqual(summary.num_keypoints, 4)
         self.assertEqual(summary.schema, "ultralytics_yolo_pose_nms")
 
+    def test_declared_weights_are_read_and_resolved_against_the_config(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            Path(temporary, "poser.onnx").write_bytes(b"")
+            Path(temporary, "detector.onnx").write_bytes(b"")
+            path = _write(
+                temporary,
+                "dataset.yaml",
+                {
+                    **DATASET_STYLE,
+                    "poser": {"weights": "poser.onnx"},
+                    "detector": {"weights": "detector.onnx"},
+                },
+            )
+            summary = read_inference_config(str(path))
+
+        poser = Path(summary.weights_path)
+        detector = Path(summary.detector_weights_path)
+        self.assertTrue(poser.is_absolute())
+        self.assertEqual(poser.resolve(), (Path(temporary) / "poser.onnx").resolve())
+        self.assertTrue(detector.is_absolute())
+        self.assertEqual(detector.resolve(), (Path(temporary) / "detector.onnx").resolve())
+
+    def test_without_declared_weights_the_summary_reports_none(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            path = _write(temporary, "dataset.yaml", DATASET_STYLE)
+            summary = read_inference_config(str(path))
+
+        self.assertIsNone(summary.weights_path)
+        self.assertIsNone(summary.detector_weights_path)
+
     def test_read_inference_config_insists_on_the_class_names(self):
         with tempfile.TemporaryDirectory() as temporary:
             path = _write(temporary, "broken.yaml", {"kpt_shape": [4, 3]})
@@ -392,6 +422,15 @@ class ValidationTests(unittest.TestCase):
         report = validate_inference_selection(config, weights)
 
         self.assertIn("predict", " ".join(report.errors))
+
+    def test_a_simcc_artifact_passes_once_a_detector_is_on_hand(self):
+        # The detector is the missing half: the same artifact refused a moment ago is a
+        # usable pair in two-stage, which is exactly what the page's Start gate reads.
+        config, weights = self._pair(DATASET_STYLE, {"head": "SimCCHead", "kpt_shape": [4, 3]})
+        report = validate_inference_selection(config, weights, detector_path="detector.onnx")
+
+        self.assertEqual(report.errors, ())
+        self.assertTrue(report.weights_ok)
 
     def test_an_artifact_without_a_sidecar_only_warns(self):
         config, weights = self._pair(DATASET_STYLE)

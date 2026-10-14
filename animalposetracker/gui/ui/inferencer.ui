@@ -70,7 +70,7 @@
              </widget>
             </item>
             <item>
-             <widget class="QPushButton" name="SelectWeights">
+             <widget class="QPushButton" name="ModeToggle">
               <property name="sizePolicy">
                <sizepolicy hsizetype="Preferred" vsizetype="Fixed">
                 <horstretch>0</horstretch>
@@ -90,7 +90,7 @@
                </size>
               </property>
               <property name="text">
-               <string>Select Weights</string>
+               <string>Mode: One-stage</string>
               </property>
              </widget>
             </item>
@@ -104,6 +104,60 @@
               </property>
               <property name="text">
                <string>Use Video</string>
+              </property>
+             </widget>
+            </item>
+           </layout>
+          </item>
+          <item>
+           <layout class="QHBoxLayout" name="BaseModelsLayout">
+            <item>
+             <widget class="QPushButton" name="SelectDetector">
+              <property name="sizePolicy">
+               <sizepolicy hsizetype="Preferred" vsizetype="Fixed">
+                <horstretch>0</horstretch>
+                <verstretch>0</verstretch>
+               </sizepolicy>
+              </property>
+              <property name="minimumSize">
+               <size>
+                <width>0</width>
+                <height>25</height>
+               </size>
+              </property>
+              <property name="maximumSize">
+               <size>
+                <width>16777215</width>
+                <height>25</height>
+               </size>
+              </property>
+              <property name="text">
+               <string>Select Detector</string>
+              </property>
+             </widget>
+            </item>
+            <item>
+             <widget class="QPushButton" name="SelectPoser">
+              <property name="sizePolicy">
+               <sizepolicy hsizetype="Preferred" vsizetype="Fixed">
+                <horstretch>0</horstretch>
+                <verstretch>0</verstretch>
+               </sizepolicy>
+              </property>
+              <property name="minimumSize">
+               <size>
+                <width>0</width>
+                <height>25</height>
+               </size>
+              </property>
+              <property name="maximumSize">
+               <size>
+                <width>16777215</width>
+                <height>25</height>
+               </size>
+              </property>
+              <property name="text">
+               <string>Select Poser</string>
               </property>
              </widget>
             </item>
@@ -538,7 +592,7 @@
                <double>0.010000000000000</double>
               </property>
               <property name="value">
-               <double>0.700000000000000</double>
+               <double>0.450000000000000</double>
               </property>
              </widget>
             </item>

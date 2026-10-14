@@ -23,7 +23,9 @@ from animalposetracker.inference.session import (
     ENGINE_NAMES,
     build_inference_session,
     instance_to_record,
+    metadata_head,
     pixel_points,
+    read_inference_config,
     validate_inference_selection,
 )
 from animalposetracker.postprocessing.output_decoders import decode_pose_outputs
@@ -72,6 +74,17 @@ class InferencerPage(QWidget, Ui_Inferencer):
 
         self.data_config_path = None
         self.weights_path = None
+        self.detector_path = None
+        # The mode switch and its dependents: one-stage by default; the boxes on the right
+        # follow the mode, never the other way round.
+        self._two_stage = False
+        self._decode_params_active = False
+        # Whether the chosen pose artifact is a SimCC (AnimalViTPose) one; the stage pair gate
+        # in `_refresh_start_state` needs it before any artifact is loaded or built.
+        self._weights_is_simcc = False
+        # The shared two-stage stream (detector -> crops -> SimCC), built at Start and dropped
+        # when the run ends.
+        self._stream_pipeline = None
         # Whether each half of the inference setup has passed its checks; Start needs both.
         self._config_ready = False
         self._weights_ready = False
@@ -93,7 +106,7 @@ class InferencerPage(QWidget, Ui_Inferencer):
         self._run_class_names = ()
         self._run_skeleton = ()
         self._add_save_switch()
-        self._add_threshold_controls()
+        self._add_decode_param_controls()
         # The filter's widgets are built first, because the tracker's builder is the one that
         # places them (both rows go into the left group, in this order).
         self._add_filter_controls()
@@ -107,6 +120,16 @@ class InferencerPage(QWidget, Ui_Inferencer):
 
         self.tools_disabled()
         self.SelectConfigure.setEnabled(True)
+        # The two model buttons open up with the config -- it states the dataset and may
+        # already declare both weights files.
+        self.SelectPoser.setEnabled(False)
+        self.SelectDetector.setEnabled(False)
+        self.ModeToggle.setText("Mode: One-stage")
+        # The live copies the decode stage reads each frame; the boxes' handlers keep them in
+        # step from here on.
+        self._live_poser_conf = float(self.Conf.value())
+        self._live_nms_iou = float(self.IoU.value())
+        self._live_detector_conf = float(self.DetectorConf.value())
         self.ShowKeypoints.setCheckState(Qt.CheckState.Checked)
         self.Show.setCheckState(Qt.CheckState.Checked)
         self.FPSShow.setCheckState(Qt.CheckState.Checked)
@@ -126,7 +149,9 @@ class InferencerPage(QWidget, Ui_Inferencer):
         
         # Base configuration signals
         self.SelectConfigure.clicked.connect(self.onSelectConfigureClicked)
-        self.SelectWeights.clicked.connect(self.onSelectWeightsClicked)
+        self.SelectDetector.clicked.connect(self.onSelectDetectorClicked)
+        self.SelectPoser.clicked.connect(self.onSelectPoserClicked)
+        self.ModeToggle.clicked.connect(self.onModeToggled)
         self.CameraORVideos.toggled.connect(self.onCameraORVideosToggled)
         self.CameraVideosSelection.currentIndexChanged.connect(self.onCameraVideosSelectionChanged)
         self.CheckCameraVideosConnect.clicked.connect(self.onCheckCameraVideosConnectClicked)
@@ -151,6 +176,7 @@ class InferencerPage(QWidget, Ui_Inferencer):
         # Display option signals
         self.IoU.valueChanged.connect(self.onIoUChanged)
         self.Conf.valueChanged.connect(self.onConfChanged)
+        self.DetectorConf.valueChanged.connect(self.onDetectorConfChanged)
         self.Backgroud.stateChanged.connect(self.onBackgroudStateChanged)
         self.ShowClasses.stateChanged.connect(self.onShowClassesStateChanged)
         self.ShowKeypoints.stateChanged.connect(self.onShowKeypointsStateChanged)
@@ -178,8 +204,9 @@ class InferencerPage(QWidget, Ui_Inferencer):
         # with neither chosen, and the builder then failed on a None path.
         self.End.setEnabled(True)
         self.Save.setEnabled(True)
-        self.IoU.setEnabled(True)
-        self.Conf.setEnabled(True)
+        # The decode trio follows the mode; the full matrix lives in
+        # `_refresh_decode_param_states`.
+        self._refresh_decode_param_states(True)
         self.Show.setEnabled(True)
         self.Backgroud.setEnabled(True)
         self.ShowClasses.setEnabled(True)
@@ -205,8 +232,7 @@ class InferencerPage(QWidget, Ui_Inferencer):
         self.Start.setEnabled(False)
         self.End.setEnabled(False)
         self.Save.setEnabled(False)
-        self.IoU.setEnabled(False)
-        self.Conf.setEnabled(False)
+        self._refresh_decode_param_states(False)
         self.Show.setEnabled(False)
         self.Backgroud.setEnabled(False)
         self.ShowClasses.setEnabled(False)
@@ -244,31 +270,48 @@ class InferencerPage(QWidget, Ui_Inferencer):
         self.SaveIoUConfLayout.removeWidget(self.Save)
         self.MainShowLayout.insertWidget(0, self.Save)
 
-    def _add_threshold_controls(self):
-        """Move the decode thresholds out of the display group, under the file pickers.
+    def _add_decode_param_controls(self):
+        """Gather the decode thresholds into one group at the top of the display column.
 
-        ``conf`` and ``iou`` decide which detections survive decoding -- they change what a run
-        produces, not what is drawn -- so they belong with the engine, the device and the
-        tracker. Their widgets are reparented as well: a layout moved between group boxes would
-        otherwise leave its children drawn inside the old box.
+        These are the boxes meant to be turned while a run is going: their values are read
+        again every frame (see `_decode`), so an edit lands within a frame or two and never
+        needs a restart -- that is why they live on the right, next to the display switches,
+        the other things that keep reacting while the stream runs. Their labels say exactly
+        what each one bites: the NMS threshold only matters for outputs that still carry NMS,
+        the detector's filter only for the two-stage stream, and `_refresh_decode_param_states`
+        lights the boxes the current mode actually uses.
         """
-        for layout in (self.IoULayout, self.ConfLayout):
-            self.SaveIoUConfLayout.removeItem(layout)
-            for index in range(layout.count()):
-                widget = layout.itemAt(index).widget()
-                if widget is not None:
-                    widget.setParent(self.BaseToolsGroup)
-
-        self.ThresholdLayout = QHBoxLayout()
-        self.ThresholdLayout.setObjectName("ThresholdLayout")
-        self.ThresholdLayout.addLayout(self.IoULayout)
-        self.ThresholdLayout.addLayout(self.ConfLayout)
-        self.BaseToolsLayout.insertLayout(1, self.ThresholdLayout)
-
-        # Its last occupant, Save, moved in with Save Records, so the emptied row is dropped
-        # instead of lingering: a layout that sits in no layout is invisible and misleading.
+        # The two rows move out of the old Save row (Save itself already left for the display
+        # row in `_add_save_switch`) and are rebuilt as one trio. They stay inside the display
+        # group, so no reparenting is needed -- only a layout moved between group boxes must
+        # carry its children across.
+        self.SaveIoUConfLayout.removeItem(self.IoULayout)
+        self.SaveIoUConfLayout.removeItem(self.ConfLayout)
         self.ShowToolsGroupVLayout.removeItem(self.SaveIoUConfLayout)
         del self.SaveIoUConfLayout
+
+        self.IoULabel.setText("NMS IoU")
+        self.ConfLabel.setText("Poser Conf")
+
+        self.DetectorConf = QDoubleSpinBox(self.ShowToolsGroup)
+        self.DetectorConf.setObjectName("DetectorConf")
+        self.DetectorConf.setMaximum(1.0)
+        self.DetectorConf.setSingleStep(0.01)
+        self.DetectorConf.setValue(0.5)
+        self.DetectorConf.setToolTip("检测器置信度门槛：只留高于它的框（仅二阶段生效，跑着也能调）")
+        self.DetectorConfLabel = QLabel("Detector Conf", self.ShowToolsGroup)
+
+        self.DetectorConfLayout = QHBoxLayout()
+        self.DetectorConfLayout.setObjectName("DetectorConfLayout")
+        self.DetectorConfLayout.addWidget(self.DetectorConfLabel)
+        self.DetectorConfLayout.addWidget(self.DetectorConf)
+
+        self.DecodeParamsLayout = QHBoxLayout()
+        self.DecodeParamsLayout.setObjectName("DecodeParamsLayout")
+        self.DecodeParamsLayout.addLayout(self.IoULayout)
+        self.DecodeParamsLayout.addLayout(self.DetectorConfLayout)
+        self.DecodeParamsLayout.addLayout(self.ConfLayout)
+        self.ShowToolsGroupVLayout.insertLayout(0, self.DecodeParamsLayout)
 
     def _add_filter_controls(self):
         """Build the temporal filter's controls; the tracker's builder places them.
@@ -456,8 +499,6 @@ class InferencerPage(QWidget, Ui_Inferencer):
         the threshold row, 74 in the camera row and 101 in the engine row.
         """
         labels = (
-            self.IoULabel,
-            self.ConfLabel,
             self.WidthLabel,
             self.HeightLabel,
             self.FPSLabel,
@@ -468,6 +509,13 @@ class InferencerPage(QWidget, Ui_Inferencer):
         width = max(label.sizeHint().width() for label in labels)
         for label in labels:
             label.setFixedWidth(width)
+
+        # The decode trio now lives in the display column instead; its three labels align
+        # among themselves, to the widest of them.
+        trio = (self.IoULabel, self.DetectorConfLabel, self.ConfLabel)
+        trio_width = max(label.sizeHint().width() for label in trio)
+        for label in trio:
+            label.setFixedWidth(trio_width)
 
     def _align_display_switches(self):
         """Give the display group's two switch rows one column rhythm.
@@ -553,8 +601,11 @@ class InferencerPage(QWidget, Ui_Inferencer):
         # Store configuration
         self.data_config_path = file_path
   
-        # Update UI
-        self.SelectWeights.setEnabled(True)
+        # Update UI: both model buttons open with the config, and any weights the config
+        # declares are adopted straight away -- a later pick still overrides them.
+        self.SelectPoser.setEnabled(True)
+        self.SelectDetector.setEnabled(True)
+        self._apply_config_declared_paths()
         self._refresh_start_state(show_dialog=True)
 
     def _refresh_start_state(self, show_dialog=False):
@@ -569,7 +620,9 @@ class InferencerPage(QWidget, Ui_Inferencer):
         no status bar to put them in and a common one (an artifact with no sidecar) would
         otherwise greet every single selection with a popup.
         """
-        report = validate_inference_selection(self.data_config_path, self.weights_path)
+        report = validate_inference_selection(
+            self.data_config_path, self.weights_path, self.detector_path
+        )
         self._config_ready = report.config_ok
         self._weights_ready = report.weights_ok
         if self._config_ready and self._weights_ready:
@@ -577,7 +630,27 @@ class InferencerPage(QWidget, Ui_Inferencer):
             # become usable as soon as both halves are in place -- which is what makes the rows
             # sitting above the source picker read in the right order.
             self.tools_enabled()
-        self.Start.setEnabled(self._config_ready and self._weights_ready)
+        # The stage pair has to match: SimCC weights run only in the two-stage stream, which
+        # additionally needs the detector's weights, while the one-stage stream refuses SimCC.
+        # Start stays dark rather than quietly running something other than what the switch
+        # says -- and the status line names whichever half the mode is still missing, so the
+        # dark button is not a dead end.
+        if self._two_stage:
+            stage_ok = self._weights_is_simcc and bool(self.detector_path)
+        else:
+            stage_ok = not self._weights_is_simcc
+        self.Start.setEnabled(self._config_ready and self._weights_ready and stage_ok)
+        if not stage_ok:
+            if self._two_stage and not self._weights_is_simcc:
+                self.thread_status(
+                    "二阶段需要 SimCC（AnimalViTPose）姿态权重：请换姿态权重或切回 One-stage"
+                )
+            elif self._two_stage:
+                self.thread_status("二阶段模式：请选择检测器（Select Detector）")
+            else:
+                self.thread_status(
+                    "SimCC（AnimalViTPose）权重需要二阶段：请把 Mode 切到 Two-stage"
+                )
 
         for warning in report.warnings:
             self.thread_status(f"警告：{warning}")
@@ -588,7 +661,7 @@ class InferencerPage(QWidget, Ui_Inferencer):
             QMessageBox.critical(self, "配置校验失败", detail)
             
 
-    def onSelectWeightsClicked(self):
+    def onSelectPoserClicked(self):
         """Open file dialog to select model weights and 
         auto-configure supported engines and devices.
 
@@ -623,10 +696,22 @@ class InferencerPage(QWidget, Ui_Inferencer):
         if not file_path:
             return
 
+        self._apply_poser_selection(file_path)
+
+    def _apply_poser_selection(self, file_path):
+        """Adopt a pose-model file: validate it, probe the engines, light what depends on it.
+
+        The dialog and the config loader both land here, so a declared weights file gets the
+        same checks and side effects as a hand-picked one.
+        """
         self.weights_path = file_path
         # Check before probing the hardware: a pair that cannot run should say so now, and the
-        # probe is the expensive part of this slot.
-        report = validate_inference_selection(self.data_config_path, self.weights_path)
+        # probe is the expensive part of this slot. The detector is part of the check -- it is
+        # what turns a SimCC artifact from a dead end into a usable pair.
+        report = validate_inference_selection(
+            self.data_config_path, self.weights_path, self.detector_path
+        )
+        self._weights_is_simcc = metadata_head(report.metadata) == "SimCCHead"
         if not report.weights_ok:
             self._config_ready = report.config_ok
             self._weights_ready = False
@@ -665,6 +750,101 @@ class InferencerPage(QWidget, Ui_Inferencer):
         # Start needs both halves of the configuration. This used to test an attribute that is
         # never assigned anywhere, so it stayed disabled until a camera or video was touched.
         self._refresh_start_state(show_dialog=False)
+
+    def onSelectDetectorClicked(self):
+        """Pick the detector artifact that turns the run into the two-stage stream."""
+        file_path, _ = QFileDialog.getOpenFileName(
+            self,
+            "Select Detector Weights",
+            "",
+            "ONNX (*.onnx);;All Files (*)",
+            options=QFileDialog.Options(),
+        )
+        if not file_path:
+            return
+        self._apply_detector_selection(file_path)
+
+    def _apply_detector_selection(self, file_path):
+        """Adopt a detector file; no detector at all is what keeps the run one-stage."""
+        detector = Path(file_path)
+        if not detector.is_file():
+            QMessageBox.warning(self, "检测器无效", f"找不到检测器文件：\n{detector}")
+            return
+        self.detector_path = str(detector)
+        self.thread_status(f"已选择检测器：{detector.name}")
+        # A pose model refused a moment ago only because the detector was missing deserves its
+        # full pass now -- otherwise Start could light with the engine combos never populated.
+        if self.weights_path and not self._weights_ready:
+            self._apply_poser_selection(self.weights_path)
+        self._refresh_start_state(show_dialog=False)
+
+    def _apply_config_declared_paths(self):
+        """Adopt the weights the config declares, if any; a later pick still overrides them.
+
+        `read_inference_config` resolves relative paths against the config file's directory,
+        so a yaml that points at its neighbours keeps working after the pair is moved.
+        """
+        try:
+            summary = read_inference_config(self.data_config_path)
+        except Exception:
+            # A broken config is reported by `_refresh_start_state` right after this.
+            return
+        # The detector first: a declared SimCC poser is only adoptable once the detector is
+        # on hand, and the other order would pop a refusal for a pair that is in fact complete.
+        if summary.detector_weights_path:
+            self._apply_detector_selection(summary.detector_weights_path)
+        if summary.weights_path:
+            self._apply_poser_selection(summary.weights_path)
+
+    @staticmethod
+    def _detector_conventions(detector_path):
+        """The declarations an ONNX detector is described by, picked by its file name.
+
+        The NMS-free YOLO exports (``nms=False``) speak pixels + letterbox + xyxy; the RT-DETR
+        family speaks normalized + stretch + cxcywh, which is also the fallback when the name
+        says nothing. Explicit declarations in the config's ``detector:`` section will sit
+        above these presets once that wiring lands; the file name is what there is today.
+        """
+        name = Path(detector_path).name.lower()
+        if "yolo" in name:
+            return {
+                "box_format": "xyxy",
+                "coord_mode": "pixels",
+                "preprocess_mode": "letterbox",
+            }
+        return {
+            "box_format": "cxcywh",
+            "coord_mode": "normalized",
+            "preprocess_mode": "stretch",
+        }
+
+    def onModeToggled(self):
+        """Flip the stream between one stage and two.
+
+        The mode is the operator's explicit call: it is never inferred from which files are
+        set, and loading a config does not move this switch. Two-stage makes the detector's
+        weights a requirement; in one-stage a chosen detector simply waits its turn.
+        """
+        self._two_stage = not self._two_stage
+        self.ModeToggle.setText("Mode: Two-stage" if self._two_stage else "Mode: One-stage")
+        self._refresh_decode_param_states()
+        # The stage-pair explanation lives in `_refresh_start_state` alone -- every path that
+        # can leave Start dark goes through it, and it names the missing half.
+        self._refresh_start_state(show_dialog=False)
+
+    def _refresh_decode_param_states(self, active=None):
+        """Light only the decode boxes the current mode uses (有作用才亮)."""
+        if active is None:
+            active = self._decode_params_active
+        self._decode_params_active = bool(active)
+        one_stage = not self._two_stage
+        self.IoU.setEnabled(self._decode_params_active and one_stage)
+        self.Conf.setEnabled(self._decode_params_active and one_stage)
+        self.DetectorConf.setEnabled(self._decode_params_active and not one_stage)
+
+    def onDetectorConfChanged(self, value):
+        """Keep the detector's live threshold in step with its box."""
+        self._live_detector_conf = float(value)
 
     def _enable_widgets(self):
         self.EngineSelection.setEnabled(True)
@@ -874,7 +1054,7 @@ class InferencerPage(QWidget, Ui_Inferencer):
     def _setup_camera_ui(self):
         """Initialize camera mode UI according to the original design"""
         # Set camera mode toggle state
-        self.CameraORVideos.setText("Use Cramera")  # Ensure text matches design
+        self.CameraORVideos.setText("Use Camera")
         self.CheckCameraVideosConnect.setText("Preview Camera")
         
         # Configure camera selection dropdown
@@ -1154,11 +1334,40 @@ class InferencerPage(QWidget, Ui_Inferencer):
 
         Returns a dict so the postprocess thread can keep stamping its stage timings into it.
         """
+        # Read live: the trio on the right is meant to be turned while the stream is running,
+        # so the thresholds are re-applied each frame instead of using the snapshot taken at
+        # Start.
+        config = replace(
+            self.session.output_config,
+            confidence_threshold=self._live_poser_conf,
+            iou_threshold=self._live_nms_iou,
+        )
         return {
-            "instances": decode_pose_outputs(
-                outputs, self.session.output_config, inverse_affine=inverse_affine
-            )
+            "instances": decode_pose_outputs(outputs, config, inverse_affine=inverse_affine)
         }
+
+    def _pass_frame_through(self, frame):
+        """Two-stage: the frame reaches the pipeline whole; the detector does the cutting."""
+        return [frame, None]
+
+    def _infer_topdown(self, frame):
+        """Two-stage: one frame in, decoded instances out.
+
+        The live boxes ride along: the detector's threshold is written onto the adapter and
+        the decode values onto a fresh output_config each frame, so turning them mid-run is
+        what the next frame reads.
+        """
+        self._stream_pipeline.detector.conf_threshold = self._live_detector_conf
+        self._stream_pipeline.output_config = replace(
+            self._stream_pipeline.output_config,
+            confidence_threshold=self._live_poser_conf,
+            iou_threshold=self._live_nms_iou,
+        )
+        return self._stream_pipeline.process_frame(frame)
+
+    def _wrap_instances(self, instances, _inverse_affine):
+        """Two-stage decodes inside the pipeline; just carry the instances onward."""
+        return {"instances": instances}
 
     def _draw_background(self, frame):
         """The Background selector's three states, applied before anything else is drawn."""
@@ -1308,19 +1517,25 @@ class InferencerPage(QWidget, Ui_Inferencer):
         self.videoreader_thread.data_ready.connect(self.put_read_data)
         self.videoreader_thread.finished.connect(self.read_end)
 
-        # Set up frame preprocessor thread. The engine's preprocess is the one the shared
-        # decoder's inverse affine belongs to, which is why the CLI's pipeline calls it too.
-        self.preprocess_thread.preprocess_function = self.session.engine.preprocess
+        # Set up the three middle stages. One-stage keeps the engine's own preprocess and the
+        # page's decode. Two-stage hands the whole frame to the shared stream pipeline
+        # (detector -> crops -> SimCC), which decodes on the way through, so the other two
+        # stages become pass-throughs and all the stage time lands under "Inference" -- the
+        # pipeline does not report its internal split.
+        if self._stream_pipeline is not None:
+            self.preprocess_thread.preprocess_function = self._pass_frame_through
+            self.inference_thread.inference_function = self._infer_topdown
+            self.postprocess_thread.postprocess_function = self._wrap_instances
+        else:
+            # The engine's preprocess is the one the shared decoder's inverse affine belongs
+            # to, which is why the CLI's pipeline calls it too.
+            self.preprocess_thread.preprocess_function = self.session.engine.preprocess
+            self.inference_thread.inference_function = self._infer_outputs
+            self.postprocess_thread.postprocess_function = self._decode
         self.preprocess_thread.status_update.connect(self.thread_status)
         self.preprocess_thread.data_ready.connect(self.put_preprocessed_data)
-
-        # Set up inference thread
-        self.inference_thread.inference_function = self._infer_outputs
         self.inference_thread.status_update.connect(self.thread_status)
         self.inference_thread.data_ready.connect(self.put_inference_data)
-
-        # Set up postprocessor thread
-        self.postprocess_thread.postprocess_function = self._decode
         self.postprocess_thread.status_update.connect(self.thread_status)
         self.postprocess_thread.data_ready.connect(self.put_postprocessed_data)
 
@@ -1589,7 +1804,9 @@ class InferencerPage(QWidget, Ui_Inferencer):
                 return
             self._init_visualization_config()
             # One call assembles the artifact, the schema and the decode contract -- the same
-            # call the `infer` command line makes, so both decode identically.
+            # call the `infer` command line makes, so both decode identically. In two-stage the
+            # same call is told a detector exists, which is what unlocks the SimCC schema, and
+            # the frame loop is handed the shared stream pipeline below.
             try:
                 self.session = build_inference_session(
                     weights_path=self.weights_path,
@@ -1603,7 +1820,28 @@ class InferencerPage(QWidget, Ui_Inferencer):
                     # _init_visualization_config has just copied them into its dict.
                     conf=self.Conf.value(),
                     iou=self.IoU.value(),
+                    topdown=self._two_stage,
                 )
+                self._stream_pipeline = None
+                if self._two_stage:
+                    from animalposetracker.inference.detector_adapter import OnnxDetectorAdapter
+                    from animalposetracker.inference.stream_inference import StreamInferencePipeline
+
+                    detector = OnnxDetectorAdapter(
+                        Path(self.detector_path),
+                        conf_threshold=self._live_detector_conf,
+                        **self._detector_conventions(self.detector_path),
+                    )
+                    # The one place that owns detect -> crop -> decode for a stream, shared
+                    # with the `infer` command line; the page only supplies the frames.
+                    self._stream_pipeline = StreamInferencePipeline(
+                        self.session.engine,
+                        self.session.output_config,
+                        input_mode="topdown",
+                        input_config=self.session.input_config,
+                        detector=detector,
+                        class_names=list(self.session.class_names),
+                    )
             except Exception as error:
                 # Whatever the artifact and the config cannot support together (an unknown
                 # keypoint count, a SimCC artifact, an unreadable file) is reported here, in
@@ -1645,6 +1883,8 @@ class InferencerPage(QWidget, Ui_Inferencer):
             # Every worker has stopped by now (see _stop_all_threads), so the record buffer is
             # final; the file is only useful whole, so it is written here rather than per frame.
             self._write_records()
+            # The detector session belongs to the run that just ended; drop it with the run.
+            self._stream_pipeline = None
             self.Display.clear()
             self.Start.setText("Start")
             self._run_active = False
@@ -1662,10 +1902,12 @@ class InferencerPage(QWidget, Ui_Inferencer):
     def onIoUChanged(self, value):
         """Handle changes to the IOU threshold slider value"""
         self.visualization_config.update({"iou": value})
+        self._live_nms_iou = float(value)
 
     def onConfChanged(self, value):
         """Handle changes to the Confidence threshold slider value"""
         self.visualization_config.update({"conf": value})
+        self._live_poser_conf = float(value)
 
     def onBackgroudStateChanged(self, state):
         """Handle changes to the Show Backgroud checkbox state"""

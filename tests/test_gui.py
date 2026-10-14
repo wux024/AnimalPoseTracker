@@ -175,7 +175,7 @@ class InferencerControlTests(unittest.TestCase):
             ), patch.object(
                 page, "_init_model_bits"
             ):
-                page.onSelectWeightsClicked()
+                page.onSelectPoserClicked()
 
             self.assertTrue(page._weights_ready)
             self.assertTrue(page.Start.isEnabled())
@@ -224,7 +224,7 @@ class InferencerControlTests(unittest.TestCase):
             ), patch.object(page, "_init_engine_selection"), patch.object(
                 page, "_init_available_devices"
             ), patch.object(page, "_init_model_bits"):
-                page.onSelectWeightsClicked()
+                page.onSelectPoserClicked()
             self.assertTrue(page.Start.isEnabled())
 
             with patch("os.chdir"), patch(
@@ -259,13 +259,236 @@ class InferencerControlTests(unittest.TestCase):
             ), patch.object(page, "_get_supported_engines_and_devices") as probe, patch(
                 "animalposetracker.gui.inferencerpage.QMessageBox"
             ) as box:
-                page.onSelectWeightsClicked()
+                page.onSelectPoserClicked()
 
             self.assertFalse(page._weights_ready)
             self.assertFalse(page.Start.isEnabled())
             self.assertIn("predict", box.critical.call_args.args[2])
             # The check runs first, so the engine/device probe never happens.
             probe.assert_not_called()
+
+    def test_loading_a_config_opens_both_model_buttons(self):
+        # The config is the gate: before it, neither model button is usable; after it, both are.
+        with tempfile.TemporaryDirectory() as temporary:
+            config_path = Path(temporary) / "dataset.yaml"
+            config_path.write_text("names: {0: probe}\nkpt_shape: [2, 3]\n", encoding="utf-8")
+
+            page = InferencerPage()
+            self.assertFalse(page.SelectPoser.isEnabled())
+            self.assertFalse(page.SelectDetector.isEnabled())
+
+            with patch("os.chdir"), patch(
+                "animalposetracker.gui.inferencerpage.QFileDialog.getOpenFileName",
+                return_value=(str(config_path), ""),
+            ):
+                page.onSelectConfigureClicked()
+
+            self.assertTrue(page.SelectPoser.isEnabled())
+            self.assertTrue(page.SelectDetector.isEnabled())
+
+    def test_declared_weights_are_adopted_and_still_overridable(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            base = Path(temporary)
+            (base / "poser.onnx").write_bytes(b"")
+            (base / "detector.onnx").write_bytes(b"")
+            (base / "override.onnx").write_bytes(b"")
+            config_path = base / "dataset.yaml"
+            config_path.write_text(
+                "names: {0: probe}\n"
+                "kpt_shape: [2, 3]\n"
+                "poser:\n"
+                "  weights: poser.onnx\n"
+                "detector:\n"
+                "  weights: detector.onnx\n",
+                encoding="utf-8",
+            )
+
+            page = InferencerPage()
+
+            def fake_engine_detection(_extension):
+                page.supported_engines_and_devices = {"ONNX": ["Intel CPU"]}
+
+            with patch("os.chdir"), patch(
+                "animalposetracker.gui.inferencerpage.QFileDialog.getOpenFileName",
+                return_value=(str(config_path), ""),
+            ), patch.object(
+                page, "_get_supported_engines_and_devices", side_effect=fake_engine_detection
+            ), patch.object(page, "_init_engine_selection"), patch.object(
+                page, "_init_available_devices"
+            ), patch.object(page, "_init_model_bits"):
+                page.onSelectConfigureClicked()
+
+            # Relative paths resolve against the config file's directory.
+            self.assertEqual(Path(page.weights_path), base / "poser.onnx")
+            self.assertEqual(Path(page.detector_path), base / "detector.onnx")
+            self.assertTrue(page._weights_ready)
+            self.assertTrue(page.Start.isEnabled())
+
+            # A later pick still overrides what the config declared.
+            with patch(
+                "animalposetracker.gui.inferencerpage.QFileDialog.getOpenFileName",
+                return_value=(str(base / "override.onnx"), ""),
+            ), patch.object(
+                page, "_get_supported_engines_and_devices", side_effect=fake_engine_detection
+            ), patch.object(page, "_init_engine_selection"), patch.object(
+                page, "_init_available_devices"
+            ), patch.object(page, "_init_model_bits"):
+                page.onSelectPoserClicked()
+
+            self.assertEqual(Path(page.weights_path), base / "override.onnx")
+
+    def test_a_config_declaring_a_complete_simcc_pair_loads_cleanly(self):
+        # The detector half is adopted first: adopting the SimCC poser before its detector
+        # existed used to pop a refusal for a pair that is in fact complete.
+        with tempfile.TemporaryDirectory() as temporary:
+            base = Path(temporary)
+            (base / "simcc.onnx").write_bytes(b"")
+            (base / "simcc.onnx.json").write_text(
+                '{"head": "SimCCHead", "kpt_shape": [2, 3]}', encoding="utf-8"
+            )
+            (base / "det.onnx").write_bytes(b"")
+            config_path = base / "dataset.yaml"
+            config_path.write_text(
+                "names: {0: probe}\n"
+                "kpt_shape: [2, 3]\n"
+                "poser:\n"
+                "  weights: simcc.onnx\n"
+                "detector:\n"
+                "  weights: det.onnx\n",
+                encoding="utf-8",
+            )
+
+            page = InferencerPage()
+
+            def fake_engine_detection(_extension):
+                page.supported_engines_and_devices = {"ONNX": ["Intel CPU"]}
+
+            with patch("os.chdir"), patch(
+                "animalposetracker.gui.inferencerpage.QFileDialog.getOpenFileName",
+                return_value=(str(config_path), ""),
+            ), patch.object(
+                page, "_get_supported_engines_and_devices", side_effect=fake_engine_detection
+            ), patch.object(page, "_init_engine_selection"), patch.object(
+                page, "_init_available_devices"
+            ), patch.object(page, "_init_model_bits"), patch(
+                "animalposetracker.gui.inferencerpage.QMessageBox"
+            ) as box:
+                page.onSelectConfigureClicked()
+
+            box.critical.assert_not_called()
+            self.assertTrue(page._weights_ready)
+            self.assertTrue(page._weights_is_simcc)
+            self.assertEqual(Path(page.detector_path), base / "det.onnx")
+            # One-stage refuses the SimCC half on its own; the switch makes the pair legal.
+            self.assertFalse(page.Start.isEnabled())
+
+            page.onModeToggled()
+            self.assertTrue(page.Start.isEnabled())
+
+    def test_the_detector_button_sits_before_the_poser_button(self):
+        page = InferencerPage()
+        layout = page.BaseModelsLayout
+
+        self.assertLess(
+            layout.indexOf(page.SelectDetector), layout.indexOf(page.SelectPoser)
+        )
+
+    def test_the_mode_switch_flips_the_stage_matrix(self):
+        page = InferencerPage()
+        self.assertEqual(page.ModeToggle.text(), "Mode: One-stage")
+
+        page.tools_enabled()
+        self.assertTrue(page.IoU.isEnabled())
+        self.assertTrue(page.Conf.isEnabled())
+        self.assertFalse(page.DetectorConf.isEnabled())
+
+        page.onModeToggled()
+        self.assertEqual(page.ModeToggle.text(), "Mode: Two-stage")
+        self.assertFalse(page.IoU.isEnabled())
+        self.assertFalse(page.Conf.isEnabled())
+        self.assertTrue(page.DetectorConf.isEnabled())
+
+    def test_two_stage_needs_a_simcc_pair_to_start(self):
+        # Start tracks the stage pair, not just the two files: a SimCC artifact is refused
+        # outright in one-stage, and in two-stage it stays dark until the detector arrives
+        # -- the same rule the shared stream pipeline enforces in its constructor.
+        with tempfile.TemporaryDirectory() as temporary:
+            base = Path(temporary)
+            (base / "best.onnx").write_bytes(b"")
+            (base / "best.onnx.json").write_text(
+                '{"head": "SimCCHead", "kpt_shape": [2, 3]}', encoding="utf-8"
+            )
+            (base / "det.onnx").write_bytes(b"")
+            config_path = base / "dataset.yaml"
+            config_path.write_text("names: {0: probe}\nkpt_shape: [2, 3]\n", encoding="utf-8")
+
+            page = InferencerPage()
+
+            def fake_engine_detection(_extension):
+                page.supported_engines_and_devices = {"ONNX": ["Intel CPU"]}
+
+            with patch("os.chdir"), patch(
+                "animalposetracker.gui.inferencerpage.QFileDialog.getOpenFileName",
+                return_value=(str(config_path), ""),
+            ), patch.object(
+                page, "_get_supported_engines_and_devices", side_effect=fake_engine_detection
+            ), patch.object(page, "_init_engine_selection"), patch.object(
+                page, "_init_available_devices"
+            ), patch.object(page, "_init_model_bits"):
+                page.onSelectConfigureClicked()
+
+            with patch(
+                "animalposetracker.gui.inferencerpage.QFileDialog.getOpenFileName",
+                return_value=(str(base / "best.onnx"), ""),
+            ), patch.object(
+                page, "_get_supported_engines_and_devices", side_effect=fake_engine_detection
+            ), patch.object(page, "_init_engine_selection"), patch.object(
+                page, "_init_available_devices"
+            ), patch.object(page, "_init_model_bits"), patch(
+                "animalposetracker.gui.inferencerpage.QMessageBox"
+            ) as box:
+                page.onSelectPoserClicked()
+
+            # One-stage refuses the SimCC artifact (the refusal names the unlock).
+            self.assertFalse(page._weights_ready)
+            self.assertFalse(page.Start.isEnabled())
+            self.assertIn("Two-stage", box.critical.call_args.args[2])
+
+            # Two-stage without a detector is still not a runnable pair.
+            page.onModeToggled()
+            self.assertFalse(page.Start.isEnabled())
+
+            with patch.object(
+                page, "_get_supported_engines_and_devices", side_effect=fake_engine_detection
+            ), patch.object(page, "_init_engine_selection"), patch.object(
+                page, "_init_available_devices"
+            ), patch.object(page, "_init_model_bits"):
+                page._apply_detector_selection(str(base / "det.onnx"))
+
+            # With the detector on hand the pair passes, and the pose half is revalidated
+            # on the way in (it had been held back by the missing detector).
+            self.assertTrue(page._weights_ready)
+            self.assertTrue(page.Start.isEnabled())
+
+    def test_the_live_thresholds_follow_their_boxes(self):
+        # The decode stage reads plain attributes each frame; the boxes' handlers keep those
+        # in step (widgets themselves are not touched from the worker threads).
+        page = InferencerPage()
+        page.Conf.setValue(0.4)
+        page.IoU.setValue(0.5)
+        page.DetectorConf.setValue(0.6)
+
+        self.assertAlmostEqual(page._live_poser_conf, 0.4)
+        self.assertAlmostEqual(page._live_nms_iou, 0.5)
+        self.assertAlmostEqual(page._live_detector_conf, 0.6)
+
+    def test_the_threshold_defaults_are_one_set(self):
+        # The GUI used to open its IoU at 0.70 while the command line's deploy default was
+        # 0.45; there is one set of numbers now.
+        page = InferencerPage()
+        self.assertAlmostEqual(page.IoU.value(), 0.45)
+        self.assertAlmostEqual(page.Conf.value(), 0.25)
+        self.assertAlmostEqual(page.DetectorConf.value(), 0.5)
 
 
 @unittest.skipUnless(QApplication is not None, "PySide6 (the gui extra) is not installed")
@@ -537,6 +760,73 @@ class InferencerDecodeTests(unittest.TestCase):
         self.assertEqual(page.inference_thread.inference_function, page._infer_outputs)
         self.assertEqual(page.postprocess_thread.postprocess_function, page._decode)
         self.assertEqual(page.visualize_thread.visualize_function, page._present)
+
+    def test_the_two_stage_pipeline_rewires_the_middle_stages(self):
+        # With the shared stream pipeline in place the frame reaches it whole: the detector
+        # does the cutting, and the pipeline decodes on the way through, so the other two
+        # stages become pass-throughs instead of the engine's preprocess + the page's decode.
+        page = self._page()
+        page._stream_pipeline = SimpleNamespace()
+        with patch.object(page, "_get_source", return_value="video.mp4"), patch(
+            "animalposetracker.gui.inferencerpage.cv2.VideoCapture", return_value=_FakeCapture()
+        ), patch("animalposetracker.gui.inferencerpage.QMessageBox"):
+            page._init_inference_threads()
+
+        self.assertEqual(page.preprocess_thread.preprocess_function, page._pass_frame_through)
+        self.assertEqual(page.inference_thread.inference_function, page._infer_topdown)
+        self.assertEqual(page.postprocess_thread.postprocess_function, page._wrap_instances)
+
+    def test_start_in_two_stage_builds_the_shared_stream_pipeline(self):
+        # Two-stage tells the builder a detector exists -- which is what unlocks the SimCC
+        # schema -- and assembles the same detect -> crop -> decode pipeline the command
+        # line runs, with the conventions read off the detector file's name.
+        page = InferencerPage()
+        page.data_config_path = "config.yaml"
+        page.weights_path = "simcc.onnx"
+        page.detector_path = "yolo-det.onnx"
+        page._two_stage = True
+        handed_over, detector_args, pipeline_args = {}, {}, {}
+
+        def fake_build(**arguments):
+            handed_over.update(arguments)
+            return SimpleNamespace(
+                engine=object(),
+                output_config=object(),
+                input_config=SimpleNamespace(input_size=(640, 480)),
+                class_names=("mouse",),
+                skeleton=(),
+                kpt_shape=(2, 3),
+            )
+
+        class FakeDetector:
+            def __init__(self, path, **kwargs):
+                detector_args.update({"path": path, **kwargs})
+
+        class FakePipeline:
+            def __init__(self, engine, output_config, **kwargs):
+                pipeline_args.update(
+                    {"engine": engine, "output_config": output_config, **kwargs}
+                )
+
+        with patch.object(page, "_get_source", return_value="video.mp4"), patch(
+            "animalposetracker.gui.inferencerpage.build_inference_session", side_effect=fake_build
+        ), patch(
+            "animalposetracker.inference.detector_adapter.OnnxDetectorAdapter", FakeDetector
+        ), patch(
+            "animalposetracker.inference.stream_inference.StreamInferencePipeline", FakePipeline
+        ), patch.object(page, "_init_inference_threads"), patch.object(
+            page, "_start_inference_threads"
+        ), patch("animalposetracker.gui.inferencerpage.QMessageBox"):
+            page.onStartClicked()
+
+        self.assertIs(handed_over["topdown"], True)
+        self.assertEqual(pipeline_args["input_mode"], "topdown")
+        self.assertEqual(pipeline_args["class_names"], ["mouse"])
+        # A yolo* detector file speaks pixels + letterbox + xyxy.
+        self.assertEqual(detector_args["box_format"], "xyxy")
+        self.assertEqual(detector_args["coord_mode"], "pixels")
+        self.assertEqual(detector_args["preprocess_mode"], "letterbox")
+        self.assertIsNotNone(page._stream_pipeline)
 
     def test_named_outputs_are_what_the_decoder_is_handed(self):
         page = self._page()
@@ -839,10 +1129,14 @@ class InferencerDecodeTests(unittest.TestCase):
         page = self._page()
         left = page.BaseToolsLayout
 
-        # Row 2 holds the decode thresholds, moved out of the display group with their widgets.
-        self.assertIs(left.itemAt(1).layout(), page.ThresholdLayout)
-        self.assertEqual(page.IoU.parentWidget().objectName(), "BaseToolsGroup")
-        self.assertEqual(page.Conf.parentWidget().objectName(), "BaseToolsGroup")
+        # Row 1 is the setup triple: configure, the mode switch and the source picker; row 2
+        # is the model pair -- detector first, poser second.
+        self.assertIs(left.itemAt(0).layout(), page.BaseConfigureLayout)
+        self.assertEqual(
+            [left.itemAt(0).layout().itemAt(index).widget() for index in range(3)],
+            [page.SelectConfigure, page.ModeToggle, page.CameraORVideos],
+        )
+        self.assertIs(left.itemAt(1).layout(), page.BaseModelsLayout)
         # Rows 3 and 4 hold the two optional stages and the filter's values. The tracker's row is
         # the empty TrackerLayout the Designer file left in the engine/device block, moved up and
         # filled -- not a second layout wearing the same name.
@@ -863,16 +1157,22 @@ class InferencerDecodeTests(unittest.TestCase):
             [page.ModelBitsLayout, page.EngineLayout, page.DeviceLayout],
         )
 
-        # The display group opens with the switch that writes the video, in the row that lists what
-        # the run shows -- it had a row of its own while there was a records switch to pair it with.
+        # The display group opens with the decode trio -- the boxes that keep reacting while a
+        # run is going -- and their widgets stay inside that group.
         right = page.ShowToolsGroupVLayout
-        self.assertIs(right.itemAt(0).layout(), page.MainShowLayout)
+        self.assertIs(right.itemAt(0).layout(), page.DecodeParamsLayout)
+        self.assertEqual(page.IoU.parentWidget().objectName(), "ShowToolsGroup")
+        self.assertEqual(page.Conf.parentWidget().objectName(), "ShowToolsGroup")
+        self.assertEqual(page.DetectorConf.parentWidget().objectName(), "ShowToolsGroup")
+        # Then the switch that writes the video, in the row that lists what the run shows -- it
+        # had a row of its own while there was a records switch to pair it with.
+        self.assertIs(right.itemAt(1).layout(), page.MainShowLayout)
         self.assertEqual(
-            [right.itemAt(0).layout().itemAt(index).widget() for index in range(4)],
+            [right.itemAt(1).layout().itemAt(index).widget() for index in range(4)],
             [page.Save, page.Show, page.Backgroud, page.ShowClasses],
         )
-        # Six rows: the two switch rows and the four the sliders sit in.
-        self.assertEqual(right.count(), 6)
+        # Seven rows: the decode trio, the two switch rows and the four the sliders sit in.
+        self.assertEqual(right.count(), 7)
 
     def test_the_rows_fill_their_group_the_way_the_designer_drew_them(self):
         # The Designer file gives this group's controls an expanding width, so a row divides its
@@ -885,8 +1185,10 @@ class InferencerDecodeTests(unittest.TestCase):
         QApplication.processEvents()
 
         for attribute in (
-            "SelectConfigure", "SelectWeights", "WidthSetup", "HeightSetup", "FPSSetup",
-            "ModelBits", "EngineSelection", "DeviceSelection", "Start", "End", "IoU", "Conf",
+            "SelectConfigure", "ModeToggle", "SelectDetector", "SelectPoser",
+            "WidthSetup", "HeightSetup", "FPSSetup",
+            "ModelBits", "EngineSelection", "DeviceSelection", "Start", "End",
+            "IoU", "Conf", "DetectorConf",
             "CameraVideosSelection", "TrackerAlgorithm", "FilterMethod", "FilterWindow",
             "FilterConfidence",
         ):
@@ -897,7 +1199,8 @@ class InferencerDecodeTests(unittest.TestCase):
         # A trailing stretch would pack a row against the left edge. No row has one, the rows the
         # Designer file drew included: they divide the group, they do not hug its left side.
         for layout in (
-            page.BaseConfigureLayout, page.ThresholdLayout, page.TrackerLayout,
+            page.BaseConfigureLayout, page.BaseModelsLayout, page.DecodeParamsLayout,
+            page.TrackerLayout,
             page.FilterValuesLayout, page.CameraVideosLayout, page.CameraParametersLayout,
             page.EngineDeviceLayout, page.StartEndLayout, page.MainShowLayout,
             page.ShowInfoLayput, page.FontScaleLayout,
@@ -906,9 +1209,13 @@ class InferencerDecodeTests(unittest.TestCase):
             with self.subTest(layout=layout.objectName()):
                 self.assertIsNone(layout.itemAt(layout.count() - 1).spacerItem())
 
-        # Which shows up as cells of equal width: three buttons split their group three ways, and
-        # the four filter values split theirs four ways.
-        for layout, count in ((page.BaseConfigureLayout, 3), (page.FilterValuesLayout, 4)):
+        # Which shows up as cells of equal width: the setup row splits three ways, the model
+        # pair two ways, and the four filter values four ways.
+        for layout, count in (
+            (page.BaseConfigureLayout, 3),
+            (page.BaseModelsLayout, 2),
+            (page.FilterValuesLayout, 4),
+        ):
             widths = [layout.itemAt(index).widget().width() for index in range(count)]
             with self.subTest(layout=layout.objectName()):
                 self.assertLessEqual(max(widths) - min(widths), 2)
@@ -937,7 +1244,7 @@ class InferencerDecodeTests(unittest.TestCase):
         QApplication.processEvents()
 
         labels = (
-            page.IoULabel, page.ConfLabel, page.WidthLabel, page.HeightLabel, page.FPSLabel,
+            page.WidthLabel, page.HeightLabel, page.FPSLabel,
             page.ModelBitsLabel, page.EngineLabel, page.DeviceLabel,
         )
         widest = max(label.sizeHint().width() for label in labels)
@@ -955,8 +1262,13 @@ class InferencerDecodeTests(unittest.TestCase):
             [page.WidthSetup.width(), page.HeightSetup.width(), page.FPSSetup.width()],
             [page.ModelBits.width(), page.EngineSelection.width(), page.DeviceSelection.width()],
         )
-        # The threshold row's first field shares the first column with them.
-        self.assertEqual(page.IoU.x(), page.WidthSetup.x())
+        # The decode trio instead aligns among itself, over in the display column.
+        trio = (page.IoULabel, page.DetectorConfLabel, page.ConfLabel)
+        widest_trio = max(label.sizeHint().width() for label in trio)
+        for label in trio:
+            with self.subTest(label=label.objectName()):
+                self.assertEqual(label.minimumWidth(), widest_trio)
+                self.assertEqual(label.maximumWidth(), widest_trio)
 
     def test_no_widget_or_row_is_left_out_of_the_page(self):
         # A widget or a row that sits in no layout draws nothing, and in the source it reads as
