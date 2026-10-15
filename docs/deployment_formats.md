@@ -22,7 +22,7 @@ For AnimalViTPose, external images without labels need an instance box provider.
 | TensorFlow GraphDef | `pb` | Yes | `tensorflow`, `onnx2tf` |
 | TensorFlow Lite | `tflite` | Yes | `tensorflow` or `tflite-runtime` |
 | TensorFlow Edge TPU | `edgetpu` | Yes | TFLite plus Coral compiler/runtime and compatible Edge TPU hardware |
-| TensorFlow.js | `tfjs` | No local runner | `tensorflowjs`; browser deployment format, as in the Ultralytics AutoBackend baseline |
+| TensorFlow.js | `tfjs` | No local runner | `tensorflowjs`; browser deployment format |
 | PaddlePaddle | `paddle` | Yes | `paddlepaddle`, `x2paddle` |
 | MNN | `mnn` | Yes | `MNN>=2.9.6` |
 | NCNN | `ncnn` | Yes | NCNN Python bindings and PNNX executable |
