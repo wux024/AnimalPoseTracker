@@ -1,8 +1,11 @@
 # Project metadata with author information
 
 # Build system requirements
+# 69.0 is the floor for this file's features: project metadata (PEP 621),
+# dynamic version, and recursive package-data globs ("**/..."). None of the
+# 70.x changes (Cython-on-Windows fix, distutils deprecation) are needed here.
 [build-system]
-requires = ["setuptools>=70.3.0"]
+requires = ["setuptools>=69.0"]
 build-backend = "setuptools.build_meta"
 
 # Project information
@@ -11,8 +14,8 @@ name = "animalposetracker"
 dynamic = ["version"]
 description = "Animal Pose Estimation and Tracking Toolkit"
 readme = "README.md"
-requires-python = ">=3.8"
-license = { "text" = "AGPL-3.0" }
+requires-python = ">=3.10"
+license = { "text" = "AGPL-3.0-or-later" }
 keywords = ["animal pose estimation", "computer vision", "neuroscience"]
 authors = [{name = "Wu X.", email = "wux024@nenu.edu.cn"}]
 classifiers = [
@@ -22,11 +25,11 @@ classifiers = [
     "Intended Audience :: Science/Research",
     "License :: OSI Approved :: GNU Affero General Public License v3 or later (AGPLv3+)",
     "Programming Language :: Python :: 3",
-    "Programming Language :: Python :: 3.8",
-    "Programming Language :: Python :: 3.9",
     "Programming Language :: Python :: 3.10",
     "Programming Language :: Python :: 3.11",
     "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Programming Language :: Python :: 3.14",
     "Topic :: Scientific/Engineering :: Artificial Intelligence",
     "Topic :: Scientific/Engineering :: Neuroscience",
     "Operating System :: POSIX :: Linux",
