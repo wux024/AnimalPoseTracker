@@ -32,9 +32,9 @@ Revision History:
 import ast
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Sequence, Union
+from typing import Any, Dict, List, Optional, Union
 
-from .registry import BuildContext, get_rule, make_divisible
+from .registry import BuildContext, get_rule
 
 __all__ = ["LayerSpec", "ModelSpec", "parse", "describe"]
 

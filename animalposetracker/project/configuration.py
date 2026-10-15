@@ -3,13 +3,7 @@
 from datetime import datetime
 from pathlib import Path
 from typing import Optional, List, Dict, Any, Union
-import hashlib
-import json
-import shutil
 import os
-import tempfile
-import subprocess
-import sys
 import yaml
 
 from animalposetracker.cfg import DATA_YAML_PATHS, MODEL_YAML_PATHS

@@ -12,7 +12,7 @@ from __future__ import annotations
 
 import sys
 from pathlib import Path
-from typing import Any, Dict, List, Mapping, Optional, Tuple
+from typing import Any, List, Mapping, Optional, Tuple
 
 from animalposetracker.config.defaults import default_subtree
 from animalposetracker.config.schema import FIELDS, SCOPES, Field

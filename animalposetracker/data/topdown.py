@@ -7,7 +7,7 @@ import os
 import tempfile
 import warnings
 from pathlib import Path
-from typing import Any, Dict, Optional, Sequence, Tuple, Union
+from typing import Any, Dict, Optional, Tuple, Union
 
 import cv2
 import numpy as np

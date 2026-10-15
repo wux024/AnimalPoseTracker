@@ -2,7 +2,7 @@
 
 import random
 import math
-from typing import Callable, Dict, Optional, Sequence, Tuple
+from typing import Callable, Dict, Optional, Sequence
 
 import cv2
 import numpy as np

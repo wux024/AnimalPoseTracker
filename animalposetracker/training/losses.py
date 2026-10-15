@@ -1,6 +1,6 @@
 """Pose losses following the project's pinned AnimalRTPose training behavior."""
 
-from typing import Any, Dict, Mapping, Optional, Sequence, Tuple
+from typing import Any, Dict, Mapping, Optional, Sequence
 
 import torch
 import torch.nn as nn

@@ -6,7 +6,6 @@ import numpy as np
 from scipy.optimize import linear_sum_assignment
 
 from .config import TrackerConfig
-from .types import PoseDetection
 
 
 def bbox_iou(first: Sequence[float], second: Sequence[float]) -> float:

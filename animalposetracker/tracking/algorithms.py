@@ -6,7 +6,7 @@ in a model, GUI, or inference runtime.
 """
 
 from collections import deque
-from typing import Iterable, List, Sequence, Tuple
+from typing import Iterable, List, Sequence
 
 import numpy as np
 

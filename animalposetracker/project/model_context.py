@@ -2,7 +2,7 @@
 
 from pathlib import Path
 from copy import deepcopy
-from typing import Any, Dict, Optional, Tuple
+from typing import Any, Dict, Tuple
 
 import yaml
 

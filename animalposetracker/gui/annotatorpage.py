@@ -1,7 +1,5 @@
 from PySide6.QtCore import Qt, QFile, QTextStream, QTimer, QSettings
-from PySide6.QtWidgets import (QApplication, QFileDialog, QMainWindow, QTreeWidget,
-                               QMessageBox, QTreeWidgetItem, QTreeWidgetItemIterator,
-                               QGraphicsScene, QGraphicsView, QMenu)
+from PySide6.QtWidgets import QApplication, QFileDialog, QMainWindow, QTreeWidget, QMessageBox, QTreeWidgetItem, QTreeWidgetItemIterator, QGraphicsScene, QMenu
 from PySide6.QtGui import QPixmap, QPainter, QIcon
 
 import os

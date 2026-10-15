@@ -92,19 +92,13 @@ def _download_google_drive_checkpoint(url, destination) -> None:
         if temporary is not None:
             temporary.unlink(missing_ok=True)
 
-from copy import deepcopy
 from datetime import datetime
 from pathlib import Path
-from typing import Optional, List, Dict, Any, Union
-import hashlib
-import json
-import shutil
+from typing import Union
 import os
 import tempfile
-import subprocess
-import sys
 
-from animalposetracker.cfg import DATA_YAML_PATHS, MODEL_YAML_PATHS
+from animalposetracker.cfg import MODEL_YAML_PATHS
 
 
 class ProjectWeightsMixin:

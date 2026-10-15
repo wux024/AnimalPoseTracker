@@ -4,8 +4,6 @@ import numpy as np
 from PySide6.QtCore import Signal
 import queue
 import traceback
-import json
-from pathlib import Path
 
 from .base import BaseThread, measure_time
 

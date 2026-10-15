@@ -3,7 +3,7 @@
 import json
 import sys
 from dataclasses import asdict, dataclass, field
-from typing import Any, Callable, Dict, Optional, TextIO
+from typing import Callable, Dict, Optional, TextIO
 
 
 @dataclass

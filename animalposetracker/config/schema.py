@@ -38,7 +38,7 @@ Terminology (mirrors the W0 concept dictionary, 2026-10-14):
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Any, Iterable, Optional, Sequence, Tuple
+from typing import Any, Optional, Sequence, Tuple
 
 __all__ = [
     "Field",

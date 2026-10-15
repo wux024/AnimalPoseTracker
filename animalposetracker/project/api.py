@@ -2,9 +2,8 @@
 
 from datetime import datetime
 from pathlib import Path
-from typing import Optional, List, Dict, Any, Union
+from typing import Optional, List, Union
 
-from animalposetracker.cfg import DATA_YAML_PATHS, MODEL_YAML_PATHS
 from .configuration import ProjectConfigurationMixin
 from .files import ProjectFilesMixin
 from .weights import ProjectWeightsMixin, _download_google_drive_checkpoint

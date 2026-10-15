@@ -32,7 +32,7 @@ Revision History:
 """
 
 from dataclasses import dataclass, field
-from typing import Any, Callable, Dict, List, Optional, Sequence, Union
+from typing import Any, Callable, Dict, Optional, Sequence
 
 __all__ = [
     "BuildContext",

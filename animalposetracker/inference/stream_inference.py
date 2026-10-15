@@ -10,12 +10,7 @@ from typing import Any, List, Mapping, Optional, Protocol, Sequence, Tuple, Unio
 import cv2
 import numpy as np
 
-from animalposetracker.preprocessing.topdown import (
-    _rotate_point as _rotate_point_radians,
-    _third_point,
-    _topdown_warp_matrix as _topdown_warp_matrix_with_rotation,
-    _fix_aspect_ratio,
-)
+from animalposetracker.preprocessing.topdown import _rotate_point as _rotate_point_radians, _topdown_warp_matrix as _topdown_warp_matrix_with_rotation, _fix_aspect_ratio
 from animalposetracker.postprocessing.output_decoders import (
     RTMO_MMDEPLOY,
     RTMPOSE_SIMCC,

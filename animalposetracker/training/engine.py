@@ -7,7 +7,6 @@ import threading
 import time
 import warnings
 from contextlib import nullcontext
-from pathlib import Path
 from typing import Any, Callable, Dict, Iterable, Mapping, Optional, Tuple
 
 from .checkpoint import load_checkpoint, save_checkpoint
