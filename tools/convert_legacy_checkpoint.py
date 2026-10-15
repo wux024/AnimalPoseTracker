@@ -36,16 +36,8 @@ def _aliases():
     from animalposetracker.nn.attention import ChannelAttention
     from animalposetracker.nn.builder import GraphSequential
     from animalposetracker.nn.head import YOLOPoseHead
-    from animalposetracker.nn.modules import (
-        CSPNeXtBlock,
-        CSPNeXtBottleneck,
-        Concat,
-        Conv,
-        DFL,
-        DWConv,
-        SPPF,
-        STEM,
-    )
+    from animalposetracker.nn.block import CSPNeXtBlock, CSPNeXtBottleneck, Concat, DFL, SPPF, STEM
+    from animalposetracker.nn.conv import Conv, DWConv
 
     table = {
         "ultralytics.nn.tasks.PoseModel": GraphSequential,

@@ -59,7 +59,8 @@ def _check_one(path: Path, scale, build: bool) -> bool:
             with torch.no_grad():
                 out = model(torch.zeros(1, spec.input_ch, 256, 256))
             print(f"Forward OK: output {getattr(out, 'shape', type(out))}")
-            print(f"Strides per scale: {model.stride.tolist()}")
+            if hasattr(model, "stride"):  # SimCC models carry no stride tensor
+                print(f"Strides per scale: {model.stride.tolist()}")
         except ImportError:
             print("[SKIP] torch not installed, skipping instantiation and forward")
         except Exception as e:

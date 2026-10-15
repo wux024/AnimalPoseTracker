@@ -38,8 +38,9 @@ from typing import Any, Dict, Optional, Union
 import torch
 import torch.nn as nn
 
+from . import block as _block_mod
+from . import conv as _conv_mod
 from . import head as _head_mod
-from . import modules as _modules
 from . import transformer as _transformer_mod
 from .registry import get_rule
 from .spec import ModelSpec, parse
@@ -73,11 +74,11 @@ def _lookup_class(cls_name: str):
                 raise AttributeError(f"torch.nn has no attribute '{part}' (from name '{cls_name}')")
         return obj
 
-    for mod in (_modules, _transformer_mod, _head_mod):
+    for mod in (_conv_mod, _block_mod, _transformer_mod, _head_mod):
         if hasattr(mod, cls_name):
             return getattr(mod, cls_name)
     raise AttributeError(
-        f"Module '{cls_name}' is not implemented in nn.modules / nn.transformer / nn.head, "
+        f"Module '{cls_name}' is not implemented in nn.conv / nn.block / nn.transformer / nn.head, "
         f"and it is not a dotted torch name such as 'nn.Upsample'. "
         f"When adding a module, update both registry.py and this lookup."
     )
@@ -121,7 +122,7 @@ class GraphSequential(nn.Module):
         Mirrors ultralytics' `BaseModel.is_fused`, which guards against folding twice.
         """
         return not any(
-            isinstance(m, (_modules.Conv, _modules.ConvTranspose)) and hasattr(m, "bn")
+            isinstance(m, (_conv_mod.Conv, _conv_mod.ConvTranspose)) and hasattr(m, "bn")
             for m in self.model.modules()
         )
 
@@ -142,12 +143,12 @@ class GraphSequential(nn.Module):
         if self.is_fused():
             return self
         for m in self.model.modules():
-            if isinstance(m, _modules.ConvTranspose) and hasattr(m, "bn"):
-                m.conv_transpose = _modules.fuse_deconv_and_bn(m.conv_transpose, m.bn)
+            if isinstance(m, _conv_mod.ConvTranspose) and hasattr(m, "bn"):
+                m.conv_transpose = _conv_mod.fuse_deconv_and_bn(m.conv_transpose, m.bn)
                 delattr(m, "bn")
                 m.forward = m.forward_fuse
-            elif isinstance(m, _modules.Conv) and hasattr(m, "bn"):
-                m.conv = _modules.fuse_conv_and_bn(m.conv, m.bn)
+            elif isinstance(m, _conv_mod.Conv) and hasattr(m, "bn"):
+                m.conv = _conv_mod.fuse_conv_and_bn(m.conv, m.bn)
                 delattr(m, "bn")
                 m.forward = m.forward_fuse
         return self

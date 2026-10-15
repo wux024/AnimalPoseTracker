@@ -70,7 +70,8 @@ from typing import List, Optional, Sequence, Tuple
 import torch
 import torch.nn as nn
 
-from .modules import Conv, DFL, RealNVP
+from .block import DFL, RealNVP
+from .conv import Conv
 from .tal import dist2bbox, make_anchors
 
 

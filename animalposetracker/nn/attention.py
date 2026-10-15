@@ -140,7 +140,7 @@ class Attention(nn.Module):
         """
         super().__init__()
         # Deferred import: modules.py imports this file, so a module-level import would cycle.
-        from .modules import Conv
+        from .conv import Conv
 
         self.num_heads = num_heads
         self.head_dim = dim // num_heads
