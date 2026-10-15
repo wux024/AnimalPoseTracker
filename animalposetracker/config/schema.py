@@ -166,7 +166,7 @@ FIELDS: Tuple[Field, ...] = (
 
     # train -- models.training (the per-model recipe)
     _f("epochs", "train", "models.training", int, "Training epochs", visibility="form", views=("train",)),
-    _f("batch_size", "train", "models.training", int, "Training batch size", visibility="form", legacy=("batch",), views=("train", "evaluate", "infer", "export")),
+    _f("batch_size", "train", "models.training", int, "Training batch size ('auto' on the training CLI probes the largest batch that fits 60% of the GPU memory)", visibility="form", legacy=("batch",), views=("train", "evaluate", "infer", "export")),
     _f("validation_batch_size", "train", "models.training", int, "Validation batch size", visibility="advanced", legacy=("val_batch",)),
     _f("image_size", "train", "models.training", int, "Model input size (a model property; follows the model recipe)", visibility="form", legacy=("imgsz",), views=("train", "evaluate", "infer", "export")),
     _f("optimizer", "train", "models.training", str, "Optimizer (auto, or a concrete name)", visibility="form", views=("train",)),

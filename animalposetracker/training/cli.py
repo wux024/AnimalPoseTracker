@@ -16,6 +16,7 @@ from pathlib import Path
 from typing import Any, Dict, List
 from urllib.parse import urlparse
 
+from .batch_probe import parse_batch_size, probe_batch_size
 from .config import TrainingConfig
 from .events import EventEmitter, TrainingEvent
 from .profiles import (
@@ -361,6 +362,7 @@ _CLI_FIELD_TO_KEY = {
 _CLI_SPECIAL_TYPES = {
     "model": str,
     "data": str,
+    "batch_size": parse_batch_size,
     "pretrained_weights": str,
     "time_hours": float,
     "validation_batch_size": int,
@@ -431,6 +433,10 @@ def _build_train_overrides(cli_values, model_type):
     for name, value in cli_values.items():
         if name in ("device", "project", "name", "exist_ok"):
             overrides[f"common.{name}"] = value
+            continue
+        if value == "auto":
+            # Probed later in the parent (single GPU) or before the launch (multi GPU);
+            # the resolver must never see the placeholder.
             continue
         path = targets.get(name)
         if path is not None:
@@ -622,6 +628,26 @@ def run(argv=None) -> int:
                     message=f"Validation uses the first selected device ({device_ids[0]}).",
                 ))
             else:
+                if values.get("batch_size") == "auto":
+                    values["batch_size"] = probe_batch_size(
+                        data_yaml=values["data"],
+                        model_yaml=values["model"],
+                        model_scale=str(project_values.get("model_scale") or "n").lower(),
+                        image_size=int(values["image_size"]),
+                        device=str(_device_ids(values.get("device"))[0]),
+                    )
+                    targets = train_key_targets(model_type)
+                    overrides = {
+                        **overrides,
+                        targets["batch_size"]: str(values["batch_size"]),
+                    }
+                    emitter.emit(TrainingEvent(
+                        event="batch_size_probe",
+                        message=(
+                            f"--batch-size auto probed {values['batch_size']} per GPU "
+                            f"(largest that fits 60% of the GPU memory)."
+                        ),
+                    ))
                 return _launch_distributed(
                     config_path,
                     args.resume,
@@ -699,6 +725,22 @@ def run(argv=None) -> int:
             values["pretrained_weights"] = str(
                 _resolve_project_default_pretrained(project_dir, project_values)
             )
+        cli_requested_auto = str(getattr(args, "batch_size", "")).strip().lower() == "auto"
+        if cli_requested_auto or values.get("batch_size") == "auto":
+            values["batch_size"] = probe_batch_size(
+                data_yaml=values["data"],
+                model_yaml=values["model"],
+                model_scale=str(project_values.get("model_scale") or "n").lower(),
+                image_size=int(values["image_size"]),
+                device=str(values.get("device") or "auto"),
+            )
+            emitter.emit(TrainingEvent(
+                event="batch_size_probe",
+                message=(
+                    f"--batch-size auto probed a batch size of {values['batch_size']} "
+                    f"(largest that fits 60% of the GPU memory)."
+                ),
+            ))
         config = resume_config or TrainingConfig.from_mapping(values, project_dir=project_dir)
         rank_seed = config.seed + (1 + rank if world_size > 1 else 0)
         config.output_dir.mkdir(parents=True, exist_ok=True)

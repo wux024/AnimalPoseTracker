@@ -81,7 +81,7 @@ This reference is generated from the key registry (`animalposetracker/config/sch
 | `validation_interval` | int | 1 / 10 (RTPose / ViTPose) | build | advanced | Run validation every N epochs |
 | `log_interval` | int | 1 / 50 (RTPose / ViTPose) | build | advanced | Log every N batches |
 | `epochs` | int | 1000 / 500 (RTPose / ViTPose) | build | form | Training epochs |
-| `batch_size` | int | 16 / 64 (RTPose / ViTPose) | build | form | Training batch size |
+| `batch_size` | int | 16 / 64 (RTPose / ViTPose) | build | form | Training batch size ('auto' on the training CLI probes the largest batch that fits 60% of the GPU memory) |
 | `validation_batch_size` | int | `null` / 32 (RTPose / ViTPose) | build | advanced | Validation batch size |
 | `image_size` | int | 640 / 256 (RTPose / ViTPose) | build | form | Model input size (a model property; follows the model recipe) |
 | `optimizer` | str | `auto` / `AdamW` (RTPose / ViTPose) | build | form | Optimizer (auto, or a concrete name) |
