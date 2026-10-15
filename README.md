@@ -217,7 +217,6 @@ https://github.com/user-attachments/assets/a22b28df-4b12-48b0-a087-4ab07f6ea17f
 | [configuration.md](docs/configuration.md) | Full reference of every registered configuration key (generated from the schema) |
 | [deployment_formats.md](docs/deployment_formats.md) | Export/prediction format matrix and per-format installation extras |
 | [pose_analysis_workflows.md](docs/pose_analysis_workflows.md) | Video tracking/filtering API and synchronized multi-camera 3D triangulation |
-| [training_framework_redesign.md](docs/training_framework_redesign.md) | Design notes of the self-contained training framework |
 | [project_config_example/](docs/project_config_example/) | A complete example project configuration |
 
 ## Citation
