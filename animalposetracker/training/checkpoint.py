@@ -137,42 +137,6 @@ def _restore_rng_state(state: Optional[Mapping[str, Any]]) -> None:
         torch.cuda.set_rng_state_all(state["cuda"])
 
 
-def _legacy_pose_globals():
-    """Map known legacy checkpoint classes to this project's local module classes."""
-    from animalposetracker.nn.attention import ChannelAttention
-    from animalposetracker.nn.builder import GraphSequential
-    from animalposetracker.nn.head import YOLOPoseHead
-    from animalposetracker.nn.modules import (
-        CSPNeXtBlock,
-        CSPNeXtBottleneck,
-        Concat,
-        Conv,
-        DFL,
-        DWConv,
-        SPPF,
-        STEM,
-    )
-
-    local_classes = {
-        "ultralytics.nn.tasks.PoseModel": GraphSequential,
-        "ultralytics.nn.modules.block.STEM": STEM,
-        "ultralytics.nn.modules.conv.Conv": Conv,
-        "ultralytics.nn.modules.block.CSPNeXtBlock": CSPNeXtBlock,
-        "ultralytics.nn.modules.block.CSPNeXtBottleneck": CSPNeXtBottleneck,
-        "ultralytics.nn.modules.conv.DWConv": DWConv,
-        "ultralytics.nn.modules.conv.ChannelAttention": ChannelAttention,
-        "ultralytics.nn.modules.block.SPPF": SPPF,
-        "ultralytics.nn.modules.conv.Concat": Concat,
-        "ultralytics.nn.modules.head.Pose": YOLOPoseHead,
-        "ultralytics.nn.modules.block.DFL": DFL,
-    }
-    aliases = []
-    for qualified_name, local_class in local_classes.items():
-        module_name, _, class_name = qualified_name.rpartition(".")
-        aliases.append(type(class_name, (local_class,), {"__module__": module_name}))
-    return aliases
-
-
 def _numpy_checkpoint_globals():
     """Allow the NumPy array globals found in legacy PyTorch checkpoints."""
     try:
@@ -197,13 +161,15 @@ def _numpy_checkpoint_globals():
 
 
 def _load_tensor_checkpoint(path, torch, map_location="cpu"):
-    """Safely read tensor checkpoints, including known legacy pose model objects.
+    """Safely read tensor checkpoints (plain dict format) and native torch modules.
 
-    Legacy class names are redirected to local classes (or allowlisted native
-    PyTorch modules). No package containing a serialized training model is
-    imported while reading the checkpoint.
+    The project's own checkpoints store plain tensors, so ``weights_only=True``
+    loads them directly. Native ``torch.nn`` classes are allowlisted for
+    historical files; any other serialized class needs a one-time conversion --
+    see ``tools/convert_legacy_checkpoint.py``. No third-party package is
+    imported while reading a checkpoint.
     """
-    allowed = _legacy_pose_globals() + _numpy_checkpoint_globals() + [set]
+    allowed = _numpy_checkpoint_globals() + [set]
     seen = set()
     for _ in range(64):
         try:
@@ -223,8 +189,10 @@ def _load_tensor_checkpoint(path, torch, map_location="cpu"):
                 allowed.append(getattr(module, class_name))
                 continue
             raise ValueError(
-                f"Checkpoint contains an unsupported serialized class: {qualified_name}. "
-                "This checkpoint architecture is not registered for safe local conversion."
+                f"Checkpoint contains a serialized class that is not part of this project: "
+                f"{qualified_name}. If this is a legacy third-party checkpoint, convert it "
+                "once with `python tools/convert_legacy_checkpoint.py <file>` and load the "
+                "produced *-weights.pt file instead."
             ) from exc
     raise ValueError("Checkpoint contains too many serialized classes for safe local conversion")
 
