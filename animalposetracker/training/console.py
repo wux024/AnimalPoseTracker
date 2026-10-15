@@ -21,15 +21,15 @@ from .events import TrainingEvent
 # datasets, and the AP block is picked from whichever namespace the validator
 # filled in (see `_select_ap_namespace`).
 _KEYPOINT_VALIDATION_COLUMNS = (
-    ("coco/AP", "AP"),
-    ("coco/AP50", "AP50"),
-    ("coco/AP75", "AP75"),
-    ("ultralytics/AP", "UltraAP"),
-    ("ultralytics/AP50", "UltraAP50"),
-    ("ultralytics/AP75", "UltraAP75"),
-    ("ultralytics/P", "P"),
-    ("ultralytics/R", "R"),
-    ("coco/AR", "AR"),
+    ("COCO/AP", "AP"),
+    ("COCO/AP50", "AP50"),
+    ("COCO/AP75", "AP75"),
+    ("YOLO/AP", "YOLOAP"),
+    ("YOLO/AP50", "YOLOAP50"),
+    ("YOLO/AP75", "YOLOAP75"),
+    ("YOLO/P", "P"),
+    ("YOLO/R", "R"),
+    ("COCO/AR", "AR"),
     ("PCK", "PCK"),
     ("AUC", "AUC"),
     ("EPE", "EPE"),
@@ -101,18 +101,18 @@ def _speed_text(metrics, prefix: str = "") -> str:
 
 def _select_ap_namespace(metrics, prefix: str) -> str:
     """Which AP block the validator filled in; the other is absent, not zero."""
-    return "ultralytics" if f"{prefix}ultralytics/AP" in metrics else "coco"
+    return "yolo" if f"{prefix}YOLO/AP" in metrics else "COCO"
 
 
 def _validation_table(metrics, columns, prefix: str = "") -> Tuple[str, str]:
     selected_ap_prefix = _select_ap_namespace(metrics, prefix)
     selected = []
     for key, label in columns:
-        if key.startswith("coco/"):
-            if selected_ap_prefix == "coco":
+        if key.startswith("COCO/"):
+            if selected_ap_prefix == "COCO":
                 selected.append((key, label))
-        elif key.startswith("ultralytics/"):
-            if selected_ap_prefix == "ultralytics":
+        elif key.startswith("YOLO/"):
+            if selected_ap_prefix == "yolo":
                 selected.append((key, label))
         else:
             selected.append((key, label))

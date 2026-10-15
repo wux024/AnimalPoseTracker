@@ -1468,7 +1468,7 @@ class StatusBarEventTests(unittest.TestCase):
 
     EVALUATION = {
         "event": "evaluation",
-        "metrics": {"coco/AP": 0.71, "coco/AP50": 0.88, "PCK": 0.62},
+        "metrics": {"COCO/AP": 0.71, "COCO/AP50": 0.88, "PCK": 0.62},
         "message": "Evaluation complete; metrics saved to runs/val/metrics.json",
     }
 
@@ -1496,11 +1496,11 @@ class StatusBarEventTests(unittest.TestCase):
 
         self.assertIn("pose mAP50-95=0.710", page.statusBar().currentMessage())
 
-    def test_ultralytics_ap_namespace_is_shown_too(self):
+    def test_yolo_ap_namespace_is_shown_too(self):
         page = AnimalPoseTrackerPage()
         event = {
             "event": "evaluation",
-            "metrics": {"ultralytics/AP": 0.42, "ultralytics/AP50": 0.6},
+            "metrics": {"YOLO/AP": 0.42, "YOLO/AP50": 0.6},
             "message": "Evaluation complete.",
         }
         with patch.object(page.project, "read_training_events", return_value=[event]):

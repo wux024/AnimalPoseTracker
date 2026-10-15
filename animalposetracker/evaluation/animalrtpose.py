@@ -42,7 +42,7 @@ class PoseDetectionValidator:
         keypoint_auc_thresholds: int = 20,
         coco_max_detections: int = 300,
         oks_area_mode: str = "annotation",
-        ap_metric: str = "coco/AP",
+        ap_metric: str = "COCO/AP",
     ) -> None:
         if not 0.0 <= confidence_threshold <= 1.0:
             raise ValueError("validation confidence threshold must be between 0 and 1")
@@ -63,7 +63,7 @@ class PoseDetectionValidator:
         self.keypoint_auc_norm_factor = float(keypoint_auc_norm_factor)
         self.keypoint_auc_thresholds = int(keypoint_auc_thresholds)
         self.coco_max_detections = int(coco_max_detections)
-        self.ultralytics_max_detections = self.max_detections
+        self.yolo_max_detections = self.max_detections
         self.oks_area_mode = str(oks_area_mode).strip().lower()
         self.ap_metric = str(ap_metric).strip()
 
@@ -84,7 +84,7 @@ class PoseDetectionValidator:
             raise ValueError("COCO keypoint validation requires the validation dataset metadata")
         coco_gt, image_ids_by_path, category_ids_by_class = build_coco_ground_truth(
             self.validation_dataset,
-            use_coco_api=self.ap_metric == "coco/AP",
+            use_coco_api=self.ap_metric == "COCO/AP",
         )
         coco_dataset = coco_gt.dataset if hasattr(coco_gt, "dataset") else coco_gt
         original_model_state = model.training
@@ -152,7 +152,7 @@ class PoseDetectionValidator:
             return_matches=True,
             oks_area_mode=self.oks_area_mode,
             ap_metric=self.ap_metric,
-            ultralytics_max_detections=self.ultralytics_max_detections,
+            yolo_max_detections=self.yolo_max_detections,
         )
         result.update(coco_metrics)
         result.update(keypoint_error_metrics_from_coco_matches(

@@ -155,7 +155,7 @@ FIELDS: Tuple[Field, ...] = (
     _f("lr_gamma", "train", "shared.training", float, "Learning-rate decay at milestones", visibility="advanced"),
     _f("validation_interval", "train", "models.training", int, "Run validation every N epochs", visibility="advanced"),
     _f("log_interval", "train", "models.training", int, "Log every N batches", visibility="advanced"),
-    _f("best_metric", "train", "shared.training", str, "Best-checkpoint metric (coco/AP or ultralytics/AP)", visibility="advanced"),
+    _f("best_metric", "train", "shared.training", str, "Best-checkpoint metric (COCO/AP or YOLO/AP)", visibility="advanced"),
     _f("best_metric_mode", "train", "shared.training", str, "Selection direction: max / min", visibility="advanced"),
     _f("early_stopping_patience", "train", "shared.training", int, "Early-stopping patience in epochs", visibility="form", legacy=("patience",), views=("train",)),
 

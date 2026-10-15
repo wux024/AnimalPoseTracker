@@ -46,7 +46,7 @@ def caught_warnings(call):
 
 
 class DeclaredSchemaSetTests(unittest.TestCase):
-    def test_supported_set_is_the_ultralytics_family(self):
+    def test_supported_set_is_the_yolo_family(self):
         self.assertEqual(SUPPORTED_YOLO_SCHEMAS, (YOLO_POSE_RAW, YOLO_POSE_NMS, YOLO_POSE_END2END))
 
     def test_mmpose_schemas_are_reserved(self):
@@ -70,7 +70,7 @@ class ExplicitSchemaTests(unittest.TestCase):
         self.assertEqual(resolved, (YOLO_POSE_RAW, None))
 
     def test_name_is_normalised(self):
-        self.assertEqual(resolve(explicit_schema="  UlTrAlYtIcS_YOLO_Pose_Raw  "),
+        self.assertEqual(resolve(explicit_schema="  YoLo_Pose_RaW  "),
                          (YOLO_POSE_RAW, None))
 
     def test_unspecified_values_fall_through(self):

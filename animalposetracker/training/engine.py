@@ -1204,18 +1204,18 @@ class Trainer:
             import matplotlib.pyplot as plt
 
             epochs = [item["epoch"] for item in self._history]
-            if self.config.best_metric == "ultralytics/AP":
+            if self.config.best_metric == "YOLO/AP":
                 ap_chart = (
                     "Ultralytics AP",
-                    ("val_ultralytics/AP", "val_ultralytics/AP50", "val_ultralytics/AP75"),
+                    ("val_YOLO/AP", "val_YOLO/AP50", "val_YOLO/AP75"),
                 )
                 recall_chart = ("Ultralytics precision / recall", ("val_ultralytics/P", "val_ultralytics/R"))
             else:
                 ap_chart = (
                     "COCO AP",
-                    ("val_coco/AP", "val_coco/AP50", "val_coco/AP75"),
+                    ("val_COCO/AP", "val_COCO/AP50", "val_COCO/AP75"),
                 )
-                recall_chart = ("COCO keypoint AR", ("val_coco/AR",))
+                recall_chart = ("COCO keypoint AR", ("val_COCO/AR",))
             if any("train_loss_simcc_x" in item for item in self._history):
                 charts = (
                     ("Loss", ("train_loss",)),

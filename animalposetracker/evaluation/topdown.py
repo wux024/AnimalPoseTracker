@@ -37,8 +37,8 @@ class SimCCPoseValidator:
         auc_norm_factor: float = 30.0,
         auc_thresholds: int = 20,
         oks_area_mode: str = "annotation",
-        ap_metric: str = "coco/AP",
-        ultralytics_max_detections: int = 300,
+        ap_metric: str = "COCO/AP",
+        yolo_max_detections: int = 300,
     ) -> None:
         self.input_size = tuple(map(int, input_size))
         self.split_ratio = float(split_ratio)
@@ -67,7 +67,7 @@ class SimCCPoseValidator:
         self.auc_thresholds = int(auc_thresholds)
         self.oks_area_mode = str(oks_area_mode).strip().lower()
         self.ap_metric = str(ap_metric).strip()
-        self.ultralytics_max_detections = int(ultralytics_max_detections)
+        self.yolo_max_detections = int(yolo_max_detections)
 
     def __call__(self, model, loader, device):
         predictions_for_coco = []
@@ -78,7 +78,7 @@ class SimCCPoseValidator:
             raise ValueError("AnimalViTPose validation requires the validation dataset")
         coco_gt, _image_ids_by_path, _category_ids_by_class = build_coco_ground_truth(
             self.validation_dataset.annotations,
-            use_coco_api=self.ap_metric == "coco/AP",
+            use_coco_api=self.ap_metric == "COCO/AP",
         )
 
         with torch.inference_mode():
@@ -191,7 +191,7 @@ class SimCCPoseValidator:
             max_detections=self.coco_max_detections,
             oks_area_mode=self.oks_area_mode,
             ap_metric=self.ap_metric,
-            ultralytics_max_detections=self.ultralytics_max_detections,
+            yolo_max_detections=self.yolo_max_detections,
         )
 
     def _oks_nms(self, detections, threshold: float):

@@ -30,7 +30,7 @@ train:
       single_cls: false
       multi_scale: false
       freeze: null
-      best_metric: coco/AP
+      best_metric: COCO/AP
       best_metric_mode: max
   metrics:
     oks_area_mode: annotation

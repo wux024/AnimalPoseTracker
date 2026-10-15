@@ -395,7 +395,7 @@ class SimCCTrainingTests(unittest.TestCase):
             "learning_rate": 1e-5,
             "weight_decay": 0.01,
             "validation_interval": 1,
-            "best_metric": "coco/AP",
+            "best_metric": "COCO/AP",
             "amp": False,
             "pretrained": False,
         })
@@ -404,7 +404,7 @@ class SimCCTrainingTests(unittest.TestCase):
         self.assertEqual(values["image_size"], 256)
         self.assertEqual(values["learning_rate"], 1e-5)
         self.assertEqual(values["validation_interval"], 1)
-        self.assertEqual(values["best_metric"], "coco/AP")
+        self.assertEqual(values["best_metric"], "COCO/AP")
         self.assertIn("layer_decay_rate", applied)
         self.assertNotIn("pretrained_weights", applied)  # pretrained: false
 
@@ -594,7 +594,7 @@ class SimCCTrainingTests(unittest.TestCase):
 
         strict = evaluate_coco_keypoints(coco_gt, detections, [0.001, 0.001], [1], [1])
         tolerant = evaluate_coco_keypoints(coco_gt, detections, [1.0, 1.0], [1], [1])
-        self.assertLess(strict["coco/AP"], tolerant["coco/AP"])
+        self.assertLess(strict["COCO/AP"], tolerant["COCO/AP"])
 
     def test_yolo_validation_labels_are_converted_to_coco_keypoints(self):
         with tempfile.TemporaryDirectory() as temporary_directory:
@@ -639,7 +639,7 @@ class SimCCTrainingTests(unittest.TestCase):
                 image_ids=[1],
                 category_ids=[1],
             )
-            self.assertAlmostEqual(result["coco/AP"], 1.0)
+            self.assertAlmostEqual(result["COCO/AP"], 1.0)
 
             class FakeCriterion(torch.nn.Module):
                 num_classes = 1
@@ -687,8 +687,8 @@ class SimCCTrainingTests(unittest.TestCase):
             self.assertEqual(
                 criterion.keypoint_loss.kpt_oks_sigmas.device, validation_device
             )
-            self.assertAlmostEqual(validation_result["coco/AP"], 1.0)
-            # `coco/AP` is the checkpoint criterion. The `fitness` alias was removed on
+            self.assertAlmostEqual(validation_result["COCO/AP"], 1.0)
+            # `COCO/AP` is the checkpoint criterion. The `fitness` alias was removed on
             # purpose, so assert it stays gone rather than reading it back.
             self.assertNotIn("fitness", validation_result)
             self.assertAlmostEqual(validation_result["PCK"], 1.0)
@@ -728,7 +728,7 @@ class SimCCTrainingTests(unittest.TestCase):
             simcc_result = simcc_validator(
                 ExactSimCCModel(), topdown_val, torch.device("cpu")
             )
-            self.assertIn("coco/AP", simcc_result)
+            self.assertIn("COCO/AP", simcc_result)
             self.assertIn("PCK", simcc_result)
             self.assertIn("AUC", simcc_result)
             self.assertIn("EPE", simcc_result)

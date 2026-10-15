@@ -77,7 +77,7 @@ class TrainingConfig:
     max_detections: int = TRAINING_NMS_MAX_DET
     oks_area_mode: str = "annotation"
     agnostic_nms: bool = TRAINING_NMS_AGNOSTIC
-    best_metric: str = "coco/AP"
+    best_metric: str = "COCO/AP"
     best_metric_mode: str = "max"
     early_stopping_patience: int = 300
     save_period: int = 0
@@ -347,10 +347,10 @@ class TrainingConfig:
             "max_detections": int(values.get("max_det", 300)),
             "oks_area_mode": values.get("oks_area_mode", "annotation"),
             "agnostic_nms": values.get("agnostic_nms", False),
-            "best_metric": values.get("best_metric", "coco/AP"),
+            "best_metric": values.get("best_metric", "COCO/AP"),
             "best_metric_mode": values.get(
                 "best_metric_mode",
-                "min" if values.get("best_metric", "coco/AP") in {"loss", "val_loss"} else "max",
+                "min" if values.get("best_metric", "COCO/AP") in {"loss", "val_loss"} else "max",
             ),
             "early_stopping_patience": values.get(
                 "early_stopping_patience", values.get("patience", 300)

@@ -1236,8 +1236,8 @@ class AnimalPoseTrackerPage(QMainWindow, Ui_AnimalPoseTracker):
         """
         entries = (
             ("loss", AnimalPoseTrackerPage._displayed_loss(metrics), ".4g"),
-            ("pose mAP50-95", metrics.get("coco/AP", metrics.get("ultralytics/AP")), ".3f"),
-            ("pose mAP50", metrics.get("coco/AP50", metrics.get("ultralytics/AP50")), ".3f"),
+            ("pose mAP50-95", metrics.get("COCO/AP", metrics.get("YOLO/AP")), ".3f"),
+            ("pose mAP50", metrics.get("COCO/AP50", metrics.get("YOLO/AP50")), ".3f"),
             ("PCK", metrics.get("PCK"), ".3f"),
         )
         return ", ".join(

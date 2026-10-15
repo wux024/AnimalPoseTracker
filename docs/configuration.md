@@ -107,7 +107,7 @@ This reference is generated from the key registry (`animalposetracker/config/sch
 | key | type | default | apply | visibility | notes |
 |---|---|---|---|---|---|
 | `lr_gamma` | float | 0.1 | build | advanced | Learning-rate decay at milestones |
-| `best_metric` | str | `coco/AP` | build | advanced | Best-checkpoint metric (coco/AP or ultralytics/AP) |
+| `best_metric` | str | `COCO/AP` | build | advanced | Best-checkpoint metric (COCO/AP or YOLO/AP) |
 | `best_metric_mode` | str | `max` | build | advanced | Selection direction: max / min |
 | `early_stopping_patience` | int | 300 | build | form | Early-stopping patience in epochs |
 | `single_cls` | bool | False | build | advanced | Train multi-class data as a single class |

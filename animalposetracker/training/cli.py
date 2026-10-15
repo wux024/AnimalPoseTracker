@@ -930,10 +930,10 @@ def run(argv=None) -> int:
                     oks_area_mode=config.oks_area_mode,
                     ap_metric=(
                         config.best_metric
-                        if config.best_metric in {"coco/AP", "ultralytics/AP"}
-                        else "coco/AP"
+                        if config.best_metric in {"COCO/AP", "YOLO/AP"}
+                        else "COCO/AP"
                     ),
-                    ultralytics_max_detections=config.max_detections,
+                    max_detections=config.max_detections,
                 )
                 if validation_loader is not None else None
             )
@@ -1012,8 +1012,8 @@ def run(argv=None) -> int:
                     oks_area_mode=config.oks_area_mode,
                     ap_metric=(
                         config.best_metric
-                        if config.best_metric in {"coco/AP", "ultralytics/AP"}
-                        else "coco/AP"
+                        if config.best_metric in {"COCO/AP", "YOLO/AP"}
+                        else "COCO/AP"
                     ),
                 )
                 if validation_loader is not None else None

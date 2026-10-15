@@ -338,11 +338,11 @@ class PrettyTrainingRendererTests(unittest.TestCase):
             TrainingEvent(event="started", epoch=0, epochs=2, message="device=cuda"),
             TrainingEvent(
                 event="validation", epoch=1, epochs=2,
-                metrics={"loss": 20.6, "coco/AP": 0.0, "PCK": 0.0},
+                metrics={"loss": 20.6, "COCO/AP": 0.0, "PCK": 0.0},
             ),
             TrainingEvent(
                 event="epoch_end", epoch=1, epochs=2,
-                metrics={"train_loss": 22.4, "val_loss": 20.6, "val_coco/AP": 0.7},
+                metrics={"train_loss": 22.4, "val_loss": 20.6, "val_COCO/AP": 0.7},
             ),
             TrainingEvent(event="finished", epoch=2, epochs=2),
         ])
@@ -399,7 +399,7 @@ class PrettyTrainingRendererTests(unittest.TestCase):
                 "train_loss": 12.5,
                 "train_loss_simcc_per_sample": 1.5625,
                 "val_images": 20, "val_instances": 31,
-                "val_coco/AP": 0.71, "val_PCK": 0.62,
+                "val_COCO/AP": 0.71, "val_PCK": 0.62,
             },
         ))
         output = stream.getvalue()
@@ -481,10 +481,10 @@ class InferCliTests(unittest.TestCase):
                     dataset_yaml = root / f"{key}.yaml"
                     dataset_yaml.write_text(yaml.safe_dump({
                         "kpt_shape": [17, 3],
-                        key: "Ultralytics_YOLO_Pose_NMS",
+                        key: "YOLO_Pose_NMS",
                     }), encoding="utf-8")
                     *_, schema = _load_dataset_config(str(dataset_yaml))
-                    self.assertEqual(schema, "ultralytics_yolo_pose_nms")
+                    self.assertEqual(schema, "yolo_pose_nms")
 
     def test_load_dataset_config_without_a_path(self):
         from animalposetracker.inference.cli import _load_dataset_config
@@ -502,7 +502,7 @@ class InferCliTests(unittest.TestCase):
         self.assertFalse(args.show)
         self.assertIsNone(args.tracker)
 
-    def test_infer_parser_accepts_ultralytics_schemas(self):
+    def test_infer_parser_accepts_yolo_schemas(self):
         from animalposetracker.inference.cli import _make_argument_parser
         from animalposetracker.inference.schema_resolution import SUPPORTED_YOLO_SCHEMAS
 

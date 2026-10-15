@@ -21,9 +21,9 @@ from animalposetracker.postprocessing.nms_params import (
 )
 
 
-YOLO_POSE_RAW = "ultralytics_yolo_pose_raw"
-YOLO_POSE_NMS = "ultralytics_yolo_pose_nms"
-YOLO_POSE_END2END = "ultralytics_yolo_pose_end2end"
+YOLO_POSE_RAW = "yolo_pose_raw"
+YOLO_POSE_NMS = "yolo_pose_nms"
+YOLO_POSE_END2END = "yolo_pose_end2end"
 RTMO_MMDEPLOY = "mmpose_rtmo_mmdeploy"
 RTMPOSE_SIMCC = "mmpose_rtmpose_simcc"
 

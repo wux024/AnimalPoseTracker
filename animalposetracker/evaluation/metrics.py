@@ -85,7 +85,7 @@ def match_predictions(
 
 def _compute_ap(recall: np.ndarray, precision: np.ndarray) -> float:
     """Use the same 101-point AP integration as Ultralytics main."""
-    return _ultralytics_compute_ap(recall, precision)
+    return _yolo_compute_ap(recall, precision)
 
 def _smooth(values: np.ndarray, fraction: float = 0.1) -> np.ndarray:
     """Smooth a curve with the moving-average window used to select max-F1 P/R."""
@@ -256,7 +256,7 @@ def build_coco_ground_truth(dataset, use_coco_api: bool = True):
     return coco_gt, image_ids_by_path, category_ids_by_class
 
 
-def _ultralytics_match_predictions(
+def _yolo_match_predictions(
     prediction_classes: np.ndarray,
     target_classes: np.ndarray,
     similarity: np.ndarray,
@@ -283,7 +283,7 @@ def _ultralytics_match_predictions(
     return correct, matches_at_50
 
 
-def _ultralytics_compute_ap(recall: np.ndarray, precision: np.ndarray) -> float:
+def _yolo_compute_ap(recall: np.ndarray, precision: np.ndarray) -> float:
     """Compute AP using Ultralytics' 101-point precision interpolation and integration."""
     modified_recall = np.concatenate(
         ([0.0], recall, [recall[-1] if len(recall) else 1.0], [1.0])
@@ -296,7 +296,7 @@ def _ultralytics_compute_ap(recall: np.ndarray, precision: np.ndarray) -> float:
     return float(integrate(sampled_precision, recall_samples))
 
 
-def _ultralytics_pose_ap(
+def _yolo_pose_ap(
     coco_dataset: Dict[str, Any],
     detections: Sequence[Dict[str, Any]],
     kpt_oks_sigmas: Sequence[float],
@@ -386,7 +386,7 @@ def _ultralytics_pose_ap(
             oks = (
                 torch.exp(-exponent) * visible[:, None, :]
             ).sum(-1) / (visible.sum(-1)[:, None] + 1e-7)
-            correct, matches_at_50 = _ultralytics_match_predictions(
+            correct, matches_at_50 = _yolo_match_predictions(
                 prediction_classes,
                 target_classes,
                 oks.cpu().numpy(),
@@ -408,11 +408,11 @@ def _ultralytics_pose_ap(
     target_classes = np.asarray(all_target_classes, dtype=np.int64)
     if not target_classes.size:
         metrics = {
-            "ultralytics/AP": 0.0,
-            "ultralytics/AP50": 0.0,
-            "ultralytics/AP75": 0.0,
-            "ultralytics/P": 0.0,
-            "ultralytics/R": 0.0,
+            "YOLO/AP": 0.0,
+            "YOLO/AP50": 0.0,
+            "YOLO/AP75": 0.0,
+            "YOLO/P": 0.0,
+            "YOLO/R": 0.0,
         }
         return (metrics, matched_pairs) if return_matches else metrics
 
@@ -448,7 +448,7 @@ def _ultralytics_pose_ap(
             -confidence_axis, -confidence[class_predictions], precision[:, 0], left=1.0
         )
         for threshold_index in range(len(thresholds)):
-            class_ap[class_index, threshold_index] = _ultralytics_compute_ap(
+            class_ap[class_index, threshold_index] = _yolo_compute_ap(
                 recall[:, threshold_index], precision[:, threshold_index]
             )
 
@@ -457,11 +457,11 @@ def _ultralytics_pose_ap(
     )
     best_confidence_index = int(_smooth(f1_curve.mean(axis=0), fraction=0.1).argmax())
     metrics = {
-        "ultralytics/AP": float(class_ap.mean()),
-        "ultralytics/AP50": float(class_ap[:, 0].mean()),
-        "ultralytics/AP75": float(class_ap[:, 5].mean()),
-        "ultralytics/P": float(precision_curves[:, best_confidence_index].mean()),
-        "ultralytics/R": float(recall_curves[:, best_confidence_index].mean()),
+        "YOLO/AP": float(class_ap.mean()),
+        "YOLO/AP50": float(class_ap[:, 0].mean()),
+        "YOLO/AP75": float(class_ap[:, 5].mean()),
+        "YOLO/P": float(precision_curves[:, best_confidence_index].mean()),
+        "YOLO/R": float(recall_curves[:, best_confidence_index].mean()),
     }
     return (metrics, matched_pairs) if return_matches else metrics
 
@@ -476,8 +476,8 @@ def evaluate_coco_keypoints(
     max_detections: int = 20,
     return_matches: bool = False,
     oks_area_mode: str = "annotation",
-    ap_metric: str = "coco/AP",
-    ultralytics_max_detections: int = 300,
+    ap_metric: str = "COCO/AP",
+    yolo_max_detections: int = 300,
 ):
     """Evaluate keypoint predictions with the selected COCO or Ultralytics AP path.
 
@@ -488,18 +488,18 @@ def evaluate_coco_keypoints(
     """
     if oks_area_mode not in {"annotation", "bbox"}:
         raise ValueError("oks_area_mode must be 'annotation' or 'bbox'")
-    if ap_metric not in {"coco/AP", "ultralytics/AP"}:
-        raise ValueError("ap_metric must be 'coco/AP' or 'ultralytics/AP'")
-    if ap_metric == "coco/AP" and int(max_detections) < 1:
+    if ap_metric not in {"COCO/AP", "YOLO/AP"}:
+        raise ValueError("ap_metric must be 'COCO/AP' or 'YOLO/AP'")
+    if ap_metric == "COCO/AP" and int(max_detections) < 1:
         raise ValueError("max_detections must be at least 1")
-    if ap_metric == "ultralytics/AP" and int(ultralytics_max_detections) < 1:
-        raise ValueError("ultralytics_max_detections must be at least 1")
+    if ap_metric == "YOLO/AP" and int(yolo_max_detections) < 1:
+        raise ValueError("yolo_max_detections must be at least 1")
     sigma_values = np.asarray(kpt_oks_sigmas, dtype=np.float32).reshape(-1)
     if not sigma_values.size or not np.isfinite(sigma_values).all() or np.any(sigma_values <= 0):
         raise ValueError("Keypoint AP evaluation needs one finite positive OKS sigma per keypoint")
-    if ap_metric == "ultralytics/AP":
+    if ap_metric == "YOLO/AP":
         coco_dataset = coco_gt.dataset if hasattr(coco_gt, "dataset") else coco_gt
-        metrics, matched_pairs = _ultralytics_pose_ap(
+        metrics, matched_pairs = _yolo_pose_ap(
             coco_dataset,
             detections,
             sigma_values,
@@ -507,7 +507,7 @@ def evaluate_coco_keypoints(
             category_ids,
             use_categories,
             oks_area_mode,
-            int(ultralytics_max_detections),
+            int(yolo_max_detections),
             return_matches,
         )
         return (metrics, matched_pairs) if return_matches else metrics
@@ -568,14 +568,14 @@ def evaluate_coco_keypoints(
         recall = recall[:, :, area_index, max_det_index]
         threshold_50 = int(np.argmin(np.abs(iou_thresholds - 0.50)))
         threshold_75 = int(np.argmin(np.abs(iou_thresholds - 0.75)))
-        metrics = {"coco/AR": _mean_valid(recall)}
-        if ap_metric == "coco/AP":
+        metrics = {"COCO/AR": _mean_valid(recall)}
+        if ap_metric == "COCO/AP":
             precision = np.asarray(evaluator.eval["precision"], dtype=np.float64)
             precision = precision[:, :, :, area_index, max_det_index]
             metrics.update({
-                "coco/AP": _mean_valid(precision),
-                "coco/AP50": _mean_valid(precision[threshold_50]),
-                "coco/AP75": _mean_valid(precision[threshold_75]),
+                "COCO/AP": _mean_valid(precision),
+                "COCO/AP50": _mean_valid(precision[threshold_50]),
+                "COCO/AP75": _mean_valid(precision[threshold_75]),
             })
     if not return_matches:
         return metrics

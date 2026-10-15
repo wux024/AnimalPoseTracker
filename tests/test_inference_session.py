@@ -35,7 +35,7 @@ DATASET_STYLE = {
     "names": {0: "cat", 1: "dog"},
     "kpt_shape": [4, 3],
     "skeleton": [[0, 1]],
-    "output_schema": "ultralytics_yolo_pose_nms",
+    "output_schema": "yolo_pose_nms",
 }
 
 
@@ -70,7 +70,7 @@ class ConfigParsingTests(unittest.TestCase):
         self.assertEqual(names, ["cat", "dog"])
         self.assertEqual(skeleton, [[0, 1]])
         self.assertEqual(kpt_shape, (4, 3))
-        self.assertEqual(schema, "ultralytics_yolo_pose_nms")
+        self.assertEqual(schema, "yolo_pose_nms")
 
     def test_project_style_config_derives_the_keypoint_shape(self):
         # A project yaml has no kpt_shape at all: the shape follows from the keypoint names and
@@ -103,7 +103,7 @@ class ConfigParsingTests(unittest.TestCase):
 
         self.assertEqual(summary.num_classes, 2)
         self.assertEqual(summary.num_keypoints, 4)
-        self.assertEqual(summary.schema, "ultralytics_yolo_pose_nms")
+        self.assertEqual(summary.schema, "yolo_pose_nms")
 
     def test_declared_weights_are_read_and_resolved_against_the_config(self):
         with tempfile.TemporaryDirectory() as temporary:
@@ -190,7 +190,7 @@ class BuildSessionTests(unittest.TestCase):
             metadata={"outputs": ["output0"]},
         )
 
-        self.assertEqual(session.schema, "ultralytics_yolo_pose_raw")
+        self.assertEqual(session.schema, "yolo_pose_raw")
         self.assertEqual(session.output_config.num_classes, 2)
         self.assertEqual(session.output_config.num_keypoints, 5)
         self.assertEqual(session.kpt_shape, (5, 3))
@@ -204,10 +204,10 @@ class BuildSessionTests(unittest.TestCase):
         _FakeEngine.runtime_shapes = {"output0": (1, 21, 10)}
         session = self._build(
             config_mapping=PROJECT_STYLE,
-            metadata={"outputs": ["output0"], "schema": "ultralytics_yolo_pose_nms"},
+            metadata={"outputs": ["output0"], "schema": "yolo_pose_nms"},
         )
 
-        self.assertEqual(session.schema, "ultralytics_yolo_pose_nms")
+        self.assertEqual(session.schema, "yolo_pose_nms")
         # Post-NMS rows carry the class id directly, so the configured names are the source.
         self.assertEqual(session.output_config.num_classes, 2)
 
@@ -217,22 +217,22 @@ class BuildSessionTests(unittest.TestCase):
             metadata={"outputs": ["output0"]},
         )
 
-        self.assertEqual(session.schema, "ultralytics_yolo_pose_nms")
+        self.assertEqual(session.schema, "yolo_pose_nms")
 
     def test_an_explicit_schema_argument_wins_over_the_config(self):
         session = self._build(
             config_mapping=DATASET_STYLE,
             metadata={"outputs": ["output0"]},
-            schema="ultralytics_yolo_pose_raw",
+            schema="yolo_pose_raw",
         )
 
-        self.assertEqual(session.schema, "ultralytics_yolo_pose_raw")
+        self.assertEqual(session.schema, "yolo_pose_raw")
 
     def test_sidecar_shape_is_used_when_the_config_has_none(self):
         session = self._build(metadata={
             "outputs": ["output0"],
             "kpt_shape": [12, 3],
-            "schema": "ultralytics_yolo_pose_raw",
+            "schema": "yolo_pose_raw",
         })
 
         self.assertEqual(session.kpt_shape, (12, 3))
@@ -313,7 +313,7 @@ class BuildSessionTests(unittest.TestCase):
 
     def test_the_engine_receives_the_resolved_backend_and_bits(self):
         self._build(
-            metadata={"kpt_shape": [4, 3], "schema": "ultralytics_yolo_pose_raw"},
+            metadata={"kpt_shape": [4, 3], "schema": "yolo_pose_raw"},
             engine="openvino",
             bits="FP16",
             device="GPU",
