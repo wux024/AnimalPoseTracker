@@ -9,10 +9,12 @@ Created On: 2026/9/16
 Version: 1.1
 
 Overview:
-    Two heads live here. They are alternatives, not siblings -- a model picks one:
+    Three heads live here. They are alternatives, not siblings -- a model picks one:
 
         1. YOLOPoseHead  anchor-based regression head, used by AnimalRTPose
         2. SimCCHead     1D coordinate classification head, used by AnimalViTPose
+        3. RTMOHead      one-stage (bottom-up) head with the Dynamic Coordinate
+                         Classifier, used by the AnimalRTMO variant
 
     ============================ 1. YOLOPoseHead ===========================
     Anchor-based pose head, implemented as a single class.
@@ -70,9 +72,11 @@ from typing import List, Optional, Sequence, Tuple
 import torch
 import torch.nn as nn
 
+from .attention import GAUEncoder
 from .block import DFL, RealNVP
 from .conv import Conv
 from .tal import dist2bbox, make_anchors
+from .transformer import SinePositionalEncoding
 
 
 class YOLOPoseHead(nn.Module):
@@ -421,4 +425,367 @@ class SimCCHead(nn.Module):
         return self.mlp_head_x(feats), self.mlp_head_y(feats)
 
 
-__all__ = ["YOLOPoseHead", "SimCCHead"]
+# --------------------------------------------------------------------------------------------
+# RTMO head (ported from mmpose; pure torch, no mmcv)
+# --------------------------------------------------------------------------------------------
+
+
+class _ScaleConst(nn.Module):
+    """Multiply by a constant (stand-in for mmcv's Scale).
+
+    mmcv's `Scale(0.1)` carries a learnable factor, but the RTMO configs never
+    train it, so a plain constant keeps behaviour and drops the parameter.
+    """
+
+    def __init__(self, factor: float):
+        super().__init__()
+        self.factor = factor
+
+    def forward(self, x):
+        return x * self.factor
+
+
+class RTMOHeadModule(nn.Module):
+    """One-stage pose head module: classification plus a pose/regression branch.
+
+    Ported from mmpose's RTMO (`rtmo_head.py`). Sub-module names (`conv_cls` /
+    `conv_pose` / `out_cls` / `out_bbox` / `out_kpt_reg` / `out_kpt_vis` /
+    `out_pose`) are kept identical so reference checkpoints load.
+
+    Args:
+        num_keypoints (int): Number of keypoints for one instance.
+        in_channels (int): Channels of the input feature maps.
+        num_classes (int): Classes excluding background. Defaults to 1.
+        widen_factor (float): Width multiplier. Defaults to 1.0.
+        cls_feat_channels (int): Channels of the classification branch.
+        stacked_convs (int): Stacked convolutions per branch.
+        num_groups (int): Groups of the grouped convolutions in the pose branch.
+        channels_per_group (int): Channels per group in the pose branch.
+        pose_vec_channels (int): Channels of the pose feature; -1 keeps the
+            regression features instead of a separate projection.
+        featmap_strides (Sequence[int]): Strides of the input feature maps.
+    """
+
+    def __init__(
+        self,
+        num_keypoints,
+        in_channels,
+        num_classes=1,
+        widen_factor=1.0,
+        cls_feat_channels=256,
+        stacked_convs=2,
+        num_groups=8,
+        channels_per_group=36,
+        pose_vec_channels=-1,
+        featmap_strides=(8, 16, 32),
+    ):
+        super().__init__()
+        self.num_classes = num_classes
+        self.cls_feat_channels = int(cls_feat_channels * widen_factor)
+        self.stacked_convs = stacked_convs
+
+        self.featmap_strides = featmap_strides
+        self.in_channels = int(in_channels * widen_factor)
+        self.num_keypoints = num_keypoints
+
+        self.num_groups = num_groups
+        self.channels_per_group = int(widen_factor * channels_per_group)
+        self.pose_vec_channels = pose_vec_channels
+
+        self._init_layers()
+
+    def _init_layers(self):
+        self._init_cls_branch()
+        self._init_pose_branch()
+
+    def _init_cls_branch(self):
+        """Classification branch: stacked 3x3 convolutions + a 1x1 output."""
+        self.conv_cls = nn.ModuleList()
+        for _ in self.featmap_strides:
+            stacked_convs = []
+            for i in range(self.stacked_convs):
+                chn = self.in_channels if i == 0 else self.cls_feat_channels
+                stacked_convs.append(Conv(chn, self.cls_feat_channels, 3, p=1))
+            self.conv_cls.append(nn.Sequential(*stacked_convs))
+
+        self.out_cls = nn.ModuleList()
+        for _ in self.featmap_strides:
+            self.out_cls.append(nn.Conv2d(self.cls_feat_channels, self.num_classes, 1))
+
+    def _init_pose_branch(self):
+        """Pose branch: grouped convolutions + box / kpt / visibility / pose outputs."""
+        self.conv_pose = nn.ModuleList()
+        out_chn = self.num_groups * self.channels_per_group
+        for _ in self.featmap_strides:
+            stacked_convs = []
+            for i in range(self.stacked_convs * 2):
+                chn = self.in_channels if i == 0 else out_chn
+                groups = 1 if i == 0 else self.num_groups
+                stacked_convs.append(Conv(chn, out_chn, 3, p=1, g=groups))
+            self.conv_pose.append(nn.Sequential(*stacked_convs))
+
+        self.out_bbox = nn.ModuleList()
+        self.out_kpt_reg = nn.ModuleList()
+        self.out_kpt_vis = nn.ModuleList()
+        for _ in self.featmap_strides:
+            self.out_bbox.append(nn.Conv2d(out_chn, 4, 1))
+            self.out_kpt_reg.append(nn.Conv2d(out_chn, self.num_keypoints * 2, 1))
+            self.out_kpt_vis.append(nn.Conv2d(out_chn, self.num_keypoints, 1))
+
+        if self.pose_vec_channels > 0:
+            self.out_pose = nn.ModuleList()
+            for _ in self.featmap_strides:
+                self.out_pose.append(nn.Conv2d(out_chn, self.pose_vec_channels, 1))
+
+    def init_weights(self):
+        """Prior-initialize the classification bias for stable training."""
+        bias_init = -math.log((1 - 0.01) / 0.01)
+        for conv_cls in self.out_cls:
+            conv_cls.bias.data.fill_(bias_init)
+
+    def forward(self, x):
+        """Run every branch on the split features of each level.
+
+        Returns (cls_scores, bbox_preds, kpt_offsets, kpt_vis, pose_feats), each a
+        per-level list. `kpt_offsets` is only produced while training (it feeds the
+        proxy poses for positive-sample selection).
+        """
+        cls_scores, bbox_preds = [], []
+        kpt_offsets, kpt_vis = [], []
+        pose_feats = []
+
+        for i in range(len(x)):
+            cls_feat, reg_feat = x[i].split(x[i].size(1) // 2, 1)
+
+            cls_feat = self.conv_cls[i](cls_feat)
+            reg_feat = self.conv_pose[i](reg_feat)
+
+            cls_scores.append(self.out_cls[i](cls_feat))
+            bbox_preds.append(self.out_bbox[i](reg_feat))
+            if self.training:
+                # `kpt_offsets` generates the proxy poses for positive sample
+                # selection during training
+                kpt_offsets.append(self.out_kpt_reg[i](reg_feat))
+            kpt_vis.append(self.out_kpt_vis[i](reg_feat))
+
+            if self.pose_vec_channels > 0:
+                pose_feats.append(self.out_pose[i](reg_feat))
+            else:
+                pose_feats.append(reg_feat)
+
+        return cls_scores, bbox_preds, kpt_offsets, kpt_vis, pose_feats
+
+
+class DCC(nn.Module):
+    """Dynamic Coordinate Classifier for one-stage pose estimation.
+
+    Ported from mmpose's RTMO. Turns the pose feature of every positive grid into
+    per-keypoint x / y distributions over dynamically allocated bins, and decodes
+    them with an integral (expectation) instead of an argmax.
+
+    Args:
+        in_channels (int): Channels of the pose feature.
+        num_keypoints (int): Number of keypoints.
+        feat_channels (int): Internal feature channels.
+        num_bins (Tuple[int, int]): Bin counts for x and y.
+        spe_channels (int): Sine positional encoding channels. Defaults to 128.
+        spe_temperature (float): Sine positional encoding temperature. Defaults to 300.
+        gau_cfg (dict, optional): Config for the gated attention unit.
+    """
+
+    def __init__(
+        self,
+        in_channels: int,
+        num_keypoints: int,
+        feat_channels: int,
+        num_bins,
+        spe_channels: int = 128,
+        spe_temperature: float = 300.0,
+        gau_cfg=None,
+    ):
+        super().__init__()
+        if gau_cfg is None:
+            gau_cfg = dict(
+                s=128, expansion_factor=2, dropout_rate=0.0, drop_path=0.0, act_fn="SiLU", pos_enc="add"
+            )
+
+        self.in_channels = in_channels
+        self.num_keypoints = num_keypoints
+        self.feat_channels = feat_channels
+        self.num_bins = num_bins
+        self.gau_cfg = gau_cfg
+
+        self.spe = SinePositionalEncoding(out_channels=spe_channels, temperature=spe_temperature)
+        self.spe_feat_channels = spe_channels
+
+        self._build_layers()
+        self._build_basic_bins()
+
+    def _build_layers(self):
+        if self.gau_cfg is not None:
+            gau_cfg = dict(self.gau_cfg)
+            gau_cfg["in_token_dims"] = self.feat_channels
+            gau_cfg["out_token_dims"] = self.feat_channels
+            self.gau = GAUEncoder(**gau_cfg)
+            if gau_cfg.get("pos_enc", "none") in ("add", "rope"):
+                self.pos_enc = nn.Parameter(torch.randn(self.num_keypoints, gau_cfg["s"]))
+
+        # fully-connected layers to convert pose feats to keypoint feats
+        self.pose_to_kpts = nn.Sequential(
+            nn.Linear(self.in_channels, self.feat_channels * self.num_keypoints),
+            nn.BatchNorm1d(self.feat_channels * self.num_keypoints),
+        )
+
+        # adapter layers for dynamic encodings
+        self.x_fc = nn.Linear(self.spe_feat_channels, self.feat_channels)
+        self.y_fc = nn.Linear(self.spe_feat_channels, self.feat_channels)
+
+        # fully-connected layers to predict sigma
+        self.sigma_fc = nn.Sequential(
+            nn.Linear(self.in_channels, self.num_keypoints),
+            nn.Sigmoid(),
+            _ScaleConst(0.1),
+        )
+
+    def _build_basic_bins(self):
+        """Basic bin coordinates for x and y, spanning [-0.5, 0.5]."""
+        self.register_buffer("y_bins", torch.linspace(-0.5, 0.5, self.num_bins[1]))
+        self.register_buffer("x_bins", torch.linspace(-0.5, 0.5, self.num_bins[0]))
+
+    def _apply_softmax(self, x_hms, y_hms):
+        """Numerically stable softmax over the bin axis of the 1-D heatmaps."""
+        x_hms = x_hms.clamp(min=-5e4, max=5e4)
+        y_hms = y_hms.clamp(min=-5e4, max=5e4)
+        pred_x = x_hms - x_hms.max(dim=-1, keepdims=True).values.detach()
+        pred_y = y_hms - y_hms.max(dim=-1, keepdims=True).values.detach()
+
+        exp_x, exp_y = pred_x.exp(), pred_y.exp()
+        prob_x = exp_x / (exp_x.sum(dim=-1, keepdims=True) + 1e-8)
+        prob_y = exp_y / (exp_y.sum(dim=-1, keepdims=True) + 1e-8)
+        return prob_x, prob_y
+
+    def _get_bin_enc(self, bbox_cs, grids):
+        """Dynamic bin allocation + sine encoding for the x / y bins."""
+        center, scale = bbox_cs.split(2, dim=-1)
+        center = center - grids
+
+        x_bins = self.x_bins.view(*((1,) * (scale.ndim - 1)), -1) * scale[..., 0:1] + center[..., 0:1]
+        y_bins = self.y_bins.view(*((1,) * (scale.ndim - 1)), -1) * scale[..., 1:2] + center[..., 1:2]
+
+        x_bins_enc = self.x_fc(self.spe(position=x_bins))
+        y_bins_enc = self.y_fc(self.spe(position=y_bins))
+        return x_bins_enc, y_bins_enc
+
+    def _pose_feats_to_heatmaps(self, pose_feats, x_bins_enc, y_bins_enc):
+        """Pose features -> per-keypoint features -> x / y 1-D heatmaps."""
+        kpt_feats = self.pose_to_kpts(pose_feats)
+        kpt_feats = kpt_feats.reshape(*kpt_feats.shape[:-1], self.num_keypoints, self.feat_channels)
+
+        if hasattr(self, "gau"):
+            kpt_feats = self.gau(kpt_feats, pos_enc=getattr(self, "pos_enc", None))
+
+        x_hms = torch.matmul(kpt_feats, x_bins_enc.transpose(-1, -2).contiguous())
+        y_hms = torch.matmul(kpt_feats, y_bins_enc.transpose(-1, -2).contiguous())
+        return x_hms, y_hms
+
+    def _decode_xy_heatmaps(self, x_hms, y_hms, bbox_cs):
+        """Integral (expectation) over the dynamic bins."""
+        center, scale = bbox_cs.split(2, dim=-1)
+
+        x_bins = self.x_bins.view(*((1,) * (scale.ndim - 1)), -1) * scale[..., 0:1] + center[..., 0:1]
+        y_bins = self.y_bins.view(*((1,) * (scale.ndim - 1)), -1) * scale[..., 1:2] + center[..., 1:2]
+
+        x = (x_hms * x_bins.unsqueeze(1)).sum(dim=-1)
+        y = (y_hms * y_bins.unsqueeze(1)).sum(dim=-1)
+        return torch.stack((x, y), dim=-1)
+
+    def generate_target_heatmap(self, kpt_targets, bbox_cs, sigmas, areas):
+        """Laplacian-error targets for the 1-D heatmaps."""
+        center, scale = bbox_cs.split(2, dim=-1)
+        x_bins = self.x_bins.view(*((1,) * (scale.ndim - 1)), -1) * scale[..., 0:1] + center[..., 0:1]
+        y_bins = self.y_bins.view(*((1,) * (scale.ndim - 1)), -1) * scale[..., 1:2] + center[..., 1:2]
+
+        dist_x = torch.abs(kpt_targets.narrow(2, 0, 1) - x_bins.unsqueeze(1))
+        dist_y = torch.abs(kpt_targets.narrow(2, 1, 1) - y_bins.unsqueeze(1))
+
+        areas = areas.pow(0.5).clip(min=1).reshape(-1, 1, 1)
+        sigmas = sigmas.clip(min=1e-3).unsqueeze(2)
+        dist_x = dist_x / areas / sigmas
+        dist_y = dist_y / areas / sigmas
+
+        hm_x = torch.exp(-dist_x / 2) / sigmas
+        hm_y = torch.exp(-dist_y / 2) / sigmas
+        return hm_x, hm_y
+
+    def forward_train(self, pose_feats, bbox_cs, grids):
+        """Training forward: returns (pose predictions, heatmaps, sigmas)."""
+        sigmas = self.sigma_fc(pose_feats)
+        x_bins_enc, y_bins_enc = self._get_bin_enc(bbox_cs, grids)
+        x_hms, y_hms = self._pose_feats_to_heatmaps(pose_feats, x_bins_enc, y_bins_enc)
+        x_hms, y_hms = self._apply_softmax(x_hms, y_hms)
+        pose_preds = self._decode_xy_heatmaps(x_hms, y_hms, bbox_cs)
+        return pose_preds, (x_hms, y_hms), sigmas
+
+    @torch.no_grad()
+    def forward_test(self, pose_feats, bbox_cs, grids):
+        """Inference forward: returns the decoded pose predictions."""
+        x_bins_enc, y_bins_enc = self._get_bin_enc(bbox_cs, grids)
+        x_hms, y_hms = self._pose_feats_to_heatmaps(pose_feats, x_bins_enc, y_bins_enc)
+        x_hms, y_hms = self._apply_softmax(x_hms, y_hms)
+        return self._decode_xy_heatmaps(x_hms, y_hms, bbox_cs)
+
+    def switch_to_deploy(self, test_cfg=None):
+        """Fold the BN into the FC and freeze the GAU path (inference optimizations)."""
+        if getattr(self, "deploy", False):
+            return
+        self._convert_pose_to_kpts()
+        if hasattr(self, "gau"):
+            self._convert_gau()
+        self.deploy = True
+
+    def _convert_pose_to_kpts(self):
+        """Fold the BatchNorm1d of `pose_to_kpts` into the preceding Linear."""
+        fc, bn = self.pose_to_kpts
+        std = (bn.running_var + bn.eps).sqrt()
+        weight = fc.weight * (bn.weight / std).unsqueeze(1)
+        bias = bn.bias + (fc.bias - bn.running_mean) * bn.weight / std
+        fc.weight.data = weight.detach()
+        fc.bias.data = bias.detach()
+        self.pose_to_kpts = fc
+
+    def _convert_gau(self):
+        """Pre-expand gamma / beta of the GAU and rewrite its forward (export-friendly)."""
+        gamma_q = self.gau.gamma[0].view(1, 1, 1, self.gau.gamma.size(-1))
+        gamma_k = self.gau.gamma[1].view(1, 1, 1, self.gau.gamma.size(-1))
+        beta_q = self.gau.beta[0].view(1, 1, 1, self.gau.beta.size(-1))
+        beta_k = self.gau.beta[1].view(1, 1, 1, self.gau.beta.size(-1))
+
+        if hasattr(self, "pos_enc"):
+            pos_enc = self.pos_enc.reshape(1, 1, *self.pos_enc.shape)
+            beta_q = beta_q + pos_enc
+            beta_k = beta_k + pos_enc
+
+        gamma_q, gamma_k = gamma_q.detach(), gamma_k.detach()
+        beta_q, beta_k = beta_q.detach(), beta_k.detach()
+
+        @torch.no_grad()
+        def _forward(self, x, *args, **kwargs):
+            norm = torch.linalg.norm(x, dim=-1, keepdim=True) * self.ln.scale
+            x = x / norm.clamp(min=self.ln.eps) * self.ln.g
+
+            uv = self.uv(x)
+            uv = self.act_fn(uv)
+
+            u, v, base = torch.split(uv, [self.e, self.e, self.s], dim=-1)
+            q = base * gamma_q.to(base) + beta_q.to(base)
+            k = base * gamma_k.to(base) + beta_k.to(base)
+            qk = torch.matmul(q, k.transpose(-1, -2))
+
+            kernel = torch.square(torch.nn.functional.relu(qk / self.sqrt_s))
+            x = u * torch.matmul(kernel, v)
+            return self.o(x)
+
+        self.gau._forward = _forward.__get__(self.gau)
+
+
+__all__ = ["YOLOPoseHead", "SimCCHead", "RTMOHeadModule", "DCC"]
