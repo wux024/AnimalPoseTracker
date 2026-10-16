@@ -73,9 +73,32 @@ def configure_project_model_spec(config: TrainingConfig, context: Dict[str, Any]
         model_spec["nc"] = 1
     elif head_name == "YOLOPoseHead":
         model_spec["nc"] = 1 if config.single_cls else class_count
+    elif head_name == "RTMOHead":
+        # The one-stage head predicts one class per grid unless the dataset says more;
+        # its keypoint count follows the dataset (set above), like the other heads.
+        model_spec["nc"] = 1 if config.single_cls else class_count
     else:
         raise NotImplementedError(f"Native inference does not support model head {head_name!r}")
     return model_spec, head_name, scale
+
+
+def _prepare_one_stage_head(model) -> None:
+    """Attach the grid priors the one-stage head needs outside training.
+
+    The training criterion injects the prior generator; the project flows build a
+    bare model, so the same generator (its only input is the head's feature-map
+    strides) is attached here. Its grid positions are a pure function of the
+    strides, so the attached generator matches the trained one exactly.
+    """
+    from animalposetracker.nn.head import RTMOHead
+    from animalposetracker.training.assigner import MlvlPointGenerator
+
+    head = model.model[-1] if getattr(model, "model", None) is not None else None
+    if isinstance(head, RTMOHead) and getattr(head, "prior_generator", None) is None:
+        head.prior_generator = MlvlPointGenerator(
+            strides=list(head.featmap_strides),
+            centralize_points=True,
+        )
 
 
 def _instantiate_and_load(config, context, model_spec, head_name, scale, weights_path, device=None):
@@ -89,6 +112,7 @@ def _instantiate_and_load(config, context, model_spec, head_name, scale, weights
     from animalposetracker.nn import build_model
 
     model = build_model(model_spec, scale=scale)
+    _prepare_one_stage_head(model)
     target_device = resolve_device(torch, device or config.device)
     model.to(target_device)
     model.eval()

@@ -321,29 +321,51 @@ def _predict_frame(image, model, config, context, settings, external_backend=Fal
     tensor = torch.from_numpy(
         np.ascontiguousarray(cv2.cvtColor(canvas, cv2.COLOR_BGR2RGB).transpose(2, 0, 1))
     ).to(device=context["device"], dtype=torch.float32).div_(255.0).unsqueeze(0)
-    if external_backend:
-        raw_outputs = model(tensor.detach().cpu().numpy())
-        if not raw_outputs:
-            raise RuntimeError("The exported pose model returned no output tensors")
-        prediction = torch.as_tensor(raw_outputs[0], device=context["device"])
-    else:
+    if context["head_name"] == "RTMOHead":
+        if external_backend:
+            raise NotImplementedError(
+                "The one-stage head predicts through its torch model here; exported "
+                "artifacts run through `animalpose-cli infer`"
+            )
         with torch.inference_mode():
             output = model(tensor)
-        if not isinstance(output, (tuple, list)) or len(output) != 2:
-            raise TypeError("AnimalRTPose inference expects (decoded predictions, raw predictions)")
-        prediction = output[0]
-    detections = pose_non_max_suppression(
-        prediction.float(),
-        num_classes=int(context["model_nc"]),
-        num_keypoints=int(context["kpt_shape"][0]),
-        keypoint_dimensions=int(context["kpt_shape"][1]),
-        confidence_threshold=settings["confidence"],
-        iou_threshold=settings["iou"],
-        max_detections=settings["max_detections"],
-        agnostic=settings["agnostic_nms"],
-    )[0]
+        result = model.model[-1].predict_from_outputs(
+            output,
+            [dict(metainfo=dict(input_size=(canvas.shape[1], canvas.shape[0])))],
+            test_cfg=dict(score_thr=settings["confidence"], nms_thr=settings["iou"]),
+        )[0]
+        boxes = result["bboxes"]
+        scores = result["scores"]
+        classes = result["labels"]
+        # The renderer keys visibility off a third keypoint channel, the same shape
+        # the anchor-based head produces.
+        keypoints = torch.cat(
+            (result["keypoints"], result["keypoints_visible"].unsqueeze(-1)), dim=-1
+        )
+    else:
+        if external_backend:
+            raw_outputs = model(tensor.detach().cpu().numpy())
+            if not raw_outputs:
+                raise RuntimeError("The exported pose model returned no output tensors")
+            prediction = torch.as_tensor(raw_outputs[0], device=context["device"])
+        else:
+            with torch.inference_mode():
+                output = model(tensor)
+            if not isinstance(output, (tuple, list)) or len(output) != 2:
+                raise TypeError("AnimalRTPose inference expects (decoded predictions, raw predictions)")
+            prediction = output[0]
+        detections = pose_non_max_suppression(
+            prediction.float(),
+            num_classes=int(context["model_nc"]),
+            num_keypoints=int(context["kpt_shape"][0]),
+            keypoint_dimensions=int(context["kpt_shape"][1]),
+            confidence_threshold=settings["confidence"],
+            iou_threshold=settings["iou"],
+            max_detections=settings["max_detections"],
+            agnostic=settings["agnostic_nms"],
+        )[0]
 
-    boxes, scores, classes, keypoints = detections
+        boxes, scores, classes, keypoints = detections
     original_height, original_width = image.shape[:2]
     if boxes.numel():
         boxes[:, [0, 2]] = ((boxes[:, [0, 2]] - pad_x) / scale).clamp(0, original_width)
@@ -819,7 +841,7 @@ def run(argv=None, box_provider: InstanceBoxProvider = None) -> int:
             context["topdown_input_size"] = tuple(map(int, head_args[1]))
             context["simcc_split_ratio"] = float(head_args[3])
 
-    if head_name not in {"YOLOPoseHead", "SimCCHead"}:
+    if head_name not in {"YOLOPoseHead", "SimCCHead", "RTMOHead"}:
         raise NotImplementedError(f"Project prediction does not support model head {head_name!r}")
     dataset_names = context["dataset"].get("names") or {}
     dataset_names = list(dataset_names.values()) if isinstance(dataset_names, dict) else list(dataset_names)
@@ -827,7 +849,7 @@ def run(argv=None, box_provider: InstanceBoxProvider = None) -> int:
     context["skeleton"] = context["project"].get("skeleton") or context["dataset"].get("skeleton") or []
 
     metadata_input_size = artifact_metadata.get("input_size")
-    if head_name == "YOLOPoseHead" and metadata_input_size:
+    if head_name in {"YOLOPoseHead", "RTMOHead"} and metadata_input_size:
         config.image_size = int(metadata_input_size[0])
     elif head_name == "SimCCHead" and metadata_input_size:
         context["topdown_input_size"] = tuple(map(int, metadata_input_size[:2]))
@@ -924,7 +946,7 @@ def run(argv=None, box_provider: InstanceBoxProvider = None) -> int:
         image_paths, videos = _source_paths(source_value, project_dir, context["dataset"])
         if not image_paths and not videos:
             raise ValueError("The prediction source contains no supported images or videos")
-    if head_name == "YOLOPoseHead" and not image_paths and not videos:
+    if head_name in {"YOLOPoseHead", "RTMOHead"} and not image_paths and not videos:
         raise ValueError("The selected dataset split contains no supported images or videos")
 
     if args.output_dir:
@@ -1071,7 +1093,7 @@ def run(argv=None, box_provider: InstanceBoxProvider = None) -> int:
         dynamic_ncols=True,
         disable=not image_paths,
     )
-    if head_name == "YOLOPoseHead":
+    if head_name in {"YOLOPoseHead", "RTMOHead"}:
         for image_path in image_progress:
             image_progress.set_postfix_str(image_path.name)
             image = _read_image(image_path)
@@ -1109,7 +1131,7 @@ def run(argv=None, box_provider: InstanceBoxProvider = None) -> int:
 
     for video_path in videos:
         output_path = output_dir / "videos" / f"{_output_stem(video_path, videos)}.mp4"
-        if head_name == "YOLOPoseHead":
+        if head_name in {"YOLOPoseHead", "RTMOHead"}:
             frame_predictor = lambda frame: _predict_frame(
                 frame, model, config, context, settings, external_backend=external_backend
             )

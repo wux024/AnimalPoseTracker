@@ -164,6 +164,7 @@ class Ui_PublicDatasetProject(object):
         self.ModelTypeSelection.addItem("")
         self.ModelTypeSelection.addItem("")
         self.ModelTypeSelection.addItem("")
+        self.ModelTypeSelection.addItem("")
         self.ModelTypeSelection.setObjectName(u"ModelTypeSelection")
         sizePolicy3.setHeightForWidth(self.ModelTypeSelection.sizePolicy().hasHeightForWidth())
         self.ModelTypeSelection.setSizePolicy(sizePolicy3)
@@ -278,6 +279,7 @@ class Ui_PublicDatasetProject(object):
         self.ModelTypeSelection.setItemText(4, QCoreApplication.translate("PublicDatasetProject", u"YOLO11-Pose", None))
         self.ModelTypeSelection.setItemText(5, QCoreApplication.translate("PublicDatasetProject", u"YOLOv8-Pose", None))
         self.ModelTypeSelection.setItemText(6, QCoreApplication.translate("PublicDatasetProject", u"YOLOv8-Pose-P6", None))
+        self.ModelTypeSelection.setItemText(7, QCoreApplication.translate("PublicDatasetProject", u"AnimalRTMO", None))
 
         self.ModelScaleSelection.setItemText(0, QCoreApplication.translate("PublicDatasetProject", u"N", None))
         self.ModelScaleSelection.setItemText(1, QCoreApplication.translate("PublicDatasetProject", u"S", None))

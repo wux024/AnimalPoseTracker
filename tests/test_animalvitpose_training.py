@@ -1054,6 +1054,7 @@ class SimCCTrainingTests(unittest.TestCase):
 
         context = {
             "device": torch.device("cpu"),
+            "head_name": "YOLOPoseHead",
             "model_nc": 1,
             "kpt_shape": (2, 3),
             "class_names": ["mouse"],

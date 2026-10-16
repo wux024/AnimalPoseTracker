@@ -79,6 +79,16 @@ from .conv import Conv
 from .tal import dist2bbox, make_anchors
 from .transformer import SinePositionalEncoding
 
+# The one-stage deploy decode needs an in-graph NMS, which only torchvision provides.
+# It is optional and imported here, at module load: importing it lazily *during*
+# ONNX tracing trips the exporter's op check (`torchvision::_cuda_version` returns
+# an int, which the tracer rejects). Same optional-dependency pattern the
+# postprocessing layer uses.
+try:
+    from torchvision.ops import nms as _torchvision_nms
+except (ImportError, RuntimeError):  # pragma: no cover - environment dependent
+    _torchvision_nms = None
+
 
 class YOLOPoseHead(nn.Module):
     """Anchor-based pose head: boxes, classes and keypoints regressed together.
@@ -756,21 +766,21 @@ class DCC(nn.Module):
 
     def _convert_gau(self):
         """Pre-expand gamma / beta of the GAU and rewrite its forward (export-friendly)."""
-        gamma_q = self.gau.gamma[0].view(1, 1, 1, self.gau.gamma.size(-1))
-        gamma_k = self.gau.gamma[1].view(1, 1, 1, self.gau.gamma.size(-1))
-        beta_q = self.gau.beta[0].view(1, 1, 1, self.gau.beta.size(-1))
-        beta_k = self.gau.beta[1].view(1, 1, 1, self.gau.beta.size(-1))
+        gamma_q = self.gau.gamma[0].detach()
+        gamma_k = self.gau.gamma[1].detach()
+        beta_q = self.gau.beta[0].detach()
+        beta_k = self.gau.beta[1].detach()
 
         if hasattr(self, "pos_enc"):
-            pos_enc = self.pos_enc.reshape(1, 1, *self.pos_enc.shape)
+            pos_enc = self.pos_enc.detach()
             beta_q = beta_q + pos_enc
             beta_k = beta_k + pos_enc
 
-        gamma_q, gamma_k = gamma_q.detach(), gamma_k.detach()
-        beta_q, beta_k = beta_q.detach(), beta_k.detach()
-
         @torch.no_grad()
         def _forward(self, x, *args, **kwargs):
+            # Shape-agnostic on purpose: the pre-deploy path derives its broadcast
+            # view from the input rank, so a 3-D (K, C) input has to keep working
+            # here -- leaving a leading dimension behind shifts every later matmul.
             norm = torch.linalg.norm(x, dim=-1, keepdim=True) * self.ln.scale
             x = x / norm.clamp(min=self.ln.eps) * self.ln.g
 
@@ -937,6 +947,11 @@ class RTMOHead(nn.Module):
         self.mlvl_priors = None
         self.flatten_priors = None
         self.flatten_stride = None
+        # deploy state (filled by switch_to_deploy, read by deploy_outputs)
+        self.deploy = False
+        self.deploy_input_size = None
+        self.deploy_score_threshold = 0.1
+        self.deploy_nms_threshold = 0.65
 
     def forward(self, feats):
         return self.head_module(feats)
@@ -1367,16 +1382,94 @@ class RTMOHead(nn.Module):
 
         return results_list
 
+    @torch.no_grad()
+    def deploy_outputs(self, outputs):
+        """Deploy-shaped outputs ``(dets, pred_kpts)`` from the head-module outputs.
+
+        The graph-friendly twin of ``predict_from_outputs`` (same input: what the
+        model's forward produced): every step is a plain tensor op, because the
+        python NMS loop there cannot be traced. ``dets`` carries
+        ``xyxy + per-class scores`` and ``pred_kpts`` the canvas-space keypoints
+        with their visibility -- the contract the inference side's
+        ``mmpose_rtmo_mmdeploy`` decoder reads.
+
+        Call ``switch_to_deploy(test_cfg=dict(input_size=(w, h)))`` first: the grid
+        priors and the decode thresholds are baked as constants, so the exported
+        graph is tied to that input size (the same restriction mmdeploy's RTMO
+        deployment has). The reported boxes are clamped to the canvas, exactly like
+        ``predict_from_outputs``; the keypoints keep the raw box geometry, as the
+        reference does.
+        """
+        if self.flatten_priors is None or self.deploy_input_size is None:
+            raise RuntimeError(
+                "RTMOHead.deploy_outputs needs frozen priors: call "
+                "switch_to_deploy(test_cfg=dict(input_size=(w, h))) first"
+            )
+        if _torchvision_nms is None:
+            raise RuntimeError(
+                "The one-stage deploy decode needs torchvision for its in-graph NMS; "
+                "install torchvision or export with a torchvision-enabled environment"
+            )
+        _nms = _torchvision_nms
+
+        cls_scores, bbox_preds, _, kpt_vis, pose_vecs = outputs
+        cls_scores = self._flatten_predictions(cls_scores)
+        bbox_preds = self._flatten_predictions(bbox_preds)
+        kpt_vis = self._flatten_predictions(kpt_vis)
+        pose_vecs = self._flatten_predictions(pose_vecs)
+
+        priors = self.flatten_priors.unsqueeze(0)
+        class_scores = cls_scores.sigmoid()
+        raw_boxes = self.decode_bbox(bbox_preds, priors, self.flatten_stride)
+        visibility = kpt_vis.sigmoid()
+
+        width, height = self.deploy_input_size
+        boxes = torch.stack(
+            (
+                raw_boxes[..., 0].clamp(0, width),
+                raw_boxes[..., 1].clamp(0, height),
+                raw_boxes[..., 2].clamp(0, width),
+                raw_boxes[..., 3].clamp(0, height),
+            ),
+            dim=-1,
+        )
+
+        # The classifier predicts bin coordinates inside the (unclamped) box, as in
+        # predict_from_outputs.
+        bbox_cs = torch.cat(_bbox_xyxy2cs(raw_boxes[0], self.bbox_padding), dim=1)
+        keypoints = self.dcc.forward_test(pose_vecs[0], bbox_cs, self.flatten_priors).unsqueeze(0)
+
+        scores, _ = class_scores.max(-1)
+        keep = scores[0] >= float(self.deploy_score_threshold)
+        boxes, scores = boxes[0][keep], scores[0][keep]
+        class_scores = class_scores[0][keep]
+        keypoints = keypoints[0][keep]
+        visibility = visibility[0][keep]
+
+        selected = _nms(boxes, scores, float(self.deploy_nms_threshold))
+        dets = torch.cat((boxes[selected], class_scores[selected]), dim=-1).unsqueeze(0)
+        pred_kpts = torch.cat(
+            (keypoints[selected], visibility[selected].unsqueeze(-1)), dim=-1
+        ).unsqueeze(0)
+        return dets, pred_kpts
+
     def switch_to_deploy(self, test_cfg=None):
-        """Precompute and freeze the priors for deployment exports."""
+        """Precompute and freeze the priors (and the decode thresholds) for deployment."""
         if getattr(self, "deploy", False):
             return
 
         cfg = dict(test_cfg or {})
         input_size = cfg.get("input_size", (640, 640))
+        self.deploy_input_size = (int(input_size[0]), int(input_size[1]))
+        self.deploy_score_threshold = float(cfg.get("score_thr", 0.1))
+        self.deploy_nms_threshold = float(cfg.get("nms_thr", 0.65))
         featmap_sizes = []
         for stride in self.featmap_strides:
             featmap_sizes.append((input_size[0] // stride, input_size[1] // stride))
+        # Rebuild instead of reusing the cache: a cache filled by ``predict`` under
+        # ``torch.inference_mode()`` holds inference tensors, and those cannot be
+        # registered as export buffers.
+        self.mlvl_priors = None
         self._ensure_priors(featmap_sizes, torch.device("cpu"), torch.float32)
         if hasattr(self, "dcc"):
             self.dcc.switch_to_deploy(test_cfg)

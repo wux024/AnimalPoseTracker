@@ -23,6 +23,7 @@ from typing import Any, Mapping, Optional, Sequence, Tuple
 import warnings
 
 from animalposetracker.postprocessing.output_decoders import (
+    RTMO_MMDEPLOY,
     RTMPOSE_SIMCC,
     SUPPORTED_OUTPUT_SCHEMAS,
     YOLO_POSE_END2END,
@@ -30,11 +31,9 @@ from animalposetracker.postprocessing.output_decoders import (
     YOLO_POSE_RAW,
 )
 
-#: Schemas this module will hand back to the inferencer. mmpose's RTMO and
-#: RTMPose schemas exist in the decoder layer but stay reserved: the inferencer
-#: has no wiring for them yet (the stream pipeline's top-down branch cannot be
-#: constructed without an injected detector), so accepting them here would only
-#: produce a pipeline that fails to build. They are rejected loudly instead.
+#: Schemas this module will hand back to the inferencer. RTMPose's SimCC schema is
+#: top-down only (it needs an injected detector) and stays reserved here; the
+#: one-stage RTMO schema and the ultralytics YOLO family run as-is.
 SUPPORTED_YOLO_SCHEMAS: Tuple[str, ...] = (YOLO_POSE_RAW, YOLO_POSE_NMS, YOLO_POSE_END2END)
 
 #: Anything the decoder layer knows but the inferencer cannot yet run.
@@ -123,6 +122,10 @@ def _validated(schema: str, *, allow_topdown: bool = False) -> str:
     """Reject schemas the inferencer cannot actually run, with a precise reason."""
     if schema in SUPPORTED_YOLO_SCHEMAS:
         return schema
+    if schema == RTMO_MMDEPLOY:
+        # One-stage bottom-up outputs run full-frame: the stream pipeline carries the
+        # bottomup preprocessing and the dets/pred_kpts decode, no detector involved.
+        return schema
     # RTMPose/SimCC belongs to the top-down branch: it can only run when a detector
     # provider was injected, so the caller unlocks it explicitly.
     if allow_topdown and schema == RTMPOSE_SIMCC:
@@ -142,6 +145,8 @@ def _declared_schema(metadata: Mapping[str, Any]) -> Optional[str]:
     declared_head = str(metadata.get("head") or "")
     if declared_head == "SimCCHead":
         return RTMPOSE_SIMCC
+    if declared_head == "RTMOHead":
+        return RTMO_MMDEPLOY
     for key in ("schema", "output_schema"):
         declared = _clean_schema_name(metadata.get(key))
         if declared is not None:

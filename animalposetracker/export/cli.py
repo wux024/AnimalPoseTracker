@@ -8,7 +8,7 @@ from pathlib import Path
 
 import torch
 
-from animalposetracker.nn.head import SimCCHead, YOLOPoseHead
+from animalposetracker.nn.head import RTMOHead, SimCCHead, YOLOPoseHead
 from animalposetracker.artifacts import EXPORT_FORMATS
 from animalposetracker.config import default_subtree, resolve_scopes
 from animalposetracker.config.resolver import project_dir_from
@@ -17,6 +17,15 @@ from animalposetracker.project.model_context import (
     load_project_runtime_model,
     unique_output_directory,
 )
+
+
+#: The output tensor names each head's graph exposes; the inference side's decoders
+#: look tensors up by these names, so they travel in the sidecar too.
+_OUTPUT_NAMES_BY_HEAD = {
+    "YOLOPoseHead": ["predictions"],
+    "SimCCHead": ["simcc_x", "simcc_y"],
+    "RTMOHead": ["dets", "pred_kpts"],
+}
 
 
 class _ExportAdapter(torch.nn.Module):
@@ -35,6 +44,9 @@ class _ExportAdapter(torch.nn.Module):
             if not isinstance(outputs, (tuple, list)) or len(outputs) != 2:
                 raise TypeError("SimCC export expects two outputs: x and y distributions")
             return outputs[0], outputs[1]
+        if self.head_name == "RTMOHead":
+            # One-stage deploy contract: (dets, pred_kpts), filtered and NMS-ed.
+            return self.model.model[-1].deploy_outputs(outputs)
         raise NotImplementedError(f"No export adapter exists for {self.head_name}")
 
 
@@ -100,15 +112,20 @@ def _export_onnx(adapter, dummy, path, context, values):
     elif head_name == "SimCCHead" and dynamic:
         dynamic_axes["simcc_x"] = dict(batch_axis)
         dynamic_axes["simcc_y"] = dict(batch_axis)
+    elif head_name == "RTMOHead":
+        # The detection count follows the image, so both outputs keep a dynamic axis
+        # even though the input size itself is baked into the deploy decode.
+        dynamic_axes["dets"] = {0: "batch", 1: "num_dets"}
+        dynamic_axes["pred_kpts"] = {0: "batch", 1: "num_dets"}
 
-    output_names = ["predictions"] if head_name == "YOLOPoseHead" else ["simcc_x", "simcc_y"]
+    output_names = _OUTPUT_NAMES_BY_HEAD[head_name]
     torch.onnx.export(
         adapter,
         dummy,
         str(path),
         input_names=["images"],
         output_names=output_names,
-        dynamic_axes=dynamic_axes if dynamic else None,
+        dynamic_axes=dynamic_axes if (dynamic or head_name == "RTMOHead") else None,
         opset_version=int(values.get("opset") or 17),
         do_constant_folding=True,
     )
@@ -310,15 +327,34 @@ def run(argv=None) -> int:
     # ncnn / rknn / tflite -- see the improvement directly.
     model.fuse()
     head = model.model[-1]
+    size = int(config.image_size)
     if isinstance(head, YOLOPoseHead):
         head.export = True
         head.format = export_format
         head.dynamic = bool(values.get("dynamic", False))
+    elif isinstance(head, RTMOHead):
+        # The priors and the decode thresholds bake into the graph, so the artifact
+        # is tied to one input size -- the same restriction mmdeploy's RTMO
+        # deployment carries. The thresholds follow the model's validation recipe
+        # (the reference test_cfg when the project tuned nothing).
+        if bool(values.get("dynamic", False)):
+            raise ValueError(
+                "The one-stage head exports at a fixed input size; drop dynamic=true"
+            )
+        from animalposetracker.training.profiles import flatten_train_values
+
+        train_values, _origins = flatten_train_values(
+            resolved, str(context["project"].get("model_type") or "AnimalRTMO")
+        )
+        head.switch_to_deploy(test_cfg=dict(
+            input_size=(size, size),
+            score_thr=float(train_values.get("confidence") or 0.1),
+            nms_thr=float(train_values.get("iou") or 0.65),
+        ))
     elif not isinstance(head, SimCCHead):
         raise NotImplementedError(f"Native export does not support head {type(head).__name__}")
 
     adapter = _ExportAdapter(model, context["head_name"]).eval()
-    size = int(config.image_size)
     dummy = torch.zeros(
         1,
         3,
@@ -342,8 +378,20 @@ def run(argv=None) -> int:
         "color_order": "RGB",
         "kpt_shape": list(model.kpt_shape),
         "weights": str(context["weights"]),
-        "outputs": ["predictions"] if context["head_name"] == "YOLOPoseHead" else ["simcc_x", "simcc_y"],
+        "outputs": list(_OUTPUT_NAMES_BY_HEAD[context["head_name"]]),
     }
+    if context["head_name"] == "RTMOHead":
+        # The one-stage graph took whole-frame bottom-up samples in training: RGB,
+        # pixels scaled to [0, 1] (input_scale) with no further normalisation. The
+        # decode thresholds are the reference test_cfg and are visible in the graph.
+        metadata.update({
+            "input_scale": 1.0 / 255.0,
+            "pixel_mean": [0.0, 0.0, 0.0],
+            "pixel_std": [1.0, 1.0, 1.0],
+            "score_threshold": float(head.deploy_score_threshold),
+            "nms_threshold": float(head.deploy_nms_threshold),
+            "num_classes": int(head.num_classes),
+        })
     if context["head_name"] == "SimCCHead":
         model_preprocessing = context["model_spec"].get("preprocessing") or {}
         metadata.update({

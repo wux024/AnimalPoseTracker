@@ -407,6 +407,7 @@ def build_inference_session(
     from animalposetracker.artifacts import detect_artifact_format, read_artifact_metadata
     from animalposetracker.inference.schema_resolution import resolve_output_schema
     from animalposetracker.postprocessing.output_decoders import (
+        RTMO_MMDEPLOY,
         YOLO_POSE_RAW,
         PoseOutputConfig,
     )
@@ -490,12 +491,16 @@ def build_inference_session(
     )
     input_config = StreamInputConfig(
         input_size=input_size,
-        preprocess_mode="engine",
+        # The one-stage (RTMO) artifacts were trained on whole-frame bottom-up
+        # samples, so they take the same resize-and-pad the training pipeline used
+        # instead of the live-inference letterbox the YOLO family runs.
+        preprocess_mode="mmpose_bottomup" if resolved_schema == RTMO_MMDEPLOY else "engine",
         color_order=str(metadata.get("color_order", "RGB")),
         # The mmpose-family exports declare this normalization and bake none of it
         # into the graph, so the top-down crop has to apply it: without the declared
         # values the pose model silently decodes raw pixels into scattered keypoints.
         # Artifacts that declare nothing keep the neutral values, exactly as before.
+        input_scale=float(metadata.get("input_scale") or 1.0),
         pixel_mean=tuple(metadata.get("pixel_mean") or (0.0, 0.0, 0.0)),
         pixel_std=tuple(metadata.get("pixel_std") or (1.0, 1.0, 1.0)),
         bbox_padding=float(metadata.get("bbox_padding") or 1.25),

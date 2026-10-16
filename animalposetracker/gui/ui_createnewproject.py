@@ -218,6 +218,7 @@ class Ui_CreateNewProject(object):
         self.ModelTypeSelection.addItem("")
         self.ModelTypeSelection.addItem("")
         self.ModelTypeSelection.addItem("")
+        self.ModelTypeSelection.addItem("")
         self.ModelTypeSelection.setObjectName(u"ModelTypeSelection")
         sizePolicy2.setHeightForWidth(self.ModelTypeSelection.sizePolicy().hasHeightForWidth())
         self.ModelTypeSelection.setSizePolicy(sizePolicy2)
@@ -470,6 +471,7 @@ class Ui_CreateNewProject(object):
         self.ModelTypeSelection.setItemText(2, QCoreApplication.translate("CreateNewProject", u"SPIPose", None))
         self.ModelTypeSelection.setItemText(3, QCoreApplication.translate("CreateNewProject", u"YOLO11-Pose", None))
         self.ModelTypeSelection.setItemText(4, QCoreApplication.translate("CreateNewProject", u"YOLOv8-Pose", None))
+        self.ModelTypeSelection.setItemText(5, QCoreApplication.translate("CreateNewProject", u"AnimalRTMO", None))
 
         self.ModelScaleSelection.setItemText(0, QCoreApplication.translate("CreateNewProject", u"N", None))
         self.ModelScaleSelection.setItemText(1, QCoreApplication.translate("CreateNewProject", u"S", None))
