@@ -32,11 +32,32 @@ def _aliases():
 
     Maps the name recorded inside the file to the equivalent class of this
     project, so the safe loader can rebuild the serialized objects.
+
+    Two families are covered: ultralytics pose checkpoints (the ones the project
+    trains against) and ultralytics detection checkpoints (the YOLO26 line, whose
+    backbone this project reuses -- converting one gives the AnimalRTMO backbone a
+    COCO-trained initialization, the same recipe mmpose follows with YOLOX). A
+    detection checkpoint's ``Detect`` head has no counterpart here, so it is
+    rebuilt against a bare module: its tensors convert but nothing ever loads them.
     """
-    from animalposetracker.nn.attention import ChannelAttention
+    import torch.nn as nn
+
+    from animalposetracker.nn.attention import Attention, ChannelAttention
     from animalposetracker.nn.builder import GraphSequential
     from animalposetracker.nn.head import YOLOPoseHead
-    from animalposetracker.nn.block import CSPNeXtBlock, CSPNeXtBottleneck, Concat, DFL, SPPF, STEM
+    from animalposetracker.nn.block import (
+        Bottleneck,
+        C2PSA,
+        C3k,
+        C3k2,
+        CSPNeXtBlock,
+        CSPNeXtBottleneck,
+        Concat,
+        DFL,
+        PSABlock,
+        SPPF,
+        STEM,
+    )
     from animalposetracker.nn.conv import Conv, DWConv
 
     table = {
@@ -51,6 +72,15 @@ def _aliases():
         "ultralytics.nn.modules.conv.Concat": Concat,
         "ultralytics.nn.modules.head.Pose": YOLOPoseHead,
         "ultralytics.nn.modules.block.DFL": DFL,
+        # Detection family (YOLO26): same blocks plus the Detect head.
+        "ultralytics.nn.tasks.DetectionModel": GraphSequential,
+        "ultralytics.nn.modules.block.C3k2": C3k2,
+        "ultralytics.nn.modules.block.C3k": C3k,
+        "ultralytics.nn.modules.block.C2PSA": C2PSA,
+        "ultralytics.nn.modules.block.PSABlock": PSABlock,
+        "ultralytics.nn.modules.block.Attention": Attention,
+        "ultralytics.nn.modules.block.Bottleneck": Bottleneck,
+        "ultralytics.nn.modules.head.Detect": nn.Module,
     }
     aliases = []
     for qualified_name, local_class in table.items():

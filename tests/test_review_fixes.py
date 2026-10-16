@@ -484,6 +484,34 @@ class ReviewFixTests(unittest.TestCase):
 
         self.assertEqual(report["loaded_tensors"], 2)
 
+    def test_legacy_converter_reads_detection_checkpoints(self):
+        """The alias table must keep covering the detection family the backbone comes from.
+
+        A stock ultralytics YOLO26 checkpoint is a detection model; converting one is how
+        the one-stage head's backbone gets a COCO-trained initialization. Reading it at
+        all depends on these aliases, so their names are pinned here.
+        """
+        import importlib.util
+
+        tool = Path(__file__).resolve().parents[1] / "tools" / "convert_legacy_checkpoint.py"
+        spec = importlib.util.spec_from_file_location("convert_legacy_checkpoint", tool)
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+
+        names = {f"{alias.__module__}.{alias.__name__}" for alias in module._aliases()}
+        for expected in (
+            "ultralytics.nn.tasks.DetectionModel",
+            "ultralytics.nn.modules.head.Detect",
+            "ultralytics.nn.modules.block.C3k2",
+            "ultralytics.nn.modules.block.C3k",
+            "ultralytics.nn.modules.block.C2PSA",
+            "ultralytics.nn.modules.block.PSABlock",
+            "ultralytics.nn.modules.block.Bottleneck",
+            "ultralytics.nn.modules.block.Attention",
+        ):
+            with self.subTest(alias=expected):
+                self.assertIn(expected, names)
+
     def test_unique_run_directory_does_not_replace_an_existing_run(self):
         with tempfile.TemporaryDirectory() as temporary:
             first = Path(temporary) / "train"

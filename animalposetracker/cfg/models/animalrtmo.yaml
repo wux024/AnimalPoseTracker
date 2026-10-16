@@ -15,6 +15,15 @@
 # reference trains at nc=1 (class-agnostic), its loss collapses the class target
 # to a scalar.
 #
+# Initialization: no checkpoint is bundled, so training starts from scratch unless
+# one is given. The backbone is the YOLO26 one, so an ultralytics detection
+# checkpoint of the matching scale (yolo26{n,s,m,l,x}.pt) initializes it: run
+# python tools/convert_legacy_checkpoint.py <weights> once, then pass the result as
+# --pretrained-weights (or stage it as <project>/pretrained/animalrtmo-<scale>.pt
+# and point train.shared.runtime.pretrained at it). Its neck and head tensors do
+# not match and are skipped; the backbone loads in full. mmpose initializes its
+# CSPDarknet backbone from YOLOX weights the same way.
+#
 # The head's loss-side runtime pieces -- prior generator, SimOTA assigner and the
 # six loss objects -- are injected by the trainer (training/losses.py RTMOLoss),
 # not carried here: this yaml only fixes the network graph.
