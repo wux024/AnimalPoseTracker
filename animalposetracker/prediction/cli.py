@@ -312,6 +312,59 @@ def _render_pose(
     return rendered, records
 
 
+def _rtmo_external_detections(model, tensor, context, settings):
+    """Decode an exported one-stage artifact into the renderer's detection tuple.
+
+    The artifact's graph already filtered and NMS-ed its candidates; the decoder
+    layer maps ``dets``/``pred_kpts`` onto canvas-pixel instances, so the caller's
+    un-letterbox step stays the same as for the torch path.
+    """
+    import torch
+
+    from animalposetracker.postprocessing.output_decoders import (
+        RTMO_MMDEPLOY,
+        PoseOutputConfig,
+        decode_pose_outputs,
+    )
+
+    raw_outputs = model(tensor.detach().cpu().numpy())
+    if not raw_outputs:
+        raise RuntimeError("The exported pose model returned no output tensors")
+    instances = decode_pose_outputs(
+        raw_outputs,
+        PoseOutputConfig(
+            schema=RTMO_MMDEPLOY,
+            num_classes=int(context["model_nc"]),
+            num_keypoints=int(context["kpt_shape"][0]),
+            keypoint_dims=int(context["kpt_shape"][1]),
+            output_names=tuple(getattr(model, "output_names", ()) or ()),
+            confidence_threshold=settings["confidence"],
+            iou_threshold=settings["iou"],
+        ),
+        inverse_affine=None,
+    )
+    if not instances:
+        empty = torch.zeros((0, 4))
+        return (
+            empty,
+            empty.new_zeros(0),
+            empty.new_zeros(0, dtype=torch.long),
+            torch.zeros((0, int(context["kpt_shape"][0]), 3)),
+        )
+    boxes = torch.as_tensor(np.stack([item.bbox_xyxy for item in instances]), dtype=torch.float32)
+    scores = torch.as_tensor([float(item.score or 0.0) for item in instances], dtype=torch.float32)
+    classes = torch.as_tensor([int(item.class_id or 0) for item in instances], dtype=torch.long)
+    points = np.stack([item.keypoints_xy for item in instances]).astype(np.float32)
+    visibility = np.stack([
+        item.keypoints_visible
+        if item.keypoints_visible is not None
+        else np.ones(item.keypoints_xy.shape[0], dtype=np.float32)
+        for item in instances
+    ]).astype(np.float32)
+    keypoints = torch.as_tensor(np.concatenate((points, visibility[..., None]), axis=-1))
+    return boxes, scores, classes, keypoints
+
+
 def _predict_frame(image, model, config, context, settings, external_backend=False):
     import torch
 
@@ -323,25 +376,25 @@ def _predict_frame(image, model, config, context, settings, external_backend=Fal
     ).to(device=context["device"], dtype=torch.float32).div_(255.0).unsqueeze(0)
     if context["head_name"] == "RTMOHead":
         if external_backend:
-            raise NotImplementedError(
-                "The one-stage head predicts through its torch model here; exported "
-                "artifacts run through `animalpose-cli infer`"
+            boxes, scores, classes, keypoints = _rtmo_external_detections(
+                model, tensor, context, settings
             )
-        with torch.inference_mode():
-            output = model(tensor)
-        result = model.model[-1].predict_from_outputs(
-            output,
-            [dict(metainfo=dict(input_size=(canvas.shape[1], canvas.shape[0])))],
-            test_cfg=dict(score_thr=settings["confidence"], nms_thr=settings["iou"]),
-        )[0]
-        boxes = result["bboxes"]
-        scores = result["scores"]
-        classes = result["labels"]
-        # The renderer keys visibility off a third keypoint channel, the same shape
-        # the anchor-based head produces.
-        keypoints = torch.cat(
-            (result["keypoints"], result["keypoints_visible"].unsqueeze(-1)), dim=-1
-        )
+        else:
+            with torch.inference_mode():
+                output = model(tensor)
+            result = model.model[-1].predict_from_outputs(
+                output,
+                [dict(metainfo=dict(input_size=(canvas.shape[1], canvas.shape[0])))],
+                test_cfg=dict(score_thr=settings["confidence"], nms_thr=settings["iou"]),
+            )[0]
+            boxes = result["bboxes"]
+            scores = result["scores"]
+            classes = result["labels"]
+            # The renderer keys visibility off a third keypoint channel, the same shape
+            # the anchor-based head produces.
+            keypoints = torch.cat(
+                (result["keypoints"], result["keypoints_visible"].unsqueeze(-1)), dim=-1
+            )
     else:
         if external_backend:
             raw_outputs = model(tensor.detach().cpu().numpy())
