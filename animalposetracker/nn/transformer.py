@@ -53,6 +53,8 @@ __all__ = [
     "VisionTransformer",
     "DropPath",
     "resize_pos_embed",
+    "SinePositionalEncoding",
+    "ScaleNorm",
 ]
 
 
@@ -564,3 +566,165 @@ class VisionTransformer(nn.Module):
         h, w = hw
         x = x.transpose(1, 2).reshape(x.shape[0], x.shape[-1], h, w).contiguous()
         return x
+
+
+class ScaleNorm(nn.Module):
+    """Scale Norm: normalize by the vector norm, then scale by a learnable gain.
+
+    Used by the GAU encoder in the RTMO head. Reference: "Transformers without
+    Tears: Improving the Normalization of Self-Attention" (arXiv:1910.05895).
+
+    Args:
+        dim (int): The dimension of the scale vector.
+        eps (float): The minimum value in clamp. Defaults to 1e-5.
+    """
+
+    def __init__(self, dim: int, eps: float = 1e-5):
+        super().__init__()
+        self.scale = dim**-0.5
+        self.eps = eps
+        self.g = nn.Parameter(torch.ones(1))
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        norm = torch.linalg.norm(x, dim=-1, keepdim=True) * self.scale
+        return x / norm.clamp(min=self.eps) * self.g
+
+
+class SinePositionalEncoding(nn.Module):
+    """Sine positional encoding for 1-D sequences and 2-D feature maps.
+
+    Ported from mmpose (`mmpose/models/utils/transformer.py`). The frequency base
+    can be learnable; a fixed eval size can be cached ahead of time. Also hosts the
+    static helpers that add or rotate a positional encoding onto a feature tensor.
+
+    Args:
+        out_channels (int): The number of channels of the encoded features.
+        spatial_dim (int): 1 for sequence data, 2 for grid data.
+        temperature (int): Scales the frequency base. Defaults to 1e5.
+        learnable (bool): Whether to optimize the frequency base.
+        eval_size (int, tuple[int], optional): Fixed spatial size of input features
+            whose positional encoding is precomputed as a buffer.
+    """
+
+    def __init__(
+        self,
+        out_channels: int,
+        spatial_dim: int = 1,
+        temperature: float = 1e5,
+        learnable: bool = False,
+        eval_size: Optional[Union[int, Tuple[int, int]]] = None,
+    ) -> None:
+        super().__init__()
+
+        if out_channels % 2 != 0:
+            raise ValueError("out_channels must be even for sine positional encoding")
+        if temperature <= 0:
+            raise ValueError("temperature must be positive")
+
+        self.spatial_dim = spatial_dim
+        self.out_channels = out_channels
+        self.temperature = temperature
+        self.eval_size = eval_size
+        self.learnable = learnable
+
+        pos_dim = out_channels // 2
+        dim_t = torch.arange(pos_dim, dtype=torch.float32) / pos_dim
+        dim_t = temperature**dim_t
+
+        if not learnable:
+            self.register_buffer("dim_t", dim_t)
+        else:
+            self.dim_t = nn.Parameter(dim_t.detach())
+
+        if eval_size:
+            if hasattr(self, f"pos_enc_{eval_size}"):
+                delattr(self, f"pos_enc_{eval_size}")
+            pos_enc = self.generate_pos_encoding(size=eval_size)
+            self.register_buffer(f"pos_enc_{eval_size}", pos_enc)
+
+    def forward(self, *args, **kwargs):
+        return self.generate_pos_encoding(*args, **kwargs)
+
+    def generate_pos_encoding(
+        self,
+        size: Optional[Union[int, Tuple[int, int]]] = None,
+        position: Optional[torch.Tensor] = None,
+    ) -> torch.Tensor:
+        """Generate the positional encoding, either from a spatial size or explicit positions."""
+        if (size is not None) == (position is not None):
+            raise ValueError("provide exactly one of `size` or `position`")
+
+        if (not (self.learnable and self.training)) and size is not None and hasattr(self, f"pos_enc_{size}"):
+            return getattr(self, f"pos_enc_{size}")
+
+        if self.spatial_dim == 1:
+            if size is not None:
+                if isinstance(size, (tuple, list)):
+                    size = size[0]
+                position = torch.arange(size, dtype=torch.float32, device=self.dim_t.device)
+
+            dim_t = self.dim_t.reshape(*((1,) * position.ndim), -1)
+            freq = position.unsqueeze(-1) / dim_t
+            pos_enc = torch.cat((freq.cos(), freq.sin()), dim=-1)
+
+        elif self.spatial_dim == 2:
+            if size is not None:
+                if isinstance(size, (tuple, list)):
+                    h, w = size[:2]
+                elif isinstance(size, (int, float)):
+                    h, w = int(size), int(size)
+                else:
+                    raise ValueError(f"got invalid type {type(size)} for size")
+                grid_h, grid_w = torch.meshgrid(
+                    torch.arange(int(h), dtype=torch.float32, device=self.dim_t.device),
+                    torch.arange(int(w), dtype=torch.float32, device=self.dim_t.device),
+                    indexing="ij",
+                )
+                grid_h, grid_w = grid_h.flatten(), grid_w.flatten()
+            else:
+                if position.size(-1) != 2:
+                    raise ValueError("position must have a last dimension of 2 for spatial_dim=2")
+                grid_h, grid_w = torch.unbind(position, dim=-1)
+
+            dim_t = self.dim_t.reshape(*((1,) * grid_h.ndim), -1)
+            freq_h = grid_h.unsqueeze(-1) / dim_t
+            freq_w = grid_w.unsqueeze(-1) / dim_t
+            pos_enc_h = torch.cat((freq_h.cos(), freq_h.sin()), dim=-1)
+            pos_enc_w = torch.cat((freq_w.cos(), freq_w.sin()), dim=-1)
+            pos_enc = torch.stack((pos_enc_h, pos_enc_w), dim=-1)
+        else:
+            raise ValueError(f"spatial_dim must be 1 or 2, got {self.spatial_dim}")
+
+        return pos_enc
+
+    @staticmethod
+    def apply_additional_pos_enc(feature: torch.Tensor, pos_enc: torch.Tensor, spatial_dim: int = 1):
+        """Add a positional encoding onto a feature tensor."""
+        if spatial_dim not in (1, 2):
+            raise ValueError(f"spatial_dim must be 1 or 2, got {spatial_dim}")
+        if spatial_dim == 2:
+            pos_enc = pos_enc.flatten(-2)
+        for _ in range(feature.ndim - pos_enc.ndim):
+            pos_enc = pos_enc.unsqueeze(0)
+        return feature + pos_enc
+
+    @staticmethod
+    def apply_rotary_pos_enc(feature: torch.Tensor, pos_enc: torch.Tensor, spatial_dim: int = 1):
+        """Rotate a feature tensor with a rotary positional encoding."""
+        if spatial_dim not in (1, 2):
+            raise ValueError(f"spatial_dim must be 1 or 2, got {spatial_dim}")
+
+        for _ in range(feature.ndim - pos_enc.ndim + spatial_dim - 1):
+            pos_enc = pos_enc.unsqueeze(0)
+
+        x1, x2 = torch.chunk(feature, 2, dim=-1)
+        if spatial_dim == 1:
+            cos, sin = torch.chunk(pos_enc, 2, dim=-1)
+            feature = torch.cat((x1 * cos - x2 * sin, x2 * cos + x1 * sin), dim=-1)
+        else:
+            pos_enc_h, pos_enc_w = torch.unbind(pos_enc, dim=-1)
+            cos_h, sin_h = torch.chunk(pos_enc_h, 2, dim=-1)
+            cos_w, sin_w = torch.chunk(pos_enc_w, 2, dim=-1)
+            feature = torch.cat((x1 * cos_h - x2 * sin_h, x1 * cos_w + x2 * sin_w), dim=-1)
+
+        return feature

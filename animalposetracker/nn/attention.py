@@ -11,9 +11,11 @@ Version: 1.0
 Overview:
     Basic attention blocks, all in one place.
 
-    Inclusion rule: only generic attention components that depend on nothing beyond torch.
-    Anything that also needs a *block* (C2f / Bottleneck / C3k) belongs in modules.py, not
-    here -- putting it here would create an import cycle.
+    Inclusion rule: only generic attention components. Anything that also needs a *block*
+    (C2f / Bottleneck / C3k) belongs in block.py, not here -- putting it here would create
+    an import cycle. GAUEncoder additionally pulls DropPath / ScaleNorm /
+    SinePositionalEncoding from transformer.py, which stays torch-only, so there is still
+    no cycle.
 
         ChannelAttention   what to attend to, across channels
         SpatialAttention   where to attend to, in space
@@ -37,11 +39,22 @@ Revision History:
       SpatialAttention / CBAM / Attention joined it.
 """
 
+import math
+
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
-__all__ = ["ChannelAttention", "SpatialAttention", "CBAM", "Attention"]
+from .transformer import DropPath, ScaleNorm, SinePositionalEncoding
+
+__all__ = [
+    "ChannelAttention",
+    "SpatialAttention",
+    "CBAM",
+    "Attention",
+    "ChannelWiseScale",
+    "GAUEncoder",
+]
 
 
 class ChannelAttention(nn.Module):
@@ -176,3 +189,149 @@ class Attention(nn.Module):
             x = (v @ attn.transpose(-2, -1)).view(b, c, h, w) + self.pe(v.reshape(b, c, h, w))
         x = self.proj(x)
         return x
+
+
+class ChannelWiseScale(nn.Module):
+    """Scale a vector by element-wise multiplication with a learnable vector.
+
+    Used as the residual scaling of the GAU encoder.
+
+    Args:
+        dim (int): The dimension of the scale vector.
+        init_value (float): The initial value of the scale vector. Defaults to 1.0.
+        trainable (bool): Whether the scale vector is trainable. Defaults to True.
+    """
+
+    def __init__(self, dim, init_value=1.0, trainable=True):
+        super().__init__()
+        self.scale = nn.Parameter(init_value * torch.ones(dim), requires_grad=trainable)
+
+    def forward(self, x):
+        return x * self.scale
+
+
+class GAUEncoder(nn.Module):
+    """Gated Attention Unit (GAU) Encoder.
+
+    Ported from mmpose (`mmpose/models/utils/transformer.py`); used by the RTMO
+    head's Dynamic Coordinate Classifier. Reference: "Transformer Quality in
+    Linear Time" (arXiv:2202.10447).
+
+    Args:
+        in_token_dims (int): The input token dimension.
+        out_token_dims (int): The output token dimension.
+        expansion_factor (int): The expansion factor of the intermediate token
+            dimension. Defaults to 2.
+        s (int): The self-attention feature dimension. Defaults to 128.
+        eps (float): The minimum value in clamp. Defaults to 1e-5.
+        dropout_rate (float): The dropout rate. Defaults to 0.0.
+        drop_path (float): The drop path rate. Defaults to 0.0.
+        act_fn (str): 'SiLU' or 'ReLU'. Defaults to 'SiLU'.
+        bias (bool): Whether to use bias in linear layers. Defaults to False.
+        pos_enc (str): 'none', 'add' or 'rope'. Defaults to 'none'.
+        spatial_dim (int): The spatial dimension of the inputs. Defaults to 1.
+    """
+
+    def __init__(
+        self,
+        in_token_dims,
+        out_token_dims,
+        expansion_factor=2,
+        s=128,
+        eps=1e-5,
+        dropout_rate=0.0,
+        drop_path=0.0,
+        act_fn="SiLU",
+        bias=False,
+        pos_enc: str = "none",
+        spatial_dim: int = 1,
+    ):
+        super().__init__()
+        self.s = s
+        self.bias = bias
+        self.pos_enc = pos_enc
+        self.in_token_dims = in_token_dims
+        self.spatial_dim = spatial_dim
+        self.drop_path = DropPath(drop_path) if drop_path > 0.0 else nn.Identity()
+
+        self.e = int(in_token_dims * expansion_factor)
+        self.o = nn.Linear(self.e, out_token_dims, bias=bias)
+
+        self._build_layers()
+
+        self.ln = ScaleNorm(in_token_dims, eps=eps)
+
+        nn.init.xavier_uniform_(self.uv.weight)
+
+        if act_fn == "SiLU":
+            self.act_fn = nn.SiLU(True)
+        else:
+            self.act_fn = nn.ReLU(True)
+
+        if in_token_dims == out_token_dims:
+            self.shortcut = True
+            self.res_scale = ChannelWiseScale(in_token_dims)
+        else:
+            self.shortcut = False
+
+        self.sqrt_s = math.sqrt(s)
+        self.dropout_rate = dropout_rate
+
+        if dropout_rate > 0.0:
+            self.dropout = nn.Dropout(dropout_rate)
+
+    def _build_layers(self):
+        self.uv = nn.Linear(self.in_token_dims, 2 * self.e + self.s, bias=self.bias)
+        self.gamma = nn.Parameter(torch.rand((2, self.s)))
+        self.beta = nn.Parameter(torch.rand((2, self.s)))
+
+    def _forward(self, x, mask=None, pos_enc=None):
+        """GAU forward function."""
+        x = self.ln(x)
+
+        # [B, K, in_token_dims] -> [B, K, e + e + s]
+        uv = self.uv(x)
+        uv = self.act_fn(uv)
+
+        # [B, K, e + e + s] -> [B, K, e], [B, K, e], [B, K, s]
+        u, v, base = torch.split(uv, [self.e, self.e, self.s], dim=-1)
+        # [B, K, 1, s] * [1, 1, 2, s] + [2, s] -> [B, K, 2, s]
+        dim = base.ndim - self.gamma.ndim + 1
+        gamma = self.gamma.view(*((1,) * dim), *self.gamma.size())
+        beta = self.beta.view(*((1,) * dim), *self.beta.size())
+        base = base.unsqueeze(-2) * gamma + beta
+        # [B, K, 2, s] -> [B, K, s], [B, K, s]
+        q, k = torch.unbind(base, dim=-2)
+
+        if self.pos_enc == "rope":
+            q = SinePositionalEncoding.apply_rotary_pos_enc(q, pos_enc, self.spatial_dim)
+            k = SinePositionalEncoding.apply_rotary_pos_enc(k, pos_enc, self.spatial_dim)
+        elif self.pos_enc == "add":
+            pos_enc = pos_enc.reshape(*((1,) * (q.ndim - 2)), q.size(-2), q.size(-1))
+            q = q + pos_enc
+            k = k + pos_enc
+
+        # [B, K, s] x [B, s, K] -> [B, K, K]
+        qk = torch.matmul(q, k.transpose(-1, -2))
+
+        kernel = torch.square(F.relu(qk / self.sqrt_s))
+
+        if mask is not None:
+            kernel = kernel * mask
+
+        if self.dropout_rate > 0.0:
+            kernel = self.dropout(kernel)
+
+        # [B, K, K] x [B, K, e] -> [B, K, e]
+        x = u * torch.matmul(kernel, v)
+        # [B, K, e] -> [B, K, out_token_dims]
+        x = self.o(x)
+
+        return x
+
+    def forward(self, x, mask=None, pos_enc=None):
+        """Forward function."""
+        out = self.drop_path(self._forward(x, mask=mask, pos_enc=pos_enc))
+        if self.shortcut:
+            return self.res_scale(x) + out
+        return out
