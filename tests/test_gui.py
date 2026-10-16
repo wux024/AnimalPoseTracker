@@ -497,7 +497,10 @@ class ConfigureTreeTests(unittest.TestCase):
     """
 
     # The exact rows each tree should end up with. Editing this list is the point: it forces
-    # every addition or removal to be a deliberate decision.
+    # every addition or removal to be a deliberate decision. This is the startup set: with no
+    # project loaded the model-scoped rows all show, so the page previews the whole registry
+    # (loading a project narrows the train form to that model's recipe -- see
+    # `test_model_scoped_rows_follow_the_active_model`).
     EXPECTED = {
         "TrainingConfigureEdit": {
             "model", "data", "num_workers", "time_hours", "cache", "fraction", "profile",
@@ -507,6 +510,7 @@ class ConfigureTreeTests(unittest.TestCase):
             "warmup_momentum", "warmup_bias_lr", "nominal_batch_size", "cosine_schedule",
             "amp", "close_mosaic", "seed", "box_loss_weight", "class_loss_weight",
             "distribution_loss_weight", "keypoint_loss_weight", "visibility_loss_weight",
+            "oks_loss_weight", "mle_loss_weight", "overlaps_power",
             "device", "project", "name",
         },
         "EvaluateConfigure": {
@@ -544,6 +548,40 @@ class ConfigureTreeTests(unittest.TestCase):
         for tree_name, expected in self.EXPECTED.items():
             with self.subTest(tree=tree_name):
                 self.assertEqual(self._keys(getattr(page, tree_name)), expected)
+
+    def test_model_scoped_rows_follow_the_active_model(self):
+        # Rows whose group is model-scoped only belong on the form of the model whose
+        # recipe defines them: a YOLO-pipeline loss weight means nothing to the SimCC
+        # pipeline, and the one-stage head's own loss terms mean nothing to the others.
+        cases = {
+            "AnimalRTPose": {
+                "present": {"distribution_loss_weight", "keypoint_loss_weight", "box_loss_weight"},
+                "absent": {"oks_loss_weight", "mle_loss_weight", "overlaps_power"},
+            },
+            "AnimalViTPose": {
+                "present": {"seed"},  # model-scoped, but also registered under shared.runtime
+                "absent": {"distribution_loss_weight", "keypoint_loss_weight", "box_loss_weight"},
+            },
+            "AnimalRTMO": {
+                "present": {"oks_loss_weight", "mle_loss_weight", "overlaps_power", "box_loss_weight"},
+                "absent": {"distribution_loss_weight", "keypoint_loss_weight"},
+            },
+        }
+        for model_type, expectation in cases.items():
+            page = AnimalPoseTrackerPage()
+            page.project.project_config["model_type"] = model_type
+            # A loaded project carries its runtime configuration; that is what tells the
+            # page which model's rows to show.
+            page.project.runtime_config["common"] = {"device": "auto"}
+            page.initialize_other_config()
+            keys = self._keys(page.TrainingConfigureEdit)
+            with self.subTest(model=model_type):
+                self.assertTrue(expectation["present"] <= keys)
+                self.assertFalse(expectation["absent"] & keys)
+                # Every form keeps the shared rows.
+                self.assertIn("epochs", keys)
+                self.assertIn("batch_size", keys)
+                self.assertIn("device", keys)
 
     def test_prediction_thresholds_land_in_the_prediction_section(self):
         # The inference page's `confidence`/`iou` rows are prediction thresholds: they must

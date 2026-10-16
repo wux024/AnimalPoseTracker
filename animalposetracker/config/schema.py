@@ -195,9 +195,9 @@ FIELDS: Tuple[Field, ...] = (
     _f("visibility_loss_weight", "train", "models.loss", float, "Visibility loss weight", visibility="form", legacy=("kobj",), views=("train",)),
     _f("label_sigma", "train", "models.loss", float, "SimCC label Gaussian sigma", visibility="advanced"),
     _f("kl_beta", "train", "models.loss", float, "SimCC KL loss beta", visibility="advanced"),
-    _f("oks_loss_weight", "train", "models.loss", float, "One-stage (RTMO) OKS loss weight", visibility="advanced"),
-    _f("mle_loss_weight", "train", "models.loss", float, "One-stage (RTMO) coordinate-classification loss weight", visibility="advanced"),
-    _f("overlaps_power", "train", "models.loss", float, "One-stage (RTMO) exponent applied to the OKS class target", visibility="advanced"),
+    _f("oks_loss_weight", "train", "models.loss", float, "One-stage (RTMO) OKS loss weight", visibility="advanced", views=("train",)),
+    _f("mle_loss_weight", "train", "models.loss", float, "One-stage (RTMO) coordinate-classification loss weight", visibility="advanced", views=("train",)),
+    _f("overlaps_power", "train", "models.loss", float, "One-stage (RTMO) exponent applied to the OKS class target", visibility="advanced", views=("train",)),
 
     # train -- models.augmentation (the 13 AnimalRTPose entries)
     _f("hsv_h", "train", "models.augmentation", float, "Hue augmentation gain", visibility="advanced"),

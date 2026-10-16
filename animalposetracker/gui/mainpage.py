@@ -339,6 +339,58 @@ class AnimalPoseTrackerPage(QMainWindow, Ui_AnimalPoseTracker):
         "ExportConfigure": "export",
     }
 
+    def _active_model_keys(self):
+        """The model-scoped keys the open project's model defines (cached per project).
+
+        Empty until a project's runtime configuration is loaded, which keeps the startup
+        page a full preview of the registry rather than one arbitrary model's rows.
+        """
+        cached = getattr(self, "_gui_model_keys_cache", None)
+        if cached is not None:
+            return cached
+        from animalposetracker.training.profiles import train_profile_keys
+
+        project = getattr(self, "project", None)
+        project_config = getattr(project, "project_config", None) or {}
+        model_type = project_config.get("model_type")
+        has_configuration = bool(getattr(project, "runtime_config", None))
+        cached = train_profile_keys(model_type) if (model_type and has_configuration) else frozenset()
+        self._gui_model_keys_cache = cached
+        return cached
+
+    def _shared_train_keys(self):
+        """Train keys that also have a registration outside ``models.*`` (cached).
+
+        Such a key is a generic knob the trainer reads for every model, so it stays on
+        every form even when a single model's recipe happens to spell out a default for
+        it (``seed`` lives under ``models.training`` but is only written for one model).
+        """
+        cached = getattr(self, "_gui_shared_keys_cache", None)
+        if cached is not None:
+            return cached
+        from animalposetracker.config.schema import fields as schema_fields
+
+        cached = frozenset(
+            field.key
+            for field in schema_fields(scope="train")
+            if not field.group.startswith("models.")
+        )
+        self._gui_shared_keys_cache = cached
+        return cached
+
+    def _field_applies(self, field) -> bool:
+        """Whether a registered key has anything to say to the active model.
+
+        Model-scoped rows only show for the model whose recipe defines them; with no
+        project loaded every row shows, so the page still previews the full registry.
+        """
+        if field.scope != "train" or not field.group.startswith("models."):
+            return True
+        keys = self._active_model_keys()
+        if not keys:
+            return True
+        return field.key in keys or field.key in self._shared_train_keys()
+
     def _gui_runtime_tables(self):
         """Row name -> runtime.yaml path, per tree; generated from the registry's views.
 
@@ -358,6 +410,8 @@ class AnimalPoseTrackerPage(QMainWindow, Ui_AnimalPoseTracker):
             rows = {}
             for field in schema_fields():
                 if view not in field.views:
+                    continue
+                if not self._field_applies(field):
                     continue
                 if field.scope == "train":
                     path = train_field_path(field, model_type)
@@ -416,16 +470,24 @@ class AnimalPoseTrackerPage(QMainWindow, Ui_AnimalPoseTracker):
         """Fill each parameter tree from the registry's `views` annotations.
 
         The ui modules no longer decide what is on screen: every row comes from a
-        registered key, so a new key shows up in the GUI the moment the registry declares
-        its views. The module's drawn rows are cleared away first -- the generated set is truth.
+        registered key whose views name the tree and whose model recipe defines it, so a
+        new key shows up in the GUI the moment the registry declares it. The module's
+        drawn rows are cleared away first -- the generated set is truth. This runs again
+        whenever a project loads, so the per-project caches are dropped here.
         """
         from animalposetracker.config.schema import fields as schema_fields
+
+        self._gui_runtime_tables_cache = None
+        self._gui_model_keys_cache = None
+        self._gui_shared_keys_cache = None
 
         for tree_name, view in self._TREE_VIEWS.items():
             tree = getattr(self, tree_name)
             tree.clear()
             for field in schema_fields():
                 if view not in field.views:
+                    continue
+                if not self._field_applies(field):
                     continue
                 item = QTreeWidgetItem()
                 item.setText(0, _configure_row_name(field))
@@ -445,10 +507,13 @@ class AnimalPoseTrackerPage(QMainWindow, Ui_AnimalPoseTracker):
     def initialize_other_config(self):
         """Fill the parameter trees from the project's runtime configuration.
 
-        Each row is looked up in the runtime tree through its path table entry. A row whose
-        key the project does not carry -- a derived value like ``data``/``model``, or a key
-        the project predates -- shows as locked instead of pretending to be editable.
+        The rows are rebuilt first: which model-scoped keys belong on the form follows the
+        project's model type. Each row is then looked up in the runtime tree through its
+        path table entry. A row whose key the project does not carry -- a derived value
+        like ``data``/``model``, or a key the project predates -- shows as locked instead
+        of pretending to be editable.
         """
+        self.generate_configure_trees()
         trees = (
             "TrainingConfigureEdit",
             "EvaluateConfigure",

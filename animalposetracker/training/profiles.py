@@ -157,6 +157,22 @@ def _profile_model_name(model_type: Optional[str]) -> str:
     return "AnimalRTPose"
 
 
+def train_profile_keys(model_type: Optional[str]) -> frozenset:
+    """The model-scoped keys the active model's package profile defines.
+
+    The GUI forms read this to hide rows the active model's pipeline never touches:
+    the SimCC recipe names its augmentation keys differently, and a loss term that
+    exists for one head has nothing to say to the others. Keys registered outside
+    ``models.*`` are shared and always apply.
+    """
+    profile = _MODEL_PROFILES.get(_profile_model_name(model_type)) or {}
+    keys = set()
+    for section in profile.values():
+        if isinstance(section, dict):
+            keys.update(str(key) for key in section)
+    return frozenset(keys)
+
+
 def train_scope_prefixes(model_type: Optional[str]) -> Tuple[Tuple[str, str], ...]:
     """The train section's flattening order, last one wins.
 
