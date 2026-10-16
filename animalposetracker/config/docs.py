@@ -59,9 +59,9 @@ def _default_cell(field: Field, defaults) -> str:
             _render_value(
                 _lookup(models.get(model) or {}, tuple(section.split(".")) + (field.key,))
             )
-            for model in ("AnimalRTPose", "AnimalViTPose")
+            for model in ("AnimalRTPose", "AnimalViTPose", "AnimalRTMO")
         ]
-        return f"{cells[0]} / {cells[1]} (RTPose / ViTPose)"
+        return f"{cells[0]} / {cells[1]} / {cells[2]} (RTPose / ViTPose / RTMO)"
     parts = tuple(field.group.split(".")) + (field.key,) if field.group else (field.key,)
     return _render_value(_lookup(defaults, parts))
 

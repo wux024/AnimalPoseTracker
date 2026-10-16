@@ -75,32 +75,32 @@ This reference is generated from the key registry (`animalposetracker/config/sch
 
 | key | type | default | apply | visibility | notes |
 |---|---|---|---|---|---|
-| `gradient_accumulation_steps` | int | `null` / 1 (RTPose / ViTPose) | build | advanced | Gradient accumulation steps |
-| `gradient_clip_norm` | float | 10.0 / 1.0 (RTPose / ViTPose) | build | advanced | Gradient clipping norm; null = off |
-| `lr_milestones` | list | `null` / `[460, 490]` (RTPose / ViTPose) | build | advanced | MultiStep learning-rate milestones |
-| `validation_interval` | int | 1 / 10 (RTPose / ViTPose) | build | advanced | Run validation every N epochs |
-| `log_interval` | int | 1 / 50 (RTPose / ViTPose) | build | advanced | Log every N batches |
-| `epochs` | int | 1000 / 500 (RTPose / ViTPose) | build | form | Training epochs |
-| `batch_size` | int | 16 / 64 (RTPose / ViTPose) | build | form | Training batch size ('auto' on the training CLI probes the largest batch that fits 60% of the GPU memory) |
-| `validation_batch_size` | int | `null` / 32 (RTPose / ViTPose) | build | advanced | Validation batch size |
-| `image_size` | int | 640 / 256 (RTPose / ViTPose) | build | form | Model input size (a model property; follows the model recipe) |
-| `optimizer` | str | `auto` / `AdamW` (RTPose / ViTPose) | build | form | Optimizer (auto, or a concrete name) |
-| `learning_rate` | float | 0.01 / 0.0005 (RTPose / ViTPose) | build | form | Initial learning rate |
-| `final_lr_factor` | float | 0.01 / — (RTPose / ViTPose) | build | form | Final learning-rate factor |
-| `momentum` | float | 0.937 / 0.9 (RTPose / ViTPose) | build | form | SGD momentum / Adam beta1 |
-| `weight_decay` | float | 0.0005 / 0.1 (RTPose / ViTPose) | build | form | Weight decay |
-| `warmup_epochs` | float | 3.0 / — (RTPose / ViTPose) | build | form | Warmup epochs |
-| `warmup_iters` | int | — / 500 (RTPose / ViTPose) | build | advanced | Warmup iterations (alternative to warmup_epochs) |
-| `warmup_start_factor` | float | — / 0.001 (RTPose / ViTPose) | build | advanced | Warmup start learning-rate factor |
-| `warmup_momentum` | float | 0.8 / — (RTPose / ViTPose) | build | advanced | Warmup start momentum |
-| `warmup_bias_lr` | float | 0.1 / — (RTPose / ViTPose) | build | advanced | Warmup learning rate for the bias group |
-| `nominal_batch_size` | int | 64 / — (RTPose / ViTPose) | build | advanced | Nominal batch size (used to scale the learning rate) |
-| `cosine_schedule` | bool | False / — (RTPose / ViTPose) | build | form | Cosine learning-rate schedule |
-| `amp` | bool | True / False (RTPose / ViTPose) | build | form | Mixed-precision training |
-| `ema` | bool | True / False (RTPose / ViTPose) | build | form | Exponential moving average |
-| `close_mosaic` | int | 10 / — (RTPose / ViTPose) | build | form | Disable mosaic for the last N epochs |
-| `layer_decay_rate` | float | `null` / — (RTPose / ViTPose) | build | advanced | ViT layer decay rate |
-| `seed` | int | — / 21 (RTPose / ViTPose) | build | advanced | Recipe-level random seed (beats shared.runtime.seed) |
+| `gradient_accumulation_steps` | int | `null` / 1 / `null` (RTPose / ViTPose / RTMO) | build | advanced | Gradient accumulation steps |
+| `gradient_clip_norm` | float | 10.0 / 1.0 / 0.1 (RTPose / ViTPose / RTMO) | build | advanced | Gradient clipping norm; null = off |
+| `lr_milestones` | list | `null` / `[460, 490]` / `null` (RTPose / ViTPose / RTMO) | build | advanced | MultiStep learning-rate milestones |
+| `validation_interval` | int | 1 / 10 / 1 (RTPose / ViTPose / RTMO) | build | advanced | Run validation every N epochs |
+| `log_interval` | int | 1 / 50 / 1 (RTPose / ViTPose / RTMO) | build | advanced | Log every N batches |
+| `epochs` | int | 1000 / 500 / 600 (RTPose / ViTPose / RTMO) | build | form | Training epochs |
+| `batch_size` | int | 16 / 64 / 16 (RTPose / ViTPose / RTMO) | build | form | Training batch size ('auto' on the training CLI probes the largest batch that fits 60% of the GPU memory) |
+| `validation_batch_size` | int | `null` / 32 / `null` (RTPose / ViTPose / RTMO) | build | advanced | Validation batch size |
+| `image_size` | int | 640 / 256 / 640 (RTPose / ViTPose / RTMO) | build | form | Model input size (a model property; follows the model recipe) |
+| `optimizer` | str | `auto` / `AdamW` / `AdamW` (RTPose / ViTPose / RTMO) | build | form | Optimizer (auto, or a concrete name) |
+| `learning_rate` | float | 0.01 / 0.0005 / 0.004 (RTPose / ViTPose / RTMO) | build | form | Initial learning rate |
+| `final_lr_factor` | float | 0.01 / — / 0.05 (RTPose / ViTPose / RTMO) | build | form | Final learning-rate factor |
+| `momentum` | float | 0.937 / 0.9 / 0.9 (RTPose / ViTPose / RTMO) | build | form | SGD momentum / Adam beta1 |
+| `weight_decay` | float | 0.0005 / 0.1 / 0.05 (RTPose / ViTPose / RTMO) | build | form | Weight decay |
+| `warmup_epochs` | float | 3.0 / — / 5.0 (RTPose / ViTPose / RTMO) | build | form | Warmup epochs |
+| `warmup_iters` | int | — / 500 / — (RTPose / ViTPose / RTMO) | build | advanced | Warmup iterations (alternative to warmup_epochs) |
+| `warmup_start_factor` | float | — / 0.001 / — (RTPose / ViTPose / RTMO) | build | advanced | Warmup start learning-rate factor |
+| `warmup_momentum` | float | 0.8 / — / 0.8 (RTPose / ViTPose / RTMO) | build | advanced | Warmup start momentum |
+| `warmup_bias_lr` | float | 0.1 / — / 0.1 (RTPose / ViTPose / RTMO) | build | advanced | Warmup learning rate for the bias group |
+| `nominal_batch_size` | int | 64 / — / 64 (RTPose / ViTPose / RTMO) | build | advanced | Nominal batch size (used to scale the learning rate) |
+| `cosine_schedule` | bool | False / — / True (RTPose / ViTPose / RTMO) | build | form | Cosine learning-rate schedule |
+| `amp` | bool | True / False / True (RTPose / ViTPose / RTMO) | build | form | Mixed-precision training |
+| `ema` | bool | True / False / True (RTPose / ViTPose / RTMO) | build | form | Exponential moving average |
+| `close_mosaic` | int | 10 / — / 20 (RTPose / ViTPose / RTMO) | build | form | Disable mosaic for the last N epochs |
+| `layer_decay_rate` | float | `null` / — / `null` (RTPose / ViTPose / RTMO) | build | advanced | ViT layer decay rate |
+| `seed` | int | — / 21 / — (RTPose / ViTPose / RTMO) | build | advanced | Recipe-level random seed (beats shared.runtime.seed) |
 
 **`train.shared.training`**
 
@@ -118,52 +118,55 @@ This reference is generated from the key registry (`animalposetracker/config/sch
 
 | key | type | default | apply | visibility | notes |
 |---|---|---|---|---|---|
-| `box_loss_weight` | float | 7.5 / — (RTPose / ViTPose) | build | form | Box regression loss weight |
-| `class_loss_weight` | float | 0.5 / — (RTPose / ViTPose) | build | form | Classification loss weight |
-| `distribution_loss_weight` | float | 1.5 / — (RTPose / ViTPose) | build | form | DFL distribution loss weight |
-| `keypoint_loss_weight` | float | 12.0 / — (RTPose / ViTPose) | build | form | Keypoint loss weight |
-| `visibility_loss_weight` | float | 1.0 / — (RTPose / ViTPose) | build | form | Visibility loss weight |
-| `label_sigma` | float | — / 6.0 (RTPose / ViTPose) | build | advanced | SimCC label Gaussian sigma |
-| `kl_beta` | float | — / 1.0 (RTPose / ViTPose) | build | advanced | SimCC KL loss beta |
+| `box_loss_weight` | float | 7.5 / — / 5.0 (RTPose / ViTPose / RTMO) | build | form | Box regression loss weight |
+| `class_loss_weight` | float | 0.5 / — / 1.0 (RTPose / ViTPose / RTMO) | build | form | Classification loss weight |
+| `distribution_loss_weight` | float | 1.5 / — / — (RTPose / ViTPose / RTMO) | build | form | DFL distribution loss weight |
+| `keypoint_loss_weight` | float | 12.0 / — / — (RTPose / ViTPose / RTMO) | build | form | Keypoint loss weight |
+| `visibility_loss_weight` | float | 1.0 / — / 1.0 (RTPose / ViTPose / RTMO) | build | form | Visibility loss weight |
+| `label_sigma` | float | — / 6.0 / — (RTPose / ViTPose / RTMO) | build | advanced | SimCC label Gaussian sigma |
+| `kl_beta` | float | — / 1.0 / — (RTPose / ViTPose / RTMO) | build | advanced | SimCC KL loss beta |
+| `oks_loss_weight` | float | — / — / 30.0 (RTPose / ViTPose / RTMO) | build | advanced | One-stage (RTMO) OKS loss weight |
+| `mle_loss_weight` | float | — / — / 1.0 (RTPose / ViTPose / RTMO) | build | advanced | One-stage (RTMO) coordinate-classification loss weight |
+| `overlaps_power` | float | — / — / 0.5 (RTPose / ViTPose / RTMO) | build | advanced | One-stage (RTMO) exponent applied to the OKS class target |
 
 **`train.models.augmentation`**
 
 | key | type | default | apply | visibility | notes |
 |---|---|---|---|---|---|
-| `hsv_h` | float | 0.015 / — (RTPose / ViTPose) | build | advanced | Hue augmentation gain |
-| `hsv_s` | float | 0.7 / — (RTPose / ViTPose) | build | advanced | Saturation augmentation gain |
-| `hsv_v` | float | 0.4 / — (RTPose / ViTPose) | build | advanced | Value augmentation gain |
-| `degrees` | float | 0.0 / — (RTPose / ViTPose) | build | advanced | Rotation augmentation (+/- degrees) |
-| `translate` | float | 0.1 / — (RTPose / ViTPose) | build | advanced | Translation augmentation fraction |
-| `scale` | float | 0.5 / — (RTPose / ViTPose) | build | advanced | Scale augmentation gain |
-| `shear` | float | 0.0 / — (RTPose / ViTPose) | build | advanced | Shear augmentation (+/- degrees) |
-| `perspective` | float | 0.0 / — (RTPose / ViTPose) | build | advanced | Perspective augmentation |
-| `flipud` | float | 0.0 / — (RTPose / ViTPose) | build | advanced | Vertical flip probability |
-| `fliplr` | float | 0.5 / — (RTPose / ViTPose) | build | advanced | Horizontal flip probability |
-| `bgr` | float | 0.0 / — (RTPose / ViTPose) | build | advanced | BGR channel-swap probability |
-| `mosaic` | float | 1.0 / — (RTPose / ViTPose) | build | advanced | Mosaic probability |
-| `mixup` | float | 0.0 / — (RTPose / ViTPose) | build | advanced | MixUp probability |
-| `horizontal_flip_probability` | float | — / 0.5 (RTPose / ViTPose) | build | advanced | Horizontal flip probability |
-| `half_body_probability` | float | — / 0.3 (RTPose / ViTPose) | build | advanced | Half-body crop probability |
-| `half_body_upper_probability` | float | — / 0.7 (RTPose / ViTPose) | build | advanced | Probability that a half-body crop keeps the upper body |
-| `half_body_scale_factor` | float | — / 1.5 (RTPose / ViTPose) | build | advanced | Half-body crop scale factor |
-| `bbox_shift_probability` | float | — / 0.3 (RTPose / ViTPose) | build | advanced | Box shift probability |
-| `bbox_shift_factor` | float | — / 0.16 (RTPose / ViTPose) | build | advanced | Box shift factor |
-| `bbox_scale_factor` | float | — / 0.5 (RTPose / ViTPose) | build | advanced | Box scale factor |
-| `bbox_rotation_probability` | float | — / 0.6 (RTPose / ViTPose) | build | advanced | Box rotation probability |
-| `bbox_rotation_factor` | float | — / 80.0 (RTPose / ViTPose) | build | advanced | Box rotation factor (degrees) |
+| `hsv_h` | float | 0.015 / — / 0.015 (RTPose / ViTPose / RTMO) | build | advanced | Hue augmentation gain |
+| `hsv_s` | float | 0.7 / — / 0.7 (RTPose / ViTPose / RTMO) | build | advanced | Saturation augmentation gain |
+| `hsv_v` | float | 0.4 / — / 0.4 (RTPose / ViTPose / RTMO) | build | advanced | Value augmentation gain |
+| `degrees` | float | 0.0 / — / 10.0 (RTPose / ViTPose / RTMO) | build | advanced | Rotation augmentation (+/- degrees) |
+| `translate` | float | 0.1 / — / 0.1 (RTPose / ViTPose / RTMO) | build | advanced | Translation augmentation fraction |
+| `scale` | float | 0.5 / — / 0.5 (RTPose / ViTPose / RTMO) | build | advanced | Scale augmentation gain |
+| `shear` | float | 0.0 / — / 0.0 (RTPose / ViTPose / RTMO) | build | advanced | Shear augmentation (+/- degrees) |
+| `perspective` | float | 0.0 / — / 0.0 (RTPose / ViTPose / RTMO) | build | advanced | Perspective augmentation |
+| `flipud` | float | 0.0 / — / 0.0 (RTPose / ViTPose / RTMO) | build | advanced | Vertical flip probability |
+| `fliplr` | float | 0.5 / — / 0.5 (RTPose / ViTPose / RTMO) | build | advanced | Horizontal flip probability |
+| `bgr` | float | 0.0 / — / 0.0 (RTPose / ViTPose / RTMO) | build | advanced | BGR channel-swap probability |
+| `mosaic` | float | 1.0 / — / 1.0 (RTPose / ViTPose / RTMO) | build | advanced | Mosaic probability |
+| `mixup` | float | 0.0 / — / 0.0 (RTPose / ViTPose / RTMO) | build | advanced | MixUp probability |
+| `horizontal_flip_probability` | float | — / 0.5 / — (RTPose / ViTPose / RTMO) | build | advanced | Horizontal flip probability |
+| `half_body_probability` | float | — / 0.3 / — (RTPose / ViTPose / RTMO) | build | advanced | Half-body crop probability |
+| `half_body_upper_probability` | float | — / 0.7 / — (RTPose / ViTPose / RTMO) | build | advanced | Probability that a half-body crop keeps the upper body |
+| `half_body_scale_factor` | float | — / 1.5 / — (RTPose / ViTPose / RTMO) | build | advanced | Half-body crop scale factor |
+| `bbox_shift_probability` | float | — / 0.3 / — (RTPose / ViTPose / RTMO) | build | advanced | Box shift probability |
+| `bbox_shift_factor` | float | — / 0.16 / — (RTPose / ViTPose / RTMO) | build | advanced | Box shift factor |
+| `bbox_scale_factor` | float | — / 0.5 / — (RTPose / ViTPose / RTMO) | build | advanced | Box scale factor |
+| `bbox_rotation_probability` | float | — / 0.6 / — (RTPose / ViTPose / RTMO) | build | advanced | Box rotation probability |
+| `bbox_rotation_factor` | float | — / 80.0 / — (RTPose / ViTPose / RTMO) | build | advanced | Box rotation factor (degrees) |
 
 **`train.models.validation`**
 
 | key | type | default | apply | visibility | notes |
 |---|---|---|---|---|---|
-| `confidence` | float | 0.001 / — (RTPose / ViTPose) | build | advanced | Validation confidence threshold |
-| `iou` | float | 0.7 / — (RTPose / ViTPose) | build | advanced | Validation NMS IoU |
-| `max_det` | int | 300 / — (RTPose / ViTPose) | build | advanced | Validation max detections per image |
-| `agnostic_nms` | bool | False / — (RTPose / ViTPose) | build | advanced | Validation class-agnostic NMS |
-| `oks_nms_threshold` | float | — / 0.9 (RTPose / ViTPose) | build | advanced | AnimalViTPose validation OKS-NMS threshold |
-| `keypoint_score_threshold` | float | — / 0.2 (RTPose / ViTPose) | build | advanced | AnimalViTPose validation keypoint filter threshold |
-| `flip_tta` | bool | — / False (RTPose / ViTPose) | build | advanced | AnimalViTPose validation flip TTA |
+| `confidence` | float | 0.001 / — / 0.1 (RTPose / ViTPose / RTMO) | build | advanced | Validation confidence threshold |
+| `iou` | float | 0.7 / — / 0.65 (RTPose / ViTPose / RTMO) | build | advanced | Validation NMS IoU |
+| `max_det` | int | 300 / — / — (RTPose / ViTPose / RTMO) | build | advanced | Validation max detections per image |
+| `agnostic_nms` | bool | False / — / — (RTPose / ViTPose / RTMO) | build | advanced | Validation class-agnostic NMS |
+| `oks_nms_threshold` | float | — / 0.9 / — (RTPose / ViTPose / RTMO) | build | advanced | AnimalViTPose validation OKS-NMS threshold |
+| `keypoint_score_threshold` | float | — / 0.2 / — (RTPose / ViTPose / RTMO) | build | advanced | AnimalViTPose validation keypoint filter threshold |
+| `flip_tta` | bool | — / False / — (RTPose / ViTPose / RTMO) | build | advanced | AnimalViTPose validation flip TTA |
 
 **`train.metrics`**
 

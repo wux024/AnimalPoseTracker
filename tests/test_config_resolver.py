@@ -190,7 +190,7 @@ class ResolverTests(unittest.TestCase):
             if parts[0] == "models":
                 candidates = [
                     ["models", model, *parts[2:]]
-                    for model in ("AnimalRTPose", "AnimalViTPose")
+                    for model in ("AnimalRTPose", "AnimalViTPose", "AnimalRTMO")
                 ]
             else:
                 candidates = [parts]

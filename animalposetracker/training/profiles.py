@@ -143,13 +143,27 @@ def apply_animalvitpose_recipe(
     return resolved, applied
 
 
+def _profile_model_name(model_type: Optional[str]) -> str:
+    """The ``models.<name>`` block a train scope resolves against.
+
+    Unknown names fall back to AnimalRTPose, which keeps a typo from silently
+    reading another model's recipe: the trainer then fails on the model yaml's
+    head instead of training with wrong defaults.
+    """
+    normalized = str(model_type or "").strip()
+    for name in ("AnimalRTPose", "AnimalViTPose", "AnimalRTMO"):
+        if normalized.casefold() == name.casefold():
+            return name
+    return "AnimalRTPose"
+
+
 def train_scope_prefixes(model_type: Optional[str]) -> Tuple[Tuple[str, str], ...]:
     """The train section's flattening order, last one wins.
 
     Shared settings first, then the active model's profile; ``metrics`` keys
     ride along at the end so the evaluator reads them from the same mapping.
     """
-    model = "AnimalViTPose" if str(model_type or "").casefold() == "animalvitpose" else "AnimalRTPose"
+    model = _profile_model_name(model_type)
     return (
         ("shared.runtime", "train.shared.runtime."),
         ("shared.training", "train.shared.training."),
@@ -197,7 +211,7 @@ def train_field_path(field, model_type: Optional[str]) -> Optional[str]:
     The single-key companion of ``train_key_targets``; the GUI's generated configure
     rows resolve their paths through it too, so both stay on one rule.
     """
-    model = "AnimalViTPose" if str(model_type or "").casefold() == "animalvitpose" else "AnimalRTPose"
+    model = _profile_model_name(model_type)
     if field.group == "shared.runtime":
         return f"train.shared.runtime.{field.key}"
     if field.group == "shared.training":

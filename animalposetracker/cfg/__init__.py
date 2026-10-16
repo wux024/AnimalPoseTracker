@@ -9,6 +9,7 @@ TRAINING_CFG_PATH = CFG_DIR / 'training.yaml'
 MODEL_YAML_PATHS = {
     'AnimalRTPose': MODEL_DIR / 'animalrtpose.yaml',
     'AnimalViTPose': MODEL_DIR / 'animalvitpose.yaml',
+    'AnimalRTMO': MODEL_DIR / 'animalrtmo.yaml',
 }
 DATA_YAML_PATHS = {
     'AcinoSet': DATA_DIR / 'acinoset.yaml',

@@ -984,7 +984,16 @@ class Trainer:
                     name: value / batches for name, value in totals.items()
                 }
                 boxes = targets.get("boxes") if isinstance(targets, Mapping) else None
-                instances = int(boxes.shape[0]) if torch.is_tensor(boxes) else 0
+                if torch.is_tensor(boxes):
+                    instances = int(boxes.shape[0])
+                elif isinstance(targets, (list, tuple)):
+                    # Bottom-up batches carry one sample per image.
+                    instances = int(sum(
+                        len(sample.get("gt_instance_labels", {}).get("bboxes", ()))
+                        for sample in targets
+                    ))
+                else:
+                    instances = 0
                 gpu_mem = (
                     float(torch.cuda.memory_reserved(self.device) / (1024 ** 3))
                     if self.device.type == "cuda"

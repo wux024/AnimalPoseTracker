@@ -771,10 +771,6 @@ def build_pose_dataloaders(
         single_cls=single_cls,
         batch_size=batch_size,
     )
-    data_config = _read_yaml(config_path)
-    validation_value = data_config.get("val") or data_config.get("val_annotations")
-    if validation_value is None and isinstance(data_config.get("annotations"), dict):
-        validation_value = data_config["annotations"].get("val")
     validation_dataset = (
         PoseTextDataset(
             config_path,
@@ -785,8 +781,45 @@ def build_pose_dataloaders(
             rect=True,
             batch_size=int(validation_batch_size or batch_size),
             stride=32,
-        ) if validation_value else None
+        ) if _has_validation_split(_read_yaml(config_path)) else None
     ) if include_validation else None
+    return _assemble_loaders(
+        train_dataset,
+        validation_dataset,
+        pose_collate,
+        batch_size=batch_size,
+        validation_batch_size=validation_batch_size,
+        num_workers=num_workers,
+        seed=seed,
+        device=device,
+    )
+
+
+def _has_validation_split(data_config: Dict[str, Any]) -> bool:
+    """Whether the dataset YAML names a validation source at all."""
+    validation_value = data_config.get("val") or data_config.get("val_annotations")
+    if validation_value is None and isinstance(data_config.get("annotations"), dict):
+        validation_value = data_config["annotations"].get("val")
+    return bool(validation_value)
+
+
+def _assemble_loaders(
+    train_dataset,
+    validation_dataset,
+    collate_fn,
+    batch_size: int,
+    validation_batch_size: Optional[int],
+    num_workers: int,
+    seed: int,
+    device: str,
+) -> Tuple[DataLoader, Optional[DataLoader], Dict[str, Any]]:
+    """Wrap the two datasets in loaders and collect the run metadata.
+
+    Shared by every split riding the same image pipeline (the detection samples
+    and the bottom-up samples of the one-stage head); only the dataset classes
+    and the collate function differ, so the distributed sampler, worker seeding,
+    pin-memory decision and metadata block live here exactly once.
+    """
     generator = torch.Generator()
     distributed = torch.distributed.is_available() and torch.distributed.is_initialized()
     rank = torch.distributed.get_rank() if distributed else 0
@@ -829,7 +862,7 @@ def build_pose_dataloaders(
         options = {
             "batch_size": effective_batch,
             "num_workers": workers,
-            "collate_fn": pose_collate,
+            "collate_fn": collate_fn,
             "pin_memory": pin_memory,
             "persistent_workers": workers > 0,
             "worker_init_fn": _seed_pose_worker,

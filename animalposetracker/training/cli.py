@@ -937,6 +937,108 @@ def run(argv=None) -> int:
                 )
                 if validation_loader is not None else None
             )
+        elif head_name == "RTMOHead":
+            from animalposetracker.data.bottomup import build_bottomup_dataloaders
+            from animalposetracker.evaluation.rtmo import RTMOPoseValidator
+            from animalposetracker.nn.head import RTMOHead
+            from .losses import RTMOLoss
+
+            if config.multi_scale:
+                raise ValueError(
+                    "multi_scale is incompatible with the bottom-up sample encoding: "
+                    "the targets are encoded in input pixels and cannot follow a batch resize"
+                )
+            train_loader, validation_loader, metadata = build_bottomup_dataloaders(
+                config.data,
+                image_size=config.image_size,
+                batch_size=config.batch_size // world_size,
+                validation_batch_size=(
+                    config.validation_batch_size // world_size
+                    if config.validation_batch_size is not None else None
+                ),
+                num_workers=config.num_workers,
+                seed=config.seed,
+                include_validation=config.validation_enabled,
+                cache=config.cache,
+                fraction=config.fraction,
+                augmentation={
+                    "hsv_h": config.hsv_h,
+                    "hsv_s": config.hsv_s,
+                    "hsv_v": config.hsv_v,
+                    "degrees": config.degrees,
+                    "translate": config.translate,
+                    "scale": config.scale,
+                    "shear": config.shear,
+                    "perspective": config.perspective,
+                    "flipud": config.flipud,
+                    "fliplr": config.fliplr,
+                    "bgr": config.bgr,
+                    "mosaic": config.mosaic,
+                    "mixup": config.mixup,
+                },
+                epochs=config.epochs,
+                close_mosaic=config.close_mosaic,
+                # The one-stage head predicts one class per grid; folding the label
+                # space keeps the samples and the head's class count in agreement.
+                single_cls=True,
+                device=config.device,
+            )
+            if rank == 0:
+                emitter.emit(TrainingEvent(
+                    event="augmentation",
+                    message=(
+                        "Using the YOLO-style image pipeline (mosaic, HSV, flips) with the "
+                        "one-stage bottom-up sample encoding; instance labels fold to a "
+                        "single class."
+                    ),
+                ))
+            model_spec["nc"] = 1
+            model_spec["kpt_shape"] = list(metadata["kpt_shape"])
+            model = build_model(model_spec, scale=scale)
+            head = model.model[-1]
+            if not isinstance(head, RTMOHead):
+                raise TypeError(f"Expected RTMOHead, built {type(head).__name__}")
+            config.train_dataset_size = metadata["train_images"]
+            criterion = RTMOLoss(
+                head,
+                kpt_oks_sigmas=metadata["kpt_oks_sigmas"],
+                cls_weight=float(values.get("class_loss_weight", 1.0)),
+                bbox_weight=float(values.get("box_loss_weight", 5.0)),
+                oks_weight=float(values.get("oks_loss_weight", 30.0)),
+                vis_weight=float(values.get("visibility_loss_weight", 1.0)),
+                mle_weight=float(values.get("mle_loss_weight", 1.0)),
+                overlaps_power=float(values.get("overlaps_power", 0.5)),
+            )
+            validator = (
+                RTMOPoseValidator(
+                    criterion,
+                    confidence_threshold=config.validation_confidence,
+                    iou_threshold=config.validation_iou,
+                    class_names=metadata["class_names"],
+                    validation_dataset=(
+                        validation_loader.dataset if validation_loader is not None else None
+                    ),
+                    keypoint_pck_threshold=float(
+                        values.get("pck_threshold", KEYPOINT_METRICS.get("pck_threshold", 0.05))
+                    ),
+                    keypoint_auc_norm_factor=float(values.get(
+                        "auc_norm_factor", KEYPOINT_METRICS.get("auc_norm_factor", 30.0)
+                    )),
+                    keypoint_auc_thresholds=int(values.get(
+                        "auc_thresholds", KEYPOINT_METRICS.get("auc_thresholds", 20)
+                    )),
+                    coco_max_detections=int(values.get(
+                        "coco_max_detections", KEYPOINT_METRICS.get("coco_max_detections", 20)
+                    )),
+                    oks_area_mode=config.oks_area_mode,
+                    ap_metric=(
+                        config.best_metric
+                        if config.best_metric in {"COCO/AP", "YOLO/AP"}
+                        else "COCO/AP"
+                    ),
+                )
+                if validation_loader is not None else None
+            )
         else:
             train_loader, validation_loader, metadata = build_pose_dataloaders(
                 config.data,

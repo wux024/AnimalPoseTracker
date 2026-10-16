@@ -20,6 +20,11 @@ IOU_THRESHOLDS = torch.linspace(0.50, 0.95, 10)
 # NMS threshold and the reported AP sit on one OKS scale.
 OKS_BBOX_AREA_FACTOR = 0.53
 
+# pycocotools' class-agnostic switch: with ``useCats=0`` the evaluator looks every record
+# up under category id -1, so a class-agnostic run re-keys its evaluator-only copies
+# (ground truth and detections) to this id before calling into pycocotools.
+CLASS_AGNOSTIC_CATEGORY_ID = -1
+
 
 def box_iou(boxes1: torch.Tensor, boxes2: torch.Tensor, eps: float = 1e-7) -> torch.Tensor:
     """Pairwise IoU for xyxy boxes, returning a ``(len(boxes1), len(boxes2))`` matrix."""
@@ -531,6 +536,23 @@ def evaluate_coco_keypoints(
             eval_coco_gt.dataset = dataset
             eval_coco_gt.createIndex()
 
+        if not use_categories:
+            # pycocotools switches class-agnostic evaluation to category id -1 and
+            # then looks records up under that id, so a class-agnostic run needs an
+            # evaluator-only copy of the GT (and matching detections) re-keyed to it;
+            # leaving the native ids in place makes every match fail silently.
+            dataset = copy.deepcopy(eval_coco_gt.dataset)
+            for annotation in dataset.get("annotations", []):
+                annotation["category_id"] = CLASS_AGNOSTIC_CATEGORY_ID
+            categories = list(dataset.get("categories", []))
+            single = dict(categories[0]) if categories else {}
+            single.update({"id": CLASS_AGNOSTIC_CATEGORY_ID})
+            dataset["categories"] = [single]
+            eval_coco_gt = COCO()
+            eval_coco_gt.dataset = dataset
+            eval_coco_gt.createIndex()
+            detections = [{**detection, "category_id": CLASS_AGNOSTIC_CATEGORY_ID} for detection in detections]
+
         if detections:
             coco_dt = eval_coco_gt.loadRes(list(detections))
         else:
@@ -551,7 +573,10 @@ def evaluate_coco_keypoints(
         evaluator.params.maxDets = sorted({20, int(max_detections)})
         if image_ids is not None:
             evaluator.params.imgIds = sorted({int(image_id) for image_id in image_ids})
-        if category_ids is not None:
+        if category_ids is not None and use_categories:
+            # Class-agnostic mode works off category id -1 and reads ``params.catIds``
+            # directly, so the constructor's match against the re-keyed GT must stand;
+            # filtering by the native ids here would empty every per-image lookup.
             evaluator.params.catIds = sorted({int(category_id) for category_id in category_ids})
         evaluator.params.useCats = int(bool(use_categories))
         evaluator.evaluate()

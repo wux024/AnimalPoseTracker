@@ -137,3 +137,57 @@ models:
       # decode_simcc receives output arrays and has no model handle, so it cannot flip. Keeping
       # TTA on would report numbers the shipped decoder cannot reproduce, so it defaults to off.
       flip_tta: false
+
+  AnimalRTMO:
+    # One-stage bottom-up recipe, following the RTMO reference configs (AdamW, small
+    # clips, long cosine schedule, mosaic dropped for the final epochs). The learning
+    # rate and decay are the reference values; nominal_batch_size follows this
+    # project's convention and only drives gradient accumulation below it.
+    training:
+      epochs: 600
+      batch_size: 16
+      image_size: 640
+      validation_batch_size:
+      optimizer: AdamW
+      learning_rate: 0.004
+      final_lr_factor: 0.05
+      momentum: 0.9
+      weight_decay: 0.05
+      warmup_epochs: 5.0
+      warmup_momentum: 0.8
+      warmup_bias_lr: 0.1
+      nominal_batch_size: 64
+      gradient_accumulation_steps:
+      gradient_clip_norm: 0.1
+      layer_decay_rate:
+      lr_milestones:
+      amp: true
+      ema: true
+      validation_interval: 1
+      log_interval: 1
+      cosine_schedule: true
+      close_mosaic: 20
+    loss:
+      box_loss_weight: 5.0
+      class_loss_weight: 1.0
+      visibility_loss_weight: 1.0
+      oks_loss_weight: 30.0
+      mle_loss_weight: 1.0
+      overlaps_power: 0.5
+    augmentation:
+      hsv_h: 0.015
+      hsv_s: 0.7
+      hsv_v: 0.4
+      degrees: 10.0
+      translate: 0.1
+      scale: 0.5
+      shear: 0.0
+      perspective: 0.0
+      flipud: 0.0
+      fliplr: 0.5
+      bgr: 0.0
+      mosaic: 1.0
+      mixup: 0.0
+    validation:
+      confidence: 0.1
+      iou: 0.65

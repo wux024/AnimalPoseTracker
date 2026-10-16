@@ -644,6 +644,14 @@ class RTMOLoss(nn.Module):
         sigmas = list(kpt_oks_sigmas) if kpt_oks_sigmas is not None else None
         if sigmas is not None and len(sigmas) != int(head.num_keypoints):
             raise ValueError(f"Expected {head.num_keypoints} OKS sigmas, got {len(sigmas)}")
+        # Kept as a buffer so the validator can read the exact sigmas the training
+        # used for its OKS scoring (mirrors PoseDetectionLoss.keypoint_loss).
+        self.register_buffer(
+            "kpt_oks_sigmas",
+            torch.as_tensor(
+                sigmas if sigmas is not None else COCO_KEYPOINT_SIGMAS, dtype=torch.float32
+            ),
+        )
 
         head.prior_generator = MlvlPointGenerator(
             strides=list(head.featmap_strides),
@@ -651,12 +659,12 @@ class RTMOLoss(nn.Module):
         )
         head.assigner = SimOTAAssigner(
             dynamic_k_indicator="oks",
-            oks_calculator=PoseOKS(sigmas),
+            oks_calculator=PoseOKS(self.kpt_oks_sigmas),
             use_keypoints_for_center=True,
         )
         head.loss_cls = VariFocalLoss(use_target_weight=True, loss_weight=cls_weight, reduction="sum")
         head.loss_bbox = IoULoss(mode="square", eps=1e-16, loss_weight=bbox_weight, reduction="sum")
-        head.loss_oks = OKSLoss(sigmas=sigmas, loss_weight=oks_weight, reduction="none")
+        head.loss_oks = OKSLoss(sigmas=self.kpt_oks_sigmas, loss_weight=oks_weight, reduction="none")
         head.loss_vis = BCELoss(use_target_weight=True, loss_weight=vis_weight, reduction="mean")
         head.loss_mle = MLECCLoss(use_target_weight=True, loss_weight=mle_weight, reduction="mean")
         head.loss_bbox_aux = (
@@ -668,9 +676,12 @@ class RTMOLoss(nn.Module):
 
     def forward(self, predictions, targets) -> Dict[str, Any]:
         losses = self.head.loss_from_outputs(predictions, targets)
-        metrics = {
+        terms = {
             key: (value.mean() if value.numel() > 1 else value)
             for key, value in losses.items()
             if key.startswith("loss_") and torch.is_tensor(value)
         }
-        return {"loss": sum(metrics.values()), "metrics": metrics}
+        total = sum(terms.values())
+        metrics = {"loss": total.detach()}
+        metrics.update({key: value.detach() for key, value in terms.items()})
+        return {"loss": total, "metrics": metrics}

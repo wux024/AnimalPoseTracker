@@ -74,10 +74,30 @@ SIMCC_COLUMNS = LossColumns(
     validation=_KEYPOINT_VALIDATION_COLUMNS,
 )
 
+RTMO_COLUMNS = LossColumns(
+    # The one-stage head reports the six RTMO terms it sums; `loss` is the total.
+    train=(
+        ("loss", "loss"),
+        ("loss_cls", "cls_loss"),
+        ("loss_bbox", "box_loss"),
+        ("loss_oks", "oks_loss"),
+        ("loss_vis", "vis_loss"),
+        ("loss_mle", "mle_loss"),
+    ),
+    # Like the SimCC head, the reference computes no validation loss for the
+    # one-stage head (its keypoint-offset branch only exists in training mode),
+    # so the validation table scores AP/PCK/AUC/EPE only.
+    validation=_KEYPOINT_VALIDATION_COLUMNS,
+)
+
 
 def loss_columns(head_name: Optional[str]) -> LossColumns:
     """Pick the column layout for a detection head, defaulting to the YOLO-Pose one."""
-    return SIMCC_COLUMNS if head_name == "SimCCHead" else YOLO_POSE_COLUMNS
+    if head_name == "SimCCHead":
+        return SIMCC_COLUMNS
+    if head_name == "RTMOHead":
+        return RTMO_COLUMNS
+    return YOLO_POSE_COLUMNS
 
 
 def _fmt(value: float) -> str:
