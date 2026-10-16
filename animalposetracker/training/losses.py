@@ -7,7 +7,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 
 from animalposetracker.nn.tal import dist2bbox, make_anchors
-from .assigner import TaskAlignedAssigner, aligned_complete_iou
+from .assigner import COCO_KEYPOINT_SIGMAS, TaskAlignedAssigner, aligned_complete_iou, bbox_overlaps
 
 
 def _xywh_to_xyxy(boxes: torch.Tensor) -> torch.Tensor:
@@ -320,3 +320,255 @@ def _boxes_to_distances(anchor_points, boxes, reg_max):
     left_top = anchor_points - boxes[..., :2]
     right_bottom = boxes[..., 2:] - anchor_points
     return torch.cat((left_top, right_bottom), dim=-1).clamp_(0, reg_max - 0.01)
+
+
+# --------------------------------------------------------------------------------------------
+# RTMO losses (ported from mmpose; pure torch)
+# --------------------------------------------------------------------------------------------
+
+
+class VariFocalLoss(nn.Module):
+    """VariFocal classification loss (mmpose port).
+
+    Positive targets carry the OKS score; the negative weight is
+    ``alpha * sigmoid(x)^gamma * (1 - label) + target``.
+    """
+
+    def __init__(self, use_target_weight=False, loss_weight=1.0, reduction="mean", alpha=0.75, gamma=2.0):
+        super().__init__()
+        if reduction not in ("mean", "sum", "none"):
+            raise ValueError("reduction must be mean / sum / none")
+        self.reduction = reduction
+        self.use_target_weight = use_target_weight
+        self.loss_weight = loss_weight
+        self.alpha = alpha
+        self.gamma = gamma
+
+    def criterion(self, output, target):
+        label = (target > 1e-4).to(target)
+        weight = self.alpha * output.sigmoid().pow(self.gamma) * (1 - label) + target
+        output = output.clip(min=-10, max=10)
+        return F.binary_cross_entropy_with_logits(output, target, reduction="none") * weight
+
+    def forward(self, output, target, target_weight=None):
+        if self.use_target_weight:
+            if target_weight is None:
+                raise ValueError("target_weight is required")
+            loss = self.criterion(output, target)
+            if target_weight.dim() == 1:
+                target_weight = target_weight.unsqueeze(1)
+            loss = loss * target_weight
+        else:
+            loss = self.criterion(output, target)
+
+        loss[torch.isinf(loss)] = 0.0
+        loss[torch.isnan(loss)] = 0.0
+
+        if self.reduction == "sum":
+            loss = loss.sum()
+        elif self.reduction == "mean":
+            loss = loss.mean()
+        return loss * self.loss_weight
+
+
+class BCELoss(nn.Module):
+    """Binary cross entropy with an optional target weight (mmpose port)."""
+
+    def __init__(self, use_target_weight=False, loss_weight=1.0, reduction="mean", use_sigmoid=False):
+        super().__init__()
+        if reduction not in ("mean", "sum", "none"):
+            raise ValueError("reduction must be mean / sum / none")
+        self.reduction = reduction
+        self.use_sigmoid = use_sigmoid
+        self.criterion = F.binary_cross_entropy if use_sigmoid else F.binary_cross_entropy_with_logits
+        self.use_target_weight = use_target_weight
+        self.loss_weight = loss_weight
+
+    def forward(self, output, target, target_weight=None):
+        loss = self.criterion(output, target, reduction="none")
+        if self.use_target_weight:
+            if target_weight is None:
+                raise ValueError("target_weight is required")
+            if target_weight.dim() == 1:
+                target_weight = target_weight[:, None]
+            loss = loss * target_weight
+
+        if self.reduction == "sum":
+            loss = loss.sum()
+        elif self.reduction == "mean":
+            loss = loss.mean()
+        return loss * self.loss_weight
+
+
+class IoULoss(nn.Module):
+    """IoU-based box regression loss (mmpose port)."""
+
+    def __init__(self, reduction="mean", mode="log", eps=1e-16, loss_weight=1.0):
+        super().__init__()
+        if reduction not in ("mean", "sum", "none"):
+            raise ValueError("reduction must be mean / sum / none")
+        if mode not in ("linear", "square", "log"):
+            raise ValueError("mode must be linear / square / log")
+        self.reduction = reduction
+        self.loss_weight = loss_weight
+        self.mode = mode
+        self.eps = eps
+
+    def forward(self, output, target, target_weight=None):
+        ious = bbox_overlaps(output, target, is_aligned=True).clamp(min=self.eps)
+
+        if self.mode == "linear":
+            loss = 1 - ious
+        elif self.mode == "square":
+            loss = 1 - ious.pow(2)
+        else:
+            loss = -ious.log()
+
+        if target_weight is not None:
+            for _ in range(loss.ndim - target_weight.ndim):
+                target_weight = target_weight.unsqueeze(-1)
+            loss = loss * target_weight
+
+        if self.reduction == "sum":
+            loss = loss.sum()
+        elif self.reduction == "mean":
+            loss = loss.mean()
+        return loss * self.loss_weight
+
+
+class L1Loss(nn.Module):
+    """L1 regression loss (mmpose port)."""
+
+    def __init__(self, reduction="mean", use_target_weight=False, loss_weight=1.0):
+        super().__init__()
+        if reduction not in ("mean", "sum", "none"):
+            raise ValueError("reduction must be mean / sum / none")
+        self.reduction = reduction
+        self.use_target_weight = use_target_weight
+        self.loss_weight = loss_weight
+
+    def forward(self, output, target, target_weight=None):
+        if self.use_target_weight:
+            if target_weight is None:
+                raise ValueError("target_weight is required")
+            for _ in range(target.ndim - target_weight.ndim):
+                target_weight = target_weight.unsqueeze(-1)
+            loss = F.l1_loss(output * target_weight, target * target_weight, reduction=self.reduction)
+        else:
+            loss = F.l1_loss(output, target, reduction=self.reduction)
+        return loss * self.loss_weight
+
+
+class OKSLoss(nn.Module):
+    """OKS keypoint loss (mmpose port).
+
+    Args:
+        sigmas: Per-keypoint sigmas; defaults to COCO-17.
+        norm_target_weight (bool): Normalize weights by the visible count
+            (True) instead of dividing by the keypoint count (False).
+    """
+
+    def __init__(
+        self,
+        sigmas=None,
+        reduction="mean",
+        mode="linear",
+        eps=1e-8,
+        norm_target_weight=False,
+        loss_weight=1.0,
+    ):
+        super().__init__()
+        if reduction not in ("mean", "sum", "none"):
+            raise ValueError("reduction must be mean / sum / none")
+        if mode not in ("linear", "square", "log"):
+            raise ValueError("mode must be linear / square / log")
+        self.reduction = reduction
+        self.loss_weight = loss_weight
+        self.mode = mode
+        self.norm_target_weight = norm_target_weight
+        self.eps = eps
+        self.register_buffer(
+            "sigmas",
+            torch.as_tensor(sigmas if sigmas is not None else COCO_KEYPOINT_SIGMAS, dtype=torch.float32),
+        )
+
+    def forward(self, output, target, target_weight=None, areas=None):
+        dist = torch.norm(output - target, dim=-1)
+        if areas is not None:
+            dist = dist / areas.pow(0.5).clip(min=self.eps).unsqueeze(-1)
+
+        sigmas = self.sigmas.reshape(*((1,) * (dist.ndim - 1)), -1)
+        dist = dist / (sigmas * 2)
+
+        oks = torch.exp(-dist.pow(2) / 2)
+
+        if target_weight is not None:
+            if self.norm_target_weight:
+                target_weight = target_weight / target_weight.sum(dim=-1, keepdims=True).clip(min=self.eps)
+            else:
+                target_weight = target_weight / target_weight.size(-1)
+            oks = oks * target_weight
+        oks = oks.sum(dim=-1)
+
+        if self.mode == "linear":
+            loss = 1 - oks
+        elif self.mode == "square":
+            loss = 1 - oks.pow(2)
+        else:
+            loss = -oks.log()
+
+        if self.reduction == "sum":
+            loss = loss.sum()
+        elif self.reduction == "mean":
+            loss = loss.mean()
+        return loss * self.loss_weight
+
+
+class MLECCLoss(nn.Module):
+    """Maximum-likelihood loss for coordinate classification (mmpose port).
+
+    `outputs` and `targets` are lists of per-axis distributions (e.g. x and y),
+    each keeping the bin dimension last; the per-axis match probabilities are
+    multiplied into a joint probability.
+    """
+
+    def __init__(self, reduction="mean", mode="log", use_target_weight=False, loss_weight=1.0):
+        super().__init__()
+        if reduction not in ("mean", "sum", "none"):
+            raise ValueError("reduction must be mean / sum / none")
+        if mode not in ("linear", "square", "log"):
+            raise ValueError("mode must be linear / square / log")
+        self.reduction = reduction
+        self.mode = mode
+        self.use_target_weight = use_target_weight
+        self.loss_weight = loss_weight
+
+    def forward(self, outputs, targets, target_weight=None):
+        if len(outputs) != len(targets):
+            raise ValueError("outputs and targets must have the same length")
+
+        prob = 1.0
+        for o, t in zip(outputs, targets):
+            prob = prob * (o * t).sum(dim=-1)
+
+        if self.mode == "linear":
+            loss = 1.0 - prob
+        elif self.mode == "square":
+            loss = 1.0 - prob.pow(2)
+        else:
+            loss = -torch.log(prob + 1e-4)
+
+        loss[torch.isnan(loss)] = 0.0
+
+        if self.use_target_weight:
+            if target_weight is None:
+                raise ValueError("target_weight is required")
+            for _ in range(loss.ndim - target_weight.ndim):
+                target_weight = target_weight.unsqueeze(-1)
+            loss = loss * target_weight
+
+        if self.reduction == "sum":
+            loss = loss.flatten(1).sum(dim=1)
+        elif self.reduction == "mean":
+            loss = loss.flatten(1).mean(dim=1)
+        return loss * self.loss_weight
