@@ -71,6 +71,7 @@ from typing import List, Optional, Sequence, Tuple
 
 import torch
 import torch.nn as nn
+import torch.nn.functional as F
 
 from .attention import GAUEncoder
 from .block import DFL, RealNVP
@@ -788,4 +789,571 @@ class DCC(nn.Module):
         self.gau._forward = _forward.__get__(self.gau)
 
 
-__all__ = ["YOLOPoseHead", "SimCCHead", "RTMOHeadModule", "DCC"]
+def _bbox_xyxy2cs(bbox, padding: float = 1.0):
+    """(left, top, right, bottom) -> (center, scale); torch tensors supported."""
+    dim = bbox.ndim
+    if dim == 1:
+        bbox = bbox[None, :]
+
+    scale = (bbox[..., 2:] - bbox[..., :2]) * padding
+    center = (bbox[..., 2:] + bbox[..., :2]) * 0.5
+
+    if dim == 1:
+        center = center[0]
+        scale = scale[0]
+    return center, scale
+
+
+def _filter_scores_and_topk(scores, score_thr, topk, results=None):
+    """Filter by score threshold, then keep the topk (mmpose helper port)."""
+    valid_mask = scores > score_thr
+    scores = scores[valid_mask]
+    valid_idxs = torch.nonzero(valid_mask)
+
+    num_topk = min(topk, valid_idxs.size(0))
+    scores, idxs = scores.sort(descending=True)
+    scores = scores[:num_topk]
+    topk_idxs = valid_idxs[idxs[:num_topk]]
+    keep_idxs, labels = topk_idxs.unbind(dim=1)
+
+    filtered_results = None
+    if results is not None:
+        if isinstance(results, dict):
+            filtered_results = {k: v[keep_idxs] for k, v in results.items()}
+        elif isinstance(results, (list, tuple)):
+            filtered_results = [result[keep_idxs] for result in results]
+        elif torch.is_tensor(results):
+            filtered_results = results[keep_idxs]
+        else:
+            raise NotImplementedError("Only supports dict or list or Tensor")
+    return scores, labels, keep_idxs, filtered_results
+
+
+def _nms_torch(boxes, scores, threshold):
+    """Greedy NMS for torch tensors; returns the kept indices."""
+    if boxes.numel() == 0:
+        return torch.empty((0,), dtype=torch.int64, device=boxes.device)
+
+    x1, y1, x2, y2 = boxes.unbind(1)
+    areas = (x2 - x1) * (y2 - y1)
+    order = scores.argsort(0, descending=True)
+
+    keep = []
+    while order.numel() > 0:
+        current = order[0]
+        keep.append(current)
+        if order.numel() == 1:
+            break
+
+        remaining = order[1:]
+        xx1 = torch.maximum(x1[current], x1[remaining])
+        yy1 = torch.maximum(y1[current], y1[remaining])
+        xx2 = torch.minimum(x2[current], x2[remaining])
+        yy2 = torch.minimum(y2[current], y2[remaining])
+        inter = (xx2 - xx1).clamp_(min=0) * (yy2 - yy1).clamp_(min=0)
+        if inter.sum() == 0:
+            order = remaining
+            continue
+        overlap = inter / (areas[current] + areas[remaining] - inter)
+        order = remaining[overlap <= threshold]
+
+    return torch.stack(keep)
+
+
+class RTMOHead(nn.Module):
+    """One-stage (bottom-up) pose head with the Dynamic Coordinate Classifier.
+
+    Ported from mmpose's RTMO. Unlike the other two heads this one is
+    detector-style: every positive grid of the input feature maps predicts a box
+    and a full pose at once, so no detector and no instance crop are involved.
+
+    Dependencies are injected as plain objects, keeping this file torch-only:
+
+    - `prior_generator`: exposes ``grid_priors(featmap_sizes, dtype, device,
+      with_stride)``;
+    - `assigner`: exposes ``assign(pred_instances: dict, gt_instances: dict) ->
+      dict`` returning ``gt_inds`` / ``labels`` / ``max_overlaps``, plus
+      ``oks_calculator(pred_kpts, gt_kpts, vis, areas)``;
+    - losses: callables; `loss_mle` is read for its ``loss_weight`` attribute.
+
+    Data samples are dicts: ``{"gt_instance_labels": {"bboxes", "labels",
+    "keypoints", "keypoints_visible", "areas"}, "gt_fields": {...},
+    "metainfo": {"input_size": (H, W)}}``.
+    """
+
+    def __init__(
+        self,
+        num_keypoints: int,
+        head_module_cfg: dict,
+        featmap_strides=(16, 32),
+        num_classes: int = 1,
+        use_aux_loss: bool = False,
+        proxy_target_cc: bool = False,
+        assigner=None,
+        prior_generator=None,
+        bbox_padding: float = 1.25,
+        overlaps_power: float = 1.0,
+        dcc_cfg=None,
+        loss_cls=None,
+        loss_bbox=None,
+        loss_oks=None,
+        loss_vis=None,
+        loss_mle=None,
+        loss_bbox_aux=None,
+    ):
+        super().__init__()
+        self.num_keypoints = num_keypoints
+        self.num_classes = num_classes
+        self.featmap_strides = tuple(featmap_strides)
+        self.use_aux_loss = use_aux_loss
+        self.overlaps_power = overlaps_power
+        self.prior_generator = prior_generator
+        self.assigner = assigner
+        self.bbox_padding = bbox_padding
+
+        head_module_cfg = dict(head_module_cfg)
+        head_module_cfg["featmap_strides"] = list(featmap_strides)
+        head_module_cfg["num_keypoints"] = num_keypoints
+        self.head_module = RTMOHeadModule(**head_module_cfg)
+
+        self.proxy_target_cc = proxy_target_cc
+        if dcc_cfg is not None:
+            dcc_cfg = dict(dcc_cfg)
+            dcc_cfg["num_keypoints"] = num_keypoints
+            self.dcc = DCC(**dcc_cfg)
+
+        self.loss_cls = loss_cls
+        self.loss_bbox = loss_bbox
+        self.loss_oks = loss_oks
+        self.loss_vis = loss_vis
+        self.loss_mle = loss_mle
+        self.loss_bbox_aux = loss_bbox_aux
+
+        # inference-time prior cache (filled by predict / switch_to_deploy)
+        self.featmap_sizes = None
+        self.mlvl_priors = None
+        self.flatten_priors = None
+        self.flatten_stride = None
+
+    def forward(self, feats):
+        return self.head_module(feats)
+
+    def init_weights(self):
+        self.head_module.init_weights()
+
+    # ------------------------------------------------------------------
+    # decoding helpers (ported from YOLOXPoseHead)
+    # ------------------------------------------------------------------
+
+    def decode_bbox(self, pred_bboxes, priors, stride):
+        """Distance predictions -> xyxy boxes, relative to each prior."""
+        stride = stride.view(1, -1, 1)
+        priors = priors.view(1, -1, 2)
+        xys = (pred_bboxes[..., :2] * stride) + priors
+        whs = pred_bboxes[..., 2:].exp() * stride
+        tl = xys - (whs * 0.5)
+        br = xys + (whs * 0.5)
+        return torch.cat([tl, br], dim=-1)
+
+    def decode_kpt_reg(self, pred_kpt_offsets, priors, stride):
+        """Keypoint offset predictions -> absolute keypoints."""
+        shape = pred_kpt_offsets.shape
+        stride = stride.view(1, -1, 1, 1)
+        priors = priors.view(1, -1, 1, 2)
+        pred_kpt_offsets = pred_kpt_offsets.reshape(*shape[:-1], self.num_keypoints, 2)
+        return (pred_kpt_offsets * stride) + priors
+
+    def _flatten_predictions(self, preds):
+        """Per-level (B, C, H, W) list -> a single (B, sum(HW), C) tensor."""
+        if len(preds) == 0:
+            return None
+        preds = [x.permute(0, 2, 3, 1).flatten(1, 2) for x in preds]
+        return torch.cat(preds, dim=1)
+
+    # ------------------------------------------------------------------
+    # target generation (ported from YOLOXPoseHead, dict-based samples)
+    # ------------------------------------------------------------------
+
+    @torch.no_grad()
+    def _get_targets(
+        self,
+        flat_priors,
+        cls_scores,
+        objectness,
+        bbox_preds,
+        kpt_reg_preds,
+        kpt_vis,
+        batch_data_samples,
+    ):
+        """Per-image targets, concatenated across the batch."""
+        num_imgs = len(batch_data_samples)
+
+        # normalize the predictions before assignment, guarding against nan
+        batch_cls_scores = cls_scores.clip(-1e4, 1e4).sigmoid()
+        batch_objectness = objectness.clip(-1e4, 1e4).sigmoid()
+        batch_kpt_vis = kpt_vis.clip(-1e4, 1e4).sigmoid()
+        batch_cls_scores[torch.isnan(batch_cls_scores)] = 0
+        batch_objectness[torch.isnan(batch_objectness)] = 0
+
+        targets_each = []
+        for i in range(num_imgs):
+            targets_each.append(
+                self._get_targets_single(
+                    flat_priors,
+                    batch_cls_scores[i],
+                    batch_objectness[i],
+                    bbox_preds[i],
+                    kpt_reg_preds[i],
+                    batch_kpt_vis[i],
+                    batch_data_samples[i],
+                )
+            )
+
+        targets = list(zip(*targets_each))
+        for i in range(len(targets)):
+            if torch.is_tensor(targets[i][0]):
+                non_empty = [target for target in targets[i] if target.size(0) > 0]
+                targets[i] = torch.cat(non_empty) if non_empty else targets[i][0].new_zeros((0,))
+
+        (foreground_masks, cls_targets, obj_targets, obj_weights, bbox_targets,
+         kpt_targets, vis_targets, vis_weights, pos_areas, pos_priors,
+         group_indices, num_fg_imgs) = targets
+
+        # auxiliary regression targets (relative to their priors)
+        if self.use_aux_loss:
+            pos_wh = pos_priors[:, -2:]
+            pos_xy = pos_priors[:, :2]
+            bbox_cxcy = (bbox_targets[:, :2] + bbox_targets[:, 2:]) / 2
+            bbox_wh = bbox_targets[:, 2:] - bbox_targets[:, :2]
+            bbox_aux_targets = torch.cat(
+                [(bbox_cxcy - pos_xy) / pos_wh, (bbox_wh / pos_wh + 1e-8).log()], dim=-1
+            )
+            kpt_aux_targets = (kpt_targets - pos_xy[:, None, :]) / (pos_wh[:, None, :])
+        else:
+            bbox_aux_targets = None
+            kpt_aux_targets = None
+
+        return (
+            foreground_masks, cls_targets, obj_targets, obj_weights,
+            bbox_targets, bbox_aux_targets, kpt_targets, kpt_aux_targets,
+            vis_targets, vis_weights, pos_areas, pos_priors, group_indices,
+            num_fg_imgs,
+        )
+
+    @torch.no_grad()
+    def _get_targets_single(
+        self,
+        priors,
+        cls_scores,
+        objectness,
+        decoded_bboxes,
+        decoded_kpts,
+        kpt_vis,
+        data_sample,
+    ):
+        """Targets for one image (see `_get_targets`)."""
+        num_priors = priors.size(0)
+        gt_instances = data_sample["gt_instance_labels"]
+        gt_fields = data_sample.get("gt_fields", {})
+        num_gts = len(gt_instances["bboxes"])
+
+        # no GT: everything empty, objectness weight 1 everywhere
+        if num_gts == 0:
+            return (
+                cls_scores.new_zeros(num_priors).bool(),
+                cls_scores.new_zeros((0, self.num_classes)),
+                cls_scores.new_zeros((num_priors, 1)),
+                cls_scores.new_ones((num_priors, 1)),
+                cls_scores.new_zeros((0, 4)),
+                cls_scores.new_zeros((0, self.num_keypoints, 2)),
+                cls_scores.new_zeros((0, self.num_keypoints)),
+                cls_scores.new_zeros((0, self.num_keypoints)),
+                cls_scores.new_zeros((0,)),
+                priors[:0],
+                [],
+                0,
+            )
+
+        # assign positive samples
+        scores = cls_scores * objectness
+        pred_instances = dict(
+            bboxes=decoded_bboxes,
+            scores=scores.sqrt_(),
+            priors=priors,
+            keypoints=decoded_kpts,
+            keypoints_visible=kpt_vis,
+        )
+        assign_result = self.assigner.assign(pred_instances=pred_instances, gt_instances=gt_instances)
+
+        pos_inds = torch.nonzero(assign_result["gt_inds"] > 0, as_tuple=False).squeeze(-1).unique()
+        num_pos_per_img = pos_inds.size(0)
+        pos_gt_labels = assign_result["labels"][pos_inds]
+        pos_assigned_gt_inds = assign_result["gt_inds"][pos_inds] - 1
+
+        bbox_target = gt_instances["bboxes"][pos_assigned_gt_inds.long()]
+
+        max_overlaps = assign_result["max_overlaps"][pos_inds]
+        cls_target = F.one_hot(pos_gt_labels, self.num_classes) * max_overlaps.unsqueeze(-1)
+
+        kpt_target = gt_instances["keypoints"][pos_assigned_gt_inds]
+        vis_target = gt_instances["keypoints_visible"][pos_assigned_gt_inds]
+        if "keypoints_visible_weights" in gt_instances:
+            vis_weight = gt_instances["keypoints_visible_weights"][pos_assigned_gt_inds]
+        else:
+            vis_weight = vis_target.new_ones(vis_target.shape)
+        pos_areas = gt_instances["areas"][pos_assigned_gt_inds]
+
+        obj_target = torch.zeros_like(objectness)
+        obj_target[pos_inds] = 1
+
+        # down-weight the grids that predict unlabeled instances
+        invalid_mask = gt_fields.get("heatmap_mask", None)
+        if invalid_mask is not None and (invalid_mask != 0.0).any():
+            pred_vis = (kpt_vis.unsqueeze(-1) > 0.3).float()
+            mean_kpts = (decoded_kpts * pred_vis).sum(dim=1) / pred_vis.sum(dim=1).clamp(min=1e-8)
+            mean_kpts = mean_kpts.reshape(1, -1, 1, 2)
+            wh = invalid_mask.shape[-1]
+            grids = mean_kpts / (wh - 1) * 2 - 1
+            mask = invalid_mask.unsqueeze(0).float()
+            weight = F.grid_sample(mask, grids, mode="bilinear", padding_mode="zeros")
+            obj_weight = 1.0 - weight.reshape(num_priors, 1)
+        else:
+            obj_weight = obj_target.new_ones(obj_target.shape)
+
+        foreground_mask = torch.zeros_like(objectness.squeeze()).to(torch.bool)
+        foreground_mask[pos_inds] = 1
+        pos_priors = priors[pos_inds]
+        group_index = [
+            torch.where(pos_assigned_gt_inds == num)[0] for num in torch.unique(pos_assigned_gt_inds)
+        ]
+
+        return (
+            foreground_mask, cls_target, obj_target, obj_weight, bbox_target,
+            kpt_target, vis_target, vis_weight, pos_areas, pos_priors,
+            group_index, num_pos_per_img,
+        )
+
+    # ------------------------------------------------------------------
+    # losses
+    # ------------------------------------------------------------------
+
+    def _reduce_mean(self, value):
+        """Cross-rank mean under DDP, a no-op on a single process."""
+        if torch.distributed.is_available() and torch.distributed.is_initialized():
+            value = value.clone()
+            torch.distributed.all_reduce(value)
+            value /= torch.distributed.get_world_size()
+        return value
+
+    def loss(self, feats, batch_data_samples, train_cfg=None):
+        """Compute the RTMO losses for one batch. Returns a dict."""
+        cls_scores, bbox_preds, kpt_offsets, kpt_vis, pose_vecs = self.forward(feats)
+
+        featmap_sizes = [cls_score.shape[2:] for cls_score in cls_scores]
+        mlvl_priors = self.prior_generator.grid_priors(
+            featmap_sizes,
+            dtype=cls_scores[0].dtype,
+            device=cls_scores[0].device,
+            with_stride=True,
+        )
+        flatten_priors = torch.cat(mlvl_priors)
+
+        flatten_cls_scores = self._flatten_predictions(cls_scores)
+        flatten_bbox_preds = self._flatten_predictions(bbox_preds)
+        # RTMO has no objectness branch: a constant that sigmoids to ~1 stands in
+        flatten_objectness = torch.ones_like(flatten_cls_scores).detach().narrow(-1, 0, 1) * 1e4
+        flatten_kpt_offsets = self._flatten_predictions(kpt_offsets)
+        flatten_kpt_vis = self._flatten_predictions(kpt_vis)
+        flatten_pose_vecs = self._flatten_predictions(pose_vecs)
+
+        flatten_bbox_decoded = self.decode_bbox(flatten_bbox_preds, flatten_priors[..., :2], flatten_priors[..., -1])
+        flatten_kpt_decoded = self.decode_kpt_reg(
+            flatten_kpt_offsets, flatten_priors[..., :2], flatten_priors[..., -1]
+        )
+
+        targets = self._get_targets(
+            flatten_priors,
+            flatten_cls_scores.detach(),
+            flatten_objectness.detach(),
+            flatten_bbox_decoded.detach(),
+            flatten_kpt_decoded.detach(),
+            flatten_kpt_vis.detach(),
+            batch_data_samples,
+        )
+        (pos_masks, cls_targets, obj_targets, obj_weights, bbox_targets, bbox_aux_targets,
+         kpt_targets, kpt_aux_targets, vis_targets, vis_weights, pos_areas, pos_priors,
+         group_indices, num_fg_imgs) = targets
+
+        num_pos = torch.tensor(sum(num_fg_imgs), dtype=torch.float, device=flatten_cls_scores.device)
+        num_total_samples = max(self._reduce_mean(num_pos), 1.0)
+
+        extra_info = dict(num_samples=num_total_samples)
+        losses = dict()
+        cls_preds_all = flatten_cls_scores.view(-1, self.num_classes)
+
+        if num_pos > 0:
+            # bbox
+            bbox_preds_pos = flatten_bbox_decoded.view(-1, 4)[pos_masks]
+            losses["loss_bbox"] = self.loss_bbox(bbox_preds_pos, bbox_targets) / num_total_samples
+
+            if self.use_aux_loss and self.loss_bbox_aux is not None:
+                bbox_preds_raw = flatten_bbox_preds.view(-1, 4)[pos_masks]
+                losses["loss_bbox_aux"] = (
+                    self.loss_bbox_aux(bbox_preds_raw, bbox_aux_targets) / num_total_samples
+                )
+
+            # keypoint visibility
+            kpt_vis_preds = flatten_kpt_vis.view(-1, self.num_keypoints)[pos_masks]
+            losses["loss_vis"] = self.loss_vis(kpt_vis_preds, vis_targets, vis_weights)
+
+            # keypoints (regression + coordinate classification)
+            kpt_reg_preds = flatten_kpt_decoded.view(-1, self.num_keypoints, 2)[pos_masks]
+
+            if self.loss_mle is not None and getattr(self.loss_mle, "loss_weight", 0) > 0:
+                pose_vecs_pos = flatten_pose_vecs.view(-1, flatten_pose_vecs.size(-1))[pos_masks]
+                bbox_cs = torch.cat(_bbox_xyxy2cs(bbox_preds_pos, self.bbox_padding), dim=1)
+                kpt_cc_preds, pred_hms, sigmas = self.dcc.forward_train(
+                    pose_vecs_pos, bbox_cs, pos_priors[..., :2]
+                )
+                target_hms = self.dcc.generate_target_heatmap(kpt_targets, bbox_cs, sigmas, pos_areas)
+                losses["loss_mle"] = self.loss_mle(pred_hms, target_hms, vis_targets)
+
+            if self.proxy_target_cc:
+                # use the coordinate-classification prediction as the regression target
+                with torch.no_grad():
+                    diff_cc = torch.norm(kpt_cc_preds - kpt_targets, dim=-1)
+                    diff_reg = torch.norm(kpt_reg_preds - kpt_targets, dim=-1)
+                    mask = (diff_reg > diff_cc).float()
+                    kpt_weights_reg = vis_targets * mask
+                    oks = self.assigner.oks_calculator(kpt_cc_preds, kpt_targets, vis_targets, pos_areas)
+                    cls_targets = oks.unsqueeze(1)
+
+                losses["loss_oks"] = self.loss_oks(
+                    kpt_reg_preds, kpt_cc_preds.detach(), kpt_weights_reg, pos_areas
+                )
+            else:
+                losses["loss_oks"] = self.loss_oks(kpt_reg_preds, kpt_targets, vis_targets, pos_areas)
+
+            # positive grids get the OKS score as their classification target
+            extra_info["overlaps"] = cls_targets
+            cls_targets = cls_targets.pow(self.overlaps_power).detach()
+            obj_targets[pos_masks] = cls_targets.to(obj_targets)
+
+        losses["loss_cls"] = self.loss_cls(cls_preds_all, obj_targets, obj_weights) / num_total_samples
+        losses.update(extra_info)
+        return losses
+
+    # ------------------------------------------------------------------
+    # inference
+    # ------------------------------------------------------------------
+
+    def _ensure_priors(self, featmap_sizes, device, dtype):
+        if self.mlvl_priors is None or self.featmap_sizes != list(featmap_sizes):
+            self.mlvl_priors = self.prior_generator.grid_priors(
+                featmap_sizes, dtype=dtype, device=device, with_stride=False
+            )
+            self.flatten_priors = torch.cat(self.mlvl_priors)
+            flatten_stride = []
+            for priors, stride in zip(self.mlvl_priors, self.featmap_strides):
+                flatten_stride.append(priors.new_full((priors.size(0),), stride))
+            self.flatten_stride = torch.cat(flatten_stride)
+            self.featmap_sizes = list(featmap_sizes)
+
+    @torch.no_grad()
+    def predict(self, feats, batch_data_samples, test_cfg=None):
+        """Decode a batch of feature maps into per-image pose results.
+
+        Returns one dict per image: ``{"bboxes", "scores", "labels", "keypoints",
+        "keypoint_scores", "keypoints_visible"}``.
+        """
+        cfg = dict(test_cfg or {})
+        cls_scores, bbox_preds, _, kpt_vis, pose_vecs = self.forward(feats)
+
+        featmap_sizes = [cls_score.shape[2:] for cls_score in cls_scores]
+        self._ensure_priors(featmap_sizes, cls_scores[0].device, cls_scores[0].dtype)
+        flatten_priors = self.flatten_priors
+        flatten_stride = self.flatten_stride
+
+        flatten_cls_scores = self._flatten_predictions(cls_scores).sigmoid()
+        flatten_bbox_preds = self._flatten_predictions(bbox_preds)
+        flatten_kpt_vis = self._flatten_predictions(kpt_vis).sigmoid()
+        flatten_pose_vecs = self._flatten_predictions(pose_vecs)
+        flatten_bbox_decoded = self.decode_bbox(flatten_bbox_preds, flatten_priors, flatten_stride)
+
+        batch_size = len(batch_data_samples)
+        results_list = []
+
+        for i in range(batch_size):
+            score_thr = cfg.get("score_thr", 0.01)
+            nms_pre = cfg.get("nms_pre", 100000)
+            nms_thr = cfg.get("nms_thr", 1.0)
+
+            scores = flatten_cls_scores[i]
+            bboxes = flatten_bbox_decoded[i]
+            kpt_vis_i = flatten_kpt_vis[i]
+            priors_i = flatten_priors
+            stride_i = flatten_stride
+
+            scores, labels = scores.max(1, keepdim=True)
+            scores, labels, keep_idxs, results = _filter_scores_and_topk(
+                scores, score_thr, nms_pre, results=dict(labels=labels[:, 0])
+            )
+            labels = results["labels"]
+            bboxes = bboxes[keep_idxs]
+            kpt_vis_i = kpt_vis_i[keep_idxs]
+            priors_i = priors_i[keep_idxs]
+            stride_i = stride_i[keep_idxs]
+
+            # an explicit slice keeps the shape right when NMS is skipped
+            keep_idxs_nms = slice(None)
+            if bboxes.numel() > 0 and nms_thr < 1.0:
+                keep_idxs_nms = _nms_torch(bboxes, scores, nms_thr)
+                bboxes = bboxes[keep_idxs_nms]
+                scores = scores[keep_idxs_nms]
+                labels = labels[keep_idxs_nms]
+                kpt_vis_i = kpt_vis_i[keep_idxs_nms]
+                priors_i = priors_i[keep_idxs_nms]
+                stride_i = stride_i[keep_idxs_nms]
+
+            if bboxes.numel() > 0:
+                pose_vecs_i = flatten_pose_vecs[i][keep_idxs][keep_idxs_nms]
+                bbox_cs = torch.cat(_bbox_xyxy2cs(bboxes, self.bbox_padding), dim=1)
+                keypoints = self.dcc.forward_test(pose_vecs_i, bbox_cs, priors_i)
+            else:
+                keypoints = bboxes.new_zeros((0, self.num_keypoints, 2))
+
+            input_size = batch_data_samples[i].get("metainfo", {}).get("input_size", None)
+            if input_size is not None and bboxes.numel() > 0:
+                bboxes[:, 0::2].clamp_(0, input_size[0])
+                bboxes[:, 1::2].clamp_(0, input_size[1])
+
+            results_list.append(
+                dict(
+                    bboxes=bboxes,
+                    scores=scores,
+                    labels=labels,
+                    keypoints=keypoints,
+                    keypoint_scores=keypoints.new_zeros((keypoints.size(0), self.num_keypoints)),
+                    keypoints_visible=kpt_vis_i,
+                )
+            )
+
+        return results_list
+
+    def switch_to_deploy(self, test_cfg=None):
+        """Precompute and freeze the priors for deployment exports."""
+        if getattr(self, "deploy", False):
+            return
+
+        cfg = dict(test_cfg or {})
+        input_size = cfg.get("input_size", (640, 640))
+        featmap_sizes = []
+        for stride in self.featmap_strides:
+            featmap_sizes.append((input_size[0] // stride, input_size[1] // stride))
+        self._ensure_priors(featmap_sizes, torch.device("cpu"), torch.float32)
+        if hasattr(self, "dcc"):
+            self.dcc.switch_to_deploy(test_cfg)
+        self.deploy = True
+
+
+__all__ = ["YOLOPoseHead", "SimCCHead", "RTMOHeadModule", "DCC", "RTMOHead"]
