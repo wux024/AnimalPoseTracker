@@ -1,4 +1,13 @@
-"""Pose losses following the project's pinned AnimalRTPose training behavior."""
+"""Local pose losses and training criteria.
+
+Three groups live here:
+
+- `PoseDetectionLoss` -- the AnimalRTPose / YOLO-style detection loss;
+- the RTMO loss family (ported from mmpose, pure torch): `VariFocalLoss`,
+  `BCELoss`, `IoULoss`, `L1Loss`, `OKSLoss`, `MLECCLoss`;
+- `RTMOLoss` -- the criterion that drives the one-stage RTMO head, assembling
+  the runtime pieces above and injecting them into the head.
+"""
 
 from typing import Any, Dict, Mapping, Optional, Sequence
 
@@ -7,7 +16,15 @@ import torch.nn as nn
 import torch.nn.functional as F
 
 from animalposetracker.nn.tal import dist2bbox, make_anchors
-from .assigner import COCO_KEYPOINT_SIGMAS, TaskAlignedAssigner, aligned_complete_iou, bbox_overlaps
+from .assigner import (
+    COCO_KEYPOINT_SIGMAS,
+    MlvlPointGenerator,
+    PoseOKS,
+    SimOTAAssigner,
+    TaskAlignedAssigner,
+    aligned_complete_iou,
+    bbox_overlaps,
+)
 
 
 def _xywh_to_xyxy(boxes: torch.Tensor) -> torch.Tensor:
@@ -572,3 +589,88 @@ class MLECCLoss(nn.Module):
         elif self.reduction == "mean":
             loss = loss.flatten(1).mean(dim=1)
         return loss * self.loss_weight
+
+
+class RTMOLoss(nn.Module):
+    """Criterion for the one-stage (bottom-up) RTMO head.
+
+    The head owns its loss machinery -- SimOTA assignment, the dynamic coordinate
+    classifier and the six terms -- so this class assembles the pieces the model
+    yaml is not allowed to carry and injects them into the head:
+
+        prior_generator  MlvlPointGenerator over the head's feature-map strides,
+                         points centered inside each cell (the reference setting);
+        assigner         SimOTAAssigner using OKS as the dynamic-k indicator;
+        losses           VariFocal / IoU / OKS / BCE / MLECC, plus L1 when the
+                         head runs with ``use_aux_loss``.
+
+    Defaults follow the reference RTMO recipe: cls 1.0, box 5.0, oks 30.0,
+    vis 1.0, mle 1.0, bbox_aux 1.0, and the class target is the OKS score to the
+    ``overlaps_power``.
+
+    The head stores every term in its natural reduction, so aggregation mirrors
+    mmengine: each non-scalar term is averaged before the sum. Unlike
+    PoseDetectionLoss the result is normalised by the positive-sample count, not
+    by the batch size, hence ``loss_is_batch_sum`` stays off.
+
+    Args:
+        head: The RTMOHead instance this criterion drives; its runtime pieces are
+            injected here.
+        kpt_oks_sigmas: Per-keypoint OKS sigmas; defaults to COCO-17.
+        cls_weight, bbox_weight, oks_weight, vis_weight, mle_weight,
+        bbox_aux_weight: Per-term loss weights.
+        overlaps_power: Exponent applied to the OKS class target.
+    """
+
+    loss_is_batch_sum = False
+
+    def __init__(
+        self,
+        head,
+        kpt_oks_sigmas: Optional[Sequence[float]] = None,
+        cls_weight: float = 1.0,
+        bbox_weight: float = 5.0,
+        oks_weight: float = 30.0,
+        vis_weight: float = 1.0,
+        mle_weight: float = 1.0,
+        bbox_aux_weight: float = 1.0,
+        overlaps_power: float = 0.5,
+    ) -> None:
+        super().__init__()
+        if not hasattr(head, "loss_from_outputs"):
+            raise TypeError(f"RTMOLoss drives an RTMOHead, got {type(head).__name__}")
+        self.head = head
+
+        sigmas = list(kpt_oks_sigmas) if kpt_oks_sigmas is not None else None
+        if sigmas is not None and len(sigmas) != int(head.num_keypoints):
+            raise ValueError(f"Expected {head.num_keypoints} OKS sigmas, got {len(sigmas)}")
+
+        head.prior_generator = MlvlPointGenerator(
+            strides=list(head.featmap_strides),
+            centralize_points=True,
+        )
+        head.assigner = SimOTAAssigner(
+            dynamic_k_indicator="oks",
+            oks_calculator=PoseOKS(sigmas),
+            use_keypoints_for_center=True,
+        )
+        head.loss_cls = VariFocalLoss(use_target_weight=True, loss_weight=cls_weight, reduction="sum")
+        head.loss_bbox = IoULoss(mode="square", eps=1e-16, loss_weight=bbox_weight, reduction="sum")
+        head.loss_oks = OKSLoss(sigmas=sigmas, loss_weight=oks_weight, reduction="none")
+        head.loss_vis = BCELoss(use_target_weight=True, loss_weight=vis_weight, reduction="mean")
+        head.loss_mle = MLECCLoss(use_target_weight=True, loss_weight=mle_weight, reduction="mean")
+        head.loss_bbox_aux = (
+            L1Loss(reduction="sum", loss_weight=bbox_aux_weight)
+            if getattr(head, "use_aux_loss", False)
+            else None
+        )
+        head.overlaps_power = float(overlaps_power)
+
+    def forward(self, predictions, targets) -> Dict[str, Any]:
+        losses = self.head.loss_from_outputs(predictions, targets)
+        metrics = {
+            key: (value.mean() if value.numel() > 1 else value)
+            for key, value in losses.items()
+            if key.startswith("loss_") and torch.is_tensor(value)
+        }
+        return {"loss": sum(metrics.values()), "metrics": metrics}

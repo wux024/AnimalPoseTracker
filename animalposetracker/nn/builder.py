@@ -41,6 +41,7 @@ import torch.nn as nn
 from . import block as _block_mod
 from . import conv as _conv_mod
 from . import head as _head_mod
+from . import rtmo_neck as _rtmo_neck_mod
 from . import transformer as _transformer_mod
 from .registry import get_rule
 from .spec import ModelSpec, parse
@@ -56,7 +57,7 @@ def _lookup_class(cls_name: str):
     - a dotted torch path, e.g. ``nn.Upsample`` or ``nn.AdaptiveAvgPool2d``. These are
       built-ins that belong to torch, so the yaml keeps the upstream spelling and nothing
       is wrapped locally. The leading ``nn.`` is resolved against ``torch.nn``.
-    - a plain name, looked up in modules / transformer / head.
+    - a plain name, looked up in modules / transformer / head / rtmo_neck.
 
     Raises:
         AttributeError: the name matches neither kind, listing where it was looked for.
@@ -74,12 +75,12 @@ def _lookup_class(cls_name: str):
                 raise AttributeError(f"torch.nn has no attribute '{part}' (from name '{cls_name}')")
         return obj
 
-    for mod in (_conv_mod, _block_mod, _transformer_mod, _head_mod):
+    for mod in (_conv_mod, _block_mod, _transformer_mod, _head_mod, _rtmo_neck_mod):
         if hasattr(mod, cls_name):
             return getattr(mod, cls_name)
     raise AttributeError(
-        f"Module '{cls_name}' is not implemented in nn.conv / nn.block / nn.transformer / nn.head, "
-        f"and it is not a dotted torch name such as 'nn.Upsample'. "
+        f"Module '{cls_name}' is not implemented in nn.conv / nn.block / nn.transformer / "
+        f"nn.head / nn.rtmo_neck, and it is not a dotted torch name such as 'nn.Upsample'. "
         f"When adding a module, update both registry.py and this lookup."
     )
 
@@ -244,6 +245,11 @@ def build_model(
                 module.momentum = 0.03
             elif module_type in {nn.Hardswish, nn.LeakyReLU, nn.ReLU, nn.ReLU6, nn.SiLU}:
                 module.inplace = True
+
+    # RTMO trains against a one-stage assignment; the low classification prior keeps
+    # the VariFocal term stable in the first iterations (same as the reference).
+    if isinstance(head, _head_mod.RTMOHead):
+        head.init_weights()
 
     if stride_check and hasattr(head, "stride"):
         _compute_strides(model, head, ch)

@@ -365,8 +365,9 @@ class HybridEncoder(nn.Module):
     """RT-DETR hybrid encoder neck: transformer encoder + FPN + PAN.
 
     Ported from mmpose with the mmcv / registry pieces replaced: ConvModule -> local
-    Conv, DetrTransformerEncoder -> the local port above, and the projector passed in
-    as an instantiated module instead of a `MODELS.build` config.
+    Conv, DetrTransformerEncoder -> the local port above, and the projector accepted
+    either as an instantiated module or as a plain config dict (see
+    `_build_projector`) instead of a `MODELS.build` config.
 
     Args:
         in_channels (List[int]): Channels of the input feature maps.
@@ -377,7 +378,7 @@ class HybridEncoder(nn.Module):
         encoder_cfg (dict): Config for the transformer encoder layers, built as
             ``dict(self_attn_cfg=..., ffn_cfg=...)``.
         output_indices (List[int], optional): Output scale selection.
-        projector: An optional instantiated module applied to the outputs.
+        projector: An optional module (or config dict) applied to the outputs.
         pe_temperature (int): Positional encoding temperature.
         spe_learnable (bool): Whether the positional encoding base is learnable.
         widen_factor / deepen_factor (float): CSPRepLayer depth / width multipliers.
@@ -461,7 +462,27 @@ class HybridEncoder(nn.Module):
         self.downsample_convs = nn.ModuleList(downsample_convs)
         self.pan_blocks = nn.ModuleList(pan_blocks)
 
-        self.projector = projector
+        self.projector = self._build_projector(projector, hidden_dim)
+
+    def _build_projector(self, projector, hidden_dim: int):
+        """Resolve the projector argument.
+
+        Accepts an instantiated module, ``None`` (no projection) or a plain dict.
+        The dict form exists because the model yaml's build rule must stay
+        torch-free and therefore cannot build the module itself; the dict carries
+        ``out_channels`` / ``kernel_size`` (and optionally ``in_channels``), and
+        everything defaults to the hidden dimension.
+        """
+        if not isinstance(projector, dict):
+            return projector
+        cfg = dict(projector)
+        n_out = len(self.output_indices) if self.output_indices is not None else len(self.in_channels)
+        return ChannelMapper(
+            in_channels=list(cfg.get("in_channels", [hidden_dim] * n_out)),
+            out_channels=int(cfg.get("out_channels", hidden_dim)),
+            kernel_size=int(cfg.get("kernel_size", 1)),
+            act=cfg.get("act", None),
+        )
 
     def forward(self, inputs: Tuple[Tensor, ...]) -> Tuple[Tensor, ...]:
         if len(inputs) != len(self.in_channels):

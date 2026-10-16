@@ -1146,8 +1146,17 @@ class RTMOHead(nn.Module):
         return value
 
     def loss(self, feats, batch_data_samples, train_cfg=None):
-        """Compute the RTMO losses for one batch. Returns a dict."""
-        cls_scores, bbox_preds, kpt_offsets, kpt_vis, pose_vecs = self.forward(feats)
+        """Compute the RTMO losses for one batch of input features. Returns a dict."""
+        return self.loss_from_outputs(self.forward(feats), batch_data_samples, train_cfg)
+
+    def loss_from_outputs(self, outputs, batch_data_samples, train_cfg=None):
+        """Loss for one batch from head-module outputs (``loss`` minus the forward pass).
+
+        The trainer hands the criterion whatever the model's forward produced, which is
+        exactly the tuple ``forward`` returns here, so the loss body works on that tuple
+        directly and ``loss`` stays as the mmpose-compatible entry point.
+        """
+        cls_scores, bbox_preds, kpt_offsets, kpt_vis, pose_vecs = outputs
 
         featmap_sizes = [cls_score.shape[2:] for cls_score in cls_scores]
         mlvl_priors = self.prior_generator.grid_priors(
@@ -1266,8 +1275,17 @@ class RTMOHead(nn.Module):
         Returns one dict per image: ``{"bboxes", "scores", "labels", "keypoints",
         "keypoint_scores", "keypoints_visible"}``.
         """
+        return self.predict_from_outputs(self.forward(feats), batch_data_samples, test_cfg)
+
+    @torch.no_grad()
+    def predict_from_outputs(self, outputs, batch_data_samples, test_cfg=None):
+        """Decode head-module outputs (``predict`` minus the forward pass).
+
+        Mirrors ``loss_from_outputs``: the decoder consumes the tuple ``forward``
+        returns, so callers that already hold a model output never run the head twice.
+        """
         cfg = dict(test_cfg or {})
-        cls_scores, bbox_preds, _, kpt_vis, pose_vecs = self.forward(feats)
+        cls_scores, bbox_preds, _, kpt_vis, pose_vecs = outputs
 
         featmap_sizes = [cls_score.shape[2:] for cls_score in cls_scores]
         self._ensure_priors(featmap_sizes, cls_scores[0].device, cls_scores[0].dtype)

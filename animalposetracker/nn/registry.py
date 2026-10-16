@@ -88,14 +88,38 @@ class BuildContext:
 
 
 def _conv(args, n, ch_in, ctx):
-    """Standard / depthwise / transposed convolution: channels scaled by width, rounded up to a multiple of 8."""
+    """Standard / depthwise convolution: channels scaled by width, rounded up to a multiple of 8.
+
+    yaml form ``[c2, k, s, p, ...]``: the stride is the third entry, so the spatial
+    ratio comes from ``args[2]``. A missing stride means 1 (kernel-only rows such as
+    ``[256, 3]`` keep the resolution).
+    """
     c2 = make_divisible(min(args[0], ctx.max_channels) * ctx.width, 8)
-    stride = args[1] if len(args) > 1 else 1
-    if stride < 1:  # ConvTranspose: stride means upsampling
-        spatial = 1.0 / stride
-    else:
-        spatial = float(stride)
+    stride = args[2] if len(args) > 2 else 1
+    return [ch_in, c2, *args[1:]], n, c2, float(stride)
+
+
+def _conv_transpose(args, n, ch_in, ctx):
+    """Transposed convolution, same argument layout as Conv.
+
+    A stride above 1 upscales here (the opposite of a regular convolution), so the
+    spatial ratio is ``1 / stride``.
+    """
+    c2 = make_divisible(min(args[0], ctx.max_channels) * ctx.width, 8)
+    stride = args[2] if len(args) > 2 else 1
+    spatial = 1.0 / stride if stride else 1.0
     return [ch_in, c2, *args[1:]], n, c2, spatial
+
+
+def _sppf(args, n, ch_in, ctx):
+    """SPPF: channels scale like Conv, the spatial size never changes.
+
+    yaml form ``[c2, k, n, shortcut]`` (yolo26) or ``[c2]`` (legacy rows). SPPF must
+    not go through the Conv rule: its second argument is the pooling kernel, not a
+    stride.
+    """
+    c2 = make_divisible(min(args[0], ctx.max_channels) * ctx.width, 8)
+    return [ch_in, c2, *args[1:]], n, c2, 1.0
 
 
 def _stem(args, n, ch_in, ctx):
@@ -107,6 +131,38 @@ def _stem(args, n, ch_in, ctx):
 def _cspnext_block(args, n, ch_in, ctx):
     """CSPNeXtBlock: repeats move into the arguments as the internal bottleneck count, outer repeats set to 1."""
     c2 = int(args[0] * ctx.width)
+    return [ch_in, c2, n, *args[1:]], 1, c2, 1.0
+
+
+def _c3k2(args, n, ch_in, ctx):
+    """C3k2 (YOLO26 backbone block): the repeats column moves into the arguments.
+
+    yaml form:
+        [c2, c3k, e, attn, g, shortcut]
+    Every entry after c2 is optional and positional, matching
+    ``C3k2(c1, c2, n, c3k=False, e=0.5, attn=False, g=1, shortcut=True)``.
+
+    Two upstream conventions are kept:
+      - c2 is width-scaled with the same rounding as Conv (multiple of 8);
+      - scales m / l / x run C3k inner blocks (the ``c3k`` slot is forced True),
+        which is why the yolo26 yaml rows are written for the n / s sizes.
+    """
+    c2 = make_divisible(min(args[0], ctx.max_channels) * ctx.width, 8)
+    new_args = [ch_in, c2, *args[1:]]
+    new_args.insert(2, n)
+    if ctx.scale in ("m", "l", "x"):
+        new_args[3:4] = [True]
+    return new_args, 1, c2, 1.0
+
+
+def _c2psa(args, n, ch_in, ctx):
+    """C2PSA (YOLO26 attention block): like C3k2 the repeats move into the arguments.
+
+    yaml form:
+        [c2, e]
+    matching ``C2PSA(c1, c2, n, e=0.5)``.
+    """
+    c2 = make_divisible(min(args[0], ctx.max_channels) * ctx.width, 8)
     return [ch_in, c2, n, *args[1:]], 1, c2, 1.0
 
 
@@ -243,6 +299,114 @@ def _simcc_head(args, n, ch_in, ctx):
     return [kwargs], n, in_channels, 1.0
 
 
+def _hybrid_encoder(args, n, ch_in, ctx):
+    """RTMO hybrid-encoder neck: backbone levels in, selected levels out.
+
+    yaml form:
+        [hidden_dim, use_encoder_idx, num_encoder_layers, output_indices]
+
+    ``in_channels`` is taken from the incoming feature maps, so the yaml does not
+    repeat backbone channel counts. The transformer config and the 1x1 output
+    projector are derived from ``hidden_dim``; the CSPRepLayer width / depth
+    follow the model scale (ctx.width / ctx.depth), the same way the backbone is
+    scaled. The projector travels as a plain dict because this function also runs
+    inside spec.parse, which must stay torch-free -- building the module happens
+    at instantiation time.
+
+    On c2: the neck emits one feature map per ``output_indices`` entry, all at
+    ``hidden_dim`` channels. The channel table holds a single number, so
+    hidden_dim is reported (equivalent to ultralytics not rewriting c2; the head
+    that follows re-derives what it needs from it).
+    """
+    hidden_dim = int(args[0])
+    use_encoder_idx = list(args[1]) if len(args) > 1 and args[1] else [2]
+    num_encoder_layers = int(args[2]) if len(args) > 2 else 1
+    output_indices = list(args[3]) if len(args) > 3 and args[3] is not None else None
+
+    in_channels = list(ch_in) if isinstance(ch_in, (list, tuple)) else [int(ch_in)]
+    n_out = len(output_indices) if output_indices is not None else len(in_channels)
+
+    kwargs = dict(
+        in_channels=in_channels,
+        hidden_dim=hidden_dim,
+        use_encoder_idx=use_encoder_idx,
+        num_encoder_layers=num_encoder_layers,
+        encoder_cfg=dict(
+            self_attn_cfg=dict(embed_dims=hidden_dim, num_heads=8, dropout=0.0),
+            ffn_cfg=dict(embed_dims=hidden_dim, feedforward_channels=hidden_dim * 4, ffn_drop=0.0),
+        ),
+        output_indices=output_indices,
+        projector=dict(in_channels=[hidden_dim] * n_out, out_channels=hidden_dim, kernel_size=1),
+        widen_factor=ctx.width,
+        deepen_factor=ctx.depth,
+    )
+    return [kwargs], n, hidden_dim, 1.0
+
+
+def _rtmo_head(args, n, ch_in, ctx):
+    """RTMO one-stage (bottom-up) pose head with the dynamic coordinate classifier.
+
+    yaml form:
+        [num_keypoints, featmap_strides, head_module_cfg, dcc_cfg]
+
+    ``head_module_cfg`` writes the widths directly (the effective numbers): the
+    head module splits every incoming feature map in half, so ``in_channels`` is
+    derived here and must not be repeated, and ``widen_factor`` has no meaning in
+    this layout. ``dcc_cfg`` configures the dynamic coordinate classifier; its
+    input width follows the pose feature (``pose_vec_channels``) when one is
+    requested. Everything the head needs at runtime -- prior generator, SimOTA
+    assigner and the six loss objects -- belongs to the training side and is
+    injected there (see training/losses.py RTMOLoss), the same split the other
+    two heads use for their loss-side pieces.
+
+    The head consumes the whole multi-scale output of the preceding layer (the
+    neck) as a single item, so ``multi_input`` is False.
+
+    On c2: the head emits decoded predictions, not a feature map; the incoming
+    channel count is only echoed to keep the channel table well-formed. The head
+    must be the last layer, so nothing reads it.
+    """
+    if len(args) < 4:
+        raise ValueError(
+            f"RTMOHead needs [num_keypoints, featmap_strides, head_module_cfg, dcc_cfg], got {args}"
+        )
+    num_keypoints = int(args[0])
+    featmap_strides = tuple(int(stride) for stride in args[1])
+    head_module_cfg = dict(args[2] or {})
+    dcc_cfg = dict(args[3] or {})
+
+    if isinstance(ch_in, (list, tuple)) and len(set(ch_in)) != 1:
+        raise ValueError(
+            f"The RTMO head splits every incoming feature map in half, so all of them must "
+            f"share one channel count; got {ch_in}"
+        )
+    channels = ch_in[-1] if isinstance(ch_in, (list, tuple)) else int(ch_in)
+    if channels % 2:
+        raise ValueError(f"The RTMO head needs an even number of input channels, got {channels}")
+    if "in_channels" in head_module_cfg:
+        raise ValueError(
+            "RTMOHead derives head_module_cfg['in_channels'] from the neck; remove the explicit value"
+        )
+    if float(head_module_cfg.get("widen_factor", 1.0)) != 1.0:
+        raise ValueError(
+            "RTMOHead widths are written as effective numbers; "
+            "drop widen_factor and write the final channel counts"
+        )
+
+    half = channels // 2
+    head_module_cfg["in_channels"] = half
+    pose_vec_channels = int(head_module_cfg.get("pose_vec_channels", -1))
+    dcc_cfg.setdefault("in_channels", pose_vec_channels if pose_vec_channels > 0 else half)
+
+    kwargs = dict(
+        num_keypoints=num_keypoints,
+        head_module_cfg=head_module_cfg,
+        featmap_strides=featmap_strides,
+        dcc_cfg=dcc_cfg,
+    )
+    return [kwargs], n, channels, 1.0
+
+
 @dataclass
 class Rule:
     """One module build rule.
@@ -291,9 +455,9 @@ def get_rule(name: str) -> Rule:
 # ------------------------------------------------------------------------------------------------
 register(Rule("Conv", "Conv", _conv, note="Standard convolution, width-scaled and aligned to 8"))
 register(Rule("DWConv", "DWConv", _conv, note="Depthwise separable convolution"))
-register(Rule("ConvTranspose", "ConvTranspose", _conv, note="Transposed convolution"))
+register(Rule("ConvTranspose", "ConvTranspose", _conv_transpose, note="Transposed convolution (stride > 1 upscales)"))
 register(Rule("Concat", "Concat", _concat, multi_input=True, note="Multi-input concat, channels summed"))
-register(Rule("SPPF", "SPPF", _conv, note="Spatial pyramid pooling (commonly follows STEM)"))
+register(Rule("SPPF", "SPPF", _sppf, note="Spatial pyramid pooling (kernel args are not strides)"))
 register(Rule("nn.Upsample", "nn.Upsample", _upsample, repeatable=False,
               note="Native torch upsampling, built directly from torch.nn"))
 register(Rule("STEM", "STEM", _stem, note="Custom: Spatial-Channel Excitation"))
@@ -305,3 +469,9 @@ register(Rule("ViT", "VisionTransformer", _vit, repeatable=False,
               note="Vision Transformer backbone (mmpretrain-compatible, featmap output)"))
 register(Rule("SimCCHead", "SimCCHead", _simcc_head, multi_input=True, repeatable=False, is_head=True,
               note="SimCC head: two 1D coordinate classifications per keypoint"))
+register(Rule("C3k2", "C3k2", _c3k2, note="YOLO26 block: repeats move into args, m/l/x force c3k inner blocks"))
+register(Rule("C2PSA", "C2PSA", _c2psa, note="YOLO26 attention block: repeats move into args"))
+register(Rule("HybridEncoder", "HybridEncoder", _hybrid_encoder, multi_input=True, repeatable=False,
+              note="RTMO neck: transformer encoder + FPN/PAN; multi-level in, selected levels out"))
+register(Rule("RTMOHead", "RTMOHead", _rtmo_head, repeatable=False, is_head=True,
+              note="RTMO one-stage pose head (bottom-up, dynamic coordinate classifier)"))
