@@ -53,20 +53,45 @@ class ProjectConfigurationMixin:
 
         self._create_project_structure()
         self._load_config_from_file("dataset", DATA_YAML_PATHS[dataname])
-        self._update_configs_from_dataset()
+        # The packaged dataset is about to be copied into the project, so the config
+        # points at the project's own directory from here on.
+        self._update_configs_from_dataset(adopt_project_dataset=True)
         self.load_config_file()
 
-    def _update_configs_from_dataset(self) -> None:
+    def _update_configs_from_dataset(self, adopt_project_dataset: bool = False) -> None:
         """Update configurations based on dataset settings.
 
         The dataset file is the shape's single source now: the project file
         keeps identity only, and the model file takes its output shape from
         the dataset here.
+
+        ``dataset.path`` is only rewritten to the project's own ``datasets/``
+        directory when that is what the project actually uses: the bundled-dataset
+        flow that copies data in says so explicitly, and a project whose own
+        ``datasets/`` tree carries content keeps pointing there. A project created
+        against a dataset root -- or sharing a split on disk -- keeps its path:
+        rewriting it on load pointed it at an empty scaffold, and the next run
+        found no images.
         """
         self.update_config("project", {"project_path": str(self._project_path)})
-        self.update_config("dataset", {'path': str(self._project_path / "datasets")})
+        if adopt_project_dataset or self._project_datasets_are_populated():
+            self.update_config("dataset", {'path': str(self._project_path / "datasets")})
         self._sync_model_config_from_dataset()
         self.save_configs()
+
+    def _project_datasets_are_populated(self) -> bool:
+        """Whether the project's own ``datasets/`` tree carries any actual data.
+
+        The scaffold directories (``images/train``, ``labels/val``, ...) are created
+        empty, so their presence says nothing; a project counts as self-contained only
+        once a file lives somewhere under there.
+        """
+        project_datasets = self._project_path / "datasets"
+        if not project_datasets.is_dir():
+            return False
+        return next(
+            (item for item in project_datasets.rglob("*") if item.is_file()), None
+        ) is not None
 
     def _sync_model_config_from_dataset(self) -> None:
         """Keep the model YAML's output shape aligned with the project dataset."""

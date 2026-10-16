@@ -237,6 +237,79 @@ class ResolverTests(unittest.TestCase):
             self.assertEqual(project_dir_from(root / "configs" / "runtime.yaml"), root.resolve())
 
 
+class ProjectLoadDatasetPathTests(unittest.TestCase):
+    """Opening a project must not move where its dataset lives.
+
+    The load path used to force ``dataset.path`` to ``<project>/datasets``; for a
+    project created against a dataset root that pointed training at an empty
+    scaffold and the next run found no images.
+    """
+
+    @staticmethod
+    def _make_loadable_project(temporary: str) -> Path:
+        """A project laid out the way the loader expects: ``<workspace>/<composed name>/``."""
+        composed = "-".join((
+            str(PROJECT_YAML["project_name"]),
+            str(PROJECT_YAML["worker"]),
+            str(PROJECT_YAML["model_type"]),
+            str(PROJECT_YAML["model_scale"]),
+            str(PROJECT_YAML["date"]),
+        ))
+        root = Path(temporary) / composed
+        _make_project(str(root))
+        return root
+
+    def _load(self, root: Path):
+        from animalposetracker.project.api import AnimalPoseTrackerProject
+
+        project = AnimalPoseTrackerProject()
+        project.load_project_config(str(root / "project.yaml"))
+        saved = yaml.safe_load((root / "configs" / "dataset.yaml").read_text(encoding="utf-8"))
+        return saved
+
+    def test_an_existing_dataset_path_survives_the_load(self):
+        with TemporaryDirectory() as temporary:
+            root = self._make_loadable_project(temporary)
+            external = Path(temporary) / "shared-dataset"
+            (external / "images" / "train").mkdir(parents=True)
+            (root / "configs" / "dataset.yaml").write_text(
+                yaml.safe_dump({**DATASET_YAML, "path": str(external)}), encoding="utf-8"
+            )
+
+            saved = self._load(root)
+
+        self.assertEqual(saved["path"], str(external))
+
+    def test_a_self_contained_project_keeps_its_own_datasets_directory(self):
+        with TemporaryDirectory() as temporary:
+            root = self._make_loadable_project(temporary)
+            (root / "datasets" / "images" / "train").mkdir(parents=True)
+            (root / "datasets" / "images" / "train" / "one.jpg").write_bytes(b"x")
+            (root / "configs" / "dataset.yaml").write_text(
+                yaml.safe_dump({**DATASET_YAML, "path": "datasets"}), encoding="utf-8"
+            )
+
+            saved = self._load(root)
+
+        self.assertEqual(saved["path"], str(root / "datasets"))
+
+    def test_the_bundled_dataset_flow_still_adopts_the_project_directory(self):
+        # The other half of the rule: a public dataset project copies its data in on
+        # purpose, so that flow keeps pointing the config at the project directory.
+        from animalposetracker.cfg import DATA_YAML_PATHS
+        from animalposetracker.project.api import AnimalPoseTrackerProject
+
+        with TemporaryDirectory() as temporary:
+            project = AnimalPoseTrackerProject(
+                project_name="probe", worker="wux", local_path=temporary
+            )
+            project.create_public_dataset_project(next(iter(DATA_YAML_PATHS)))
+
+        self.assertEqual(
+            project.dataset_config["path"], str(project._project_path / "datasets")
+        )
+
+
 class WriterTests(unittest.TestCase):
     def test_roundtrip_updates_one_scope(self):
         with TemporaryDirectory() as temporary:
