@@ -508,6 +508,9 @@ class ReviewFixTests(unittest.TestCase):
             "ultralytics.nn.modules.block.PSABlock",
             "ultralytics.nn.modules.block.Bottleneck",
             "ultralytics.nn.modules.block.Attention",
+            # The YOLO26 pose family shares the backbone, so its head classes convert too.
+            "ultralytics.nn.modules.head.Pose26",
+            "ultralytics.nn.modules.head.RealNVP",
         ):
             with self.subTest(alias=expected):
                 self.assertIn(expected, names)

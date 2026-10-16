@@ -43,6 +43,7 @@ def _aliases():
     import torch.nn as nn
 
     from animalposetracker.nn.attention import Attention, ChannelAttention
+    from animalposetracker.nn.block import RealNVP
     from animalposetracker.nn.builder import GraphSequential
     from animalposetracker.nn.head import YOLOPoseHead
     from animalposetracker.nn.block import (
@@ -72,6 +73,11 @@ def _aliases():
         "ultralytics.nn.modules.conv.Concat": Concat,
         "ultralytics.nn.modules.head.Pose": YOLOPoseHead,
         "ultralytics.nn.modules.block.DFL": DFL,
+        # The YOLO26 pose family shares the backbone with the detection models, so its
+        # checkpoints initialize the one-stage backbone the same way; only the head
+        # class name is new (Pose26 / the RLE flow).
+        "ultralytics.nn.modules.head.Pose26": YOLOPoseHead,
+        "ultralytics.nn.modules.head.RealNVP": RealNVP,
         # Detection family (YOLO26): same blocks plus the Detect head.
         "ultralytics.nn.tasks.DetectionModel": GraphSequential,
         "ultralytics.nn.modules.block.C3k2": C3k2,
