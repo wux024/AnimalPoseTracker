@@ -10,11 +10,17 @@
 #     Pose Estimation" (CVPR 2024), mmpose implementation;
 #   - YOLO26 backbone blocks, ultralytics 8.4.175.
 #
+# Deviations from the reference, on purpose: the backbone is YOLO26 instead of
+# CSPDarknet, and the classification branch supports more than one class -- the
+# reference trains at nc=1 (class-agnostic), its loss collapses the class target
+# to a scalar.
+#
 # The head's loss-side runtime pieces -- prior generator, SimOTA assigner and the
 # six loss objects -- are injected by the trainer (training/losses.py RTMOLoss),
 # not carried here: this yaml only fixes the network graph.
 
-nc: 1 # (int) number of classes; RTMO is class-agnostic, one grid point predicts one instance
+nc: 1 # (int) number of classes; the trainer sets this from the dataset. One class reproduces
+      # the reference (class-agnostic person) setup; more classes train a multi-class head.
 kpt_shape: [17, 3] # (list) number of keypoints, number of dims (x, y, visible)
 scales: # compound scaling constants, shared with yolo26-pose
   # [depth, width, max_channels]

@@ -352,12 +352,14 @@ def _rtmo_head(args, n, ch_in, ctx):
     ``head_module_cfg`` writes the widths directly (the effective numbers): the
     head module splits every incoming feature map in half, so ``in_channels`` is
     derived here and must not be repeated, and ``widen_factor`` has no meaning in
-    this layout. ``dcc_cfg`` configures the dynamic coordinate classifier; its
-    input width follows the pose feature (``pose_vec_channels``) when one is
-    requested. Everything the head needs at runtime -- prior generator, SimOTA
-    assigner and the six loss objects -- belongs to the training side and is
-    injected there (see training/losses.py RTMOLoss), the same split the other
-    two heads use for their loss-side pieces.
+    this layout. ``num_classes`` follows the yaml's top-level ``nc`` (the trainer
+    sets it from the dataset), and the class count reaches both the head module's
+    classification branch and the head's loss. ``dcc_cfg`` configures the dynamic
+    coordinate classifier; its input width follows the pose feature
+    (``pose_vec_channels``) when one is requested. Everything the head needs at
+    runtime -- prior generator, SimOTA assigner and the six loss objects --
+    belongs to the training side and is injected there (see training/losses.py
+    RTMOLoss), the same split the other two heads use for their loss-side pieces.
 
     The head consumes the whole multi-scale output of the preceding layer (the
     neck) as a single item, so ``multi_input`` is False.
@@ -392,9 +394,15 @@ def _rtmo_head(args, n, ch_in, ctx):
             "RTMOHead widths are written as effective numbers; "
             "drop widen_factor and write the final channel counts"
         )
+    if "num_classes" in head_module_cfg:
+        raise ValueError(
+            "RTMOHead derives head_module_cfg['num_classes'] from the yaml's nc; "
+            "remove the explicit value"
+        )
 
     half = channels // 2
     head_module_cfg["in_channels"] = half
+    head_module_cfg["num_classes"] = int(ctx.nc)
     pose_vec_channels = int(head_module_cfg.get("pose_vec_channels", -1))
     dcc_cfg.setdefault("in_channels", pose_vec_channels if pose_vec_channels > 0 else half)
 
@@ -402,6 +410,7 @@ def _rtmo_head(args, n, ch_in, ctx):
         num_keypoints=num_keypoints,
         head_module_cfg=head_module_cfg,
         featmap_strides=featmap_strides,
+        num_classes=int(ctx.nc),
         dcc_cfg=dcc_cfg,
     )
     return [kwargs], n, channels, 1.0

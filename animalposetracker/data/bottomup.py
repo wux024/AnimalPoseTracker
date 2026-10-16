@@ -15,9 +15,9 @@ canvas size here). The head's one-stage assignment and the dynamic coordinate
 classifier both work in that space, so the conversion belongs at the very end of
 the pipeline.
 
-The one-stage head is class-agnostic, so callers pass ``single_cls=True`` (the
-trainer does): the label space folds to a single class before the samples are
-built.
+Instance labels keep their class ids; ``single_cls`` still folds them on request,
+and the one-stage head trains either way (one class reproduces the reference
+class-agnostic setup).
 """
 
 from pathlib import Path

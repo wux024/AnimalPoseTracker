@@ -978,9 +978,9 @@ def run(argv=None) -> int:
                 },
                 epochs=config.epochs,
                 close_mosaic=config.close_mosaic,
-                # The one-stage head predicts one class per grid; folding the label
-                # space keeps the samples and the head's class count in agreement.
-                single_cls=True,
+                # The one-stage head trains one class per grid or a set of them; the
+                # samples keep their class ids unless single_cls folds them.
+                single_cls=config.single_cls,
                 device=config.device,
             )
             if rank == 0:
@@ -988,16 +988,24 @@ def run(argv=None) -> int:
                     event="augmentation",
                     message=(
                         "Using the YOLO-style image pipeline (mosaic, HSV, flips) with the "
-                        "one-stage bottom-up sample encoding; instance labels fold to a "
-                        "single class."
+                        "one-stage bottom-up sample encoding; "
+                        + (
+                            "instance labels fold to a single class (single_cls)."
+                            if config.single_cls
+                            else f"training {metadata['num_classes']} class(es)."
+                        )
                     ),
                 ))
-            model_spec["nc"] = 1
+            model_spec["nc"] = int(metadata["num_classes"])
             model_spec["kpt_shape"] = list(metadata["kpt_shape"])
             model = build_model(model_spec, scale=scale)
             head = model.model[-1]
             if not isinstance(head, RTMOHead):
                 raise TypeError(f"Expected RTMOHead, built {type(head).__name__}")
+            if int(model.nc) != int(metadata["num_classes"]):
+                raise ValueError(
+                    f"Model has {model.nc} classes but the dataset defines {metadata['num_classes']}"
+                )
             config.train_dataset_size = metadata["train_images"]
             criterion = RTMOLoss(
                 head,

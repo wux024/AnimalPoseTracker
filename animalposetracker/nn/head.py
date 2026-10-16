@@ -866,6 +866,9 @@ class RTMOHead(nn.Module):
     Ported from mmpose's RTMO. Unlike the other two heads this one is
     detector-style: every positive grid of the input feature maps predicts a box
     and a full pose at once, so no detector and no instance crop are involved.
+    The classification branch takes the model's class count (``nc``); one class
+    reproduces the reference setup, more classes train a multi-class head (the
+    reference itself only ever trains one).
 
     Dependencies are injected as plain objects, keeping this file torch-only:
 
@@ -1015,8 +1018,8 @@ class RTMOHead(nn.Module):
                 non_empty = [target for target in targets[i] if target.size(0) > 0]
                 targets[i] = torch.cat(non_empty) if non_empty else targets[i][0].new_zeros((0,))
 
-        (foreground_masks, cls_targets, obj_targets, obj_weights, bbox_targets,
-         kpt_targets, vis_targets, vis_weights, pos_areas, pos_priors,
+        (foreground_masks, cls_targets, pos_gt_labels, cls_target_map, obj_weights,
+         bbox_targets, kpt_targets, vis_targets, vis_weights, pos_areas, pos_priors,
          group_indices, num_fg_imgs) = targets
 
         # auxiliary regression targets (relative to their priors)
@@ -1034,7 +1037,7 @@ class RTMOHead(nn.Module):
             kpt_aux_targets = None
 
         return (
-            foreground_masks, cls_targets, obj_targets, obj_weights,
+            foreground_masks, cls_targets, pos_gt_labels, cls_target_map, obj_weights,
             bbox_targets, bbox_aux_targets, kpt_targets, kpt_aux_targets,
             vis_targets, vis_weights, pos_areas, pos_priors, group_indices,
             num_fg_imgs,
@@ -1062,7 +1065,8 @@ class RTMOHead(nn.Module):
             return (
                 cls_scores.new_zeros(num_priors).bool(),
                 cls_scores.new_zeros((0, self.num_classes)),
-                cls_scores.new_zeros((num_priors, 1)),
+                cls_scores.new_zeros((0,), dtype=torch.long),
+                cls_scores.new_zeros((num_priors, self.num_classes)),
                 cls_scores.new_ones((num_priors, 1)),
                 cls_scores.new_zeros((0, 4)),
                 cls_scores.new_zeros((0, self.num_keypoints, 2)),
@@ -1103,8 +1107,11 @@ class RTMOHead(nn.Module):
             vis_weight = vis_target.new_ones(vis_target.shape)
         pos_areas = gt_instances["areas"][pos_assigned_gt_inds]
 
-        obj_target = torch.zeros_like(objectness)
-        obj_target[pos_inds] = 1
+        # Per-class classification targets. The head has no objectness branch (YOLOX
+        # carried one and the reference kept the name), so this map *is* the class
+        # target: zeros everywhere, positives filled with their class's OKS score.
+        # With one class it reduces exactly to the reference's scalar objectness target.
+        cls_target_map = objectness.new_zeros((num_priors, self.num_classes))
 
         # down-weight the grids that predict unlabeled instances
         invalid_mask = gt_fields.get("heatmap_mask", None)
@@ -1118,7 +1125,7 @@ class RTMOHead(nn.Module):
             weight = F.grid_sample(mask, grids, mode="bilinear", padding_mode="zeros")
             obj_weight = 1.0 - weight.reshape(num_priors, 1)
         else:
-            obj_weight = obj_target.new_ones(obj_target.shape)
+            obj_weight = cls_target_map.new_ones((num_priors, 1))
 
         foreground_mask = torch.zeros_like(objectness.squeeze()).to(torch.bool)
         foreground_mask[pos_inds] = 1
@@ -1128,8 +1135,8 @@ class RTMOHead(nn.Module):
         ]
 
         return (
-            foreground_mask, cls_target, obj_target, obj_weight, bbox_target,
-            kpt_target, vis_target, vis_weight, pos_areas, pos_priors,
+            foreground_mask, cls_target, pos_gt_labels, cls_target_map, obj_weight,
+            bbox_target, kpt_target, vis_target, vis_weight, pos_areas, pos_priors,
             group_index, num_pos_per_img,
         )
 
@@ -1189,9 +1196,9 @@ class RTMOHead(nn.Module):
             flatten_kpt_vis.detach(),
             batch_data_samples,
         )
-        (pos_masks, cls_targets, obj_targets, obj_weights, bbox_targets, bbox_aux_targets,
-         kpt_targets, kpt_aux_targets, vis_targets, vis_weights, pos_areas, pos_priors,
-         group_indices, num_fg_imgs) = targets
+        (pos_masks, cls_targets, pos_gt_labels, cls_target_map, obj_weights, bbox_targets,
+         bbox_aux_targets, kpt_targets, kpt_aux_targets, vis_targets, vis_weights,
+         pos_areas, pos_priors, group_indices, num_fg_imgs) = targets
 
         num_pos = torch.tensor(sum(num_fg_imgs), dtype=torch.float, device=flatten_cls_scores.device)
         num_total_samples = max(self._reduce_mean(num_pos), 1.0)
@@ -1235,7 +1242,9 @@ class RTMOHead(nn.Module):
                     mask = (diff_reg > diff_cc).float()
                     kpt_weights_reg = vis_targets * mask
                     oks = self.assigner.oks_calculator(kpt_cc_preds, kpt_targets, vis_targets, pos_areas)
-                    cls_targets = oks.unsqueeze(1)
+                    # the class one-hot stays; only the OKS weighting is swapped for the
+                    # coordinate-classification score (one class reduces to the reference)
+                    cls_targets = F.one_hot(pos_gt_labels, self.num_classes).to(oks) * oks.unsqueeze(1)
 
                 losses["loss_oks"] = self.loss_oks(
                     kpt_reg_preds, kpt_cc_preds.detach(), kpt_weights_reg, pos_areas
@@ -1246,9 +1255,9 @@ class RTMOHead(nn.Module):
             # positive grids get the OKS score as their classification target
             extra_info["overlaps"] = cls_targets
             cls_targets = cls_targets.pow(self.overlaps_power).detach()
-            obj_targets[pos_masks] = cls_targets.to(obj_targets)
+            cls_target_map[pos_masks] = cls_targets.to(cls_target_map)
 
-        losses["loss_cls"] = self.loss_cls(cls_preds_all, obj_targets, obj_weights) / num_total_samples
+        losses["loss_cls"] = self.loss_cls(cls_preds_all, cls_target_map, obj_weights) / num_total_samples
         losses.update(extra_info)
         return losses
 
