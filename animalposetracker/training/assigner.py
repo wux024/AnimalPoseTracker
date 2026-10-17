@@ -13,6 +13,17 @@ import torch
 import torch.nn as nn
 
 
+def _no_autocast(tensor):
+    """Keep an fp32 computation out of autocast.
+
+    PyTorch refuses ``binary_cross_entropy`` while autocast is active and checks the
+    autocast *state*, not the input dtype -- so casting the inputs to fp32 is not
+    enough, the context has to be switched off around the call. These are target and
+    cost computations inside ``torch.no_grad()``, where fp32 was the intent anyway.
+    """
+    return torch.autocast(device_type=tensor.device.type, enabled=False)
+
+
 def aligned_complete_iou(boxes_a: torch.Tensor, boxes_b: torch.Tensor) -> torch.Tensor:
     """Return CIoU for broadcastable xyxy box tensors."""
     a = boxes_a
@@ -479,27 +490,29 @@ class SimOTAAssigner:
             )
             valid_pred_scores = valid_pred_scores.unsqueeze(1).repeat(1, num_gt, 1)
             # fp32 on purpose: BCE under autocast can overflow
-            cls_cost = (
-                torch.nn.functional.binary_cross_entropy(
-                    valid_pred_scores.to(dtype=torch.float32), gt_onehot_label, reduction="none"
+            with _no_autocast(valid_pred_scores):
+                cls_cost = (
+                    torch.nn.functional.binary_cross_entropy(
+                        valid_pred_scores.to(dtype=torch.float32), gt_onehot_label, reduction="none"
+                    )
+                    .sum(-1)
+                    .to(dtype=valid_pred_scores.dtype)
                 )
-                .sum(-1)
-                .to(dtype=valid_pred_scores.dtype)
-            )
             cost_matrix = cost_matrix + cls_cost * self.cls_weight
 
         if self.vis_weight > 0:
             valid_pred_kpts_vis = valid_pred_kpts_vis.unsqueeze(1).repeat(1, num_gt, 1)
             gt_kpt_vis = gt_keypoints_visible.unsqueeze(0).float()
-            vis_cost = (
-                torch.nn.functional.binary_cross_entropy(
-                    valid_pred_kpts_vis.to(dtype=torch.float32),
-                    gt_kpt_vis.repeat(num_valid, 1, 1),
-                    reduction="none",
+            with _no_autocast(valid_pred_kpts_vis):
+                vis_cost = (
+                    torch.nn.functional.binary_cross_entropy(
+                        valid_pred_kpts_vis.to(dtype=torch.float32),
+                        gt_kpt_vis.repeat(num_valid, 1, 1),
+                        reduction="none",
+                    )
+                    .sum(-1)
+                    .to(dtype=valid_pred_kpts_vis.dtype)
                 )
-                .sum(-1)
-                .to(dtype=valid_pred_kpts_vis.dtype)
-            )
             cost_matrix = cost_matrix + vis_cost * self.vis_weight
 
         if self.dynamic_k_indicator == "iou":

@@ -1470,7 +1470,8 @@ class RTMOHead(nn.Module):
         # ``torch.inference_mode()`` holds inference tensors, and those cannot be
         # registered as export buffers.
         self.mlvl_priors = None
-        self._ensure_priors(featmap_sizes, torch.device("cpu"), torch.float32)
+        reference = next(self.parameters())
+        self._ensure_priors(featmap_sizes, reference.device, reference.dtype)
         if hasattr(self, "dcc"):
             self.dcc.switch_to_deploy(test_cfg)
         self.deploy = True

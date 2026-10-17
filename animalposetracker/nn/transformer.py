@@ -695,7 +695,8 @@ class SinePositionalEncoding(nn.Module):
         else:
             raise ValueError(f"spatial_dim must be 1 or 2, got {self.spatial_dim}")
 
-        return pos_enc
+        # fp32 table, model dtype result: the arange symbolic cannot export half
+        return pos_enc.to(self.dim_t.dtype)
 
     @staticmethod
     def apply_additional_pos_enc(feature: torch.Tensor, pos_enc: torch.Tensor, spatial_dim: int = 1):
