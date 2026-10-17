@@ -87,11 +87,32 @@ def _aliases():
         "ultralytics.nn.modules.block.Attention": Attention,
         "ultralytics.nn.modules.block.Bottleneck": Bottleneck,
         "ultralytics.nn.modules.head.Detect": nn.Module,
+        # Classification family (ImageNet): its graph and head classes.
+        "ultralytics.nn.tasks.ClassificationModel": GraphSequential,
+        "ultralytics.nn.modules.head.Classify": nn.Module,
     }
     aliases = []
     for qualified_name, local_class in table.items():
         module_name, _, class_name = qualified_name.rpartition(".")
         aliases.append(type(class_name, (local_class,), {"__module__": module_name}))
+    try:
+        from torchvision import transforms as _torchvision_transforms
+        from torchvision.transforms import functional as _torchvision_functional
+    except (ImportError, RuntimeError):  # torchvision is optional; only checkpoints carry it
+        _torchvision_transforms = None
+        _torchvision_functional = None
+    if _torchvision_transforms is not None:
+        # Classification checkpoints serialize their preprocessing pipeline. The classes
+        # are installed here, so the real ones are allowlisted (an enum such as
+        # InterpolationMode cannot be subclassed); they are never executed.
+        for name in ("Compose", "Resize", "CenterCrop", "Normalize", "ToTensor"):
+            local = getattr(_torchvision_transforms, name, None)
+            if local is not None:
+                aliases.append(local)
+    if _torchvision_functional is not None:
+        interpolation = getattr(_torchvision_functional, "InterpolationMode", None)
+        if interpolation is not None:
+            aliases.append(interpolation)
     return aliases
 
 

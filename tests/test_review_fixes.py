@@ -511,6 +511,9 @@ class ReviewFixTests(unittest.TestCase):
             # The YOLO26 pose family shares the backbone, so its head classes convert too.
             "ultralytics.nn.modules.head.Pose26",
             "ultralytics.nn.modules.head.RealNVP",
+            # Classification (ImageNet) checkpoints, used as backbone initialisers.
+            "ultralytics.nn.tasks.ClassificationModel",
+            "ultralytics.nn.modules.head.Classify",
         ):
             with self.subTest(alias=expected):
                 self.assertIn(expected, names)
