@@ -101,6 +101,13 @@ def resolve_checkpoint_path(source, cache_dir=None) -> Path:
         lock_path.unlink(missing_ok=True)
 
 
+#: Module class -> the role mmpose checkpoints name it by.
+_MMPOSE_ROLE_CLASSES = {
+    "HybridEncoder": "neck",
+    "RTMOHead": "head",
+}
+
+
 def _rng_state() -> Dict[str, Any]:
     torch = _torch()
     state = {
@@ -142,26 +149,48 @@ def _restore_rng_state(state: Optional[Mapping[str, Any]]) -> None:
 
 
 def _numpy_checkpoint_globals():
-    """Allow the NumPy array globals found in legacy PyTorch checkpoints."""
+    """Allow the NumPy array globals found in legacy PyTorch checkpoints.
+
+    NumPy 2 moved the implementation to ``numpy._core`` but checkpoints written with
+    NumPy 1 record ``numpy.core.multiarray``; the safe loader compares qualified
+    names, so both spellings have to be allowlisted.
+    """
     try:
         import numpy as np
     except ImportError:
         return []
+    entries = []
     for module_name in ("numpy._core.multiarray", "numpy.core.multiarray"):
         try:
             multiarray = importlib.import_module(module_name)
-            break
         except (ImportError, AttributeError):
             continue
-    else:
+        reconstruct = multiarray._reconstruct
+        if getattr(reconstruct, "__module__", "") != module_name:
+            # NumPy 2 aliases ``numpy.core`` onto ``numpy._core``, so the same objects are
+            # reachable under both names -- but the safe loader matches the qualified name
+            # recorded in the file, and a shim is the only way to answer the legacy one.
+            def reconstruct(subtype, shape, dtype, _implementation=multiarray._reconstruct):
+                return _implementation(subtype, shape, dtype)
+
+            reconstruct.__module__ = module_name
+            reconstruct.__name__ = "_reconstruct"
+        entries.extend([reconstruct, multiarray.scalar])
+    if not entries:
         return []
-    return [
-        multiarray._reconstruct,
-        multiarray.scalar,
-        np.ndarray,
-        np.dtype,
-        type(np.dtype(np.uint32)),
-    ]
+    # ``numpy.core`` aliases record concrete dtype classes (UInt8DType, Float32DType, ...),
+    # and torch matches exact classes, so the common ones are all allowlisted.
+    dtype_types = sorted(
+        {
+            type(np.dtype(code))
+            for code in (
+                "bool", "uint8", "int8", "uint16", "int16", "uint32", "int32",
+                "uint64", "int64", "float16", "float32", "float64",
+            )
+        },
+        key=str,
+    )
+    return [*entries, np.ndarray, np.dtype, *dtype_types]
 
 
 def _load_tensor_checkpoint(path, torch, map_location="cpu"):
@@ -320,6 +349,16 @@ def load_model_weights(path, model, map_location="cpu", strict=True):
     payload = _load_tensor_checkpoint(source, torch, map_location=map_location)
     state = _extract_model_state(payload, torch)
     target = model.state_dict()
+    # mmpose checkpoints name the graph by role (``backbone`` / ``neck`` / ``head``) while
+    # the YAML graph keeps every module under ``model.<index>``. The index depends on the
+    # architecture -- two layers for the pose heads, eleven for the one-stage head -- so it
+    # is resolved from the target's module classes rather than hardcoded.
+    role_layers = {}
+    for module_name, module in model.named_modules():
+        if module_name.startswith("model.") and module_name.count(".") == 1:
+            role = _MMPOSE_ROLE_CLASSES.get(type(module).__name__)
+            if role is not None:
+                role_layers[role] = module_name
     compatible = {}
     shape_mismatches = []
     unexpected = []
@@ -330,6 +369,9 @@ def load_model_weights(path, model, map_location="cpu", strict=True):
         candidate_names = [normalized_name]
         # MMPose checkpoints store the graph under ``backbone`` and ``head`` while
         # AnimalPoseTracker's YAML graph stores those modules at layer 0 and 1.
+        for role, layer in role_layers.items():
+            if normalized_name.startswith(role + "."):
+                candidate_names.append(layer + "." + normalized_name[len(role) + 1:])
         if normalized_name.startswith("backbone."):
             candidate_names.append("model.0." + normalized_name[len("backbone."):])
         elif normalized_name.startswith("head."):
