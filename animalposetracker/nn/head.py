@@ -799,6 +799,10 @@ class DCC(nn.Module):
         self.gau._forward = _forward.__get__(self.gau)
 
 
+#: Largest log-scale the box decoder will exponentiate (e^10 * 32 px is still ~22k px).
+_DECODE_LOG_SCALE_LIMIT = 10.0
+
+
 def _bbox_xyxy2cs(bbox, padding: float = 1.0):
     """(left, top, right, bottom) -> (center, scale); torch tensors supported."""
     dim = bbox.ndim
@@ -968,7 +972,11 @@ class RTMOHead(nn.Module):
         stride = stride.view(1, -1, 1)
         priors = priors.view(1, -1, 2)
         xys = (pred_bboxes[..., :2] * stride) + priors
-        whs = pred_bboxes[..., 2:].exp() * stride
+        # exp() of a runaway regression (early training, an unstable batch) overflows to
+        # inf; the box scale then goes inf, the coordinate classifier's positional
+        # encoding takes cos(inf) and every keypoint of that instance decodes to NaN.
+        # The clamp only bites far outside any real box (e^10 * 32 px).
+        whs = pred_bboxes[..., 2:].clamp(max=_DECODE_LOG_SCALE_LIMIT).exp() * stride
         tl = xys - (whs * 0.5)
         br = xys + (whs * 0.5)
         return torch.cat([tl, br], dim=-1)
