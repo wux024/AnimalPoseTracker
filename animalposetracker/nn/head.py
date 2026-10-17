@@ -1310,6 +1310,13 @@ class RTMOHead(nn.Module):
         """
         cfg = dict(test_cfg or {})
         cls_scores, bbox_preds, _, kpt_vis, pose_vecs = outputs
+        # Decode in fp32: under autocast the coordinate classifier's bin softmax takes
+        # exp() on half-precision logits, overflows to inf and returns NaN keypoints.
+        # ``deploy_outputs`` keeps the graph's own dtype; this is the torch path.
+        cls_scores = [tensor.float() for tensor in cls_scores]
+        bbox_preds = [tensor.float() for tensor in bbox_preds]
+        kpt_vis = [tensor.float() for tensor in kpt_vis]
+        pose_vecs = [tensor.float() for tensor in pose_vecs]
 
         featmap_sizes = [cls_score.shape[2:] for cls_score in cls_scores]
         self._ensure_priors(featmap_sizes, cls_scores[0].device, cls_scores[0].dtype)

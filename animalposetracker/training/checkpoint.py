@@ -137,7 +137,7 @@ def _restore_rng_state(state: Optional[Mapping[str, Any]]) -> None:
         # The checkpoint payload stores the RNG states as plain byte arrays, and CUDA's
         # restore insists on ByteTensors -- resume used to abort right here.
         torch.cuda.set_rng_state_all(
-            [torch.as_tensor(item, dtype=torch.uint8) for item in state["cuda"]]
+            [torch.as_tensor(item, dtype=torch.uint8).cpu() for item in state["cuda"]]
         )
 
 
