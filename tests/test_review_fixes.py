@@ -125,7 +125,7 @@ class ReviewFixTests(unittest.TestCase):
 
         self.assertEqual(observed_warmup, [3, 3])
 
-    def test_validation_keeps_ema_weights_fp32_under_amp(self):
+    def test_validation_keeps_ema_weights_fp32_without_amp(self):
         model = torch.nn.Linear(2, 1)
         with torch.no_grad():
             model.weight.fill_(1.0001)
@@ -159,7 +159,9 @@ class ReviewFixTests(unittest.TestCase):
         with patch("torch.autocast", return_value=nullcontext()) as autocast:
             result = trainer._validate([], Validator(), epoch_number=1)
 
-        autocast.assert_called_once_with(device_type="cuda", enabled=True)
+        # Validation is fp32 on purpose: half-precision activations overflow and the
+        # one-stage head decodes them into NaN keypoints (see the fp32 validation fix).
+        autocast.assert_not_called()
         self.assertEqual(result["loss"], 1.0)
         self.assertEqual(observed_dtypes, [torch.float32])
         for name, value in model.state_dict().items():
