@@ -44,6 +44,8 @@ def run(argv: Optional[Sequence[str]] = None) -> int:
     parser.add_argument("--confidence-threshold", type=float, default=0.05)
     parser.add_argument("--reprojection-threshold", type=float, default=8.0)
     parser.add_argument("--min-views", type=int, default=2)
+    parser.add_argument("--check-sync", action="store_true",
+                        help="estimate the frame offset between cameras and refuse a mismatch")
     parser.add_argument("--pose-filter", default="none", choices=["none", "median", "savgol"],
                         help="temporal filter for the 3D sequence (writes poses3d-filter.json)")
     parser.add_argument("--filter-window", type=int, default=5)
@@ -73,6 +75,7 @@ def run(argv: Optional[Sequence[str]] = None) -> int:
             confidence_threshold=args.confidence_threshold,
             reprojection_threshold=args.reprojection_threshold,
             min_views=args.min_views,
+            check_sync=bool(args.check_sync),
             pose_filter=pose_filter,
         )
     except (CalibrationError, FileNotFoundError, ValueError) as exc:

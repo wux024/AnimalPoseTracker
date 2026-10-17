@@ -216,5 +216,51 @@ class ReconstructionTests(unittest.TestCase):
         self.assertIn("--pose3d", str(caught.exception))
 
 
+class SyncTests(unittest.TestCase):
+    def _rig(self):
+        from animalposetracker.pose3d import CameraCalibration, CameraRig
+        cameras = {name: CameraCalibration(name, INTRINSIC, *_look_at(eye))
+                   for name, eye in (("camA", (1.2, 0.0, 0.3)), ("camB", (-1.0, 0.6, 0.3)))}
+        return CameraRig(cameras=cameras, distortion={n: ("none", np.zeros(4)) for n in cameras})
+
+    @staticmethod
+    def _project(points, camera):
+        local = points @ camera.rotation_matrix.T + camera.translation_vector
+        pixels = (local / local[:, 2:3]) @ camera.intrinsic_matrix.T
+        return pixels[:, :2]
+
+    def _series(self, rig):
+        rng = np.random.default_rng(11)
+        base = rng.normal(scale=0.1, size=(6, 3))
+        series = {"camA": [], "camB": []}
+        for frame in range(30):
+            points = base + 0.02 * frame + 0.05 * np.sin(np.arange(6))[:, None] * frame / 30
+            for name, camera in rig.cameras.items():
+                series[name].append(np.hstack([self._project(points, camera), np.ones((6, 1))]))
+        return series
+
+    def test_a_frame_offset_is_recovered_from_the_epipolar_constraint(self):
+        from animalposetracker.pose3d.sync import estimate_frame_offsets
+
+        rig = self._rig()
+        series = self._series(rig)
+        shifted = {"camA": series["camA"],
+                   "camB": [series["camB"][0]] * 3 + series["camB"]}
+        report = estimate_frame_offsets(rig, shifted, max_offset=8)
+        self.assertEqual(report["offsets"]["camB"], 3)
+        self.assertTrue(report["curves"]["camB"]["confident"])
+
+    def test_the_sync_block_is_validated(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            block = _camera_block((1.0, 0.0, 0.0), INTRINSIC)
+            payload = {"world_unit": "mm", "cameras": {"camA": block},
+                       "sync": {"mode": "telepathy"}}
+            path = Path(temporary) / "cameras.yaml"
+            path.write_text(yaml.safe_dump(payload), encoding="utf-8")
+            with self.assertRaises(CalibrationError) as caught:
+                load_camera_rig(path)
+        self.assertIn("sync.mode", str(caught.exception))
+
+
 if __name__ == "__main__":
     unittest.main()

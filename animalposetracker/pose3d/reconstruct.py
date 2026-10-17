@@ -92,6 +92,7 @@ def reconstruct_project(
     reprojection_threshold: float = 8.0,
     min_views: int = 2,
     pose_filter: Optional[Mapping[str, Any]] = None,
+    check_sync: bool = False,
 ) -> Dict[str, Any]:
     """Triangulate every frame of a 3D-enabled project and write the protocol files."""
     project = Path(project_dir).expanduser().resolve()
@@ -126,8 +127,34 @@ def reconstruct_project(
 
     loaded = [_View(camera, view_paths[camera], _prediction_records(view_paths[camera])) for camera in rig.cameras]
     frame_counts = {view.camera: len(view.records) for view in loaded}
-    if len(set(frame_counts.values())) != 1:
+    if max(frame_counts.values()) - min(frame_counts.values()) > 60:
         raise ValueError(f"Views disagree on frame count: {frame_counts}")
+    anchor = next(iter(rig.cameras))
+    offsets = {camera: int(rig.frame_offsets.get(camera, 0)) for camera in rig.cameras}
+
+    sync_check = None
+    if check_sync:
+        from .sync import estimate_frame_offsets
+
+        series = {}
+        for view in loaded:
+            frames_series = []
+            for record in view.records:
+                instances = _instances(record)
+                if not instances:
+                    break
+                frames_series.append(rig.undistort(view.camera, instances[0]))
+            series[view.camera] = frames_series
+        sync_check = estimate_frame_offsets(rig, series)
+        for camera, curve in sync_check["curves"].items():
+            best = curve["best_offset"]
+            if not curve["confident"] or best == offsets.get(camera, 0):
+                continue
+            raise ValueError(
+                f"Camera '{camera}' needs a frame offset of {best} (epipolar median "
+                f"{curve['best_median_px']} px there vs {curve['zero_offset_median_px']} px at "
+                f"offset 0). Set sync.offsets.{camera}: {best} in configs/cameras.yaml"
+            )
 
     frames: List[Dict[str, Any]] = []
     frames_per_camera = {camera: 0 for camera in rig.cameras}
@@ -135,8 +162,11 @@ def reconstruct_project(
     dropped_points = 0
     errors: List[float] = []
 
-    for frame_index in range(next(iter(frame_counts.values()))):
-        per_view = [(view.camera, _instances(view.records[frame_index])) for view in loaded]
+    for frame_index in range(frame_counts[anchor]):
+        per_view = [(view.camera,
+                     _instances(view.records[frame_index + offsets[view.camera]])
+                     if 0 <= frame_index + offsets[view.camera] < len(view.records) else [])
+                    for view in loaded]
         instance_count = max(len(instances) for _, instances in per_view) if per_view else 0
         frame_instances: List[Dict[str, Any]] = []
         for instance_index in range(instance_count):
@@ -190,6 +220,7 @@ def reconstruct_project(
         "created_by": "animalposetracker",
         "association": association,
         "world_unit": rig.world_unit,
+        "sync": {"mode": rig.sync_mode, "declared_offsets": offsets, "check": sync_check},
         "calibration": {
             "path": str(rig_path),
             "cameras": {camera: {"image_size": list(c.image_size or []),

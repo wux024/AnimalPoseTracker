@@ -27,6 +27,10 @@ class CameraRig:
     cameras: Dict[str, CameraCalibration]
     distortion: Dict[str, Tuple[str, np.ndarray]] = field(default_factory=dict)
     world_unit: str = "mm"
+    #: ``hardware``, ``software`` or ``unknown`` -- a declaration, not a guarantee.
+    sync_mode: str = "unknown"
+    #: Frames each camera's data is shifted by, relative to the first camera.
+    frame_offsets: Dict[str, int] = field(default_factory=dict)
 
     def undistort(self, camera_id: str, pixels: np.ndarray) -> np.ndarray:
         """Map observed pixels to the undistorted pixel grid the core expects.
@@ -133,7 +137,27 @@ def load_camera_rig(path: Path) -> CameraRig:
             )
         distortion[camera] = (model, coefficients)
 
-    return CameraRig(cameras=cameras, distortion=distortion, world_unit=world_unit)
+    sync = payload.get("sync") or {}
+    if not isinstance(sync, Mapping):
+        raise CalibrationError(f"{source} field 'sync' must be a mapping")
+    sync_mode = str(sync.get("mode") or "unknown").strip().lower()
+    if sync_mode not in {"hardware", "software", "unknown"}:
+        raise CalibrationError(
+            f"sync.mode must be hardware, software or unknown; got '{sync_mode}'"
+        )
+    offsets: Dict[str, int] = {}
+    for camera, value in (sync.get("offsets") or {}).items():
+        if camera not in cameras:
+            raise CalibrationError(f"sync.offsets names an unknown camera: '{camera}'")
+        try:
+            offsets[str(camera)] = int(value)
+        except (TypeError, ValueError) as error:
+            raise CalibrationError(
+                f"sync.offsets.{camera} must be an integer frame offset"
+            ) from error
+
+    return CameraRig(cameras=cameras, distortion=distortion, world_unit=world_unit,
+                     sync_mode=sync_mode, frame_offsets=offsets)
 
 
 __all__ = ["CalibrationError", "CameraRig", "load_camera_rig"]
