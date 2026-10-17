@@ -125,7 +125,7 @@ def _restore_rng_state(state: Optional[Mapping[str, Any]]) -> None:
     if "python" in state:
         random.setstate(state["python"])
     if "torch" in state:
-        torch.set_rng_state(state["torch"].cpu())
+        torch.set_rng_state(torch.as_tensor(state["torch"], dtype=torch.uint8).cpu())
     if "numpy" in state:
         try:
             import numpy as np
@@ -134,7 +134,11 @@ def _restore_rng_state(state: Optional[Mapping[str, Any]]) -> None:
         except ImportError:
             pass
     if "cuda" in state and torch.cuda.is_available():
-        torch.cuda.set_rng_state_all(state["cuda"])
+        # The checkpoint payload stores the RNG states as plain byte arrays, and CUDA's
+        # restore insists on ByteTensors -- resume used to abort right here.
+        torch.cuda.set_rng_state_all(
+            [torch.as_tensor(item, dtype=torch.uint8) for item in state["cuda"]]
+        )
 
 
 def _numpy_checkpoint_globals():

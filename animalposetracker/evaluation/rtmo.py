@@ -74,6 +74,11 @@ class RTMOPoseValidator:
         speed_seconds = {"preprocess": 0.0, "inference": 0.0, "postprocess": 0.0}
 
         original_model_state = model.training
+        # Decode with the head of the model being evaluated: validation may run the EMA
+        # copy, and its head is a different object (the engine only switched the evaluated
+        # copy to eval mode, the training model stays in train mode with its BatchNorm1d
+        # updating -- which aborts as soon as a single instance is decoded).
+        head = model.model[-1] if getattr(model, "model", None) is not None else self.head
         model.eval()
         try:
             with torch.inference_mode():
@@ -91,7 +96,7 @@ class RTMOPoseValidator:
                     speed_seconds["inference"] += time.perf_counter() - stage_started
 
                     stage_started = time.perf_counter()
-                    results = self.head.predict_from_outputs(
+                    results = head.predict_from_outputs(
                         outputs,
                         samples,
                         test_cfg=dict(
