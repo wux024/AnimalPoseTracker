@@ -49,7 +49,8 @@ class AnimalPoseTrackerProject(ProjectConfigurationMixin, ProjectFilesMixin, Pro
                  classes_name: Optional[List[str]] = None,
                  sources: Union[str, Path, List[Union[str, Path]]] = None,
                  date: str = None,
-                 pose3d: bool = False):
+                 pose3d: bool = False,
+                 public_dataset: Optional[str] = None):
         """
         Initialize a new project with given parameters.
 
@@ -111,6 +112,7 @@ class AnimalPoseTrackerProject(ProjectConfigurationMixin, ProjectFilesMixin, Pro
             # Multi-view reconstruction is opt-in: only a project created with the 3D
             # option carries the calibration file and results/pose3d.
             "pose3d": bool(pose3d),
+            "public_dataset": public_dataset or None,
         }
 
         self.pose3d = bool(pose3d)

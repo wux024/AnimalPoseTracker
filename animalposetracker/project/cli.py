@@ -1,6 +1,7 @@
 """Command-line project creation and configuration."""
 
 import argparse
+from typing import Optional
 from dataclasses import fields as dataclass_fields
 from datetime import datetime
 from pathlib import Path
@@ -218,6 +219,12 @@ def _create_project(args: argparse.Namespace) -> AnimalPoseTrackerProject:
         "keypoint_names", [f"kpt_{index}" for index in range(keypoint_count)]
     )
 
+    public_name = _public_dataset_name(dataset_path)
+    if getattr(args, "pose3d", False) and public_name:
+        raise SystemExit(
+            f"'{public_name}' is a public benchmark dataset; 3D reconstruction needs a "
+            "multi-camera capture, so --pose3d is not available for it"
+        )
     project = AnimalPoseTrackerProject(
         local_path=Path(args.workspace).expanduser().resolve(),
         project_name=args.name,
@@ -232,6 +239,7 @@ def _create_project(args: argparse.Namespace) -> AnimalPoseTrackerProject:
         kpt_oks_sigmas=dataset_config.get("kpt_oks_sigmas"),
         classes_name=ordered_names,
         pose3d=bool(getattr(args, "pose3d", False)),
+        public_dataset=public_name,
         date=args.date,
     )
     project.create_new_project()
@@ -398,3 +406,17 @@ def run(argv=None) -> int:
     args = _make_create_parser().parse_args(argv)
     _create_project(args)
     return 0
+
+
+def _public_dataset_name(dataset_path) -> Optional[str]:
+    """The packaged dataset a project was created from, if it is a public benchmark."""
+    try:
+        resolved = Path(dataset_path).expanduser().resolve()
+    except OSError:
+        return None
+    from animalposetracker.cfg import DATA_YAML_PATHS
+
+    for name, path in DATA_YAML_PATHS.items():
+        if Path(path).expanduser().resolve() == resolved:
+            return name
+    return None

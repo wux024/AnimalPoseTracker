@@ -46,12 +46,15 @@ def _prediction_records(path: Path) -> List[Mapping[str, Any]]:
         payload = payload.get("predictions") or payload.get("frames") or []
     if not isinstance(payload, Sequence) or isinstance(payload, (str, bytes)):
         raise ValueError(f"{path} does not contain a list of prediction records")
-    records = list(payload)
-    for record in records:
-        if isinstance(record, Mapping) and "predictions" not in record and "frames" in record:
-            raise ValueError(
-                f"{path} holds video predictions; the 3D stage currently needs one record per frame"
-            )
+    # A predictions file holds either one record per image or one record per video frame
+    # (``source`` + ``frame`` + ``predictions``); summary records carry no predictions and
+    # are dropped. The source may therefore be a folder of images or a video.
+    records = [record for record in payload
+               if isinstance(record, Mapping) and record.get("predictions") is not None]
+    if not records:
+        raise ValueError(f"{path} holds no prediction records")
+    if all("frame" in record for record in records):
+        records.sort(key=lambda record: int(record["frame"]))
     return records
 
 
@@ -95,6 +98,11 @@ def reconstruct_project(
     identity = _read_yaml(project / "project.yaml") if (project / "project.yaml").is_file() else {}
     if not identity:
         raise FileNotFoundError(f"Not a project directory (no project.yaml): {project}")
+    if identity.get("public_dataset"):
+        raise ValueError(
+            f"Project '{project.name}' was created from the public benchmark "
+            f"'{identity['public_dataset']}'; it has no multi-camera capture, so 3D is not available"
+        )
     if not identity.get("pose3d"):
         raise ValueError(
             f"Project '{project.name}' was created without the 3D option "

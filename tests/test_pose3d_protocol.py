@@ -151,6 +151,63 @@ class ReconstructionTests(unittest.TestCase):
             report = reconstruct_project(project, pose_filter={"method": "median", "window_length": 5})
         self.assertIsNotNone(report["outputs"]["poses3d_filtered"])
 
+    def test_a_public_benchmark_project_is_refused(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            project = _write_project(Path(temporary), pose3d=True)
+            identity = yaml.safe_load((project / "project.yaml").read_text(encoding="utf-8"))
+            identity["public_dataset"] = "Tri-Mouse"
+            (project / "project.yaml").write_text(yaml.safe_dump(identity), encoding="utf-8")
+            with self.assertRaises(ValueError) as caught:
+                reconstruct_project(project)
+        self.assertIn("public benchmark", str(caught.exception))
+
+    def test_the_create_command_refuses_pose3d_for_a_packaged_dataset(self):
+        import subprocess
+        import sys
+
+        from animalposetracker.cfg import DATA_YAML_PATHS
+
+        packaged = next(iter(DATA_YAML_PATHS.values()))
+        with tempfile.TemporaryDirectory() as temporary:
+            completed = subprocess.run(
+                [sys.executable, "-m", "animalposetracker.cli", "create",
+                 "--dataset", str(packaged), "--dataset-root", temporary,
+                 "--workspace", temporary, "--name", "public3d", "--worker", "t",
+                 "--model", "AnimalRTPose", "--scale", "N", "--no-pretrained", "--pose3d"],
+                capture_output=True, text=True,
+            )
+        self.assertNotEqual(completed.returncode, 0)
+        self.assertIn("public benchmark", completed.stderr + completed.stdout)
+
+    def test_video_frame_records_are_accepted_and_sorted(self):
+        skeleton = np.zeros((3, 3))
+        cameras = {"camA": (1.0, 0.0, 0.0), "camB": (-1.0, 0.0, 0.0)}
+        with tempfile.TemporaryDirectory() as temporary:
+            project = _write_project(Path(temporary), pose3d=True)
+            payload = {
+                "world_unit": "mm",
+                "cameras": {name: _camera_block(eye, INTRINSIC) for name, eye in cameras.items()},
+            }
+            (project / "configs" / "cameras.yaml").write_text(yaml.safe_dump(payload), encoding="utf-8")
+            for name in cameras:
+                target = project / "results" / "predict" / name
+                target.mkdir(parents=True)
+                rotation, translation = _look_at(cameras[name])
+                points = (rotation @ skeleton.T).T + translation
+                pixels = (INTRINSIC @ points.T).T
+                pixels = pixels[:, :2] / pixels[:, 2:3]
+                keypoints = [[float(u), float(v), 1.0] for u, v in pixels]
+                # deliberately out of order, with a per-video summary record appended
+                records = [
+                    {"source": "cam.mp4", "frame": 1, "predictions": [{"keypoints": keypoints}]},
+                    {"source": "cam.mp4", "frame": 0, "predictions": [{"keypoints": keypoints}]},
+                    {"source": "cam.mp4", "output": "rendered.mp4", "frames": 2},
+                ]
+                (target / "predictions.json").write_text(json.dumps(records), encoding="utf-8")
+            report = reconstruct_project(project)
+        self.assertEqual(report["summary"]["frames"], 2)
+        self.assertEqual(report["summary"]["instances"], 2)
+
     def test_a_project_without_the_3d_option_is_refused(self):
         with tempfile.TemporaryDirectory() as temporary:
             project = _write_project(Path(temporary), pose3d=False)
