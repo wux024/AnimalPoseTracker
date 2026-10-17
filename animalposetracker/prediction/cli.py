@@ -1196,7 +1196,7 @@ def run(argv=None, box_provider: InstanceBoxProvider = None) -> int:
             encoding="utf-8",
         )
     if filtered_results:
-        (output_dir / "filtered_predictions.json").write_text(
+        (output_dir / "predictions-filter.json").write_text(
             json.dumps(filtered_results, ensure_ascii=False, indent=2, allow_nan=False) + "\n",
             encoding="utf-8",
         )

@@ -20,7 +20,7 @@ This returns the selected output directory and starts the project prediction
 worker. After the worker finishes, the directory contains the original
 per-frame detections in `predictions.json`, confirmed tracks with `track_id` in
 `tracked_predictions.json`, and smoothed track coordinates in
-`filtered_predictions.json`. The rendered video displays track IDs when
+`predictions-filter.json`. The rendered video displays track IDs when
 tracking is enabled. Each video gets a new tracker instance, so track IDs are
 local to that video.
 

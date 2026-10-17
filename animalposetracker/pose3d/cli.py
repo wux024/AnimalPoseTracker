@@ -36,7 +36,8 @@ def run(argv: Optional[Sequence[str]] = None) -> int:
     parser.add_argument("--config", default="configs/runtime.yaml", help="project runtime config")
     parser.add_argument("--calibration", help="camera calibration file (default: configs/cameras.yaml)")
     parser.add_argument("--views", action="append", default=[],
-                        help="camera=path to that camera's predictions.json (repeatable)")
+                        help="camera=path to that camera's predictions.json (repeatable; point "
+                             "it at predictions-filter.json to triangulate the filtered 2D)")
     parser.add_argument("--association", default="index", choices=["index"],
                         help="how instances correspond across cameras (index only for now)")
     parser.add_argument("--output", help="output directory (default: <project>/results/pose3d)")
