@@ -97,6 +97,14 @@ class NewProjectFormTests(unittest.TestCase):
         self.assertEqual(model["kpt_shape"], [6, 3])
         self.assertEqual(model["nc"], 2)
 
+    def test_the_form_offers_an_opt_in_3d_checkbox(self):
+        # 3D is opt-in and only this page offers it; public benchmarks are created from their
+        # own page, which has no such option at all.
+        page = CreateNewProjectPage()
+        self.assertFalse(page.Enable3DReconstruction.isChecked())
+        self.assertIn("3D", page.Enable3DReconstruction.text())
+        self.assertIn("cameras.yaml", page.Enable3DReconstruction.toolTip())
+
     def test_closing_the_form_stops_the_pending_debounce(self):
         # A pending debounce used to fire into the closed page.
         page = CreateNewProjectPage()

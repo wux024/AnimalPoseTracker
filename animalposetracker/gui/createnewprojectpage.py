@@ -1,5 +1,5 @@
 from PySide6.QtCore import Signal, Qt, QSignalBlocker
-from PySide6.QtWidgets import  (QFileDialog, QMessageBox, QWidget, QMenu)
+from PySide6.QtWidgets import  (QCheckBox, QFileDialog, QMessageBox, QWidget, QMenu)
 from PySide6.QtGui import QCursor, QIcon
 from pathlib import Path
 
@@ -28,6 +28,21 @@ class CreateNewProjectPage(ProjectFormBase, QWidget, Ui_CreateNewProject):
         self.setWindowIcon(QIcon(LOGO_SMALL_PATH))
         self.project = AnimalPoseTrackerProject()
         self.project.local_path = Path.cwd()
+
+        # 3D is opt-in: the checkbox only exists on this page. Public benchmarks are created
+        # from their own page, which offers no 3D option at all.
+        self.Enable3DReconstruction = QCheckBox("Enable 3D reconstruction (multi-camera)")
+        self.Enable3DReconstruction.setObjectName(u"Enable3DReconstruction")
+        self.Enable3DReconstruction.setChecked(False)
+        self.Enable3DReconstruction.setToolTip(
+            "Creates configs/cameras.yaml and results/pose3d. Fill the calibration in by hand "
+            "before running `animalpose-cli pose3d`."
+        )
+        parent = self.CopySourceData.parentWidget()
+        layout = parent.layout() if parent is not None else None
+        if layout is not None:
+            index = layout.indexOf(self.CopySourceData)
+            layout.insertWidget(index if index >= 0 else layout.count(), self.Enable3DReconstruction)
 
         # Load project config
         self.SourceDataSelected.setTristate(True)
@@ -302,6 +317,11 @@ class CreateNewProjectPage(ProjectFormBase, QWidget, Ui_CreateNewProject):
             if key not in {"keypoints", "visible", "classes", "keypoints_name", "classes_name"}
         }
         self.project.update_config("project", project_identity)
+        # The checkbox drives both the layout (dirs + calibration template) and the file.
+        enabled3d = bool(getattr(self, "Enable3DReconstruction", None) and
+                         self.Enable3DReconstruction.isChecked())
+        self.project.pose3d = enabled3d
+        self.project.project_config["pose3d"] = enabled3d
         # The shape lives in dataset.yaml now (the project file keeps identity):
         # mirror the form's shape inputs there before the project is created.
         self._refresh_dataset_shape()

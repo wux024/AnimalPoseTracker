@@ -87,6 +87,8 @@ class PublicDatasetProjectPage(ProjectFormBase, QWidget, Ui_PublicDatasetProject
             return
         self.project.update_config("project", project_config)
         self.project.local_path = Path(self.LocationPathDisplay.text())
+        # A packaged benchmark has no multi-camera capture: create_public_dataset_project
+        # records `public_dataset`, which locks the 3D stage out of this project for good.
         self.project.create_public_dataset_project(self.dataset)
         self.CreateProjectClicked.emit()
         
