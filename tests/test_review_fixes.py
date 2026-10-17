@@ -569,7 +569,7 @@ class ReviewFixTests(unittest.TestCase):
                 model_scale="N",
             )
             project.create_new_project()
-            weights = project.project_path / "runs" / "train" / "weights" / "best.pt"
+            weights = project.project_path / "results" / "train" / "weights" / "best.pt"
             weights.parent.mkdir(parents=True)
             weights.write_bytes(b"placeholder")
             project.set_runtime_value("common.selected_weights", str(weights))

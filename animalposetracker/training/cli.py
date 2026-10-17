@@ -581,7 +581,7 @@ def run(argv=None) -> int:
         elif args.validate_only and world_size_env <= 1:
             from animalposetracker.project.model_context import unique_output_directory
 
-            validation_root = project_dir / "runs" / "val"
+            validation_root = project_dir / "results" / "val"
             values["output_dir"] = str(unique_output_directory(
                 validation_root,
                 exist_ok=bool(values.get("exist_ok", False)),
@@ -591,7 +591,7 @@ def run(argv=None) -> int:
 
             configured_output = values.get("output_dir", values.get("save_dir"))
             if configured_output is None:
-                run_root = Path(str(values.get("project") or "runs")).expanduser()
+                run_root = Path(str(values.get("project") or "results")).expanduser()
                 if not run_root.is_absolute():
                     run_root = project_dir / run_root
                 output_path = run_root / str(values.get("name") or "train")
@@ -606,7 +606,7 @@ def run(argv=None) -> int:
         elif not args.validate_only and not args.resume and world_size_env > 1:
             configured_output = values.get("output_dir", values.get("save_dir"))
             if configured_output is None:
-                run_root = Path(str(values.get("project") or "runs")).expanduser()
+                run_root = Path(str(values.get("project") or "results")).expanduser()
                 if not run_root.is_absolute():
                     run_root = project_dir / run_root
                 output_path = run_root / str(values.get("name") or "train")

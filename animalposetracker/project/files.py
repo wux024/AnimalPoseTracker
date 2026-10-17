@@ -68,7 +68,38 @@ class ProjectFilesMixin:
                 "Use another project name, worker, or save location."
             )
         self._create_project_structure()
+        if getattr(self, "pose3d", False):
+            self._write_calibration_template()
         self.load_config_file()
+
+    def _write_calibration_template(self) -> None:
+        """Write the empty camera calibration the 3D stage expects.
+
+        The file is filled by hand (intrinsic/extrinsic computed with whichever tool the
+        capture team uses); the loader validates it strictly, so an empty section is a
+        clear "not filled in yet" rather than a silent identity calibration.
+        """
+        target = self._project_path / "configs" / "cameras.yaml"
+        if target.exists():
+            return
+        target.write_text(
+            "# Multi-view camera calibration for this project.\n"
+            "#\n"
+            "# Fill one block per camera; rotation and translation map WORLD coordinates\n"
+            "# into the camera frame (x_cam = R @ x_world + t).\n"
+            "#\n"
+            "# world_unit: mm\n"
+            "# cameras://n"
+            "#   camA://n"
+            "#     image_size: [1280, 1024]\n"
+            "#     intrinsic: [[fx, 0, cx], [0, fy, cy], [0, 0, 1]]\n"
+            "#     distortion: {model: none}          # none | brown | fisheye\n"
+            "#     rotation: [[r11, r12, r13], [r21, r22, r23], [r31, r32, r33]]\n"
+            "#     translation: [tx, ty, tz]\n"
+            "world_unit: mm\n"
+            "cameras: {}\n",
+            encoding="utf-8",
+        )
 
     def _create_project_structure(self) -> None:
         """Create all project directories and configurations."""
@@ -177,5 +208,8 @@ class ProjectFilesMixin:
 
     def create_project_dirs(self) -> None:
         """Create the standard directory structure for the project."""
-        for rel_dir in self.DEFAULT_DIRS:
+        directories = list(self.DEFAULT_DIRS)
+        if getattr(self, "pose3d", False):
+            directories.append("results/pose3d")
+        for rel_dir in directories:
             (self._project_path / rel_dir).mkdir(parents=True, exist_ok=True)

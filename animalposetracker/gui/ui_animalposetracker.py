@@ -1159,7 +1159,7 @@ class Ui_AnimalPoseTracker(object):
         ___qtreewidgetitem36.setText(1, QCoreApplication.translate("AnimalPoseTracker", u"8", None));
         ___qtreewidgetitem36.setText(0, QCoreApplication.translate("AnimalPoseTracker", u"workers", None));
         ___qtreewidgetitem37 = self.TrainingConfigureEdit.topLevelItem(12)
-        ___qtreewidgetitem37.setText(1, QCoreApplication.translate("AnimalPoseTracker", u"runs", None));
+        ___qtreewidgetitem37.setText(1, QCoreApplication.translate("AnimalPoseTracker", u"results", None));
         ___qtreewidgetitem37.setText(0, QCoreApplication.translate("AnimalPoseTracker", u"project", None));
         ___qtreewidgetitem38 = self.TrainingConfigureEdit.topLevelItem(13)
         ___qtreewidgetitem38.setText(1, QCoreApplication.translate("AnimalPoseTracker", u"train", None));

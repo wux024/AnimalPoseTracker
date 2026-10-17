@@ -271,8 +271,8 @@ class InferencerPage(QWidget, Ui_Inferencer):
         # here rather than in the ui module.
         self.Save.setText("Save Video")
         self.Save.setToolTip(
-            "Write the rendered frames to runs/inference/output.avi. "
-            "Per-frame pose records always go to runs/inference/records.json, "
+            "Write the rendered frames to results/inference/output.avi. "
+            "Per-frame pose records always go to results/inference/records.json, "
             "in the same shape `infer --records` writes"
         )
 
@@ -571,7 +571,7 @@ class InferencerPage(QWidget, Ui_Inferencer):
             QMessageBox.warning(self, "Smoothing not applied", str(error))
             records = self.records
 
-        output_dir = Path.cwd() / "runs" / "inference"
+        output_dir = Path.cwd() / "results" / "inference"
         try:
             output_dir.mkdir(parents=True, exist_ok=True)
             target = output_dir / "records.json"
@@ -1563,7 +1563,7 @@ class InferencerPage(QWidget, Ui_Inferencer):
 
         # set up video writer thread
         if self.Save.isChecked():
-            save_path = Path.cwd() / "runs" / "inference"
+            save_path = Path.cwd() / "results" / "inference"
             save_path.mkdir(exist_ok=True, parents=True)
             self.videowriter_thread.save_path = save_path / "output.avi"
             # A source that reports no frame rate (or a page where nothing was ever set) would

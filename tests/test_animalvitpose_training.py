@@ -50,11 +50,11 @@ from animalposetracker.data.topdown import (
 class SimCCTrainingTests(unittest.TestCase):
     def test_animalrtpose_checkpoint_urls_live_with_model_config_and_download(self):
         expected_ids = {
-            "n": "1frHtyJKbyAZUr4uGpbTSje4L0hrkeqgz",
-            "s": "19XeuqZRvF9IBoBbPPkDrjew3Pw9MdBLJ",
-            "m": "1BRlOoZnVHyf_P_UJJWhhw9udF3HsNBT6",
-            "l": "1CeQTPO4Mf-uG3jwkD5rnzttn6yFZoHjK",
-            "x": "1ubZL6AVGuLb8616Y6lySQKjNNbV85qUL",
+            "n": "1sl8WQGFcB2lD-W5rVqKS3kauK0ZwX_zV",
+            "s": "1ehkMFUwOEpaQRRNX6l5c2XsFFCRP6n83",
+            "m": "1G5E0AenDdYXGH90Uv9ppUEeUVrpv7PhH",
+            "l": "1jT1SxpFP3C5Rn87vfMmZ__oqzy3IJViW",
+            "x": "1SfoeM85OPBBsgpwmA-ryMKKhgPijjyt2",
         }
         model_yaml = (
             Path(__file__).parent.parent
@@ -880,7 +880,7 @@ class SimCCTrainingTests(unittest.TestCase):
                 classes=1,
             )
             project.create_new_project()
-            checkpoint = project.project_path / "runs" / "train" / "weights" / "best.pt"
+            checkpoint = project.project_path / "results" / "train" / "weights" / "best.pt"
             checkpoint.parent.mkdir(parents=True)
             checkpoint.touch()
 
@@ -897,9 +897,9 @@ class SimCCTrainingTests(unittest.TestCase):
             # the file it will write before it starts -- otherwise the metrics go unread.
             self.assertEqual(
                 project.training_event_path,
-                project.project_path / "runs" / "val" / "training.jsonl",
+                project.project_path / "results" / "val" / "training.jsonl",
             )
-            self.assertIn(str((project.project_path / "runs" / "val").resolve()), command)
+            self.assertIn(str((project.project_path / "results" / "val").resolve()), command)
 
             project.set_runtime_value("common.selected_weights", str(checkpoint))
             with patch.object(project, "_execute_command") as execute:
@@ -942,7 +942,7 @@ class SimCCTrainingTests(unittest.TestCase):
                 classes=1,
             )
             project.create_new_project()
-            artifact = project.project_path / "runs" / "export" / "pose_openvino_model"
+            artifact = project.project_path / "results" / "export" / "pose_openvino_model"
             artifact.mkdir(parents=True)
             project.set_runtime_value("common.selected_weights", str(artifact))
             self.assertEqual(project._resolve_project_prediction_model(), artifact.resolve())
@@ -1201,7 +1201,7 @@ class SimCCTrainingTests(unittest.TestCase):
             model = build_model(model_spec, scale=scale)
             checkpoint = root / "test-weights.pt"
             torch.save({"state_dict": model.state_dict()}, checkpoint)
-            output_dir = root / "runs" / "test-predictions"
+            output_dir = root / "results" / "test-predictions"
             run_prediction([
                 "--config", str(root / "configs" / "runtime.yaml"),
                 "--weights", str(checkpoint),
@@ -1216,7 +1216,7 @@ class SimCCTrainingTests(unittest.TestCase):
             self.assertEqual(len(result[0]["predictions"]), 1)
             self.assertTrue(Path(result[0]["output"]).is_file())
 
-            export_dir = root / "runs" / "test-export"
+            export_dir = root / "results" / "test-export"
             run_export([
                 "--config", str(root / "configs" / "runtime.yaml"),
                 "--weights", str(checkpoint),
@@ -1225,7 +1225,7 @@ class SimCCTrainingTests(unittest.TestCase):
             ])
             torchscript_weights = export_dir / "test-weights.torchscript"
             self.assertTrue(torchscript_weights.is_file())
-            exported_prediction_dir = root / "runs" / "exported-model-predictions"
+            exported_prediction_dir = root / "results" / "exported-model-predictions"
             run_prediction([
                 "--config", str(root / "configs" / "runtime.yaml"),
                 "--weights", str(torchscript_weights),
@@ -1243,7 +1243,7 @@ class SimCCTrainingTests(unittest.TestCase):
 
             # The format comes from configs/runtime.yaml (export section); no
             # --format flag here, so a successful export proves it was read.
-            onnx_dir = root / "runs" / "test-onnx-export"
+            onnx_dir = root / "results" / "test-onnx-export"
             run_export([
                 "--config", str(root / "configs" / "runtime.yaml"),
                 "--weights", str(checkpoint),
@@ -1251,7 +1251,7 @@ class SimCCTrainingTests(unittest.TestCase):
             ])
             onnx_weights = onnx_dir / "test-weights.onnx"
             self.assertTrue(onnx_weights.is_file())
-            onnx_prediction_dir = root / "runs" / "onnx-predictions"
+            onnx_prediction_dir = root / "results" / "onnx-predictions"
             run_prediction([
                 "--config", str(root / "configs" / "runtime.yaml"),
                 "--weights", str(onnx_weights),

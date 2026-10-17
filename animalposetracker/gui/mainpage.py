@@ -1038,7 +1038,7 @@ class AnimalPoseTrackerPage(QMainWindow, Ui_AnimalPoseTracker):
         if file:
             resume_path = file
         else:
-            resume_path = str(self.project.project_path / "runs/train/weights/last.pt")
+            resume_path = str(self.project.project_path / "results/train/weights/last.pt")
         # Through the same guarded path as Start Train: resuming is the same worker, and this
         # used to disable the buttons by hand and never start the poll timer, so nothing brought
         # them back.

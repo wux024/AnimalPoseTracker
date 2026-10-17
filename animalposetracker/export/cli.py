@@ -235,14 +235,14 @@ def run(argv=None) -> int:
             else context["project_dir"] / output_dir
         ).resolve()
     elif args.project or args.name:
-        output_root = Path(args.project or "runs").expanduser()
+        output_root = Path(args.project or "results").expanduser()
         if not output_root.is_absolute():
             output_root = context["project_dir"] / output_root
         config.output_dir = output_root / (args.name or "export")
     else:
         # Export runs get their own namespace instead of inheriting the
-        # training run name (project/name = runs/train) from the runtime config.
-        config.output_dir = context["project_dir"] / "runs" / "export"
+        # training run name (project/name = results/train) from the runtime config.
+        config.output_dir = context["project_dir"] / "results" / "export"
     config.output_dir = unique_output_directory(
         config.output_dir,
         exist_ok=bool(values.get("exist_ok", False)),

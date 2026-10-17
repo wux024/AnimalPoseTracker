@@ -172,7 +172,7 @@ class ProjectWeightsMixin:
                 "Native project evaluation, prediction and export require a PyTorch .pt/.pth checkpoint"
             )
 
-        run_root = Path(self.get_runtime_value("common.project", "runs")).expanduser()
+        run_root = Path(self.get_runtime_value("common.project", "results")).expanduser()
         if not run_root.is_absolute():
             run_root = self._project_path / run_root
         run_name = str(self.get_runtime_value("common.name", "train"))

@@ -26,7 +26,7 @@ class AnimalPoseTrackerProject(ProjectConfigurationMixin, ProjectFilesMixin, Pro
         "datasets/labels/test",
         "datasets/annotations",
         "pretrained",
-        "runs",
+        "results",
         "sources",
         "sources/images",
         "sources/videos",
@@ -48,7 +48,8 @@ class AnimalPoseTrackerProject(ProjectConfigurationMixin, ProjectFilesMixin, Pro
                  kpt_oks_sigmas: Optional[List[float]] = None,
                  classes_name: Optional[List[str]] = None,
                  sources: Union[str, Path, List[Union[str, Path]]] = None,
-                 date: str = None):
+                 date: str = None,
+                 pose3d: bool = False):
         """
         Initialize a new project with given parameters.
 
@@ -67,6 +68,7 @@ class AnimalPoseTrackerProject(ProjectConfigurationMixin, ProjectFilesMixin, Pro
             classes_name: Names of classes (default: ['person'])
             sources: Source paths (default: None)
             date: Project creation date (default: current date)
+            pose3d: Enable multi-view 3D reconstruction (default: False)
         """
         # Validate keypoints-related parameters
         if keypoints_name is not None and len(keypoints_name) != keypoints:
@@ -106,7 +108,12 @@ class AnimalPoseTrackerProject(ProjectConfigurationMixin, ProjectFilesMixin, Pro
             "model_scale": model_scale,
             "date": date if date is not None else datetime.now().strftime(r"%Y%m%d"),
             "sources": [str(s) for s in sources] if sources else [],
+            # Multi-view reconstruction is opt-in: only a project created with the 3D
+            # option carries the calibration file and results/pose3d.
+            "pose3d": bool(pose3d),
         }
+
+        self.pose3d = bool(pose3d)
 
         self.dataset_config = {
             'path': 'datasets',

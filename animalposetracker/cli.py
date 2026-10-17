@@ -15,6 +15,7 @@ COMMANDS = {
     "predict": "Predict on images, videos, or a dataset split",
     "infer": "Run live inference on a camera, video file, or stream URL",
     "export": "Export a checkpoint to a deployment format",
+    "pose3d": "Triangulate multi-view 2D predictions into 3D keypoints",
 }
 
 
@@ -91,6 +92,11 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
 
     elif parsed.command == "infer":
         from animalposetracker.inference.cli import run
+
+    elif parsed.command == "pose3d":
+        from animalposetracker.pose3d.cli import run
+
+        return int(run(command_args) or 0)
 
     else:
         from animalposetracker.export.cli import run

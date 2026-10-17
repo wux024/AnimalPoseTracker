@@ -986,7 +986,7 @@ class InferencerDecodeTests(unittest.TestCase):
         ):
             page._finalize_cleanup()
 
-            target = Path(temporary) / "runs" / "inference" / "records.json"
+            target = Path(temporary) / "results" / "inference" / "records.json"
             self.assertEqual(json.loads(target.read_text(encoding="utf-8")), page.records)
 
     def test_a_run_that_produced_no_records_writes_no_file(self):
@@ -996,7 +996,7 @@ class InferencerDecodeTests(unittest.TestCase):
         ):
             page._finalize_cleanup()
 
-            self.assertFalse((Path(temporary) / "runs" / "inference" / "records.json").exists())
+            self.assertFalse((Path(temporary) / "results" / "inference" / "records.json").exists())
 
     def test_tracking_controls_offer_the_cli_algorithms(self):
         from animalposetracker.tracking.config import ALGORITHMS
@@ -1469,7 +1469,7 @@ class StatusBarEventTests(unittest.TestCase):
     EVALUATION = {
         "event": "evaluation",
         "metrics": {"COCO/AP": 0.71, "COCO/AP50": 0.88, "PCK": 0.62},
-        "message": "Evaluation complete; metrics saved to runs/val/metrics.json",
+        "message": "Evaluation complete; metrics saved to results/val/metrics.json",
     }
 
     @classmethod
@@ -1919,7 +1919,7 @@ class InferencerStartContractTests(unittest.TestCase):
                 page.deleteLater()
                 self.application.processEvents()
 
-                target = Path(temporary) / "runs" / "inference" / "records.json"
+                target = Path(temporary) / "results" / "inference" / "records.json"
                 self.assertTrue(target.exists(), "the run's records were lost")
                 self.assertEqual(json.loads(target.read_text(encoding="utf-8")), page.records)
 

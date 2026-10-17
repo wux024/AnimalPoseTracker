@@ -28,7 +28,7 @@ class TrainingConfig:
     model: Optional[PathLike] = None
     data: Optional[PathLike] = None
     pretrained_weights: Optional[PathLike] = None
-    output_dir: PathLike = Path("runs/train")
+    output_dir: PathLike = Path("results/train")
 
     epochs: int = 100
     time_hours: Optional[float] = None
@@ -242,7 +242,7 @@ class TrainingConfig:
         values = dict(values or {})
         root = Path(project_dir or values.get("project_dir") or ".").expanduser().resolve()
 
-        run_root = values.get("project", "runs")
+        run_root = values.get("project", "results")
         run_name = values.get("name", "train")
         output_dir = values.get("output_dir", values.get("save_dir"))
         if output_dir is None:

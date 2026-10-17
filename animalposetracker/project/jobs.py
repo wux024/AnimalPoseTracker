@@ -36,7 +36,7 @@ class ProjectJobsMixin:
         pretrained = self.get_runtime_value("train.shared.runtime.pretrained")
         self._update_and_save_config("train", pretrained=pretrained)
         self._detect_pretrained()
-        run_root = Path(self.get_runtime_value("common.project", "runs")).expanduser()
+        run_root = Path(self.get_runtime_value("common.project", "results")).expanduser()
         if not run_root.is_absolute():
             run_root = self._project_path / run_root
         run_path = unique_output_directory(
@@ -105,7 +105,7 @@ class ProjectJobsMixin:
         from animalposetracker.project.model_context import unique_output_directory
 
         weights_path = self._resolve_project_weights()
-        run_root = Path(self.get_runtime_value("common.project", "runs")).expanduser()
+        run_root = Path(self.get_runtime_value("common.project", "results")).expanduser()
         if not run_root.is_absolute():
             run_root = self._project_path / run_root
         # The validator reports through the same structured events the trainer emits, so point at
@@ -144,7 +144,7 @@ class ProjectJobsMixin:
         model_path = self._resolve_project_prediction_model()
         if inference_source is None:
             inference_source = self.get_runtime_value("predict.source")
-        output_root = Path(self.get_runtime_value("common.project", "runs")).expanduser()
+        output_root = Path(self.get_runtime_value("common.project", "results")).expanduser()
         if not output_root.is_absolute():
             output_root = self._project_path / output_root
         self.prediction_output_dir = unique_output_directory(
@@ -201,7 +201,7 @@ class ProjectJobsMixin:
     def resume(self, resume_path: str) -> None:
         """Resume an AnimalPoseTracker training checkpoint."""
         if not resume_path:
-            resume_path = str(self.project_path / "runs" / "train" / "weights" / "last.pt")
+            resume_path = str(self.project_path / "results" / "train" / "weights" / "last.pt")
         checkpoint_path = Path(resume_path).expanduser().resolve()
         self._update_and_save_config("train", pretrained=False)
         self.training_event_path = checkpoint_path.parent.parent / "training.jsonl"
@@ -234,7 +234,7 @@ class ProjectJobsMixin:
             "--weights",
             str(weights_path),
             "--output-dir",
-            "runs/export",
+            "results/export",
         ]
         if format is not None:
             cmd.extend(["--format", str(format)])

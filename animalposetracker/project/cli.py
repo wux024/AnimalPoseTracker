@@ -111,6 +111,11 @@ def _make_create_parser() -> argparse.ArgumentParser:
         default=argparse.SUPPRESS,
         help="Train from scratch.",
     )
+    parser.add_argument(
+        "--pose3d",
+        action="store_true",
+        help="Enable multi-view 3D reconstruction (adds configs/cameras.yaml and results/pose3d)",
+    )
     pretrained.add_argument(
         "--pretrained-weights", dest="pretrained_weights", default=argparse.SUPPRESS,
         help="Record a local checkpoint path in configs/runtime.yaml.",
@@ -226,6 +231,7 @@ def _create_project(args: argparse.Namespace) -> AnimalPoseTrackerProject:
         skeleton=dataset_config.get("skeleton", []),
         kpt_oks_sigmas=dataset_config.get("kpt_oks_sigmas"),
         classes_name=ordered_names,
+        pose3d=bool(getattr(args, "pose3d", False)),
         date=args.date,
     )
     project.create_new_project()
@@ -250,7 +256,7 @@ def _create_project(args: argparse.Namespace) -> AnimalPoseTrackerProject:
     # Defaults the create flow pins for this project's training runs.
     project.set_runtime_value("train.shared.runtime.validation_enabled", True)
     project.set_runtime_value("train.shared.runtime.plots", True)
-    project.set_runtime_value("common.project", "runs")
+    project.set_runtime_value("common.project", "results")
     project.set_runtime_value("common.name", "train")
     project.set_runtime_value("common.exist_ok", False)
     project.apply_runtime_overrides(_collect_create_training_overrides(args))

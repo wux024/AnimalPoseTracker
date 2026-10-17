@@ -7,10 +7,10 @@
 
 common:
   device: auto
-  project: runs
+  project: results
   name: train
   exist_ok: false
-  selected_weights:      # GUI model selection; null = use runs/<name>/weights/best.pt
+  selected_weights:      # GUI model selection; null = use results/<name>/weights/best.pt
 
 predict:
   source:
