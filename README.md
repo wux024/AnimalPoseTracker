@@ -35,9 +35,11 @@
 
 # Welcome! 👋
 
-AnimalPoseTracker is a cross-species animal pose estimation toolbox: two model families
+**AnimalPoseTracker** is a cross-species animal pose estimation toolbox: two model families
 trained by a framework of its own, a wide export matrix, desktop applications for the whole
-workflow, and a multi-camera 3D stage on top of the pose records every run writes.
+workflow, and a multi-camera 3D stage on top of the pose records every run writes. Anything
+you can label, you can track — the pipeline makes no assumption about species or object.
+<a href="#why-use-animalposetracker">Read why it is built this way</a>.
 
 ```bash
 # every step is one command, and every command writes files you can inspect
@@ -61,7 +63,7 @@ Three things it does that a general pose library usually leaves to you:
   triangulation consume the same records the prediction stage writes, and the result can be
   rendered back onto the cameras.
 
-## Installation
+# Installation
 
 Python 3.10 or newer. A PyTorch 2.0+ build matching your hardware is needed for training only.
 
