@@ -85,12 +85,14 @@ Command-line values override `configs/runtime.yaml` for that run and are never w
 | 5. Predict | `animalpose-cli predict` | `results/predict/.../predictions.json` and a rendered video |
 | 6. Infer | `animalpose-cli infer` | A live overlay from a camera, a video file or a stream URL |
 | 7. Export | `animalpose-cli export` | `<model>.<format>` plus its `.json` sidecar |
-| 8. 3D | `animalpose-cli calibrate` → `pose3d` → `pose3d-render` | `results/pose3d/` — CSV, summary, plot and a 3D video |
+| 8. Calibrate | `animalpose-cli calibrate` | Intrinsics and extrinsics of the rig, from ChArUco frames or videos |
+| 9. Triangulate | `animalpose-cli pose3d` | `results/pose3d/...csv` — 3D keypoints for every frame |
+| 10. Render 3D | `animalpose-cli pose3d-render` | 3D video, trajectory plot and a reconstruction summary |
 
 Every command takes `--help`; the flags used most often are in
 [Getting started](docs/getting_started.md).
 
-Steps 1–8 are detailed in [Getting started](docs/getting_started.md); the desktop route
+Steps 1–10 are detailed in [Getting started](docs/getting_started.md); the desktop route
 through the same steps is in [Desktop applications](docs/gui.md).
 
 # Why use AnimalPoseTracker?
