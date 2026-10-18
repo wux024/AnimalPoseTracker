@@ -7,7 +7,9 @@
    this file no longer does that. */
 
 html[data-theme="light"] {
-  --sidebar-bg-color: rgba(226, 237, 247, 0.78);
+  /* sampled from the same blue as the header, so the column and the bar read as one
+     surface instead of grey next to blue */
+  --sidebar-bg-color: rgba(15, 127, 191, 0.14);
   --sidebar-text-color: #16232e;
   --sidebar-highlight-color: #0a5f91;
   --sidebar-hover-text-color: #0f7fbf;
