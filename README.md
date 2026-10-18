@@ -69,7 +69,7 @@ animalpose-cli export --config <project>/configs/runtime.yaml \
 `load` validates a project and prints a summary without opening the GUI or writing files.
 Command-line values override `configs/runtime.yaml` for that run and are never written back.
 
-# Documentation: the process
+# Documentation: The AnimalPoseTracker Process
 
 ![](docs/assets/workflow.svg)
 
