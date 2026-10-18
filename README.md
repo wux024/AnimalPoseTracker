@@ -96,10 +96,10 @@ Every command takes `--help`; the flags used most often are in
 Steps 1–10 are detailed in [Getting started](docs/getting_started.md); the desktop route
 through the same steps is in [Desktop applications](docs/gui.md).
 
-# [Walkthrough](docs/demo.md)
+# Usage demo
 
-One run end to end on a built-in dataset — create, train, predict — and the files each step
-leaves behind.
+One run end to end on a built-in dataset — create, train, predict — and the files each
+step leaves behind. [Walk through it](docs/demo.md).
 
 # Why use AnimalPoseTracker?
 
