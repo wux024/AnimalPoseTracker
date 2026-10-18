@@ -73,8 +73,9 @@ Command-line values override `configs/runtime.yaml` for that run and are never w
 
 ![](docs/assets/overview.svg)
 
-`animalpose-cli --help` lists all ten workflows, and `animalposetracker`,
-`animalpose-annotator` and `animalpose-inferencer` open the three windows.
+`animalpose-cli --help` lists all ten workflows. `animalposetracker`,
+`animalpose-annotator` and `animalpose-inferencer` open the three windows; the inferencer also
+runs an exported engine (`.onnx`, `.engine`, `.mlpackage`, ...) without a project.
 
 | Step | Command | What you get |
 |---|---|---|
@@ -85,9 +86,9 @@ Command-line values override `configs/runtime.yaml` for that run and are never w
 | 5. Predict | `animalpose-cli predict` | `predictions.json`, rendered video |
 | 6. Infer | `animalpose-cli infer` | Live overlay from camera or stream |
 | 7. Export | `animalpose-cli export` | `<model>.<format>` + `.json` sidecar |
-| 8. Calibrate | `animalpose-cli calibrate` | Rig intrinsics and extrinsics (ChArUco) |
-| 9. Triangulate | `animalpose-cli pose3d` | `results/pose3d/...csv` |
-| 10. Render | `animalpose-cli pose3d-render` | 3D video, trajectory plot, summary |
+| 8. 3D | `animalpose-cli calibrate` | Rig intrinsics and extrinsics (ChArUco) |
+|  | `animalpose-cli pose3d` | `results/pose3d/...csv` — 3D keypoints |
+|  | `animalpose-cli pose3d-render` | 3D video, trajectory plot, summary |
 
 Every command takes `--help`; the flags used most often are in
 [Getting started](docs/getting_started.md).
