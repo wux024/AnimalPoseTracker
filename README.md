@@ -35,10 +35,11 @@
 
 # Welcome! 👋
 
-**AnimalPoseTracker** is a cross-species animal pose estimation toolbox: two model families
-trained by a framework of its own, a wide export matrix, desktop applications for the whole
-workflow, and a multi-camera 3D stage on top of the pose records every run writes. Anything
-you can label, you can track — the pipeline makes no assumption about species or object.
+**AnimalPoseTracker** is a cross-species toolbox for markerless pose estimation — one animal,
+a group, or a rig of synchronized cameras. If you can see it and label it, you can track it:
+nothing in the pipeline assumes a species, a viewpoint, or a cage. It trains its own models,
+exports them to a dozen deployment targets, and hands the same pose records to tracking and
+3D reconstruction, so the project you label today is the project you deploy next month.
 <a href="#why-use-animalposetracker">Read why it is built this way</a>.
 
 # Installation
