@@ -98,7 +98,7 @@ def render(name: str, spec: dict, limit: int | None, stride: int, fps: int) -> N
     # (-150, -80, -200) and never move; only the markers are updated per frame, which is
     # what keeps the axes still.
     bottom.set_axis_off()
-    bottom.set_box_aspect((width / 450.0, 1.0, 1.0))
+    bottom.view_init(elev=30, azim=-60)      # the matplotlib default the reference uses
 
     # Fix the box to the whole clip (plus the arrow anchor). Taking the first frame only
     # left the skeleton outside the limits a second later, so the hand vanished.
