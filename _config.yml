@@ -3,6 +3,10 @@ author: Xin Wu
 copyright: "2026, Xin Wu. Released under AGPL-3.0-or-later."
 logo: docs/assets/logo-mark.png
 
+# Only the files named in _toc.yml become pages; anything else in the repository is
+# ignored even if it is markdown. Mirrors DeepLabCut's setting.
+only_build_toc_files: true
+
 execute:
   execute_notebooks: "off"
 
@@ -24,12 +28,15 @@ repository:
   branch: main
 
 html:
+  extra_navbar: ""
   use_issues_button: true
   use_repository_button: true
   use_edit_page_button: true
   home_page_in_toc: true
   baseurl: https://wux024.github.io/AnimalPoseTracker
   favicon: docs/assets/favicon.png
+  extra_footer: |
+    <div>Powered by <a href="https://jupyterbook.org/">Jupyter Book</a>.</div>
 
 sphinx:
   config:

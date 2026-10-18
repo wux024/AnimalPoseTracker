@@ -1,227 +1,81 @@
-/* House style for the AnimalPoseTracker book.
-   Kept small on purpose: the theme already does the layout, this only tunes rhythm,
-   colour and the few elements the docs lean on (tables, screenshots, code). */
+/* custom.css — mirrors the approach in DeepLabCut's docs/_static/custom.css.
 
-:root {
-  --apt-blue: #0f7fbf;
-  --apt-blue-dark: #0a5f91;
-  --apt-ink: #16232e;
-  --apt-rule: #e3eaf1;
+   That sheet is deliberately small: a handful of colour variables, the sidebar surface,
+   the header strip, and a signature at the end of the navigation. Everything else —
+   column widths, type scale, tables, code blocks — is left to the theme. Re-implementing
+   the layout here is what produced the grey margins and the card in earlier revisions;
+   this file no longer does that. */
+
+html[data-theme="light"] {
+  --sidebar-bg-color: rgba(226, 237, 247, 0.78);
+  --sidebar-text-color: #16232e;
+  --sidebar-highlight-color: #0a5f91;
+  --sidebar-hover-text-color: #0f7fbf;
+  --header-bg-color: rgba(15, 127, 191, 0.94);
+  --button-color: #ffffff;
+  --footer-text-color: #16232e;
 }
 
-/* ---------- page ground ---------- */
-
-/* DeepLabCut's sheet has no article card: the text sits on the page itself and the
-   coloured header strip is the only band. A card here only produced grey margins on
-   both sides, which read as empty space. */
-body {
-  background-color: #ffffff;
+html[data-theme="dark"] {
+  --sidebar-bg-color: #2c3b4a;
+  --sidebar-text-color: #ffffff;
+  --sidebar-highlight-color: #7cc4ea;
+  --sidebar-hover-text-color: #a8d8f0;
+  --header-bg-color: rgba(15, 127, 191, 0.72);
+  --button-color: #ffffff;
+  --footer-text-color: #b9c6d2;
 }
 
-.bd-main .bd-content .bd-article-container {
-  max-width: 980px;
-  background: transparent;
-  border: 0;
-  box-shadow: none;
-  margin: 0 auto;
-  padding: 1.3rem 2.2rem 2.2rem;
+/* Sidebar */
+.bd-sidebar-primary.bd-sidebar {
+  background-color: var(--sidebar-bg-color);
+  color: var(--sidebar-text-color);
 }
 
-/* Let the three columns use the whole window; a capped page width left a white strip
-   past the table of contents that reads as unfinished. */
-.bd-container__inner.bd-page-width {
-  max-width: 100%;
+.bd-sidebar-primary.bd-sidebar a {
+  color: var(--sidebar-text-color);
 }
 
-@media (max-width: 900px) {
-  .bd-main .bd-content .bd-article-container {
-    padding: 1rem 1.1rem 1.6rem;
-  }
+.bd-sidebar-primary.bd-sidebar a:hover {
+  color: var(--sidebar-hover-text-color);
 }
 
-/* ---------- reading rhythm ---------- */
-
-article.bd-article {
-  color: var(--apt-ink);
-  font-size: 1.02rem;
-  line-height: 1.72;
+/* Current page in the navigation */
+.toctree-l1.current.active {
+  color: var(--sidebar-highlight-color);
 }
 
-/* ---------- headings ---------- */
-
-article.bd-article h1 {
-  font-weight: 700;
-  letter-spacing: -0.015em;
-  margin-bottom: 0.7em;
+.toctree-l1.current.active * {
+  color: inherit;
 }
 
-article.bd-article h2 {
-  margin-top: 1.9em;
-  padding-bottom: 0.35em;
-  border-bottom: 1px solid var(--apt-rule);
-}
-
-article.bd-article h3 {
-  margin-top: 1.5em;
-  font-weight: 600;
-}
-
-/* ---------- links ---------- */
-
-article.bd-article a {
-  color: var(--apt-blue);
-  text-decoration: none;
-  border-bottom: 1px solid rgba(15, 127, 191, 0.28);
-}
-
-article.bd-article a:hover {
-  color: var(--apt-blue-dark);
-  border-bottom-color: var(--apt-blue-dark);
-}
-
-/* ---------- code ---------- */
-
-article.bd-article div.highlight pre {
-  border-radius: 10px;
-  padding: 0.95rem 1.1rem;
-  font-size: 0.86rem;
-  line-height: 1.65;
-}
-
-article.bd-article code.literal {
-  background: #f2f6fa;
-  border: 1px solid var(--apt-rule);
-  border-radius: 5px;
-  padding: 0.08em 0.34em;
-  font-size: 0.88em;
-  color: #0d4c73;
-}
-
-/* ---------- tables ---------- */
-
-article.bd-article table {
-  font-size: 0.92rem;
-  border-collapse: collapse;
-  width: 100%;
-}
-
-article.bd-article table th {
-  background: #f4f8fb;
-  border-bottom: 2px solid #d8e4ee;
-  font-weight: 600;
-  text-align: left;
-}
-
-article.bd-article table td,
-article.bd-article table th {
-  padding: 0.5rem 0.7rem;
-}
-
-article.bd-article table td {
-  border-bottom: 1px solid #edf2f7;
-}
-
-article.bd-article table tr:last-child td {
-  border-bottom: none;
-}
-
-/* ---------- images ---------- */
-
-/* Screenshots get a frame; badges and inline icons must not. */
-article.bd-article img:not([src*="shields.io"]):not([src*="raw.githubusercontent"]) {
-  border-radius: 10px;
-  box-shadow: 0 8px 26px rgba(16, 42, 67, 0.12);
-  max-width: 100%;
-}
-
-/* The landing banner already carries its own artwork — a frame would box it in. */
-article.bd-article img.brand-banner,
-article.bd-article img[src*="logo"] {
-  border-radius: 0 !important;
-  box-shadow: none !important;
-  background: transparent !important;
-}
-
-article.bd-article p > img[src*="logo"] {
-  display: block !important;
-  width: 100% !important;
-  max-width: 100% !important;
-  height: auto !important;
-}
-
-/* ---------- top bar ---------- */
-
-/* DeepLabCut's own sheet is the reference here: the visible strip is
-   `.bd-header-article`, not `.bd-header` (which collapses to zero height). Colouring
-   that element is what turns the bar into a solid band. */
-.bd-header-article {
-  background-color: var(--apt-blue);
-  z-index: 1000;
-}
-
-.article-header-buttons .btn {
-  color: #ffffff;
-}
-
-.article-header-buttons .btn:hover {
-  opacity: 0.85;
-}
-
-/* ---------- side columns ---------- */
-
-.bd-sidebar {
-  background-color: rgba(226, 237, 247, 0.88);
-  backdrop-filter: blur(4px);
-  -webkit-backdrop-filter: blur(4px);
-}
-
-.bd-sidebar-primary {
-  background-color: rgba(226, 237, 247, 0.92);
-  backdrop-filter: blur(4px);
-  -webkit-backdrop-filter: blur(4px);
-  border-right: 1px solid #d3e2ef;
-  padding-top: 0;
-  margin-top: 0;
-}
-
-/* A quiet signature at the end of the navigation, the way DeepLabCut closes its
-   sidebar with the community line. */
+/* Sidebar footer */
 .sidebar-primary-items__end::after {
   content: "AnimalPoseTracker · v0.1.0";
   display: block;
   text-align: center;
   font-size: 12px;
   letter-spacing: 0.02em;
-  color: #5b6b7a;
-  opacity: 0.9;
-  padding: 2rem 0 1rem;
+  color: var(--footer-text-color);
+  opacity: 0.75;
+  padding-top: 2rem;
 }
 
-.bd-sidebar-secondary {
-  background-color: rgba(226, 237, 247, 0.92);
-  border-left: 1px solid #d3e2ef;
-  margin-left: auto;
+/* Header strip — the visible bar is `.bd-header-article`, not `.bd-header` */
+.bd-header-article {
+  background-color: var(--header-bg-color);
+  backdrop-filter: blur(2px);
+  -webkit-backdrop-filter: blur(2px);
+  z-index: 1000;
 }
 
-/* ---------- sidebar ---------- */
-
-.bd-sidebar-primary .logo {
-  max-width: 62%;
-  margin: 0.4rem auto 1rem;
+/* Header buttons */
+.article-header-buttons .btn {
+  color: var(--button-color);
+  z-index: 1;
 }
 
-.bd-sidebar-primary .logo img {
-  max-height: 92px;
-}
-
-.navbar-brand {
-  font-weight: 600;
-  letter-spacing: -0.01em;
-}
-
-/* ---------- footer ---------- */
-
-.footer {
-  font-size: 0.82rem;
-  color: #5b6b7a;
+.article-header-buttons .btn:hover {
+  opacity: 0.8;
+  z-index: 1;
 }
