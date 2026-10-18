@@ -73,75 +73,22 @@ Command-line values override `configs/runtime.yaml` for that run and are never w
 
 ![](docs/assets/overview.svg)
 
-`animalpose-cli --help` lists all ten workflows. The same steps can be clicked through in
-`animalposetracker` (project workspace) and `animalpose-annotator` / `animalpose-inferencer`
-(labeling and live inference windows).
+`animalpose-cli --help` lists all ten workflows, and `animalposetracker`,
+`animalpose-annotator` and `animalpose-inferencer` open the three windows.
 
-**[1] Create** a project — four configs and an empty dataset layout:
+| Step | Command | What you get |
+|---|---|---|
+| 1. Create | `animalpose-cli create` | A project with four configs and an empty dataset layout |
+| 2. Label | `animalpose-annotator` | Boxes, classes, keypoints and skeleton |
+| 3. Train | `animalpose-cli train` | `results/train/weights/best.pt`, `training.jsonl`, `results.png` |
+| 4. Evaluate | `animalpose-cli val` | `results/val/metrics.json` — AP, AR, PCK, AUC, EPE |
+| 5. Predict | `animalpose-cli predict` | `results/predict/.../predictions.json` and a rendered video |
+| 6. Infer | `animalpose-cli infer` | A live overlay from a camera, a video file or a stream URL |
+| 7. Export | `animalpose-cli export` | `<model>.<format>` plus its `.json` sidecar |
+| 8. 3D | `animalpose-cli calibrate` → `pose3d` → `pose3d-render` | `results/pose3d/` — CSV, summary, plot and a 3D video |
 
-```bash
-animalpose-cli create --dataset trimouse --workspace projects --name smoke --worker user \
-    --model AnimalRTPose --scale N --date demo
-```
-
-**[2] Label** the keypoints — the annotator opens on the project, where boxes, classes and
-skeletons are drawn:
-
-```bash
-animalpose-annotator
-```
-
-**[3] Train** — the runtime config carries the model, the dataset and the schedule:
-
-```bash
-animalpose-cli train --config projects/smoke-user-AnimalRTPose-N-demo/configs/runtime.yaml
-```
-
-**[4] Evaluate** on the held-out split:
-
-```bash
-animalpose-cli val --config <project>/configs/runtime.yaml \
-    --weights <project>/results/train/weights/best.pt
-```
-
-**[5] Predict** a video, a folder of frames, or a whole split:
-
-```bash
-animalpose-cli predict --config <project>/configs/runtime.yaml \
-    --weights <project>/results/train/weights/best.pt \
-    --source frames/ --conf 0.25 --tracker bytetrack
-```
-
-**[6] Infer live** from a camera, a video file or a stream URL — no project required, the
-checkpoint and the source are enough:
-
-```bash
-animalpose-cli infer --config infer.yaml
-animalpose-cli infer --config infer.yaml --source rtsp://host/stream --conf 0.4
-```
-
-**[7] Export** the checkpoint for deployment:
-
-```bash
-animalpose-cli export --config <project>/configs/runtime.yaml \
-    --weights <project>/results/train/weights/best.pt --format onnx --dynamic --opset 17
-```
-
-**[8] Reconstruct in 3D** — calibrate the rig once, triangulate every camera's records,
-then render the result back onto the cameras:
-
-```bash
-animalpose-cli calibrate --view camA=frames/camA --view camB=frames/camB \
-    --board-squares 10x7 --square-size 22 --marker-size 16.5
-animalpose-cli pose3d --config configs/runtime.yaml --association epipolar
-animalpose-cli pose3d-render --config configs/runtime.yaml --video both
-```
-
-Every step writes into the project folder: `configs/`, the labels,
-`results/train/weights/best.pt`, `results/val/metrics.json`,
-`results/predict/.../predictions.json`, the exported model with its sidecar, and
-`results/pose3d/` for the 3D stage. `animalpose-cli load <project>` prints a summary
-without running anything.
+Every command takes `--help`; the flags used most often are in
+[Getting started](docs/getting_started.md).
 
 Steps 1–8 are detailed in [Getting started](docs/getting_started.md); the desktop route
 through the same steps is in [Desktop applications](docs/gui.md).
