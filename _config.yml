@@ -1,0 +1,43 @@
+title: AnimalPoseTracker
+author: Xin Wu
+copyright: "2026, Xin Wu. Released under AGPL-3.0-or-later."
+logo: docs/assets/logo-mark.png
+
+execute:
+  execute_notebooks: "off"
+
+# The book root is the repository, so everything the docs do not own must be kept out.
+exclude_patterns:
+  - animalposetracker
+  - tests
+  - tools
+  - build
+  - _build
+  - site
+  - .pytest_cache
+  - "*.egg-info"
+  - "**/*.egg-info"
+
+repository:
+  url: https://github.com/wux024/AnimalPoseTracker
+  path_to_book: ""
+  branch: main
+
+html:
+  use_issues_button: true
+  use_repository_button: true
+  use_edit_page_button: true
+  home_page_in_toc: true
+  baseurl: https://wux024.github.io/AnimalPoseTracker
+  favicon: docs/assets/favicon.png
+
+sphinx:
+  config:
+    html_theme_options:
+      show_toc_level: 2
+      use_download_button: false
+      use_fullscreen_button: true
+    html_css_files:
+      - custom.css
+    html_static_path:
+      - docs/assets

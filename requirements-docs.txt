@@ -1,0 +1,3 @@
+# Documentation site: the book in the repository root.
+# Build locally with `jupyter-book build .`; the pages land in _build/html.
+jupyter-book>=1.0,<2

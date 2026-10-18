@@ -1,0 +1,18 @@
+format: jb-book
+root: README
+
+parts:
+  - caption: Getting started
+    chapters:
+      - file: docs/getting_started
+
+  - caption: Workflows
+    chapters:
+      - file: docs/three_d
+      - file: docs/gui
+      - file: docs/pose_analysis_workflows
+
+  - caption: Reference
+    chapters:
+      - file: docs/configuration
+      - file: docs/deployment_formats

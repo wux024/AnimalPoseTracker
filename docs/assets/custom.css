@@ -1,0 +1,145 @@
+/* House style for the AnimalPoseTracker book.
+   Kept small on purpose: the theme already does the layout, this only tunes rhythm,
+   colour and the few elements the docs lean on (tables, screenshots, code). */
+
+:root {
+  --apt-blue: #0f7fbf;
+  --apt-blue-dark: #0a5f91;
+  --apt-ink: #16232e;
+  --apt-rule: #e3eaf1;
+}
+
+/* ---------- column width and reading rhythm ---------- */
+
+.bd-main .bd-content .bd-article-container {
+  max-width: 880px;
+}
+
+article.bd-article {
+  color: var(--apt-ink);
+  font-size: 1.02rem;
+  line-height: 1.75;
+}
+
+article.bd-article p,
+article.bd-article li {
+  max-width: 72ch;
+}
+
+/* ---------- headings ---------- */
+
+article.bd-article h1 {
+  font-weight: 700;
+  letter-spacing: -0.015em;
+  margin-bottom: 0.7em;
+}
+
+article.bd-article h2 {
+  margin-top: 2.4em;
+  padding-bottom: 0.35em;
+  border-bottom: 1px solid var(--apt-rule);
+}
+
+article.bd-article h3 {
+  margin-top: 1.8em;
+  font-weight: 600;
+}
+
+/* ---------- links ---------- */
+
+article.bd-article a {
+  color: var(--apt-blue);
+  text-decoration: none;
+  border-bottom: 1px solid rgba(15, 127, 191, 0.28);
+}
+
+article.bd-article a:hover {
+  color: var(--apt-blue-dark);
+  border-bottom-color: var(--apt-blue-dark);
+}
+
+/* ---------- code ---------- */
+
+article.bd-article div.highlight pre {
+  border-radius: 10px;
+  padding: 0.95rem 1.1rem;
+  font-size: 0.86rem;
+  line-height: 1.65;
+}
+
+article.bd-article code.literal {
+  background: #f2f6fa;
+  border: 1px solid var(--apt-rule);
+  border-radius: 5px;
+  padding: 0.08em 0.34em;
+  font-size: 0.88em;
+  color: #0d4c73;
+}
+
+/* ---------- tables ---------- */
+
+article.bd-article table {
+  font-size: 0.92rem;
+  border-collapse: collapse;
+  width: 100%;
+}
+
+article.bd-article table th {
+  background: #f4f8fb;
+  border-bottom: 2px solid #d8e4ee;
+  font-weight: 600;
+  text-align: left;
+}
+
+article.bd-article table td,
+article.bd-article table th {
+  padding: 0.5rem 0.7rem;
+}
+
+article.bd-article table td {
+  border-bottom: 1px solid #edf2f7;
+}
+
+article.bd-article table tr:last-child td {
+  border-bottom: none;
+}
+
+/* ---------- images ---------- */
+
+/* Screenshots get a frame; badges and inline icons must not. */
+article.bd-article img:not([src*="shields.io"]):not([src*="raw.githubusercontent"]) {
+  border-radius: 10px;
+  box-shadow: 0 8px 26px rgba(16, 42, 67, 0.12);
+  max-width: 100%;
+}
+
+/* The landing banner already carries its own artwork — a frame would box it in. */
+article.bd-article img.brand-banner,
+article.bd-article img[src*="logo"] {
+  border-radius: 0 !important;
+  box-shadow: none !important;
+  background: transparent !important;
+}
+
+/* ---------- sidebar ---------- */
+
+.bd-sidebar-primary .logo {
+  max-width: 62%;
+  margin: 0.4rem auto 1rem;
+}
+
+.bd-sidebar-primary .logo img {
+  max-height: 92px;
+}
+
+.navbar-brand {
+  font-weight: 600;
+  letter-spacing: -0.01em;
+}
+
+/* ---------- footer ---------- */
+
+.footer {
+  font-size: 0.82rem;
+  color: #5b6b7a;
+}
