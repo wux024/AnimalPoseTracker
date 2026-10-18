@@ -97,6 +97,19 @@ animalpose-cli infer --config infer.yaml --conf 0.4   # an explicit flag wins fo
 
 AnimalViTPose validation does **not** use flip test-time augmentation by default, so the reported `coco/AP`, `PCK`, `AUC` and `EPE` match what the shipped decoder (`postprocessing/output_decoders.decode_simcc`) produces. Set `validation.flip_tta: true` in the model preset (`animalposetracker/cfg/training.yaml`) to re-enable it, and expect the metrics to read higher than the deployment path.
 
+### Multi-camera 3D
+
+`pose3d` triangulates one `predictions.json` per camera into `results/pose3d/` (`poses3d.json`, optional `poses3d-filter.json`, `report.json`). It needs a `configs/cameras.yaml`; `create --pose3d` writes the template and locks the 3D stage out of public-benchmark projects.
+
+```bash
+animalpose-cli calibrate --view camA=frames/camA --view camB=frames/camB --view camC=frames/camC \
+    --board-squares 10x7 --square-size 22 --marker-size 16.5 --output configs/cameras.yaml
+animalpose-cli pose3d --config configs/runtime.yaml
+animalpose-cli pose3d-export --config configs/runtime.yaml --plot results/pose3d/trajectory.png
+```
+
+`calibrate` accepts an image folder or a video per view (`--frame-step` samples videos), fits one constrained lens model per camera (or reuses `--intrinsics-from`), and refuses to overwrite an existing calibration without `--force`; `--intrinsic-frames` caps the frames used for the lens fit because OpenCV slows down sharply past ~60. `pose3d-export` writes a flat CSV (`frame, instance, keypoint, x, y, z, confidence, validity, reprojection_error, num_views`), a JSON summary, and an optional trajectory PNG for one instance; `--filtered` reads the filtered sequence.
+
 ## Configuration model
 
 Training defaults live in [`animalposetracker/cfg/training.yaml`](animalposetracker/cfg/training.yaml). Values identical across AnimalRTPose and AnimalViTPose are defined once under `training.shared`; each model profile contains only its specific or differing training, loss, augmentation and validation values. The model type in `project.yaml` selects the matching key under `training.models`.
