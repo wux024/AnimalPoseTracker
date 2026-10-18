@@ -28,6 +28,13 @@ html[data-theme="dark"] {
   --footer-text-color: #b9c6d2;
 }
 
+/* Long section titles used to wrap onto a second line; a slightly smaller H1 keeps
+   "Documentation: The AnimalPoseTracker Process" on one row. */
+article.bd-article h1 {
+  font-size: 2.05rem;
+  line-height: 1.25;
+}
+
 /* Sidebar */
 .bd-sidebar-primary.bd-sidebar {
   background-color: var(--sidebar-bg-color);
