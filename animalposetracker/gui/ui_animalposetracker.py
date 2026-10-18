@@ -1141,6 +1141,11 @@ class Ui_AnimalPoseTracker(object):
 
         self.ReconstructionToolsLayout.addWidget(self.RunPose3DExport)
 
+        self.RunPose3DVideo = QPushButton(self.ReconstructionGroup)
+        self.RunPose3DVideo.setObjectName(u"RunPose3DVideo")
+
+        self.ReconstructionToolsLayout.addWidget(self.RunPose3DVideo)
+
 
         self.ReconstructionGroupLayout.addLayout(self.ReconstructionToolsLayout)
 
@@ -1740,6 +1745,7 @@ class Ui_AnimalPoseTracker(object):
         self.ExportFiltered3D.setText(QCoreApplication.translate("AnimalPoseTracker", u"Export filtered", None))
         self.PlotInstanceLabel.setText(QCoreApplication.translate("AnimalPoseTracker", u"Plot instance", None))
         self.RunPose3DExport.setText(QCoreApplication.translate("AnimalPoseTracker", u"Export 3D results", None))
+        self.RunPose3DVideo.setText(QCoreApplication.translate("AnimalPoseTracker", u"Render 3D video", None))
         self.ConfigureTabPage.setTabText(self.ConfigureTabPage.indexOf(self.ThreeDReconstruction), QCoreApplication.translate("AnimalPoseTracker", u"3D Reconstruction", None))
         self.menuAnimalPoseTracker.setTitle(QCoreApplication.translate("AnimalPoseTracker", u"File", None))
         self.menuTools.setTitle(QCoreApplication.translate("AnimalPoseTracker", u"Tools", None))

@@ -16,7 +16,7 @@ COMMANDS = {
     "infer": "Run live inference on a camera, video file, or stream URL",
     "export": "Export a checkpoint to a deployment format",
     "pose3d": "Triangulate multi-view 2D predictions into 3D keypoints",
-    "pose3d-export": "Export pose3d results to CSV, a summary, or a trajectory plot",
+    "pose3d-render": "Render pose3d results to CSV, a summary, a plot, or a video",
     "calibrate": "Calibrate a multi-camera rig from ChArUco frames or videos",
 }
 
@@ -100,7 +100,7 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
 
         return int(run(command_args) or 0)
 
-    elif parsed.command == "pose3d-export":
+    elif parsed.command == "pose3d-render":
         from animalposetracker.pose3d.export import run
 
         return int(run(command_args) or 0)

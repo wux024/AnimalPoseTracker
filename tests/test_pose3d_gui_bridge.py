@@ -116,15 +116,21 @@ class ExportCommandTests(unittest.TestCase):
     def test_filtered_and_plot_options(self):
         command = build_export_command("/tmp/project", filtered=True,
                                       plot="/tmp/trajectory.png", instance=2)
-        self.assertEqual(command[3], "pose3d-export")
+        self.assertEqual(command[3], "pose3d-render")
         self.assertIn("--filtered", command)
         self.assertEqual(command[command.index("--plot") + 1], str(Path("/tmp/trajectory.png")))
         self.assertEqual(command[command.index("--instance") + 1], "2")
 
     def test_plain_export_has_no_optional_flags(self):
         command = build_export_command("/tmp/project")
-        for flag in ("--filtered", "--plot", "--include-invalid"):
+        for flag in ("--filtered", "--plot", "--include-invalid", "--video"):
             self.assertNotIn(flag, command)
+
+    def test_rendering_rides_on_the_export_command(self):
+        command = build_export_command("/tmp/project", filtered=True, video="both")
+        self.assertEqual(command[3], "pose3d-render")
+        self.assertEqual(command[command.index("--video") + 1], "both")
+        self.assertIn("--filtered", command)
 
 
 if __name__ == "__main__":

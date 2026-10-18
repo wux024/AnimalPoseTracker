@@ -8,7 +8,11 @@ module provides three views of the same data:
   reprojection error, and view count;
 * a JSON summary with frame/instance/point counts, dropped ratio, reprojection
   percentiles, per-keypoint coverage, and the world-space bounds;
-* an optional PNG with XY, XZ, and YZ trajectories for one instance.
+* an optional PNG with XY, XZ, and YZ trajectories for one instance;
+* optional videos: the sequence projected back onto each camera, and a revolving 3D view.
+
+The CLI command is ``pose3d-render`` (``export`` alone is the model exporter, and two
+commands called export invited exactly the confusion this rename removed).
 
 Nothing here imports the inference or training stacks: the command only reads
 the JSON protocol and writes plain files.
@@ -201,8 +205,8 @@ def write_plot(payload: Mapping[str, object], path: Path, instance: int = 0) -> 
 
 def run(argv: Optional[Sequence[str]] = None) -> int:
     parser = argparse.ArgumentParser(
-        prog="animalpose-cli pose3d-export",
-        description="Export pose3d results to CSV, a JSON summary, and an optional trajectory plot.",
+        prog="animalpose-cli pose3d-render",
+        description="Render pose3d results to CSV, a JSON summary, a trajectory plot, or a video.",
         epilog=(
             "By default the command reads <project>/results/pose3d/poses3d.json and writes "
             "poses3d.csv next to it. Use --filtered for the temporally filtered sequence."
@@ -218,13 +222,31 @@ def run(argv: Optional[Sequence[str]] = None) -> int:
     parser.add_argument("--summary-output", help="write the JSON summary to this path")
     parser.add_argument("--plot", help="write a trajectory PNG for one instance")
     parser.add_argument("--instance", type=int, default=0, help="instance index used by --plot")
+    parser.add_argument("--video", default="none", choices=["none", "overlay", "space", "both"],
+                        help="render the sequence: 'overlay' projects it back onto each "
+                             "camera's video, 'space' revolves a 3D view, 'both' does both")
+    parser.add_argument("--views", action="append", default=[],
+                        help="camera=path to that camera's predictions.json (finds its video)")
+    parser.add_argument("--calibration", help="camera calibration (default: configs/cameras.yaml)")
+    parser.add_argument("--images", action="store_true",
+                        help="with --video, also keep one JPEG per frame")
+    parser.add_argument("--fps", type=float, default=30.0, help="video frame rate")
+    parser.add_argument("--stride", type=int, default=1, help="keep every n-th frame")
+    parser.add_argument("--layout", default="horizontal", choices=["horizontal", "vertical"],
+                        help="how overlay tiles the cameras")
+    parser.add_argument("--max-width", type=int, default=640,
+                        help="width of each camera tile in overlay mode")
+    parser.add_argument("--width", type=int, default=960, help="3D view width")
+    parser.add_argument("--height", type=int, default=720, help="3D view height")
+    parser.add_argument("--no-revolve", action="store_true",
+                        help="keep the 3D view's azimuth fixed")
     args = parser.parse_args(list(argv) if argv is not None else None)
 
     try:
+        project = Path(args.config).expanduser().resolve().parent.parent
         if args.poses:
             poses_path = Path(args.poses).expanduser()
         else:
-            project = Path(args.config).expanduser().resolve().parent.parent
             name = "poses3d-filter.json" if args.filtered else "poses3d.json"
             poses_path = project / "results" / "pose3d" / name
             if args.filtered and not poses_path.is_file():
@@ -245,15 +267,71 @@ def run(argv: Optional[Sequence[str]] = None) -> int:
         if args.plot:
             write_plot(payload, Path(args.plot), instance=args.instance)
             print(f"wrote {args.plot}")
+        if args.video != "none":
+            for path, frames in _render_videos(payload, project, args):
+                print(f"wrote {path} ({frames} frames)")
         print(
-            f"pose3d-export: {rows} rows from {summary['frames']} frames, "
+            f"pose3d-render: {rows} rows from {summary['frames']} frames, "
             f"{summary['instances']} instances ({summary['dropped_ratio'] * 100:.1f}% dropped) | "
             f"wrote {output}"
         )
         return 0
     except (OSError, ValueError, KeyError) as error:
-        print(f"pose3d-export failed: {error}")
+        print(f"pose3d-render failed: {error}")
         return 1
+
+
+def _view_records(project: Path, rig, views: Sequence[str]) -> dict:
+    """The prediction records per camera, from --views or the project's own layout."""
+    from .cli import _parse_views
+
+    paths = _parse_views(views)
+    if not paths:
+        paths = {camera: project / "results" / "predict" / camera / "predictions.json"
+                 for camera in rig.cameras}
+    records = {}
+    for camera, path in paths.items():
+        path = Path(path)
+        if path.is_file():
+            payload = json.loads(path.read_text(encoding="utf-8"))
+            if isinstance(payload, dict):
+                payload = payload.get("predictions") or payload.get("frames") or []
+            records[camera] = [record for record in payload if isinstance(record, dict)]
+    return records
+
+
+def _render_videos(payload, project: Path, args) -> list:
+    """Render what --video asked for; returns ``(path, frame count)`` pairs."""
+    from .calibration import load_camera_rig
+    from .render import load_skeleton, render_overlay, render_space, source_videos
+
+    suffix = "-filter" if args.filtered else ""
+    root = project / "results" / "pose3d"
+    video_dir = root / f"videos{suffix}"
+    image_dir = root / f"images{suffix}" if args.images else None
+    skeleton = load_skeleton(project)
+    written = []
+    if args.video in ("overlay", "both"):
+        rig = load_camera_rig(Path(args.calibration or project / "configs" / "cameras.yaml"))
+        sources = source_videos(_view_records(project, rig, args.views))
+        if not sources:
+            raise ValueError(
+                "No camera video found for the overlay: point --views at predictions made "
+                "from videos, or render only the 3D view with --video space"
+            )
+        target = video_dir / "poses3d-overlay.mp4"
+        written.append((target, render_overlay(
+            payload, rig, sources, target, skeleton=skeleton, images_dir=image_dir,
+            fps=args.fps, stride=args.stride, layout=args.layout, max_width=args.max_width,
+        )))
+    if args.video in ("space", "both"):
+        target = video_dir / "poses3d-space.mp4"
+        written.append((target, render_space(
+            payload, target, skeleton=skeleton, images_dir=image_dir, fps=args.fps,
+            stride=args.stride, width=args.width, height=args.height,
+            revolve=not args.no_revolve,
+        )))
+    return written
 
 
 if __name__ == "__main__":

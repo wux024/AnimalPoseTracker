@@ -144,9 +144,10 @@ def build_export_command(
     instance: int = 0,
     summary_output: Optional[Union[str, Path]] = None,
     include_invalid: bool = False,
+    video: str = "none",
 ) -> List[str]:
-    """Command that writes the CSV, the JSON summary and the trajectory plot."""
-    command = _module_command("pose3d-export")
+    """Command that writes the CSV, the JSON summary, the plot and the videos."""
+    command = _module_command("pose3d-render")
     command.extend(["--config", DEFAULT_RUNTIME])
     if filtered:
         command.append("--filtered")
@@ -157,6 +158,8 @@ def build_export_command(
         command.extend(["--summary-output", str(Path(summary_output).expanduser())])
     if include_invalid:
         command.append("--include-invalid")
+    if video != "none":
+        command.extend(["--video", str(video)])
     return command
 
 

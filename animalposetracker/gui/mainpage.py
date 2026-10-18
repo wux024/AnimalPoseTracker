@@ -1441,6 +1441,7 @@ class AnimalPoseTrackerPage(QMainWindow, Ui_AnimalPoseTracker):
         self.RunCalibration.clicked.connect(self.onRunCalibration)
         self.RunReconstruction.clicked.connect(self.onRunReconstruction)
         self.RunPose3DExport.clicked.connect(self.onRunPose3DExport)
+        self.RunPose3DVideo.clicked.connect(self.onRunPose3DVideo)
         # The tab appears with a 3D project, not for every project.
         self.setThreeDVisible(False)
         self.refreshCameraTable()
@@ -1495,7 +1496,7 @@ class AnimalPoseTrackerPage(QMainWindow, Ui_AnimalPoseTracker):
         """Enable the controls only when no task is running and the project carries 3D."""
         enabled = (not running) and self._pose3d_enabled()
         for button in (self.RunCalibration, self.RunReconstruction, self.RunPose3DExport,
-                       self.AddCamera, self.RemoveCamera):
+                       self.RunPose3DVideo, self.AddCamera, self.RemoveCamera):
             button.setEnabled(enabled)
         self.CameraTable.setEnabled(not running)
 
@@ -1673,6 +1674,18 @@ class AnimalPoseTrackerPage(QMainWindow, Ui_AnimalPoseTracker):
             summary_output=output_dir / "summary.json",
         )
         self._runPose3DCommand(command, "3D export")
+
+    def onRunPose3DVideo(self):
+        """Render the triangulated sequence back onto the cameras and as a 3D view."""
+        project_dir = self._pose3d_project_dir()
+        if project_dir is None:
+            return
+        command = build_export_command(
+            project_dir,
+            filtered=self.ExportFiltered3D.isChecked(),
+            video="both",
+        )
+        self._runPose3DCommand(command, "3D video")
 
     def _runPose3DCommand(self, command, label):
         """Run one 3D command with the project as its working directory."""
