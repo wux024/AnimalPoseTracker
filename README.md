@@ -40,20 +40,9 @@ toolbox, as it assumes no particular species, viewpoint, or camera count.
 
 # Installation
 
-Python 3.10 or newer. A PyTorch 2.0+ build matching your hardware is needed for training only.
-
-```bash
-conda create -n animalposetracker python=3.10 && conda activate animalposetracker
-pip install torch torchvision --index-url https://download.pytorch.org/whl/cu118   # your CUDA build
-git clone https://github.com/wux024/AnimalPoseTracker.git && cd AnimalPoseTracker
-pip install -v -e ".[training,gui]"    # desktop: GUI + built-in training
-pip install -v -e ".[training]"        # headless server: CLI + built-in training
-```
-
-Extras are independent: `.[export]` adds the ONNX tooling, `.[export-openvino]` the OpenVINO
-tooling, `.[predict-triton]` the Triton client. Inference supports ONNX, OpenVINO, TensorRT,
-CoreML, CANN and OpenCV — install only the engine you deploy with. The full matrix, with the
-extra each target needs, is in [Deployment formats](docs/deployment_formats.md).
+Please follow [Getting started](docs/getting_started.md) — it covers the conda environment,
+matching the PyTorch build to your hardware, and installing only the extras for the engine
+you deploy with. Python 3.10 or newer is required.
 
 ## Quick start
 
