@@ -41,28 +41,6 @@ workflow, and a multi-camera 3D stage on top of the pose records every run write
 you can label, you can track — the pipeline makes no assumption about species or object.
 <a href="#why-use-animalposetracker">Read why it is built this way</a>.
 
-```bash
-# every step is one command, and every command writes files you can inspect
-animalpose-cli create --dataset trimouse --workspace projects --name smoke --worker user \
-    --model AnimalRTPose --scale N --date demo
-cd projects/smoke-user-AnimalRTPose-N-demo
-animalpose-cli train  --config configs/runtime.yaml
-animalpose-cli export --config configs/runtime.yaml \
-    --weights results/train/weights/best.pt --format onnx
-```
-
-Three things it does that a general pose library usually leaves to you:
-
-- **Trains without borrowing a trainer.** Project creation, training, validation, dataset
-  prediction, export and checkpoint I/O all run on this project's own workers — no
-  third-party training framework is imported.
-- **Deploys almost anywhere.** TorchScript, ONNX, OpenVINO, TensorRT, CoreML, the TensorFlow
-  family, PaddlePaddle, MNN, NCNN, Sony IMX500 and Rockchip RKNN, plus a remote Triton model
-  URL — each with a sidecar that carries its preprocessing contract.
-- **Closes the 2D → 3D loop.** Tracking, temporal filtering and synchronized multi-camera
-  triangulation consume the same records the prediction stage writes, and the result can be
-  rendered back onto the cameras.
-
 # Installation
 
 Python 3.10 or newer. A PyTorch 2.0+ build matching your hardware is needed for training only.
@@ -113,6 +91,18 @@ Steps 1–6 are detailed in [Getting started](docs/getting_started.md); the desk
 through the same steps is in [Desktop applications](docs/gui.md).
 
 ## Why use AnimalPoseTracker?
+
+Three things it does that a general pose library usually leaves to you:
+
+- **Trains without borrowing a trainer.** Project creation, training, validation, dataset
+  prediction, export and checkpoint I/O all run on this project's own workers — no
+  third-party training framework is imported.
+- **Deploys almost anywhere.** TorchScript, ONNX, OpenVINO, TensorRT, CoreML, the TensorFlow
+  family, PaddlePaddle, MNN, NCNN, Sony IMX500 and Rockchip RKNN, plus a remote Triton model
+  URL — each with a sidecar that carries its preprocessing contract.
+- **Closes the 2D → 3D loop.** Tracking, temporal filtering and synchronized multi-camera
+  triangulation consume the same records the prediction stage writes, and the result can be
+  rendered back onto the cameras.
 
 ### Performance
 
