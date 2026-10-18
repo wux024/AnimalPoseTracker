@@ -154,30 +154,38 @@ article.bd-article p > img[src*="logo"] {
 
 /* ---------- top bar ---------- */
 
-/* The theme paints the bar from its own variables and re-declares them with
-   !important, and the bar itself collapses to zero height, so a band on the very top
-   edge is the reliable way to carry the brand colour. */
-.bd-header.navbar {
-  border-top: 6px solid var(--apt-blue) !important;
+/* DeepLabCut's own sheet is the reference here: the visible strip is
+   `.bd-header-article`, not `.bd-header` (which collapses to zero height). Colouring
+   that element is what turns the bar into a solid band. */
+.bd-header-article {
+  background-color: var(--apt-blue);
+  z-index: 1000;
 }
 
-/* The controls float over the tinted ground; give their row a surface of its own. */
-.bd-header__inner {
-  background-color: #ffffff;
-  border-bottom: 1px solid #dfe7ee;
-  box-shadow: 0 1px 0 rgba(0, 0, 0, 0.02);
+.article-header-buttons .btn {
+  color: #ffffff;
+}
+
+.article-header-buttons .btn:hover {
+  opacity: 0.85;
 }
 
 /* ---------- side columns ---------- */
 
+.bd-sidebar {
+  background-color: #e2edf7;
+}
+
 .bd-sidebar-primary {
-  background-color: #e9eff5;
-  border-right: 1px solid #dbe4ec;
+  background-color: #e2edf7;
+  border-right: 1px solid #d3e2ef;
+  padding-top: 0;
+  margin-top: 0;
 }
 
 .bd-sidebar-secondary {
-  background-color: #e9eff5;
-  border-left: 1px solid #dbe4ec;
+  background-color: #e2edf7;
+  border-left: 1px solid #d3e2ef;
 }
 
 /* ---------- sidebar ---------- */
