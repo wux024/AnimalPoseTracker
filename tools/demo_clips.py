@@ -27,6 +27,7 @@ matplotlib.use("Agg")
 
 import matplotlib.pyplot as plt  # noqa: E402
 import numpy as np  # noqa: E402
+from PIL import Image  # noqa: E402
 
 SOURCE = Path("C:/Users/wux024/project/AdamPosePlug")
 OUTPUT = Path("C:/Users/wux024/project/AnimalPoseTrackerProject/demos")
@@ -87,6 +88,20 @@ def load_frames(path: Path, names: list[str]) -> np.ndarray:
     return np.stack([np.array(series[name], dtype=float) for name in names], axis=1)
 
 
+def crop_dead_space(image: np.ndarray) -> np.ndarray:
+    """Drop the flat band under the camera tiles.
+
+    AdamPosePlug hard-codes ``frame_height - 580``; that constant is tied to the height
+    of their capture, and applied to ours it cuts through the hands. Trimming to the last
+    row that carries detail does the same job for any resolution.
+    """
+    gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
+    rows = np.where(gray.std(axis=1) > 1.5)[0]
+    if len(rows) == 0:
+        return image
+    return image[: int(rows[-1]) + 1]
+
+
 def render(name: str, spec: dict, limit: int | None, fps: int, stride: int) -> None:
     points = spec["points"]
     data = load_frames(SOURCE / spec["csv"], points)
@@ -107,15 +122,53 @@ def render(name: str, spec: dict, limit: int | None, fps: int, stride: int) -> N
     hi = finite.max(axis=0) if len(finite) else np.ones(3)
     centre = (lo + hi) / 2
 
-    # AdamPosePlug stacks the two panels: 2D on top, 3D underneath, both 1640x451
-    # (PoseEstimation2D at y=150 and PoseEstimation3D at y=609 in a 1920x1080 window).
-    figure = plt.figure(figsize=(16.4, 9.0), dpi=100)
-    axis_video = figure.add_axes([0.0, 0.5, 1.0, 0.5])
-    axis_3d = figure.add_axes([0.0, 0.0, 1.0, 0.5], projection="3d")
+    # In AdamPosePlug these are two separate widgets (a QLabel and a FigureCanvas), so
+    # they are rendered as two canvases and the frames are stacked afterwards. Sharing
+    # one figure squeezed the 3D axes into a corner.
+    fig_video = plt.figure(figsize=(16.4, 4.51), dpi=100)
+    axis_video = fig_video.add_axes([0.0, 0.0, 1.0, 1.0])
     axis_video.set_axis_off()
+
+    fig_3d = plt.figure(figsize=(20.5, 5.62), dpi=80)     # 1640 x 450, as in the original
+    axis_3d = fig_3d.add_subplot(1, 1, 1, projection="3d")
+    fig_3d.subplots_adjust(top=1, left=0, right=1, bottom=0, hspace=0, wspace=0)
+    axis_3d.set_axis_off()
 
     staging = Path(tempfile.mkdtemp(prefix=f"apt-{name}-"))
     palette = [tuple(c) for c in plt.cm.tab20(np.linspace(0, 1, len(points)))]
+    dx, dy, dz = -150.0, -80.0, -200.0
+
+    # The reference draws the axes once in drawfigure_init and then only moves the
+    # markers. Redrawing the whole axes each frame made autoscale chase the skeleton,
+    # so the arrows drifted — hence one fixed frame for the whole clip.
+    xyz_all = data.copy()
+    xyz_all[:, :, 2] = -xyz_all[:, :, 2]
+
+    axis_3d.set_axis_off()
+    lines = []
+    for chain in spec["chains"]:
+        idx = [index[p] for p in chain]
+        lines.append(axis_3d.plot([0], [0], [0], "b-")[0])
+    markers = axis_3d.plot(xyz_all[0, :, 0], xyz_all[0, :, 1], xyz_all[0, :, 2],
+                           linestyle="none", marker="o", markersize=6,
+                           color="b")[0]
+    for direction, colour in (((1, 0, 0), "r"), ((0, 1, 0), "g"), ((0, 0, 1), "y")):
+        axis_3d.quiver(dx, dy, dz, *direction, length=60, normalize=True,
+                       color=colour, arrow_length_ratio=0.12)
+    labels = {"family": "Times New Roman", "size": 14, "style": "italic"}
+    axis_3d.text(dx + 65, dy, dz, "x", fontdict=labels)
+    axis_3d.text(dx, dy + 65, dz, "y", fontdict=labels)
+    axis_3d.text(dx, dy, dz + 65, "z", fontdict=labels)
+
+    # Freeze the box once the layout is known: the arrows and the limits then stay put
+    # while the skeleton moves inside them, the way they do in the reference.
+    fig_3d.canvas.draw()
+    frozen = (axis_3d.get_xlim(), axis_3d.get_ylim(), axis_3d.get_zlim())
+    axis_3d.set_xlim(*frozen[0])
+    axis_3d.set_ylim(*frozen[1])
+    axis_3d.set_zlim(*frozen[2])
+    axis_3d.set_autoscale_on(False)
+
     try:
         for frame in range(total):
             ok, image = cap.read()
@@ -127,32 +180,36 @@ def render(name: str, spec: dict, limit: int | None, fps: int, stride: int) -> N
             axis_video.clear()
             axis_video.set_axis_off()
             if ok:
-                cut = image.shape[0] - 580
-                image = image[:cut, :, :]
-                width = int(image.shape[1] / image.shape[0] * 450)
-                image = cv2.resize(image, (width, 450))
-                axis_video.imshow(cv2.cvtColor(image, cv2.COLOR_BGR2RGB))
+                source_height = image.shape[0]
+                cut = source_height - 580
+                cropped = image[:cut, :, :]
+                # the reference divides by the *uncropped* height, which squeezes the
+                # tile; 1920/1092*450 = 791 px wide, not 1687
+                width = int(image.shape[1] / source_height * 450)
+                resized = cv2.resize(cropped, (width, 450))
+                panel = np.full((450, 1640, 3), 255, np.uint8)
+                x0 = (1640 - width) // 2
+                panel[:, x0:x0 + width] = resized
+                axis_video.imshow(cv2.cvtColor(panel, cv2.COLOR_BGR2RGB))
 
-            # --- 3DPose: no axis, no limits, arrows anchored at (-150, -80, -200),
-            # z negated; matplotlib autoscales just like the original ---
-            axis_3d.clear()
-            axis_3d.set_axis_off()
-            xyz = data[frame].copy()
-            xyz[:, 2] = -xyz[:, 2]
-            for chain in spec["chains"]:
+            # --- 3DPose: only the landmarks move; the frame, the arrows and the
+            # limits stay where drawfigure_init put them ---
+            xyz = xyz_all[frame]
+            for line, chain in zip(lines, spec["chains"]):
                 idx = [index[p] for p in chain]
-                axis_3d.plot(xyz[idx, 0], xyz[idx, 1], xyz[idx, 2], "b-")
-            axis_3d.scatter(xyz[:, 0], xyz[:, 1], xyz[:, 2], s=100,
-                            c=[palette[i] for i in range(len(points))], depthshade=False)
-            dx, dy, dz = -150.0, -80.0, -200.0
-            for direction, colour in (((1, 0, 0), "r"), ((0, 1, 0), "g"), ((0, 0, 1), "y")):
-                axis_3d.quiver(dx, dy, dz, *direction, length=60, normalize=True,
-                               color=colour, arrow_length_ratio=0.12)
-            labels = {"family": "Times New Roman", "size": 14, "style": "italic"}
-            axis_3d.text(dx + 65, dy, dz, "x", fontdict=labels)
-            axis_3d.text(dx, dy + 65, dz, "y", fontdict=labels)
-            axis_3d.text(dx, dy, dz + 65, "z", fontdict=labels)
-            figure.savefig(staging / f"{frame // stride:04d}.png", facecolor="white")
+                line.set_data(xyz[idx, 0], xyz[idx, 1])
+                line.set_3d_properties(xyz[idx, 2], "z")
+            markers.set_data(xyz[:, 0], xyz[:, 1])
+            markers.set_3d_properties(xyz[:, 2], "z")
+
+            index_name = f"{frame // stride:04d}"
+            fig_video.savefig(staging / f"{index_name}_v.png", facecolor="white")
+            fig_3d.savefig(staging / f"{index_name}_3.png", facecolor="white")
+            top = cv2.imread(str(staging / f"{index_name}_v.png"))
+            bottom = cv2.imread(str(staging / f"{index_name}_3.png"))
+            width = min(top.shape[1], bottom.shape[1])
+            cv2.imwrite(str(staging / f"{index_name}.png"),
+                        np.vstack([top[:, :width], bottom[:, :width]]))
         cap.release()
 
         OUTPUT.mkdir(parents=True, exist_ok=True)
@@ -182,7 +239,7 @@ def render(name: str, spec: dict, limit: int | None, fps: int, stride: int) -> N
         print(f"{name}: {total} frames -> {gif.name} ({detail})")
     finally:
         shutil.rmtree(staging, ignore_errors=True)
-        plt.close(figure)
+        plt.close("all")
 
 
 def main() -> int:
