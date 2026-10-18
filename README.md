@@ -2,6 +2,8 @@
 
 ![](docs/assets/logo.png)
 
+![](docs/assets/demos/hand.gif) ![](docs/assets/demos/koi.gif) ![](docs/assets/demos/animals.gif)
+
 <a href="docs/getting_started.md">📚 Documentation</a> |
 <a href="#installation">🛠️ Installation</a> |
 <a href="#quick-start">🚀 Quick start</a> |

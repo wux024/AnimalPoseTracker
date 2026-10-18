@@ -56,6 +56,21 @@ html[data-theme="dark"] {
   max-width: 100%;
 }
 
+/* The three landing demos sit side by side, a third of the column each. Sphinx copies
+   them to _images/, so they are matched by file name rather than by source folder. */
+article.bd-article p > img[src$="hand.gif"],
+article.bd-article p > img[src$="koi.gif"],
+article.bd-article p > img[src$="animals.gif"] {
+  display: inline-block;
+  height: 190px;
+  width: auto;
+  max-width: 31%;
+  margin: 0.2rem 0.6% 0.4rem;
+  border-radius: 8px;
+  vertical-align: middle;
+  object-fit: cover;
+}
+
 /* Current page in the navigation */
 .toctree-l1.current.active {
   color: var(--sidebar-highlight-color);
