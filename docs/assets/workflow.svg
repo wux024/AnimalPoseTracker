@@ -1,0 +1,48 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1000 170" width="1000" height="170" role="img" aria-label="The AnimalPoseTracker workflow: create, label, train, evaluate, predict, export">
+  <defs>
+    <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M 0 0 L 10 5 L 0 10 z" fill="#7c93a8"/>
+    </marker>
+    <style>
+      .box { fill: #ffffff; stroke: #cfdbe6; stroke-width: 1.5; }
+      .step { font: 600 15px -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; fill: #16232e; text-anchor: middle; }
+      .artifact { font: 11px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; fill: #5b6b7a; text-anchor: middle; }
+      .flow { stroke: #7c93a8; stroke-width: 1.6; fill: none; marker-end: url(#arrow); }
+      .accent { fill: #eef6fb; stroke: #9fc6de; }
+    </style>
+  </defs>
+
+  <g>
+    <rect class="box" x="10" y="26" width="140" height="56" rx="10"/>
+    <text class="step" x="80" y="60">create</text>
+    <text class="artifact" x="80" y="106">project/</text>
+
+    <rect class="box" x="178" y="26" width="140" height="56" rx="10"/>
+    <text class="step" x="248" y="60">label</text>
+    <text class="artifact" x="248" y="106">YOLO / COCO</text>
+
+    <rect class="box accent" x="346" y="26" width="140" height="56" rx="10"/>
+    <text class="step" x="416" y="60">train</text>
+    <text class="artifact" x="416" y="106">best.pt</text>
+
+    <rect class="box" x="514" y="26" width="140" height="56" rx="10"/>
+    <text class="step" x="584" y="60">evaluate</text>
+    <text class="artifact" x="584" y="106">metrics.json</text>
+
+    <rect class="box" x="682" y="26" width="140" height="56" rx="10"/>
+    <text class="step" x="752" y="60">predict</text>
+    <text class="artifact" x="752" y="106">predictions.json</text>
+
+    <rect class="box" x="850" y="26" width="140" height="56" rx="10"/>
+    <text class="step" x="920" y="60">export</text>
+    <text class="artifact" x="920" y="106">model.onnx</text>
+
+    <path class="flow" d="M 150 54 L 172 54"/>
+    <path class="flow" d="M 318 54 L 340 54"/>
+    <path class="flow" d="M 486 54 L 508 54"/>
+    <path class="flow" d="M 654 54 L 676 54"/>
+    <path class="flow" d="M 822 54 L 844 54"/>
+
+    <text class="artifact" x="500" y="146" style="font-family: -apple-system, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; font-style: italic; font-size: 12px;">every step writes files you can open, plot or diff — nothing is hidden inside the trainer</text>
+  </g>
+</svg>

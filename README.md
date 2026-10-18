@@ -1,11 +1,12 @@
 ![](docs/assets/logo.png)
 
-<a href="https://wux024.github.io/AnimalPoseTracker/">Docs site</a> · <a href="docs/getting_started.md">Documentation</a> · <a href="#installation">Installation</a> · <a href="#quick-start">Quick start</a> · <a href="#multi-camera-3d">3D</a> · <a href="#desktop-applications">GUI</a> · <a href="https://github.com/wux024/AnimalPoseTracker/issues">Issues</a> · <a href="#references--citations">Citation</a>
+<a href="docs/getting_started.md">Documentation</a> · <a href="#installation">Installation</a> · <a href="#quick-start">Quick start</a> · <a href="#multi-camera-3d">3D</a> · <a href="#desktop-applications">GUI</a> · <a href="https://github.com/wux024/AnimalPoseTracker/issues">Issues</a> · <a href="#references--citations">Citation</a>
 
 ![Python](https://img.shields.io/badge/python-3.10%2B-blue)
 ![License](https://img.shields.io/badge/license-AGPL--3.0--or--later-green)
 ![Platforms](https://img.shields.io/badge/platform-linux%20%7C%20macos%20%7C%20windows-lightgrey)
-[![Stars](https://img.shields.io/github/stars/wux024/AnimalPoseTracker?style=social)](https://github.com/wux024/AnimalPoseTracker/stargazers)
+![Status](https://img.shields.io/badge/status-0.1.0-orange)
+[![Docs](https://github.com/wux024/AnimalPoseTracker/actions/workflows/docs.yml/badge.svg)](https://github.com/wux024/AnimalPoseTracker/actions/workflows/docs.yml)
 
 # Welcome! 👋
 
@@ -70,6 +71,8 @@ Command-line values override `configs/runtime.yaml` for that run and are never w
 
 ## Documentation: the process
 
+![](docs/assets/workflow.svg)
+
 | Step | Command | What you get |
 |---|---|---|
 | 1. Create | `animalpose-cli create` | A project with four configs and an empty dataset layout |
@@ -122,6 +125,15 @@ cross-species real-time pose affordable on a single GPU. AnimalViTPose
 orthogonal decomposition decoder that lifts accuracy without giving up the deployment path.
 This repository is the system that grew around the two: one project format, one trainer, one
 record schema, and the 3D stage that reuses it.
+
+### Ecosystem
+
+The same lineage is available where it was first published:
+
+- [AnimalRTPose configs](https://github.com/wux024/ultralytics/tree/animalrtpose/configs) — the ultralytics fork the one-stage model was trained in
+- [AnimalViTPose configs](https://github.com/wux024/mmpose/tree/main/configs/animal_2d_keypoint/animalvitpose) — the MMPose config for the ViT model
+- [SPCPose](https://github.com/wux024/SPCPose) — pose estimation from a single-pixel camera
+- [AdamPose](https://github.com/wux024/AdamPose) — motion parameters from tracked keypoints
 
 ## Multi-camera 3D
 

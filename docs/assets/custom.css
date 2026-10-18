@@ -11,6 +11,11 @@
 
 /* ---------- column width and reading rhythm ---------- */
 
+.bd-container__inner.bd-page-width {
+  margin-left: auto;
+  margin-right: auto;
+}
+
 .bd-main .bd-content .bd-article-container {
   max-width: 880px;
 }
@@ -119,6 +124,13 @@ article.bd-article img[src*="logo"] {
   border-radius: 0 !important;
   box-shadow: none !important;
   background: transparent !important;
+}
+
+article.bd-article p > img[src*="logo"] {
+  display: block !important;
+  width: 100% !important;
+  max-width: 100% !important;
+  height: auto !important;
 }
 
 /* ---------- sidebar ---------- */
