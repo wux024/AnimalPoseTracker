@@ -35,6 +35,20 @@ article.bd-article h1 {
   line-height: 1.25;
 }
 
+/* A heading that is also a link keeps the heading colour; it only shows the link on
+   hover, the way the reference site renders "# [Code demo](...)". */
+article.bd-article h1 a,
+article.bd-article h2 a {
+  color: inherit;
+  border-bottom: none;
+}
+
+article.bd-article h1 a:hover,
+article.bd-article h2 a:hover {
+  color: var(--apt-blue);
+  border-bottom: none;
+}
+
 /* Sidebar */
 .bd-sidebar-primary.bd-sidebar {
   background-color: var(--sidebar-bg-color);
