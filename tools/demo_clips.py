@@ -100,6 +100,16 @@ def render(name: str, spec: dict, limit: int | None, stride: int, fps: int) -> N
     bottom.set_axis_off()
     bottom.view_init(elev=30, azim=-60)      # the matplotlib default the reference uses
 
+    # Scale the whole axes up by 1.5, centred, with a transparent background so the
+    # enlarged panel does not paint over the video tile above it.
+    zoom = 1.5
+    left, bottom_edge, pane_w, pane_h = 0.0, 0.0, 1.0, 0.5
+    bottom.patch.set_alpha(0.0)
+    bottom.set_position([left - pane_w * (zoom - 1) / 2,
+                         bottom_edge - pane_h * (zoom - 1) / 2,
+                         pane_w * zoom,
+                         pane_h * zoom])
+
     # The box follows the data, not the arrows. The arrows are anchored at the corner of
     # that box, because keeping them at the literal (-150, -80, -200) stretched the z
     # axis to six hundred millimetres and shrank the skeleton to a knot in the middle.
