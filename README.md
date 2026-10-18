@@ -1,6 +1,6 @@
 ![](docs/assets/logo.png)
 
-<a href="docs/getting_started.md">Documentation</a> · <a href="#installation">Installation</a> · <a href="#quick-start">Quick start</a> · <a href="#multi-camera-3d">3D</a> · <a href="#desktop-applications">GUI</a> · <a href="https://github.com/wux024/AnimalPoseTracker/issues">Issues</a> · <a href="#references--citations">Citation</a>
+<a href="https://wux024.github.io/AnimalPoseTracker/">Docs site</a> · <a href="docs/getting_started.md">Documentation</a> · <a href="#installation">Installation</a> · <a href="#quick-start">Quick start</a> · <a href="#multi-camera-3d">3D</a> · <a href="#desktop-applications">GUI</a> · <a href="https://github.com/wux024/AnimalPoseTracker/issues">Issues</a> · <a href="#references--citations">Citation</a>
 
 ![Python](https://img.shields.io/badge/python-3.10%2B-blue)
 ![License](https://img.shields.io/badge/license-AGPL--3.0--or--later-green)
