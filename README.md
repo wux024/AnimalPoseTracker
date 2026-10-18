@@ -71,7 +71,7 @@ Command-line values override `configs/runtime.yaml` for that run and are never w
 
 # Documentation: The AnimalPoseTracker Process
 
-![](docs/assets/workflow.svg)
+![](docs/assets/overview.svg)
 
 | Step | Command | What you get |
 |---|---|---|
