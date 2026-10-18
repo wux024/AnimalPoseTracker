@@ -94,6 +94,28 @@ def render(name: str, spec: dict, limit: int | None, stride: int, fps: int) -> N
     bottom = figure.add_axes([0.0, 0.0, 1.0, 0.5], projection="3d")
     top.set_axis_off()
 
+    # drawfigure_init(): everything below is drawn once. The arrows are anchored at
+    # (-150, -80, -200) and never move; only the markers are updated per frame, which is
+    # what keeps the axes still.
+    bottom.set_axis_off()
+    bottom.set_box_aspect((width / 450.0, 1.0, 1.0))
+    first = data[0].copy()
+    first[:, 2] = -first[:, 2]
+    skeletons = []
+    for chain in spec["chains"]:
+        idx = [index[p] for p in chain]
+        skeletons.append(bottom.plot(first[idx, 0], first[idx, 1], first[idx, 2], "b-")[0])
+    dots = [bottom.plot(first[i, 0], first[i, 1], first[i, 2], marker="o",
+                        linestyle="none", color=colours[i], markersize=6)[0]
+            for i in range(len(spec["points"]))]
+    for direction, colour in (((1, 0, 0), "r"), ((0, 1, 0), "g"), ((0, 0, 1), "y")):
+        bottom.quiver(dx, dy, dz, *direction, length=60, normalize=True,
+                      color=colour, arrow_length_ratio=0.12)
+    labels = {"family": "Times New Roman", "size": 14, "style": "italic"}
+    bottom.text(dx + 65, dy, dz, "x", fontdict=labels)
+    bottom.text(dx, dy + 65, dz, "y", fontdict=labels)
+    bottom.text(dx, dy, dz + 65, "z", fontdict=labels)
+
     staging = Path(tempfile.mkdtemp(prefix=f"apt-{name}-"))
     try:
         for frame in range(total):
@@ -108,27 +130,16 @@ def render(name: str, spec: dict, limit: int | None, stride: int, fps: int) -> N
                 image = image[: int(height - 580), :, :]
                 top.imshow(cv2.cvtColor(cv2.resize(image, (width, 450)), cv2.COLOR_BGR2RGB))
 
-            # drawfigure_init(): bare canvas, z negated, arrows once per frame
-            bottom.clear()
-            bottom.set_axis_off()
-            # stretch the box to the canvas: a 1:1:1 cube inside a 791x450 area leaves
-            # a wide white band on both sides
-            bottom.set_box_aspect((width / 450.0, 1.0, 1.0))
+            # drawfigure(): move the markers only, never redraw the axes
             xyz = data[frame].copy()
             xyz[:, 2] = -xyz[:, 2]
-            for chain in spec["chains"]:
+            for line, chain in zip(skeletons, spec["chains"]):
                 idx = [index[p] for p in chain]
-                bottom.plot(xyz[idx, 0], xyz[idx, 1], xyz[idx, 2], "b-")
-            for i in range(len(spec["points"])):
-                bottom.plot(xyz[i, 0], xyz[i, 1], xyz[i, 2], marker="o", linestyle="none",
-                            color=colours[i], markersize=6)
-            for direction, colour in (((1, 0, 0), "r"), ((0, 1, 0), "g"), ((0, 0, 1), "y")):
-                bottom.quiver(dx, dy, dz, *direction, length=60, normalize=True,
-                              color=colour, arrow_length_ratio=0.12)
-            labels = {"family": "Times New Roman", "size": 14, "style": "italic"}
-            bottom.text(dx + 65, dy, dz, "x", fontdict=labels)
-            bottom.text(dx, dy + 65, dz, "y", fontdict=labels)
-            bottom.text(dx, dy, dz + 65, "z", fontdict=labels)
+                line.set_data(xyz[idx, 0], xyz[idx, 1])
+                line.set_3d_properties(xyz[idx, 2], "z")
+            for i, dot in enumerate(dots):
+                dot.set_data([xyz[i, 0]], [xyz[i, 1]])
+                dot.set_3d_properties([xyz[i, 2]], "z")
 
             figure.savefig(staging / f"{frame // stride:04d}.png", facecolor="white")
         cap.release()
