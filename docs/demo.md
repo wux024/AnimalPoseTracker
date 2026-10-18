@@ -1,4 +1,4 @@
-# Code demo
+# Walkthrough
 
 A full run from an empty folder, using one of the dataset profiles that ship with the
 package — `Tri-Mouse`, `Fish`, `Horse10`, `LoTE-Web`, `StanfordExtra`, `TopViewMouse` and a
