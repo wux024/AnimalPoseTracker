@@ -43,9 +43,8 @@ sphinx:
       show_toc_level: 2
       use_download_button: false
       use_fullscreen_button: true
+      home_page_in_toc: true
     html_css_files:
       - custom.css
-    html_js_files:
-      - sidebar-home.js
     html_static_path:
       - docs/assets
