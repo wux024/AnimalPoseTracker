@@ -106,14 +106,11 @@ def render(name: str, spec: dict, limit: int | None, fps: int, stride: int) -> N
     lo = finite.min(axis=0) if len(finite) else np.zeros(3)
     hi = finite.max(axis=0) if len(finite) else np.ones(3)
     centre = (lo + hi) / 2
-    centre_3d = centre.copy()
-    centre_3d[2] = -centre_3d[2]
 
-    # two panels, the way AdamPosePlug lays them out: video on the left, a bare 3D
-    # canvas on the right, both about 450 px tall
-    figure = plt.figure(figsize=(14, 4.2), dpi=100)
-    axis_video = figure.add_axes([0.004, 0.02, 0.44, 0.96])
-    axis_3d = figure.add_axes([0.44, 0.0, 0.556, 1.0], projection="3d")
+    # two panels of roughly equal width, 450 px tall, as in AdamPosePlug
+    figure = plt.figure(figsize=(16, 4.5), dpi=100)
+    axis_video = figure.add_axes([0.0, 0.0, 0.5, 1.0])
+    axis_3d = figure.add_axes([0.5, 0.0, 0.5, 1.0], projection="3d")
     axis_video.set_axis_off()
 
     staging = Path(tempfile.mkdtemp(prefix=f"apt-{name}-"))
@@ -124,34 +121,36 @@ def render(name: str, spec: dict, limit: int | None, fps: int, stride: int) -> N
             if frame % stride:
                 continue
 
-            # --- 2DPose: the video tile, cropped the way AdamPosePlug crops it ---
+            # --- 2DPose: crop 580 px off the bottom, then scale to 450 tall,
+            # exactly as AdamPosePlugMain.videoframe does ---
             axis_video.clear()
             axis_video.set_axis_off()
             if ok:
-                image = image[: int(image.shape[0] * 0.62)]
-                axis_video.imshow(cv2.cvtColor(image, cv2.COLOR_BGR2RGB), aspect="auto")
+                cut = image.shape[0] - 580
+                image = image[:cut, :, :]
+                width = int(image.shape[1] / image.shape[0] * 450)
+                image = cv2.resize(image, (width, 450))
+                axis_video.imshow(cv2.cvtColor(image, cv2.COLOR_BGR2RGB))
 
-            # --- 3DPose: bare canvas, skeleton, world arrows, z negated ---
+            # --- 3DPose: no axis, no limits, arrows anchored at (-150, -80, -200),
+            # z negated; matplotlib autoscales just like the original ---
             axis_3d.clear()
             axis_3d.set_axis_off()
             xyz = data[frame].copy()
             xyz[:, 2] = -xyz[:, 2]
-            span = float(np.nanmax(np.abs(xyz - centre_3d))) * 0.55 + 1e-6
             for chain in spec["chains"]:
                 idx = [index[p] for p in chain]
-                axis_3d.plot(xyz[idx, 0], xyz[idx, 1], xyz[idx, 2],
-                             "b-", linewidth=1.7)
-            axis_3d.scatter(xyz[:, 0], xyz[:, 1], xyz[:, 2], s=18,
+                axis_3d.plot(xyz[idx, 0], xyz[idx, 1], xyz[idx, 2], "b-")
+            axis_3d.scatter(xyz[:, 0], xyz[:, 1], xyz[:, 2], s=100,
                             c=[palette[i] for i in range(len(points))], depthshade=False)
-            origin = centre_3d - span
+            dx, dy, dz = -150.0, -80.0, -200.0
             for direction, colour in (((1, 0, 0), "r"), ((0, 1, 0), "g"), ((0, 0, 1), "y")):
-                axis_3d.quiver(origin[0], origin[1], origin[2], *direction,
-                               length=span * 0.6, normalize=True, color=colour,
-                               arrow_length_ratio=0.12)
-            axis_3d.set_xlim(centre_3d[0] - span, centre_3d[0] + span)
-            axis_3d.set_ylim(centre_3d[1] - span, centre_3d[1] + span)
-            axis_3d.set_zlim(centre_3d[2] - span, centre_3d[2] + span)
-            axis_3d.set_box_aspect((1, 1, 1))
+                axis_3d.quiver(dx, dy, dz, *direction, length=60, normalize=True,
+                               color=colour, arrow_length_ratio=0.12)
+            labels = {"family": "Times New Roman", "size": 14, "style": "italic"}
+            axis_3d.text(dx + 65, dy, dz, "x", fontdict=labels)
+            axis_3d.text(dx, dy + 65, dz, "y", fontdict=labels)
+            axis_3d.text(dx, dy, dz + 65, "z", fontdict=labels)
             figure.savefig(staging / f"{frame // stride:04d}.png", facecolor="white")
         cap.release()
 
