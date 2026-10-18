@@ -1,20 +1,25 @@
 name: docs
 
 # Builds the Jupyter Book in the repository root (README.md is the landing page) and
-# publishes it to GitHub Pages. One-time repository setup:
-#   Settings → Pages → Build and deployment → Source: GitHub Actions
+# publishes it to GitHub Pages.
+#
+# Publishing is manual on purpose: the site stays unpublished until it is ready to be
+# public, and the repository's Pages source is set to "None" in the meantime. To turn the
+# automatic build back on, re-add the `push` trigger below and set
+#   Settings -> Pages -> Build and deployment -> Source: GitHub Actions
 
 on:
-  push:
-    branches: [main]
-    paths:
-      - "README.md"
-      - "docs/**"
-      - "_config.yml"
-      - "_toc.yml"
-      - "requirements-docs.txt"
-      - ".github/workflows/docs.yml"
   workflow_dispatch:
+
+#  push:
+#    branches: [main]
+#    paths:
+#      - "README.md"
+#      - "docs/**"
+#      - "_config.yml"
+#      - "_toc.yml"
+#      - "requirements-docs.txt"
+#      - ".github/workflows/docs.yml"
 
 permissions:
   contents: read
