@@ -11,34 +11,31 @@
 
 /* ---------- page ground ---------- */
 
-/* The theme ships an all-white canvas; a tinted ground plus a white article card gives
-   the page depth and stops the wide margins reading as empty space. */
+/* DeepLabCut's sheet has no article card: the text sits on the page itself and the
+   coloured header strip is the only band. A card here only produced grey margins on
+   both sides, which read as empty space. */
 body {
-  background-color: #eef2f6;
+  background-color: #ffffff;
 }
 
 .bd-main .bd-content .bd-article-container {
   max-width: 980px;
-  background-color: #ffffff;
-  border: 1px solid #e2e9f0;
-  border-radius: 14px;
-  box-shadow: 0 2px 14px rgba(16, 42, 67, 0.06);
-  margin: 0.9rem auto 2.2rem;
-  padding: 2.2rem 2.8rem 2.6rem;
+  background: transparent;
+  border: 0;
+  box-shadow: none;
+  margin: 0 auto;
+  padding: 1.3rem 2.2rem 2.2rem;
 }
 
-/* Use the width the screen offers instead of a narrow centred column: the tinted
-   ground makes unused margins obvious. */
+/* Let the three columns use the whole window; a capped page width left a white strip
+   past the table of contents that reads as unfinished. */
 .bd-container__inner.bd-page-width {
-  max-width: 1440px;
-  margin-left: auto;
-  margin-right: auto;
+  max-width: 100%;
 }
 
 @media (max-width: 900px) {
   .bd-main .bd-content .bd-article-container {
-    padding: 1.4rem 1.2rem 1.8rem;
-    border-radius: 10px;
+    padding: 1rem 1.1rem 1.6rem;
   }
 }
 
@@ -201,8 +198,9 @@ article.bd-article p > img[src*="logo"] {
 }
 
 .bd-sidebar-secondary {
-  background-color: #e2edf7;
+  background-color: rgba(226, 237, 247, 0.92);
   border-left: 1px solid #d3e2ef;
+  margin-left: auto;
 }
 
 /* ---------- sidebar ---------- */
