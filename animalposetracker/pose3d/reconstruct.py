@@ -1,7 +1,7 @@
 """Multi-view reconstruction for a project: 2D predictions in, ``results/pose3d`` out.
 
 The runner owns the whole 3D stage: it reads one ``predictions.json`` per
-camera, associates instances across views (``index`` only for now), undistorts
+camera, associates instances across views (``index`` or ``epipolar``), undistorts
 the pixels with the rig's distortion model, triangulates, and writes the files
 agreed for the 3D protocol: ``poses3d.json``, ``poses3d-filter.json`` (only when
 filtering is enabled) and ``report.json``.
@@ -16,11 +16,12 @@ from typing import Any, Dict, Iterable, List, Mapping, Optional, Sequence
 
 import numpy as np
 
+from .associate import associate_instances
 from .calibration import CameraRig, load_camera_rig
 from .core import triangulate_keypoints
 
 SCHEMA = "pose3d/1"
-ASSOCIATIONS = {"index"}
+ASSOCIATIONS = {"index", "epipolar"}
 
 
 @dataclass
@@ -74,6 +75,25 @@ def _instances(record: Mapping[str, Any]) -> List[np.ndarray]:
     return poses
 
 
+def _index_groups(
+    per_view: Sequence[tuple], min_views: int
+) -> List[Dict[str, int]]:
+    """Pair the n-th instance of every camera with the n-th of the others.
+
+    Detection order is only an identity when a frame holds a single animal, or
+    when every camera happens to order them the same way; that is why the
+    ``epipolar`` association exists.
+    """
+    instance_count = max((len(instances) for _, instances in per_view), default=0)
+    groups: List[Dict[str, int]] = []
+    for instance_index in range(instance_count):
+        group = {camera: instance_index for camera, instances in per_view
+                 if instance_index < len(instances)}
+        if len(group) >= int(min_views):
+            groups.append(group)
+    return groups
+
+
 def _atomic_write(path: Path, payload: Mapping[str, Any]) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     temporary = path.with_suffix(path.suffix + ".tmp")
@@ -91,6 +111,7 @@ def reconstruct_project(
     confidence_threshold: float = 0.05,
     reprojection_threshold: float = 8.0,
     min_views: int = 2,
+    max_sampson_px: float = 25.0,
     pose_filter: Optional[Mapping[str, Any]] = None,
     check_sync: bool = False,
 ) -> Dict[str, Any]:
@@ -161,21 +182,38 @@ def reconstruct_project(
     total_points = 0
     dropped_points = 0
     errors: List[float] = []
+    unmatched_instances = {camera: 0 for camera in rig.cameras}
+    matched_instances = 0
 
     for frame_index in range(frame_counts[anchor]):
         per_view = [(view.camera,
-                     _instances(view.records[frame_index + offsets[view.camera]])
-                     if 0 <= frame_index + offsets[view.camera] < len(view.records) else [])
+                     [rig.undistort(view.camera, instance)
+                      for instance in (_instances(view.records[frame_index + offsets[view.camera]])
+                                       if 0 <= frame_index + offsets[view.camera] < len(view.records) else [])])
                     for view in loaded]
-        instance_count = max(len(instances) for _, instances in per_view) if per_view else 0
-        frame_instances: List[Dict[str, Any]] = []
-        for instance_index in range(instance_count):
-            poses: Dict[str, np.ndarray] = {}
+        view_map = dict(per_view)
+        if association == "index":
+            groups = _index_groups(per_view, min_views)
+        else:
+            # Matching is more sensitive to noise than triangulation: a wrong
+            # identity cannot be repaired later, so keep the joint keypoints at
+            # least reasonably confident even when the caller triangulates loose ones.
+            groups = associate_instances(
+                view_map, rig,
+                max_sampson_px=max_sampson_px,
+                confidence_threshold=max(float(confidence_threshold), 0.1),
+                min_views=min_views,
+            )
+            matched_instances += sum(len(group) for group in groups)
             for camera, instances in per_view:
-                if instance_index < len(instances):
-                    poses[camera] = rig.undistort(camera, instances[instance_index])
-            if len(poses) < min_views:
-                continue
+                used = sum(1 for group in groups if camera in group)
+                unmatched_instances[camera] += len(instances) - used
+
+        frame_instances: List[Dict[str, Any]] = []
+        for group in groups:
+            poses: Dict[str, np.ndarray] = {
+                camera: view_map[camera][index] for camera, index in group.items()
+            }
             result = triangulate_keypoints(
                 poses, rig.cameras,
                 confidence_threshold=confidence_threshold,
@@ -195,6 +233,7 @@ def reconstruct_project(
                 "confidence": np.nan_to_num(result.confidence, nan=0.0).round(4).tolist(),
                 "reprojection_error": np.nan_to_num(result.reprojection_error, nan=0.0).round(3).tolist(),
                 "views": sorted(poses),
+                "view_indices": {camera: int(index) for camera, index in sorted(group.items())},
             })
         frames.append({"frame": frame_index, "instances": frame_instances})
 
@@ -219,6 +258,11 @@ def reconstruct_project(
         "schema": SCHEMA,
         "created_by": "animalposetracker",
         "association": association,
+        "association_stats": {
+            "max_sampson_px": float(max_sampson_px),
+            "matched_instances": int(matched_instances),
+            "unmatched_instances": dict(unmatched_instances),
+        } if association == "epipolar" else None,
         "world_unit": rig.world_unit,
         "sync": {"mode": rig.sync_mode, "declared_offsets": offsets, "check": sync_check},
         "calibration": {

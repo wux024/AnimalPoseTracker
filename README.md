@@ -105,10 +105,13 @@ AnimalViTPose validation does **not** use flip test-time augmentation by default
 animalpose-cli calibrate --view camA=frames/camA --view camB=frames/camB --view camC=frames/camC \
     --board-squares 10x7 --square-size 22 --marker-size 16.5 --output configs/cameras.yaml
 animalpose-cli pose3d --config configs/runtime.yaml
+animalpose-cli pose3d --config configs/runtime.yaml --association epipolar
 animalpose-cli pose3d-export --config configs/runtime.yaml --plot results/pose3d/trajectory.png
 ```
 
 `calibrate` accepts an image folder or a video per view (`--frame-step` samples videos), fits one constrained lens model per camera (or reuses `--intrinsics-from`), and refuses to overwrite an existing calibration without `--force`; `--intrinsic-frames` caps the frames used for the lens fit because OpenCV slows down sharply past ~60. `pose3d-export` writes a flat CSV (`frame, instance, keypoint, x, y, z, confidence, validity, reprojection_error, num_views`), a JSON summary, and an optional trajectory PNG for one instance; `--filtered` reads the filtered sequence.
+
+Instances are associated across cameras with `--association`. `index` (default) pairs the n-th instance of every camera and is only correct with one animal per frame; `epipolar` matches them by the epipolar constraint instead, so detection order, a dropped detection, or two animals crossing cannot swap identities. Each instance in `poses3d.json` records the chosen instance per camera (`view_indices`), and `report.json` carries the match counts under `association_stats`.
 
 ## Configuration model
 

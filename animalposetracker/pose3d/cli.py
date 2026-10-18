@@ -38,8 +38,14 @@ def run(argv: Optional[Sequence[str]] = None) -> int:
     parser.add_argument("--views", action="append", default=[],
                         help="camera=path to that camera's predictions.json (repeatable; point "
                              "it at predictions-filter.json to triangulate the filtered 2D)")
-    parser.add_argument("--association", default="index", choices=["index"],
-                        help="how instances correspond across cameras (index only for now)")
+    parser.add_argument("--association", default="index", choices=["index", "epipolar"],
+                        help="how instances correspond across cameras: 'index' pairs the n-th "
+                             "instance of every camera (only safe with one animal per frame), "
+                             "'epipolar' matches them by the epipolar constraint (required when "
+                             "several animals share a frame)")
+    parser.add_argument("--max-sampson", type=float, default=25.0,
+                        help="epipolar association: reject a pairing beyond this median Sampson "
+                             "distance in px")
     parser.add_argument("--output", help="output directory (default: <project>/results/pose3d)")
     parser.add_argument("--confidence-threshold", type=float, default=0.05)
     parser.add_argument("--reprojection-threshold", type=float, default=8.0)
@@ -75,6 +81,7 @@ def run(argv: Optional[Sequence[str]] = None) -> int:
             confidence_threshold=args.confidence_threshold,
             reprojection_threshold=args.reprojection_threshold,
             min_views=args.min_views,
+            max_sampson_px=args.max_sampson,
             check_sync=bool(args.check_sync),
             pose_filter=pose_filter,
         )
