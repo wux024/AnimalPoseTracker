@@ -41,9 +41,12 @@ sphinx:
   config:
     html_theme_options:
       show_toc_level: 2
-      use_download_button: false
+      use_download_button: true
       use_fullscreen_button: true
+      use_repository_button: true
+      use_issues_button: true
       home_page_in_toc: true
+      repository_url: https://github.com/wux024/AnimalPoseTracker
     html_css_files:
       - custom.css
     html_static_path:
