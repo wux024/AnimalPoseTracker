@@ -99,6 +99,18 @@ def render(name: str, spec: dict, limit: int | None, stride: int, fps: int) -> N
     # what keeps the axes still.
     bottom.set_axis_off()
     bottom.set_box_aspect((width / 450.0, 1.0, 1.0))
+
+    # Fix the box to the whole clip (plus the arrow anchor). Taking the first frame only
+    # left the skeleton outside the limits a second later, so the hand vanished.
+    xyz_all = data.copy()
+    xyz_all[:, :, 2] = -xyz_all[:, :, 2]
+    anchor = np.array([dx, dy, dz], dtype=float)
+    low = np.minimum(xyz_all.min(axis=(0, 1)), anchor) - 40.0
+    high = np.maximum(xyz_all.max(axis=(0, 1)), anchor) + 40.0
+    bottom.set_xlim(low[0], high[0])
+    bottom.set_ylim(low[1], high[1])
+    bottom.set_zlim(low[2], high[2])
+
     first = data[0].copy()
     first[:, 2] = -first[:, 2]
     skeletons = []
