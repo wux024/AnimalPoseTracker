@@ -107,10 +107,11 @@ def render(name: str, spec: dict, limit: int | None, fps: int, stride: int) -> N
     hi = finite.max(axis=0) if len(finite) else np.ones(3)
     centre = (lo + hi) / 2
 
-    # two panels of roughly equal width, 450 px tall, as in AdamPosePlug
-    figure = plt.figure(figsize=(16, 4.5), dpi=100)
-    axis_video = figure.add_axes([0.0, 0.0, 0.5, 1.0])
-    axis_3d = figure.add_axes([0.5, 0.0, 0.5, 1.0], projection="3d")
+    # AdamPosePlug stacks the two panels: 2D on top, 3D underneath, both 1640x451
+    # (PoseEstimation2D at y=150 and PoseEstimation3D at y=609 in a 1920x1080 window).
+    figure = plt.figure(figsize=(16.4, 9.0), dpi=100)
+    axis_video = figure.add_axes([0.0, 0.5, 1.0, 0.5])
+    axis_3d = figure.add_axes([0.0, 0.0, 1.0, 0.5], projection="3d")
     axis_video.set_axis_off()
 
     staging = Path(tempfile.mkdtemp(prefix=f"apt-{name}-"))
