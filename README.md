@@ -73,21 +73,21 @@ Command-line values override `configs/runtime.yaml` for that run and are never w
 
 ![](docs/assets/overview.svg)
 
-`animalpose-cli --help` lists all ten workflows, and `animalposetracker`,
+Every workflow below is a subcommand of `animalpose-cli`; `--help` lists them all, and `animalposetracker`,
 `animalpose-annotator` and `animalpose-inferencer` open the three windows.
 
 | Step | Command | What you get |
 |---|---|---|
-| 1. Create | `animalpose-cli create` | A project with four configs and an empty dataset layout |
-| 2. Label | `animalpose-annotator` | Boxes, classes, keypoints and skeleton |
-| 3. Train | `animalpose-cli train` | `results/train/weights/best.pt`, `training.jsonl`, `results.png` |
-| 4. Evaluate | `animalpose-cli val` | `results/val/metrics.json` — AP, AR, PCK, AUC, EPE |
-| 5. Predict | `animalpose-cli predict` | `results/predict/.../predictions.json` and a rendered video |
-| 6. Infer | `animalpose-cli infer` | A live overlay from a camera, a video file or a stream URL |
-| 7. Export | `animalpose-cli export` | `<model>.<format>` plus its `.json` sidecar |
-| 8. Calibrate | `animalpose-cli calibrate` | Intrinsics and extrinsics of the rig, from ChArUco frames or videos |
-| 9. Triangulate | `animalpose-cli pose3d` | `results/pose3d/...csv` — 3D keypoints for every frame |
-| 10. Render 3D | `animalpose-cli pose3d-render` | 3D video, trajectory plot and a reconstruction summary |
+| 1. Create | `create` | Four configs, empty dataset layout |
+| 2. Label | `animalpose-annotator` | Boxes, classes, keypoints, skeleton |
+| 3. Train | `train` | `best.pt`, `training.jsonl`, `results.png` |
+| 4. Evaluate | `val` | `metrics.json` — AP, AR, PCK, AUC, EPE |
+| 5. Predict | `predict` | `predictions.json`, rendered video |
+| 6. Infer | `infer` | Live overlay from camera or stream |
+| 7. Export | `export` | `<model>.<format>` + `.json` sidecar |
+| 8. Calibrate | `calibrate` | Rig intrinsics and extrinsics (ChArUco) |
+| 9. Triangulate | `pose3d` | `results/pose3d/...csv` |
+| 10. Render | `pose3d-render` | 3D video, trajectory plot, summary |
 
 Every command takes `--help`; the flags used most often are in
 [Getting started](docs/getting_started.md).

@@ -86,6 +86,12 @@ article.bd-article p > img[src$="animals.gif"] {
   color: var(--sidebar-highlight-color);
 }
 
+/* Step tables read badly when the number and the name wrap onto separate lines */
+article.bd-article table td:first-child,
+article.bd-article table th:first-child {
+  white-space: nowrap;
+}
+
 .toctree-l1.current.active * {
   color: inherit;
 }
