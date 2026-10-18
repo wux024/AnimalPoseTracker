@@ -22,8 +22,6 @@
 <img src="https://img.shields.io/badge/platform-linux%20%7C%20macos%20%7C%20windows-lightgrey" alt="Platforms">
 <img src="https://img.shields.io/badge/status-0.1.0-orange" alt="Status">
 <a href="https://github.com/wux024/AnimalPoseTracker/stargazers"><img src="https://img.shields.io/github/stars/wux024/AnimalPoseTracker.svg?style=social&label=Star" alt="Stars"></a>
-<img src="https://img.shields.io/github/forks/wux024/AnimalPoseTracker?style=social&label=Fork" alt="Forks">
-<img src="https://img.shields.io/github/issues/wux024/AnimalPoseTracker" alt="Issues">
 <img src="https://img.shields.io/badge/contributions-welcome-brightgreen.svg" alt="Contributions welcome">
 
 <img src="https://img.shields.io/badge/PyTorch-2.0%2B-ee4c2c" alt="PyTorch 2.0+">
@@ -82,7 +80,7 @@ animalpose-cli export --config <project>/configs/runtime.yaml \
 `load` validates a project and prints a summary without opening the GUI or writing files.
 Command-line values override `configs/runtime.yaml` for that run and are never written back.
 
-## Documentation: the process
+# Documentation: the process
 
 ![](docs/assets/workflow.svg)
 

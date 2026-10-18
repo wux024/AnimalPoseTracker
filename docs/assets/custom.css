@@ -68,6 +68,7 @@ article.bd-article p > img[src$="animals.gif"] {
   width: auto;
   max-width: 31%;
   margin: 0.2rem 0.6% 0.4rem;
+  border: 1px solid #dbe6ef;
   border-radius: 8px;
   vertical-align: middle;
   object-fit: cover;
