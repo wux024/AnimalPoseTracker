@@ -73,21 +73,21 @@ Command-line values override `configs/runtime.yaml` for that run and are never w
 
 ![](docs/assets/overview.svg)
 
-Every workflow below is a subcommand of `animalpose-cli`; `--help` lists them all, and `animalposetracker`,
+`animalpose-cli --help` lists all ten workflows, and `animalposetracker`,
 `animalpose-annotator` and `animalpose-inferencer` open the three windows.
 
 | Step | Command | What you get |
 |---|---|---|
-| 1. Create | `create` | Four configs, empty dataset layout |
+| 1. Create | `animalpose-cli create` | Four configs, empty dataset layout |
 | 2. Label | `animalpose-annotator` | Boxes, classes, keypoints, skeleton |
-| 3. Train | `train` | `best.pt`, `training.jsonl`, `results.png` |
-| 4. Evaluate | `val` | `metrics.json` — AP, AR, PCK, AUC, EPE |
-| 5. Predict | `predict` | `predictions.json`, rendered video |
-| 6. Infer | `infer` | Live overlay from camera or stream |
-| 7. Export | `export` | `<model>.<format>` + `.json` sidecar |
-| 8. Calibrate | `calibrate` | Rig intrinsics and extrinsics (ChArUco) |
-| 9. Triangulate | `pose3d` | `results/pose3d/...csv` |
-| 10. Render | `pose3d-render` | 3D video, trajectory plot, summary |
+| 3. Train | `animalpose-cli train` | `best.pt`, `training.jsonl`, `results.png` |
+| 4. Evaluate | `animalpose-cli val` | `metrics.json` — AP, AR, PCK, AUC, EPE |
+| 5. Predict | `animalpose-cli predict` | `predictions.json`, rendered video |
+| 6. Infer | `animalpose-cli infer` | Live overlay from camera or stream |
+| 7. Export | `animalpose-cli export` | `<model>.<format>` + `.json` sidecar |
+| 8. Calibrate | `animalpose-cli calibrate` | Rig intrinsics and extrinsics (ChArUco) |
+| 9. Triangulate | `animalpose-cli pose3d` | `results/pose3d/...csv` |
+| 10. Render | `animalpose-cli pose3d-render` | 3D video, trajectory plot, summary |
 
 Every command takes `--help`; the flags used most often are in
 [Getting started](docs/getting_started.md).

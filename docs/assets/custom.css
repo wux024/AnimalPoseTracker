@@ -88,7 +88,8 @@ article.bd-article p > img[src$="animals.gif"] {
 
 /* Step tables read badly when the number and the name wrap onto separate lines */
 article.bd-article table td:first-child,
-article.bd-article table th:first-child {
+article.bd-article table th:first-child,
+article.bd-article table td:nth-child(2) code {
   white-space: nowrap;
 }
 
