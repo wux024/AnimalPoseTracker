@@ -32,7 +32,6 @@ html:
   use_issues_button: true
   use_repository_button: true
   use_edit_page_button: true
-  home_page_in_toc: true
   baseurl: https://wux024.github.io/AnimalPoseTracker
   favicon: docs/assets/favicon.png
   extra_footer: |
@@ -46,5 +45,7 @@ sphinx:
       use_fullscreen_button: true
     html_css_files:
       - custom.css
+    html_js_files:
+      - sidebar-home.js
     html_static_path:
       - docs/assets

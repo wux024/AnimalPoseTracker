@@ -76,6 +76,13 @@ article.bd-article p > img[src$="animals.gif"] {
   color: var(--sidebar-highlight-color);
 }
 
+/* the home link injected by sidebar-home.js follows the same highlight */
+.apt-home-link > a.active,
+.apt-home-link > a.current {
+  color: var(--sidebar-highlight-color);
+  font-weight: 600;
+}
+
 .toctree-l1.current.active * {
   color: inherit;
 }
