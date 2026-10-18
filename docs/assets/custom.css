@@ -173,14 +173,31 @@ article.bd-article p > img[src*="logo"] {
 /* ---------- side columns ---------- */
 
 .bd-sidebar {
-  background-color: #e2edf7;
+  background-color: rgba(226, 237, 247, 0.88);
+  backdrop-filter: blur(4px);
+  -webkit-backdrop-filter: blur(4px);
 }
 
 .bd-sidebar-primary {
-  background-color: #e2edf7;
+  background-color: rgba(226, 237, 247, 0.92);
+  backdrop-filter: blur(4px);
+  -webkit-backdrop-filter: blur(4px);
   border-right: 1px solid #d3e2ef;
   padding-top: 0;
   margin-top: 0;
+}
+
+/* A quiet signature at the end of the navigation, the way DeepLabCut closes its
+   sidebar with the community line. */
+.sidebar-primary-items__end::after {
+  content: "AnimalPoseTracker · v0.1.0";
+  display: block;
+  text-align: center;
+  font-size: 12px;
+  letter-spacing: 0.02em;
+  color: #5b6b7a;
+  opacity: 0.9;
+  padding: 2rem 0 1rem;
 }
 
 .bd-sidebar-secondary {
