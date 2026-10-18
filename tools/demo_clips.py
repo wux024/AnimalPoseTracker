@@ -100,16 +100,23 @@ def render(name: str, spec: dict, limit: int | None, stride: int, fps: int) -> N
     bottom.set_axis_off()
     bottom.view_init(elev=30, azim=-60)      # the matplotlib default the reference uses
 
-    # Fix the box to the whole clip (plus the arrow anchor). Taking the first frame only
-    # left the skeleton outside the limits a second later, so the hand vanished.
+    # The box follows the data, not the arrows. The arrows are anchored at the corner of
+    # that box, because keeping them at the literal (-150, -80, -200) stretched the z
+    # axis to six hundred millimetres and shrank the skeleton to a knot in the middle.
     xyz_all = data.copy()
     xyz_all[:, :, 2] = -xyz_all[:, :, 2]
-    anchor = np.array([dx, dy, dz], dtype=float)
-    low = np.minimum(xyz_all.min(axis=(0, 1)), anchor) - 40.0
-    high = np.maximum(xyz_all.max(axis=(0, 1)), anchor) + 40.0
+    low = xyz_all.min(axis=(0, 1))
+    high = xyz_all.max(axis=(0, 1))
+    pad = (high - low) * 0.08 + 1e-6
+    low, high = low - pad, high + pad
     bottom.set_xlim(low[0], high[0])
     bottom.set_ylim(low[1], high[1])
     bottom.set_zlim(low[2], high[2])
+
+    # arrows sit at the low corner, sized to the box so they keep the original proportion
+    dx, dy, dz = float(low[0]), float(low[1]), float(low[2])
+    arrow_len = float((high - low).max()) * 0.18
+    label_offset = arrow_len * 1.1         # the reference puts the label just past the tip
 
     first = data[0].copy()
     first[:, 2] = -first[:, 2]
@@ -121,12 +128,12 @@ def render(name: str, spec: dict, limit: int | None, stride: int, fps: int) -> N
                         linestyle="none", color=colours[i], markersize=6)[0]
             for i in range(len(spec["points"]))]
     for direction, colour in (((1, 0, 0), "r"), ((0, 1, 0), "g"), ((0, 0, 1), "y")):
-        bottom.quiver(dx, dy, dz, *direction, length=60, normalize=True,
+        bottom.quiver(dx, dy, dz, *direction, length=arrow_len, normalize=True,
                       color=colour, arrow_length_ratio=0.12)
     labels = {"family": "Times New Roman", "size": 14, "style": "italic"}
-    bottom.text(dx + 65, dy, dz, "x", fontdict=labels)
-    bottom.text(dx, dy + 65, dz, "y", fontdict=labels)
-    bottom.text(dx, dy, dz + 65, "z", fontdict=labels)
+    bottom.text(dx + label_offset, dy, dz, "x", fontdict=labels)
+    bottom.text(dx, dy + label_offset, dz, "y", fontdict=labels)
+    bottom.text(dx, dy, dz + label_offset, "z", fontdict=labels)
 
     staging = Path(tempfile.mkdtemp(prefix=f"apt-{name}-"))
     try:
