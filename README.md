@@ -85,7 +85,12 @@ Command-line values override `configs/runtime.yaml` for that run and are never w
 Steps 1–6 are detailed in [Getting started](docs/getting_started.md); the desktop route
 through the same steps is in [Desktop applications](docs/gui.md).
 
-## Why use AnimalPoseTracker?
+# Why use AnimalPoseTracker?
+
+It is actively maintained, and it aims at a usable `CLI` and `GUI` for computer-vision
+researchers and life scientists alike: state-of-the-art models under one project format,
+with defaults that work before they are tuned. Reading the two papers below is the shortest
+way to see what each model is for and how to adapt it.
 
 Three things it does that a general pose library usually leaves to you:
 
@@ -99,7 +104,7 @@ Three things it does that a general pose library usually leaves to you:
   triangulation consume the same records the prediction stage writes, and the result can be
   rendered back onto the cameras.
 
-### Performance
+## Performance 🔥
 
 Measured by the built-in validator on a two-animal dataset (111 test images, 146 instances,
 300 epochs, one RTX 2080 Ti). Average precision is computed over OKS thresholds
@@ -120,7 +125,7 @@ Deployment throughput, 959-frame clips at 640 input:
 | RT-DETR-L + AnimalViTPose-S | RTX 4090 | 40 fps |
 | AnimalRTPose-N, ONNX Runtime | CPU only | 4.3 fps |
 
-### Models
+## Models
 
 - **AnimalRTPose** — single-stage, real-time; predicts boxes and keypoints in one pass, so it
   runs without a detector. N/S/M/L scales.
@@ -129,7 +134,7 @@ Deployment throughput, 959-frame clips at 640 input:
 - Both train through the same loop, CLI, validator and export path; **RTMO** is supported as
   an additional one-stage family.
 
-### The history
+## The history
 
 AnimalRTPose ([Neural Networks, 2025](https://doi.org/10.1016/j.neunet.2025.107685)) made
 cross-species real-time pose affordable on a single GPU. AnimalViTPose
