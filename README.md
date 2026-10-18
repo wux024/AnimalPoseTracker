@@ -96,6 +96,11 @@ Every command takes `--help`; the flags used most often are in
 Steps 1–10 are detailed in [Getting started](docs/getting_started.md); the desktop route
 through the same steps is in [Desktop applications](docs/gui.md).
 
+# [Code demo](docs/demo.md)
+
+A complete run on a built-in dataset — create, train, predict — with the paths each step
+writes. [See the demo](docs/demo.md).
+
 # Why use AnimalPoseTracker?
 
 It is actively maintained, and it aims at a usable `CLI` and `GUI` for computer-vision

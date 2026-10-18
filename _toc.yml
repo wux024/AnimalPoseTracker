@@ -8,6 +8,7 @@ parts:
 
   - caption: Workflows
     chapters:
+      - file: docs/demo
       - file: docs/three_d
       - file: docs/gui
       - file: docs/pose_analysis_workflows
