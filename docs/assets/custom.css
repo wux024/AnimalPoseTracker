@@ -40,22 +40,20 @@ html[data-theme="dark"] {
   color: var(--sidebar-hover-text-color);
 }
 
-/* Logo at the top of the sidebar — the standing mark, capped by height so it reads as
-   a badge instead of filling the column. The brand link inherits the header's fixed
-   height, which crops the image, so it is released here. */
-.bd-sidebar .navbar-brand.logo {
-  display: block;
-  height: auto;
-  max-height: none;
-  overflow: visible;
-  padding: 0.9rem 0 0.5rem;
+/* Logo at the top of the sidebar. The theme pins the brand link to
+   --pst-header-height and the image to `height: 100%`; overriding either, or painting the
+   mark on the column behind it, still gets the top cropped by that band. The mark is
+   therefore kept inside the slot and capped by height instead of filling the column —
+   the standing mark is portrait, so a full-width fill would overflow the slot anyway. */
+.bd-sidebar-primary .navbar-brand {
+  height: auto !important;
+  max-height: 176px !important;
 }
 
 .navbar-brand img {
-  max-width: 100%;
   max-height: 168px;
   width: auto;
-  height: auto;
+  max-width: 100%;
 }
 
 /* Current page in the navigation */
