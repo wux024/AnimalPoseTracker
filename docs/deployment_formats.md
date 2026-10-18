@@ -47,4 +47,4 @@ pip install -e ".[predict-triton]"
 
 TensorRT, Edge TPU, IMX500, and RKNN require vendor/platform components beyond a portable Python extra. They are not installed automatically by AnimalPoseTracker. INT8 calibration is wired for TFLite/Edge TPU and IMX500; unsupported precision requests are rejected rather than silently ignored.
 
-The worker preserves the existing `runs/predict/predictions.json` list schema. `prediction_metadata.json` records the checkpoint/artifact, format, model type, and selected dataset split.
+The worker preserves the existing `results/predict/predictions.json` list schema. `prediction_metadata.json` records the checkpoint/artifact, format, model type, and selected dataset split.

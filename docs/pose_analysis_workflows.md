@@ -69,9 +69,9 @@ cameras = {
 
 results_3d = project.triangulate(
     predictions_by_camera={
-        "left": "runs/predict/left-camera/tracked_predictions.json",
-        "right": "runs/predict/right-camera/tracked_predictions.json",
-        "top": "runs/predict/top-camera/tracked_predictions.json",
+        "left": "results/predict/left-camera/tracked_predictions.json",
+        "right": "results/predict/right-camera/tracked_predictions.json",
+        "top": "results/predict/top-camera/tracked_predictions.json",
     },
     cameras=cameras,
     source_by_camera={
