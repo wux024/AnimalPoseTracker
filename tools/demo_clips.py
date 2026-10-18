@@ -79,6 +79,7 @@ def render(name: str, spec: dict, limit: int | None, stride: int, fps: int) -> N
     cap = cv2.VideoCapture(str(SOURCE / spec["video"]))
     frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
     height = cap.get(cv2.CAP_PROP_FRAME_HEIGHT)
+    width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH) / height * 450)
     if frames != len(data):
         raise ValueError(f"{name}: {len(data)} rows against {frames} video frames")
 
@@ -87,7 +88,8 @@ def render(name: str, spec: dict, limit: int | None, stride: int, fps: int) -> N
     dx, dy, dz = -150.0, -80.0, -200.0
     colours = [tuple(c) for c in plt.cm.tab20(np.linspace(0, 1, len(spec["points"])))]
 
-    figure = plt.figure(figsize=(16.4, 9.0), dpi=100)
+    # the canvas is as wide as the video tile, so neither panel has dead margins
+    figure = plt.figure(figsize=(width / 100, 9.0), dpi=100)
     top = figure.add_axes([0.0, 0.5, 1.0, 0.5])
     bottom = figure.add_axes([0.0, 0.0, 1.0, 0.5], projection="3d")
     top.set_axis_off()
@@ -104,12 +106,14 @@ def render(name: str, spec: dict, limit: int | None, stride: int, fps: int) -> N
             top.set_axis_off()
             if ok:
                 image = image[: int(height - 580), :, :]
-                width = int(image.shape[1] / height * 450)
                 top.imshow(cv2.cvtColor(cv2.resize(image, (width, 450)), cv2.COLOR_BGR2RGB))
 
             # drawfigure_init(): bare canvas, z negated, arrows once per frame
             bottom.clear()
             bottom.set_axis_off()
+            # stretch the box to the canvas: a 1:1:1 cube inside a 791x450 area leaves
+            # a wide white band on both sides
+            bottom.set_box_aspect((width / 450.0, 1.0, 1.0))
             xyz = data[frame].copy()
             xyz[:, 2] = -xyz[:, 2]
             for chain in spec["chains"]:
