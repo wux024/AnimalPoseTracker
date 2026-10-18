@@ -73,14 +73,51 @@ Command-line values override `configs/runtime.yaml` for that run and are never w
 
 ![](docs/assets/overview.svg)
 
-| Step | Command | What you get |
-|---|---|---|
-| 1. Create | `animalpose-cli create` | A project with four configs and an empty dataset layout |
-| 2. Label | `animalpose-annotator` | YOLO-Pose or COCO keypoint labels |
-| 3. Train | `animalpose-cli train` | `results/train/weights/best.pt`, `training.jsonl`, `results.png` |
-| 4. Evaluate | `animalpose-cli val` | `results/val/metrics.json` — AP, AR, PCK, AUC, EPE |
-| 5. Predict | `animalpose-cli predict` | `results/predict/.../predictions.json` and rendered video |
-| 6. Export | `animalpose-cli export` | `<model>.<format>` plus its `.json` sidecar |
+**[1] Create** a project — four configs and an empty dataset layout:
+
+```bash
+animalpose-cli create --dataset trimouse --workspace projects --name smoke --worker user \
+    --model AnimalRTPose --scale N --date demo
+```
+
+**[2] Label** the keypoints — the annotator opens on the project, where boxes, classes and
+skeletons are drawn:
+
+```bash
+animalpose-annotator
+```
+
+**[3] Train** — the runtime config carries the model, the dataset and the schedule:
+
+```bash
+animalpose-cli train --config projects/smoke-user-AnimalRTPose-N-demo/configs/runtime.yaml
+```
+
+**[4] Evaluate** on the held-out split:
+
+```bash
+animalpose-cli val --config <project>/configs/runtime.yaml \
+    --weights <project>/results/train/weights/best.pt
+```
+
+**[5] Predict** a video, a folder of frames, or a whole split:
+
+```bash
+animalpose-cli predict --config <project>/configs/runtime.yaml \
+    --weights <project>/results/train/weights/best.pt \
+    --source frames/ --conf 0.25 --tracker bytetrack
+```
+
+**[6] Export** the checkpoint for deployment:
+
+```bash
+animalpose-cli export --config <project>/configs/runtime.yaml \
+    --weights <project>/results/train/weights/best.pt --format onnx --dynamic --opset 17
+```
+
+Every step writes into the project folder: `configs/`, the labels,
+`results/train/weights/best.pt`, `results/val/metrics.json`,
+`results/predict/.../predictions.json`, and the exported model with its sidecar.
 
 Steps 1–6 are detailed in [Getting started](docs/getting_started.md); the desktop route
 through the same steps is in [Desktop applications](docs/gui.md).
