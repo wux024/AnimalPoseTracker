@@ -60,11 +60,20 @@ extra each target needs, is in [Deployment formats](docs/deployment_formats.md).
 
 ## Quick start
 
+From an empty folder to an exportable model in two steps. The install above is assumed.
+
+- [1] Create a project and train it:
+
 ```bash
 animalpose-cli create --dataset trimouse --workspace projects --name smoke --worker user \
     --model AnimalRTPose --scale N --date demo --epochs 100 --batch-size 8 --image-size 640
-animalpose-cli train  --config projects/smoke-user-AnimalRTPose-N-demo/configs/runtime.yaml
-animalpose-cli val    --config <project>/configs/runtime.yaml \
+animalpose-cli train --config projects/smoke-user-AnimalRTPose-N-demo/configs/runtime.yaml
+```
+
+- [2] Evaluate it, then export the checkpoint:
+
+```bash
+animalpose-cli val --config <project>/configs/runtime.yaml \
     --weights <project>/results/train/weights/best.pt
 animalpose-cli export --config <project>/configs/runtime.yaml \
     --weights <project>/results/train/weights/best.pt --format onnx --dynamic --opset 17
