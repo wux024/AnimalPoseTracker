@@ -36,7 +36,7 @@
 **AnimalPoseTracker** is a toolbox for markerless pose estimation of animals performing
 various behaviors. As long as you can see (label) what you want to track, you can use this
 toolbox, as it assumes no particular species, viewpoint, or camera count.
-<a href="#why-use-animalposetracker">Read a short development and application summary below</a>.
+<a href="#why-another-pose-tracker">Read a short development and application summary below</a>.
 
 # Installation
 
@@ -101,7 +101,7 @@ through the same steps is in [Desktop applications](docs/gui.md).
 One run end to end on a built-in dataset — create, train, predict — and the files each
 step leaves behind. [Walk through it](docs/demo.md).
 
-# Why use AnimalPoseTracker?
+# Why another pose tracker?
 
 It continues to be actively maintained, and it aims at a usable `CLI` and `GUI` for
 computer-vision researchers and life scientists alike: state-of-the-art models under one
