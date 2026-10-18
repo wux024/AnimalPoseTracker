@@ -103,22 +103,14 @@ step leaves behind. [Walk through it](docs/demo.md).
 
 # Why use AnimalPoseTracker?
 
-It is actively maintained, and it aims at a usable `CLI` and `GUI` for computer-vision
-researchers and life scientists alike: state-of-the-art models under one project format,
-with defaults that work before they are tuned. Reading the two papers below is the shortest
-way to see what each model is for and how to adapt it.
+It continues to be actively maintained, and it aims at a usable `CLI` and `GUI` for
+computer-vision researchers and life scientists alike: state-of-the-art models under one
+project format, with defaults that work before they are tuned. What sets it apart is the
+breadth — one project trains, validates, predicts, exports and reconstructs in 3D, rather
+than handing you a model and leaving the rest to glue code.
 
-Three things it does that a general pose library usually leaves to you:
-
-- **Trains without borrowing a trainer.** Project creation, training, validation, dataset
-  prediction, export and checkpoint I/O all run on this project's own workers — no
-  third-party training framework is imported.
-- **Deploys almost anywhere.** TorchScript, ONNX, OpenVINO, TensorRT, CoreML, the TensorFlow
-  family, PaddlePaddle, MNN, NCNN, Sony IMX500 and Rockchip RKNN, plus a remote Triton model
-  URL — each with a sidecar that carries its preprocessing contract.
-- **Closes the 2D → 3D loop.** Tracking, temporal filtering and synchronized multi-camera
-  triangulation consume the same records the prediction stage writes, and the result can be
-  rendered back onto the cameras.
+Reading the two papers below is the shortest way to see what each model is for and how to
+adapt it to your setting.
 
 ## Performance 🔥
 
