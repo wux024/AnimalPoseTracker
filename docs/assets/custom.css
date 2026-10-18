@@ -40,6 +40,24 @@ html[data-theme="dark"] {
   color: var(--sidebar-hover-text-color);
 }
 
+/* Logo at the top of the sidebar — the standing mark, capped by height so it reads as
+   a badge instead of filling the column. The brand link inherits the header's fixed
+   height, which crops the image, so it is released here. */
+.bd-sidebar .navbar-brand.logo {
+  display: block;
+  height: auto;
+  max-height: none;
+  overflow: visible;
+  padding: 0.9rem 0 0.5rem;
+}
+
+.navbar-brand img {
+  max-width: 100%;
+  max-height: 104px;
+  width: auto;
+  height: auto;
+}
+
 /* Current page in the navigation */
 .toctree-l1.current.active {
   color: var(--sidebar-highlight-color);
