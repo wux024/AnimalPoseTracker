@@ -45,6 +45,10 @@ class ProjectConfigurationMixin:
             if not config_file.exists():
                 raise FileNotFoundError(f"Config file not found: {config_file}")
             self._load_config_file(config_type, config_file)
+        # Once the project exists the file is the truth: `pose3d` decides whether the project
+        # carries results/pose3d and whether the 3D page is usable, so a loaded rig must not be
+        # masked by the constructor's default.
+        self.pose3d = bool((self.project_config or {}).get("pose3d", False))
 
     def create_public_dataset_project(self, dataname: str = 'AP10K') -> None:
         """Create a project using a public dataset configuration."""

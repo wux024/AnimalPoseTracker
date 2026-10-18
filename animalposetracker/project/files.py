@@ -72,6 +72,29 @@ class ProjectFilesMixin:
             self._write_calibration_template()
         self.load_config_file()
 
+    def enable_pose3d(self) -> None:
+        """Turn an existing project into a 3D one: flag, calibration template, output folder.
+
+        Projects are created without 3D by default and a capture plan can change afterwards.
+        The flag lives in ``project.yaml``, so this rewrites that file and leaves every other
+        key alone; the template stays empty, which the loader reads as "not calibrated yet"
+        rather than as an identity rig.
+        """
+        if not (self._project_path / "project.yaml").is_file():
+            raise RuntimeError("Load a project before enabling 3D reconstruction")
+        if self.project_config.get("public_dataset"):
+            raise ValueError(
+                f"Project '{self._project_path.name}' was created from the public benchmark "
+                f"'{self.project_config['public_dataset']}'; it has no multi-camera capture"
+            )
+        if self.project_config.get("pose3d"):
+            return
+        self.pose3d = True
+        self.project_config["pose3d"] = True
+        self.save_configs("project")
+        self._write_calibration_template()
+        self.create_project_dirs()
+
     def _write_calibration_template(self) -> None:
         """Write the empty camera calibration the 3D stage expects.
 

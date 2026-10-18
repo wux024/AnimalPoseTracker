@@ -2344,5 +2344,135 @@ class UiModuleTests(unittest.TestCase):
                 self.assertNotIn(":\\", text)
 
 
+@unittest.skipUnless(QApplication is not None, "PySide6 (the gui extra) is not installed")
+class ThreeDPageTests(unittest.TestCase):
+    """The 3D tab reads the rig, keeps the user's rows, and refuses a project without 3D."""
+
+    @classmethod
+    def setUpClass(cls):
+        cls.application = QApplication.instance() or QApplication([])
+
+    def _page(self):
+        return AnimalPoseTrackerPage()
+
+    def _with_rig(self, page, cameras):
+        import tempfile
+
+        temporary = tempfile.TemporaryDirectory()
+        self.addCleanup(temporary.cleanup)
+        project = page.project
+        project.project_config.update({"project_name": "probe", "worker": "w", "date": "20260101",
+                                       "pose3d": True})
+        project.local_path = Path(temporary.name)
+        project.pose3d = True
+        (project.project_path / "configs").mkdir(parents=True)
+        (project.project_path / "project.yaml").write_text("pose3d: true\n", encoding="utf-8")
+        (project.project_path / "configs" / "cameras.yaml").write_text(
+            yaml.safe_dump({"cameras": {name: {} for name in cameras}}), encoding="utf-8"
+        )
+        return project.project_path
+
+    def test_the_tab_only_shows_for_a_3d_project(self):
+        page = self._page()
+        index = page.ConfigureTabPage.indexOf(page.ThreeDReconstruction)
+        self.assertEqual(page.ConfigureTabPage.tabText(index), "3D Reconstruction")
+        self.assertFalse(page.ConfigureTabPage.isTabVisible(index))   # nothing loaded yet
+
+        self._with_rig(page, ("camA", "camB"))
+        page.refreshCameraTable()
+        self.assertTrue(page.ConfigureTabPage.isTabVisible(index))
+        self.assertEqual(page.ConfigureTabPage.tabText(page.ConfigureTabPage.count() - 1),
+                         "3D Reconstruction")
+
+    def test_adding_rows_names_the_cameras_in_order(self):
+        page = self._page()
+        page.CameraTable.setRowCount(0)
+        page.onAddCamera()
+        page.onAddCamera()
+        self.assertEqual(page.CameraTable.rowCount(), 2)
+        self.assertEqual(page._cameraCell(0, 0), "camA")
+        self.assertEqual(page._cameraCell(1, 0), "camB")
+
+    def test_removing_a_row_drops_the_selected_camera(self):
+        page = self._page()
+        page.CameraTable.setRowCount(0)
+        page.onAddCamera()
+        page.onAddCamera()
+        page.CameraTable.setCurrentCell(0, 0)
+        page.onRemoveCamera()
+        self.assertEqual(page.CameraTable.rowCount(), 1)
+        self.assertEqual(page._cameraCell(0, 0), "camB")
+
+    def test_loading_a_rig_fills_the_table_with_its_cameras(self):
+        page = self._page()
+        project_dir = self._with_rig(page, ("camA", "camB", "camC"))
+        page.refreshCameraTable()
+        self.assertEqual(page.CameraTable.rowCount(), 3)
+        self.assertEqual(page._cameraCell(2, 0), "camC")
+        self.assertEqual(Path(page._cameraCell(1, 2)),
+                         project_dir / "results" / "predict" / "camB" / "predictions.json")
+
+    def test_a_project_without_the_3d_option_disables_the_page(self):
+        page = self._page()
+        project_dir = self._with_rig(page, ("camA", "camB"))
+        page.project.pose3d = False
+        page.project.project_config["pose3d"] = False
+        page.refreshCameraTable()
+        self.assertEqual(page.CameraTable.rowCount(), 0)
+        self.assertFalse(page.RunReconstruction.isEnabled())
+        self.assertFalse(page.ConfigureTabPage.isTabVisible(
+            page.ConfigureTabPage.indexOf(page.ThreeDReconstruction)))
+        self.assertIn("without the 3D option", page.Pose3DLog.toPlainText())
+
+    def test_a_plain_project_can_be_upgraded_to_3d(self):
+        page = self._page()
+        project_dir = self._with_rig(page, ())
+        page.project.pose3d = False
+        page.project.project_config["pose3d"] = False
+        (project_dir / "project.yaml").write_text(
+            yaml.safe_dump({"project_name": "probe", "pose3d": False}), encoding="utf-8"
+        )
+        page.refreshCameraTable()
+        index = page.ConfigureTabPage.indexOf(page.ThreeDReconstruction)
+        self.assertFalse(page.ConfigureTabPage.isTabVisible(index))
+        self.assertTrue(page.actionEnable3D.isEnabled())
+
+        page.onEnable3D()
+
+        identity = yaml.safe_load((project_dir / "project.yaml").read_text(encoding="utf-8"))
+        self.assertTrue(identity["pose3d"])
+        self.assertTrue((project_dir / "configs" / "cameras.yaml").is_file())
+        self.assertTrue((project_dir / "results" / "pose3d").is_dir())
+        self.assertTrue(page.ConfigureTabPage.isTabVisible(index))
+        self.assertFalse(page.actionEnable3D.isEnabled())
+
+    def test_a_public_benchmark_project_cannot_be_upgraded(self):
+        page = self._page()
+        project_dir = self._with_rig(page, ())
+        page.project.pose3d = False
+        page.project.project_config["pose3d"] = False
+        page.project.project_config["public_dataset"] = "Tri-Mouse"
+        (project_dir / "project.yaml").write_text(
+            yaml.safe_dump({"project_name": "probe", "public_dataset": "Tri-Mouse",
+                            "pose3d": False}), encoding="utf-8"
+        )
+        with patch("animalposetracker.gui.mainpage.QMessageBox") as box:
+            page.onEnable3D()
+        box.warning.assert_called_once()
+        self.assertIn("public benchmark", str(box.warning.call_args[0][2]))
+        identity = yaml.safe_load((project_dir / "project.yaml").read_text(encoding="utf-8"))
+        self.assertFalse(identity.get("pose3d"))
+
+    def test_calibration_needs_two_views(self):
+        page = self._page()
+        self._with_rig(page, ("camA", "camB"))
+        page.refreshCameraTable()
+        page._setCameraCell(0, 1, "/data/camA")   # only one source filled in
+        with patch("animalposetracker.gui.mainpage.QMessageBox") as box:
+            page.onRunCalibration()
+        box.warning.assert_called_once()
+        self.assertIn("at least two views", str(box.warning.call_args[0][2]).lower())
+
+
 if __name__ == "__main__":
     unittest.main()

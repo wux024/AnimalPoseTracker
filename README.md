@@ -113,6 +113,8 @@ animalpose-cli pose3d-export --config configs/runtime.yaml --plot results/pose3d
 
 Instances are associated across cameras with `--association`. `index` (default) pairs the n-th instance of every camera and is only correct with one animal per frame; `epipolar` matches them by the epipolar constraint instead, so detection order, a dropped detection, or two animals crossing cannot swap identities. Each instance in `poses3d.json` records the chosen instance per camera (`view_indices`), and `report.json` carries the match counts under `association_stats`.
 
+The same stage has a home in the GUI: the **3D Reconstruction** tab, which only appears for a project created with the 3D option, lists the cameras (double-click a cell to pick a calibration folder/video or a predictions file) and runs `calibrate`, `pose3d` and `pose3d-export` with their live output in the page. The commands it runs are the CLI's own; the page only collects the paths and numbers. A project created without 3D can gain it later from **Tools > Enable 3D reconstruction for this project**, which writes the flag, the empty `configs/cameras.yaml` and `results/pose3d` without touching anything else; public-benchmark projects stay locked out.
+
 ## Configuration model
 
 Training defaults live in [`animalposetracker/cfg/training.yaml`](animalposetracker/cfg/training.yaml). Values identical across AnimalRTPose and AnimalViTPose are defined once under `training.shared`; each model profile contains only its specific or differing training, loss, augmentation and validation values. The model type in `project.yaml` selects the matching key under `training.models`.

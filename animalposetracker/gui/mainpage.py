@@ -1,9 +1,9 @@
-from PySide6.QtCore import  Qt, QSettings, QFile, QTextStream, QTimer, QThread, Signal
+from PySide6.QtCore import  Qt, QSettings, QFile, QTextStream, QTimer, QThread, Signal, QProcess
 from PySide6.QtWidgets import  (QMenu, QApplication, QFileDialog, QMainWindow,
                                  QMessageBox, QTreeWidget, QTreeWidgetItem, QLabel, 
                                  QTreeWidgetItemIterator, QSplashScreen, QProgressBar,
-                                 QDialog)
-from PySide6.QtGui import QCursor, QPixmap, QIcon, QColor
+                                 QDialog, QTableWidgetItem)
+from PySide6.QtGui import QCursor, QPixmap, QIcon, QColor, QTextCursor
 import os
 import sys
 from pathlib import Path
@@ -19,6 +19,13 @@ from .utils import (DatasetSplitDialog, split_dataset_sklearn,
                     create_coco_annotations, ConfigureValueDelegate)
 from animalposetracker.gui import WindowFactory
 from animalposetracker.project.api import AnimalPoseTrackerProject
+from animalposetracker.pose3d.gui_bridge import (
+    build_calibrate_command,
+    build_export_command,
+    build_pose3d_command,
+    camera_names,
+    prediction_path,
+)
 from animalposetracker.utils import (convert_labels_to_coco, 
                                      convert_labels_to_yolo,
                                      KeyframeExtractor)
@@ -172,6 +179,7 @@ class AnimalPoseTrackerPage(QMainWindow, Ui_AnimalPoseTracker):
         # File menu actions
         self.actionCreateNewProject.triggered.connect(self.onCreateNewProject)
         self.actionLoadProject.triggered.connect(self.onLoadProject)
+        self.actionEnable3D.triggered.connect(self.onEnable3D)
         self.actionSave.triggered.connect(self.onSave)
         self.actionExit.triggered.connect(self.onExit)
         
@@ -241,6 +249,9 @@ class AnimalPoseTrackerPage(QMainWindow, Ui_AnimalPoseTracker):
         self.StartModelWeights.clicked.connect(self.onSelectModelWeights)
         self.StartExport.clicked.connect(self.onStartExport)
 
+        # 3D reconstruction tab
+        self.setupPose3DConnections()
+
     def _open_sub_page(self, page_class):
         """Replace the current tool window, closing the previous one first.
 
@@ -279,6 +290,8 @@ class AnimalPoseTrackerPage(QMainWindow, Ui_AnimalPoseTracker):
         self.ConfigureFilePathDisplay.setText(project_config_path)
         self.initialize_other_config()
         self.addRecentProject(project_config_path)
+        # A project created with the 3D option gets its page filled in right away.
+        self.refreshCameraTable()
         # close sub page
         self.sub_page.close()
         self.sub_page = None     
@@ -296,6 +309,8 @@ class AnimalPoseTrackerPage(QMainWindow, Ui_AnimalPoseTracker):
             self.ConfigureFilePathDisplay.setText(project_config_path)
             self.initialize_other_config()
             self.addRecentProject(project_config_path)
+            # A 3D project brings its rig with it; the page reads it back on load.
+            self.refreshCameraTable()
             # set work directory
             os.chdir(self.project.project_path)
 
@@ -1413,7 +1428,280 @@ class AnimalPoseTrackerPage(QMainWindow, Ui_AnimalPoseTracker):
     def onStartExport(self):
         """Slot for starting export"""
         self.project.export()
-    
+
+    # ---- 3D reconstruction tab -------------------------------------------------------------
+
+    def setupPose3DConnections(self):
+        """Wire the 3D page; the page only builds commands the CLI already owns."""
+        self._pose3d_process = None
+        self.AddCamera.clicked.connect(self.onAddCamera)
+        self.RemoveCamera.clicked.connect(self.onRemoveCamera)
+        self.RefreshCameras.clicked.connect(self.refreshCameraTable)
+        self.CameraTable.cellDoubleClicked.connect(self.onCameraTableCellDoubleClicked)
+        self.RunCalibration.clicked.connect(self.onRunCalibration)
+        self.RunReconstruction.clicked.connect(self.onRunReconstruction)
+        self.RunPose3DExport.clicked.connect(self.onRunPose3DExport)
+        # The tab appears with a 3D project, not for every project.
+        self.setThreeDVisible(False)
+        self.refreshCameraTable()
+        self._setPose3DRunning(False)
+
+    def _pose3d_project_dir(self):
+        """The loaded project's directory, or None before a project is open."""
+        try:
+            return Path(self.project.project_path)
+        except Exception:
+            return None
+
+    def _pose3d_enabled(self):
+        """Whether this project carries the 3D option.
+
+        The loaded configuration is the source of truth; the object attribute only covers the
+        window between a create form being submitted and the files being read back.
+        """
+        config = getattr(self.project, "project_config", None) or {}
+        if "pose3d" in config:
+            return bool(config["pose3d"])
+        return bool(getattr(self.project, "pose3d", False))
+
+    def _sync_enable3d_action(self):
+        """Offer the upgrade only where it can work: a loaded, non-benchmark project without 3D."""
+        project_dir = self._pose3d_project_dir()
+        loaded = project_dir is not None and (project_dir / "project.yaml").is_file()
+        config = getattr(self.project, "project_config", None) or {}
+        self.actionEnable3D.setEnabled(
+            loaded and not config.get("public_dataset") and not self._pose3d_enabled()
+        )
+
+    def onEnable3D(self):
+        """Add the 3D layout (flag, calibration template, output folder) to a loaded project."""
+        if not (self.project.project_path / "project.yaml").is_file():
+            QMessageBox.warning(self, "Enable 3D",
+                                "Load a project before enabling 3D reconstruction.")
+            return
+        try:
+            self.project.enable_pose3d()
+        except (RuntimeError, ValueError) as error:
+            QMessageBox.warning(self, "Enable 3D", str(error))
+            return
+        self.refreshCameraTable()
+        self.ConfigureTabPage.setCurrentWidget(self.ThreeDReconstruction)
+        self.Pose3DLog.appendPlainText(
+            "3D reconstruction enabled. Add one camera row per view, point it at that "
+            "camera's calibration images or video, then run the calibration."
+        )
+
+    def _setPose3DRunning(self, running):
+        """Enable the controls only when no task is running and the project carries 3D."""
+        enabled = (not running) and self._pose3d_enabled()
+        for button in (self.RunCalibration, self.RunReconstruction, self.RunPose3DExport,
+                       self.AddCamera, self.RemoveCamera):
+            button.setEnabled(enabled)
+        self.CameraTable.setEnabled(not running)
+
+    def refreshCameraTable(self):
+        """Fill the camera table from the project's calibration file.
+
+        An empty ``cameras.yaml`` (the template ``create --pose3d`` writes) leaves the table
+        alone, so reloading never wipes names the user is still typing.
+        """
+        project_dir = self._pose3d_project_dir()
+        if project_dir is None or not (project_dir / "project.yaml").is_file():
+            self.setThreeDVisible(False)
+            self._sync_enable3d_action()
+            return
+        enabled = self._pose3d_enabled()
+        self.setThreeDVisible(enabled)
+        self._sync_enable3d_action()
+        if not enabled:
+            self.CameraTable.setRowCount(0)
+            self.Pose3DLog.setPlainText(
+                "This project was created without the 3D option; recreate it with "
+                "\"Enable 3D reconstruction\" to use this page."
+            )
+            self._setPose3DRunning(False)
+            return
+        # A loaded 3D project enables the controls; the empty template leaves them enabled too,
+        # because the rig is filled in on this page.
+        self._setPose3DRunning(False)
+        names = camera_names(project_dir)
+        if not names:
+            return
+        self.CameraTable.setRowCount(0)
+        for name in names:
+            self._appendCameraRow(name, "", str(prediction_path(project_dir, name)))
+
+    def _appendCameraRow(self, camera, source, predictions):
+        row = self.CameraTable.rowCount()
+        self.CameraTable.insertRow(row)
+        self.CameraTable.setItem(row, 0, QTableWidgetItem(str(camera)))
+        self.CameraTable.setItem(row, 1, QTableWidgetItem(str(source)))
+        self.CameraTable.setItem(row, 2, QTableWidgetItem(str(predictions)))
+
+    def _cameraCell(self, row, column):
+        item = self.CameraTable.item(row, column)
+        return item.text().strip() if item is not None else ""
+
+    def _setCameraCell(self, row, column, text):
+        item = self.CameraTable.item(row, column)
+        if item is None:
+            self.CameraTable.setItem(row, column, QTableWidgetItem(str(text)))
+        else:
+            item.setText(str(text))
+
+    def onAddCamera(self):
+        row = self.CameraTable.rowCount()
+        # camA, camB, ... follow the rig convention the CLI and the docs use.
+        name = f"cam{chr(ord('A') + row)}" if row < 26 else f"cam{row + 1}"
+        project_dir = self._pose3d_project_dir()
+        predictions = str(prediction_path(project_dir, name)) if project_dir else ""
+        self._appendCameraRow(name, "", predictions)
+
+    def onRemoveCamera(self):
+        row = self.CameraTable.currentRow()
+        if row >= 0:
+            self.CameraTable.removeRow(row)
+
+    def onCameraTableCellDoubleClicked(self, row, column):
+        if column == 1:
+            menu = QMenu(self)
+            video_action = menu.addAction("Select video")
+            image_action = menu.addAction("Select image directory")
+            action = menu.exec(QCursor.pos())
+            if action is video_action:
+                path, _ = QFileDialog.getOpenFileName(
+                    self, "Select calibration video", "",
+                    "Video (*.mp4 *.avi *.mov *.mkv)",
+                )
+                if path:
+                    self._setCameraCell(row, 1, path)
+            elif action is image_action:
+                path = QFileDialog.getExistingDirectory(self, "Select image directory")
+                if path:
+                    self._setCameraCell(row, 1, path)
+        elif column == 2:
+            path, _ = QFileDialog.getOpenFileName(
+                self, "Select 2D predictions", "", "Predictions (*.json)"
+            )
+            if path:
+                self._setCameraCell(row, 2, path)
+
+    def _camera_sources(self):
+        """``{camera: source}`` for the rows that name a camera and a calibration source."""
+        sources = {}
+        for row in range(self.CameraTable.rowCount()):
+            camera = self._cameraCell(row, 0)
+            source = self._cameraCell(row, 1)
+            if camera and source:
+                sources[camera] = source
+        return sources
+
+    def _camera_predictions(self, filtered):
+        """``{camera: predictions path}`` for every named camera row."""
+        project_dir = self._pose3d_project_dir()
+        views = {}
+        for row in range(self.CameraTable.rowCount()):
+            camera = self._cameraCell(row, 0)
+            if not camera:
+                continue
+            path = self._cameraCell(row, 2)
+            if not path and project_dir is not None:
+                path = str(prediction_path(project_dir, camera, filtered))
+            if path:
+                views[camera] = path
+        return views
+
+    def onRunCalibration(self):
+        project_dir = self._pose3d_project_dir()
+        if project_dir is None:
+            return
+        sources = self._camera_sources()
+        try:
+            command = build_calibrate_command(
+                project_dir, sources,
+                board_squares=self.BoardSquares.text().strip() or "10x7",
+                square_size=self.SquareSize.value(),
+                marker_size=self.MarkerSize.value(),
+                sync=self.SyncMode.currentText(),
+                force=self.OverwriteCalibration.isChecked(),
+                intrinsics_from=(project_dir / "configs" / "cameras.yaml")
+                if self.ReuseIntrinsics.isChecked() else None,
+            )
+        except ValueError as error:
+            QMessageBox.warning(self, "Camera calibration", str(error))
+            return
+        self._runPose3DCommand(command, "Calibration")
+
+    def onRunReconstruction(self):
+        project_dir = self._pose3d_project_dir()
+        if project_dir is None:
+            return
+        views = self._camera_predictions(self.UseFiltered2D.isChecked())
+        if len(views) < 2:
+            QMessageBox.warning(
+                self, "3D reconstruction",
+                "At least two cameras with a predictions file are required.",
+            )
+            return
+        missing = [f"{camera}: {path}" for camera, path in views.items() if not Path(path).is_file()]
+        if missing:
+            QMessageBox.warning(
+                self, "3D reconstruction",
+                "Missing 2D predictions for:\n" + "\n".join(missing),
+            )
+            return
+        command = build_pose3d_command(
+            project_dir,
+            views=views,
+            association=self.AssociationMode.currentText(),
+            max_sampson=self.MaxSampson.value(),
+            min_views=self.MinViews.value(),
+            check_sync=self.CheckSync.isChecked(),
+        )
+        self._runPose3DCommand(command, "3D reconstruction")
+
+    def onRunPose3DExport(self):
+        project_dir = self._pose3d_project_dir()
+        if project_dir is None:
+            return
+        output_dir = project_dir / "results" / "pose3d"
+        command = build_export_command(
+            project_dir,
+            filtered=self.ExportFiltered3D.isChecked(),
+            plot=output_dir / "trajectory.png",
+            instance=self.PlotInstance.value(),
+            summary_output=output_dir / "summary.json",
+        )
+        self._runPose3DCommand(command, "3D export")
+
+    def _runPose3DCommand(self, command, label):
+        """Run one 3D command with the project as its working directory."""
+        if self._pose3d_process is not None and self._pose3d_process.state() != QProcess.ProcessState.NotRunning:
+            QMessageBox.information(self, "3D", "A 3D task is already running.")
+            return
+        project_dir = self._pose3d_project_dir()
+        self.Pose3DLog.appendPlainText(f"\n=== {label} ===\n$ " + " ".join(str(part) for part in command))
+        process = QProcess(self)
+        process.setWorkingDirectory(str(project_dir))
+        process.setProcessChannelMode(QProcess.ProcessChannelMode.MergedChannels)
+        process.readyReadStandardOutput.connect(lambda p=process: self._readPose3DOutput(p))
+        process.finished.connect(lambda code, _status, name=label: self._pose3DFinished(code, name))
+        process.start(str(command[0]), [str(part) for part in command[1:]])
+        self._pose3d_process = process
+        self._setPose3DRunning(True)
+
+    def _readPose3DOutput(self, process):
+        data = bytes(process.readAllStandardOutput()).decode("utf-8", "replace")
+        if data:
+            self.Pose3DLog.moveCursor(QTextCursor.MoveOperation.End)
+            self.Pose3DLog.insertPlainText(data)
+
+    def _pose3DFinished(self, code, label):
+        self._setPose3DRunning(False)
+        self.Pose3DLog.appendPlainText(f"=== {label} finished with exit code {code} ===")
+        if code == 0 and label.startswith("Calibration"):
+            self.refreshCameraTable()
+
 
 class SplashScreen(QSplashScreen):
     """Custom splash screen with guaranteed initialization sequence"""

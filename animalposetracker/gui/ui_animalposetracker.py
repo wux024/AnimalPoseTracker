@@ -15,11 +15,11 @@ from PySide6.QtGui import (QAction, QBrush, QColor, QConicalGradient,
     QIcon, QImage, QKeySequence, QLinearGradient,
     QPainter, QPalette, QPixmap, QRadialGradient,
     QTransform)
-from PySide6.QtWidgets import (QApplication, QCheckBox, QComboBox, QFrame,
-    QGroupBox, QHBoxLayout, QHeaderView, QLabel,
+from PySide6.QtWidgets import (QApplication, QCheckBox, QComboBox, QDoubleSpinBox,
+    QFrame, QGroupBox, QHBoxLayout, QHeaderView, QLabel,
     QLayout, QLineEdit, QMainWindow, QMenu,
-    QMenuBar, QPushButton, QSizePolicy, QSpacerItem,
-    QSpinBox, QStackedWidget, QTabWidget, QToolBar,
+    QMenuBar, QPlainTextEdit, QPushButton, QSizePolicy, QSpacerItem,
+    QSpinBox, QStackedWidget, QTabWidget, QTableWidget, QToolBar,
     QTreeWidget, QTreeWidgetItem, QVBoxLayout, QWidget)
 
 class Ui_AnimalPoseTracker(object):
@@ -54,6 +54,8 @@ class Ui_AnimalPoseTracker(object):
         self.actionExit.setObjectName(u"actionExit")
         icon3 = QIcon(QIcon.fromTheme(u"application-exit"))
         self.actionExit.setIcon(icon3)
+        self.actionEnable3D = QAction(AnimalPoseTracker)
+        self.actionEnable3D.setObjectName(u"actionEnable3D")
         self.actionAnnotator = QAction(AnimalPoseTracker)
         self.actionAnnotator.setObjectName(u"actionAnnotator")
         self.actionInferencer = QAction(AnimalPoseTracker)
@@ -922,6 +924,237 @@ class Ui_AnimalPoseTracker(object):
         self.ExportModelLayout.addWidget(self.ExportConfigureGroup)
 
         self.ConfigureTabPage.addTab(self.ExportModel, "")
+        self.ThreeDReconstruction = QWidget()
+        self.ThreeDReconstruction.setObjectName(u"ThreeDReconstruction")
+        self.ThreeDReconstructionLayout = QVBoxLayout(self.ThreeDReconstruction)
+        self.ThreeDReconstructionLayout.setObjectName(u"ThreeDReconstructionLayout")
+        self.ThreeDReconstructionLabel = QLabel(self.ThreeDReconstruction)
+        self.ThreeDReconstructionLabel.setObjectName(u"ThreeDReconstructionLabel")
+        self.ThreeDReconstructionLabel.setFont(font3)
+        self.ThreeDReconstructionLabel.setAlignment(Qt.AlignmentFlag.AlignLeading|Qt.AlignmentFlag.AlignLeft|Qt.AlignmentFlag.AlignVCenter)
+
+        self.ThreeDReconstructionLayout.addWidget(self.ThreeDReconstructionLabel)
+
+        self.ThreeDReconstructionLine = QFrame(self.ThreeDReconstruction)
+        self.ThreeDReconstructionLine.setObjectName(u"ThreeDReconstructionLine")
+        self.ThreeDReconstructionLine.setFrameShape(QFrame.Shape.HLine)
+        self.ThreeDReconstructionLine.setFrameShadow(QFrame.Shadow.Sunken)
+
+        self.ThreeDReconstructionLayout.addWidget(self.ThreeDReconstructionLine)
+
+        self.ThreeDCameraGroup = QGroupBox(self.ThreeDReconstruction)
+        self.ThreeDCameraGroup.setObjectName(u"ThreeDCameraGroup")
+        self.ThreeDCameraGroupLayout = QVBoxLayout(self.ThreeDCameraGroup)
+        self.ThreeDCameraGroupLayout.setObjectName(u"ThreeDCameraGroupLayout")
+        self.ThreeDCameraToolsLayout = QHBoxLayout()
+        self.ThreeDCameraToolsLayout.setObjectName(u"ThreeDCameraToolsLayout")
+        self.AddCamera = QPushButton(self.ThreeDCameraGroup)
+        self.AddCamera.setObjectName(u"AddCamera")
+
+        self.ThreeDCameraToolsLayout.addWidget(self.AddCamera)
+
+        self.RemoveCamera = QPushButton(self.ThreeDCameraGroup)
+        self.RemoveCamera.setObjectName(u"RemoveCamera")
+
+        self.ThreeDCameraToolsLayout.addWidget(self.RemoveCamera)
+
+        self.RefreshCameras = QPushButton(self.ThreeDCameraGroup)
+        self.RefreshCameras.setObjectName(u"RefreshCameras")
+
+        self.ThreeDCameraToolsLayout.addWidget(self.RefreshCameras)
+
+
+        self.ThreeDCameraGroupLayout.addLayout(self.ThreeDCameraToolsLayout)
+
+        self.CameraTable = QTableWidget(self.ThreeDCameraGroup)
+        self.CameraTable.setObjectName(u"CameraTable")
+        self.CameraTable.setColumnCount(3)
+        self.CameraTable.setMinimumHeight(90)
+        self.CameraTable.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeMode.Stretch)
+        self.CameraTable.verticalHeader().setVisible(False)
+        self.CameraTable.setWordWrap(False)
+        self.CameraTable.setSelectionBehavior(QTableWidget.SelectionBehavior.SelectRows)
+
+        self.ThreeDCameraGroupLayout.addWidget(self.CameraTable)
+
+
+        self.ThreeDReconstructionLayout.addWidget(self.ThreeDCameraGroup)
+
+        self.CalibrateGroup = QGroupBox(self.ThreeDReconstruction)
+        self.CalibrateGroup.setObjectName(u"CalibrateGroup")
+        self.CalibrateGroupLayout = QVBoxLayout(self.CalibrateGroup)
+        self.CalibrateGroupLayout.setObjectName(u"CalibrateGroupLayout")
+        self.CalibrateBoardLayout = QHBoxLayout()
+        self.CalibrateBoardLayout.setObjectName(u"CalibrateBoardLayout")
+        self.BoardSquaresLabel = QLabel(self.CalibrateGroup)
+        self.BoardSquaresLabel.setObjectName(u"BoardSquaresLabel")
+
+        self.CalibrateBoardLayout.addWidget(self.BoardSquaresLabel)
+
+        self.BoardSquares = QLineEdit(self.CalibrateGroup)
+        self.BoardSquares.setObjectName(u"BoardSquares")
+        self.BoardSquares.setMaximumWidth(90)
+
+        self.CalibrateBoardLayout.addWidget(self.BoardSquares)
+
+        self.SquareSizeLabel = QLabel(self.CalibrateGroup)
+        self.SquareSizeLabel.setObjectName(u"SquareSizeLabel")
+
+        self.CalibrateBoardLayout.addWidget(self.SquareSizeLabel)
+
+        self.SquareSize = QDoubleSpinBox(self.CalibrateGroup)
+        self.SquareSize.setObjectName(u"SquareSize")
+        self.SquareSize.setDecimals(2)
+        self.SquareSize.setMaximum(1000.0)
+        self.SquareSize.setValue(22.0)
+
+        self.CalibrateBoardLayout.addWidget(self.SquareSize)
+
+        self.MarkerSizeLabel = QLabel(self.CalibrateGroup)
+        self.MarkerSizeLabel.setObjectName(u"MarkerSizeLabel")
+
+        self.CalibrateBoardLayout.addWidget(self.MarkerSizeLabel)
+
+        self.MarkerSize = QDoubleSpinBox(self.CalibrateGroup)
+        self.MarkerSize.setObjectName(u"MarkerSize")
+        self.MarkerSize.setDecimals(2)
+        self.MarkerSize.setMaximum(1000.0)
+        self.MarkerSize.setValue(16.5)
+
+        self.CalibrateBoardLayout.addWidget(self.MarkerSize)
+
+        self.SyncModeLabel = QLabel(self.CalibrateGroup)
+        self.SyncModeLabel.setObjectName(u"SyncModeLabel")
+
+        self.CalibrateBoardLayout.addWidget(self.SyncModeLabel)
+
+        self.SyncMode = QComboBox(self.CalibrateGroup)
+        self.SyncMode.setObjectName(u"SyncMode")
+        self.SyncMode.addItems(["hardware", "software", "unknown"])
+
+        self.CalibrateBoardLayout.addWidget(self.SyncMode)
+
+        self.CalibrateGroupLayout.addLayout(self.CalibrateBoardLayout)
+
+        self.CalibrateToolsLayout = QHBoxLayout()
+        self.CalibrateToolsLayout.setObjectName(u"CalibrateToolsLayout")
+        self.ReuseIntrinsics = QCheckBox(self.CalibrateGroup)
+        self.ReuseIntrinsics.setObjectName(u"ReuseIntrinsics")
+
+        self.CalibrateToolsLayout.addWidget(self.ReuseIntrinsics)
+
+        self.OverwriteCalibration = QCheckBox(self.CalibrateGroup)
+        self.OverwriteCalibration.setObjectName(u"OverwriteCalibration")
+
+        self.CalibrateToolsLayout.addWidget(self.OverwriteCalibration)
+
+        self.RunCalibration = QPushButton(self.CalibrateGroup)
+        self.RunCalibration.setObjectName(u"RunCalibration")
+
+        self.CalibrateToolsLayout.addWidget(self.RunCalibration)
+
+
+        self.CalibrateGroupLayout.addLayout(self.CalibrateToolsLayout)
+
+
+        self.ThreeDReconstructionLayout.addWidget(self.CalibrateGroup)
+
+        self.ReconstructionGroup = QGroupBox(self.ThreeDReconstruction)
+        self.ReconstructionGroup.setObjectName(u"ReconstructionGroup")
+        self.ReconstructionGroupLayout = QVBoxLayout(self.ReconstructionGroup)
+        self.ReconstructionGroupLayout.setObjectName(u"ReconstructionGroupLayout")
+        self.ReconstructionOptionsLayout = QHBoxLayout()
+        self.ReconstructionOptionsLayout.setObjectName(u"ReconstructionOptionsLayout")
+        self.AssociationLabel = QLabel(self.ReconstructionGroup)
+        self.AssociationLabel.setObjectName(u"AssociationLabel")
+
+        self.ReconstructionOptionsLayout.addWidget(self.AssociationLabel)
+
+        self.AssociationMode = QComboBox(self.ReconstructionGroup)
+        self.AssociationMode.setObjectName(u"AssociationMode")
+        self.AssociationMode.addItems(["index", "epipolar"])
+
+        self.ReconstructionOptionsLayout.addWidget(self.AssociationMode)
+
+        self.MaxSampsonLabel = QLabel(self.ReconstructionGroup)
+        self.MaxSampsonLabel.setObjectName(u"MaxSampsonLabel")
+
+        self.ReconstructionOptionsLayout.addWidget(self.MaxSampsonLabel)
+
+        self.MaxSampson = QDoubleSpinBox(self.ReconstructionGroup)
+        self.MaxSampson.setObjectName(u"MaxSampson")
+        self.MaxSampson.setDecimals(1)
+        self.MaxSampson.setMaximum(500.0)
+        self.MaxSampson.setValue(25.0)
+
+        self.ReconstructionOptionsLayout.addWidget(self.MaxSampson)
+
+        self.MinViewsLabel = QLabel(self.ReconstructionGroup)
+        self.MinViewsLabel.setObjectName(u"MinViewsLabel")
+
+        self.ReconstructionOptionsLayout.addWidget(self.MinViewsLabel)
+
+        self.MinViews = QSpinBox(self.ReconstructionGroup)
+        self.MinViews.setObjectName(u"MinViews")
+        self.MinViews.setMinimum(2)
+        self.MinViews.setMaximum(8)
+        self.MinViews.setValue(2)
+
+        self.ReconstructionOptionsLayout.addWidget(self.MinViews)
+
+        self.UseFiltered2D = QCheckBox(self.ReconstructionGroup)
+        self.UseFiltered2D.setObjectName(u"UseFiltered2D")
+
+        self.ReconstructionOptionsLayout.addWidget(self.UseFiltered2D)
+
+        self.CheckSync = QCheckBox(self.ReconstructionGroup)
+        self.CheckSync.setObjectName(u"CheckSync")
+
+        self.ReconstructionOptionsLayout.addWidget(self.CheckSync)
+
+        self.ReconstructionGroupLayout.addLayout(self.ReconstructionOptionsLayout)
+
+        self.ReconstructionToolsLayout = QHBoxLayout()
+        self.ReconstructionToolsLayout.setObjectName(u"ReconstructionToolsLayout")
+        self.RunReconstruction = QPushButton(self.ReconstructionGroup)
+        self.RunReconstruction.setObjectName(u"RunReconstruction")
+
+        self.ReconstructionToolsLayout.addWidget(self.RunReconstruction)
+
+        self.ExportFiltered3D = QCheckBox(self.ReconstructionGroup)
+        self.ExportFiltered3D.setObjectName(u"ExportFiltered3D")
+
+        self.ReconstructionToolsLayout.addWidget(self.ExportFiltered3D)
+
+        self.PlotInstanceLabel = QLabel(self.ReconstructionGroup)
+        self.PlotInstanceLabel.setObjectName(u"PlotInstanceLabel")
+
+        self.ReconstructionToolsLayout.addWidget(self.PlotInstanceLabel)
+
+        self.PlotInstance = QSpinBox(self.ReconstructionGroup)
+        self.PlotInstance.setObjectName(u"PlotInstance")
+
+        self.ReconstructionToolsLayout.addWidget(self.PlotInstance)
+
+        self.RunPose3DExport = QPushButton(self.ReconstructionGroup)
+        self.RunPose3DExport.setObjectName(u"RunPose3DExport")
+
+        self.ReconstructionToolsLayout.addWidget(self.RunPose3DExport)
+
+
+        self.ReconstructionGroupLayout.addLayout(self.ReconstructionToolsLayout)
+
+
+        self.ThreeDReconstructionLayout.addWidget(self.ReconstructionGroup)
+
+        self.Pose3DLog = QPlainTextEdit(self.ThreeDReconstruction)
+        self.Pose3DLog.setObjectName(u"Pose3DLog")
+        self.Pose3DLog.setReadOnly(True)
+        self.Pose3DLog.setMinimumHeight(80)
+
+        self.ThreeDReconstructionLayout.addWidget(self.Pose3DLog)
+
+        self.ConfigureTabPage.addTab(self.ThreeDReconstruction, "")
 
         self.ConfigurePageLayout.addWidget(self.ConfigureTabPage)
 
@@ -965,6 +1198,7 @@ class Ui_AnimalPoseTracker(object):
         self.menuAnimalPoseTracker.addAction(self.actionOpenRecent)
         self.menuAnimalPoseTracker.addAction(self.actionSave)
         self.menuAnimalPoseTracker.addAction(self.actionExit)
+        self.menuTools.addAction(self.actionEnable3D)
         self.menuTools.addAction(self.actionAnnotator)
         self.menuTools.addAction(self.actionInferencer)
         self.menuHelp.addAction(self.actionDoc)
@@ -992,6 +1226,8 @@ class Ui_AnimalPoseTracker(object):
         self.actionLoadProject.setText(QCoreApplication.translate("AnimalPoseTracker", u"Open Old Project Ctrl+O", None))
         self.actionOpenRecent.setText(QCoreApplication.translate("AnimalPoseTracker", u"Open Recent", None))
         self.actionSave.setText(QCoreApplication.translate("AnimalPoseTracker", u"Save", None))
+        self.actionEnable3D.setText(QCoreApplication.translate(
+            "AnimalPoseTracker", u"Enable 3D reconstruction for this project", None))
         self.actionExit.setText(QCoreApplication.translate("AnimalPoseTracker", u"Exit", None))
         self.actionAnnotator.setText(QCoreApplication.translate("AnimalPoseTracker", u"Annotator", None))
         self.actionInferencer.setText(QCoreApplication.translate("AnimalPoseTracker", u"Inferencer", None))
@@ -1475,6 +1711,36 @@ class Ui_AnimalPoseTracker(object):
         self.ExportConfigure.setSortingEnabled(__sortingEnabled4)
 
         self.ConfigureTabPage.setTabText(self.ConfigureTabPage.indexOf(self.ExportModel), QCoreApplication.translate("AnimalPoseTracker", u"Export Model", None))
+        self.ThreeDReconstructionLabel.setText(QCoreApplication.translate("AnimalPoseTracker", u"AnimalPoseTracker-3D Reconstruction", None))
+        self.ThreeDCameraGroup.setTitle(QCoreApplication.translate("AnimalPoseTracker", u"Cameras", None))
+        self.AddCamera.setText(QCoreApplication.translate("AnimalPoseTracker", u"Add camera", None))
+        self.RemoveCamera.setText(QCoreApplication.translate("AnimalPoseTracker", u"Remove camera", None))
+        self.RefreshCameras.setText(QCoreApplication.translate("AnimalPoseTracker", u"Reload rig", None))
+        self.CameraTable.setHorizontalHeaderLabels([
+            QCoreApplication.translate("AnimalPoseTracker", u"Camera", None),
+            QCoreApplication.translate("AnimalPoseTracker", u"Calibration source", None),
+            QCoreApplication.translate("AnimalPoseTracker", u"2D predictions", None),
+        ])
+        self.CalibrateGroup.setTitle(QCoreApplication.translate("AnimalPoseTracker", u"Camera calibration", None))
+        self.BoardSquaresLabel.setText(QCoreApplication.translate("AnimalPoseTracker", u"Board (squares)", None))
+        self.BoardSquares.setText(QCoreApplication.translate("AnimalPoseTracker", u"10x7", None))
+        self.SquareSizeLabel.setText(QCoreApplication.translate("AnimalPoseTracker", u"Square (mm)", None))
+        self.MarkerSizeLabel.setText(QCoreApplication.translate("AnimalPoseTracker", u"Marker (mm)", None))
+        self.SyncModeLabel.setText(QCoreApplication.translate("AnimalPoseTracker", u"Sync", None))
+        self.ReuseIntrinsics.setText(QCoreApplication.translate("AnimalPoseTracker", u"Reuse intrinsics from configs/cameras.yaml", None))
+        self.OverwriteCalibration.setText(QCoreApplication.translate("AnimalPoseTracker", u"Overwrite existing calibration", None))
+        self.RunCalibration.setText(QCoreApplication.translate("AnimalPoseTracker", u"Run calibration", None))
+        self.ReconstructionGroup.setTitle(QCoreApplication.translate("AnimalPoseTracker", u"Reconstruction", None))
+        self.AssociationLabel.setText(QCoreApplication.translate("AnimalPoseTracker", u"Associate", None))
+        self.MaxSampsonLabel.setText(QCoreApplication.translate("AnimalPoseTracker", u"Max Sampson (px)", None))
+        self.MinViewsLabel.setText(QCoreApplication.translate("AnimalPoseTracker", u"Min views", None))
+        self.UseFiltered2D.setText(QCoreApplication.translate("AnimalPoseTracker", u"Use filtered 2D", None))
+        self.CheckSync.setText(QCoreApplication.translate("AnimalPoseTracker", u"Check sync", None))
+        self.RunReconstruction.setText(QCoreApplication.translate("AnimalPoseTracker", u"Run 3D reconstruction", None))
+        self.ExportFiltered3D.setText(QCoreApplication.translate("AnimalPoseTracker", u"Export filtered", None))
+        self.PlotInstanceLabel.setText(QCoreApplication.translate("AnimalPoseTracker", u"Plot instance", None))
+        self.RunPose3DExport.setText(QCoreApplication.translate("AnimalPoseTracker", u"Export 3D results", None))
+        self.ConfigureTabPage.setTabText(self.ConfigureTabPage.indexOf(self.ThreeDReconstruction), QCoreApplication.translate("AnimalPoseTracker", u"3D Reconstruction", None))
         self.menuAnimalPoseTracker.setTitle(QCoreApplication.translate("AnimalPoseTracker", u"File", None))
         self.menuTools.setTitle(QCoreApplication.translate("AnimalPoseTracker", u"Tools", None))
         self.menuHelp.setTitle(QCoreApplication.translate("AnimalPoseTracker", u"Help", None))
@@ -1482,4 +1748,15 @@ class Ui_AnimalPoseTracker(object):
         self.menuTheme.setTitle(QCoreApplication.translate("AnimalPoseTracker", u"Theme", None))
         self.toolBar.setWindowTitle(QCoreApplication.translate("AnimalPoseTracker", u"toolBar", None))
     # retranslateUi
+
+    def setThreeDVisible(self, visible):
+        """Show the 3D tab only for a project created with the 3D option.
+
+        The page stays mounted either way: hiding the tab keeps the widget inside the stacked
+        layout, so a project that gains a rig later (or is reloaded) shows the page again
+        without rebuilding it.
+        """
+        index = self.ConfigureTabPage.indexOf(self.ThreeDReconstruction)
+        if index >= 0:
+            self.ConfigureTabPage.setTabVisible(index, bool(visible))
 
