@@ -1,12 +1,17 @@
 ![](docs/assets/logo.png)
 
-<a href="docs/getting_started.md">Documentation</a> · <a href="#installation">Installation</a> · <a href="#quick-start">Quick start</a> · <a href="#multi-camera-3d">3D</a> · <a href="#desktop-applications">GUI</a> · <a href="https://github.com/wux024/AnimalPoseTracker/issues">Issues</a> · <a href="#references--citations">Citation</a>
+<a href="docs/getting_started.md">📖 Documentation</a> · <a href="#installation">⚙️ Installation</a> · <a href="#quick-start">🚀 Quick start</a> · <a href="#multi-camera-3d">🎯 3D</a> · <a href="#desktop-applications">🖥️ GUI</a> · <a href="https://github.com/wux024/AnimalPoseTracker/issues">🐛 Issues</a> · <a href="#references--citations">📝 Citation</a>
 
 ![Python](https://img.shields.io/badge/python-3.10%2B-blue)
 ![License](https://img.shields.io/badge/license-AGPL--3.0--or--later-green)
 ![Platforms](https://img.shields.io/badge/platform-linux%20%7C%20macos%20%7C%20windows-lightgrey)
 ![Status](https://img.shields.io/badge/status-0.1.0-orange)
+
 [![Docs](https://github.com/wux024/AnimalPoseTracker/actions/workflows/docs.yml/badge.svg)](https://github.com/wux024/AnimalPoseTracker/actions/workflows/docs.yml)
+![PyTorch](https://img.shields.io/badge/PyTorch-2.0%2B-ee4c2c)
+![OpenCV](https://img.shields.io/badge/OpenCV-4.6%2B-5c3ee8)
+![PySide6](https://img.shields.io/badge/PySide6-6.2%2B-41cd52)
+![ONNXRuntime](https://img.shields.io/badge/ONNXRuntime-1.10%2B-005ced)
 
 # Welcome! 👋
 
