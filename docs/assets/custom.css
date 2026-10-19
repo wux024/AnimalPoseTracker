@@ -79,20 +79,24 @@ article.bd-article h2 a:hover {
   max-width: 100%;
 }
 
-/* The three landing demos sit side by side, a third of the column each. Sphinx copies
-   them to _images/, so they are matched by file name rather than by source folder. */
+/* The three landing demos sit side by side in three equal slots. The GIFs do not share
+   an aspect ratio (460x384, 460x315, 460x345), so the box size is fixed and the frame is
+   scaled inside it with `contain`: the slots line up, the pictures keep their proportions
+   and any leftover space becomes an even margin. Sphinx copies the frames to _images/,
+   so they are matched by file name rather than by source folder. */
 article.bd-article p > img[src$="hand.gif"],
 article.bd-article p > img[src$="koi.gif"],
 article.bd-article p > img[src$="animals.gif"] {
   display: inline-block;
+  box-sizing: border-box;
+  width: 31.6%;
   height: 190px;
-  width: auto;
-  max-width: 31%;
   margin: 0.2rem 0.6% 0.4rem;
   border: 1px solid #dbe6ef;
   border-radius: 8px;
   vertical-align: middle;
-  object-fit: cover;
+  object-fit: contain;
+  object-position: center center;
 }
 
 /* Current page in the navigation */
