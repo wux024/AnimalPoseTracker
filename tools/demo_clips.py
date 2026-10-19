@@ -89,10 +89,13 @@ def render(name: str, spec: dict, limit: int | None, stride: int, fps: int) -> N
     dx, dy, dz = -150.0, -80.0, -200.0
     colours = [tuple(c) for c in plt.cm.tab10(np.linspace(0, 1, len(spec["points"])))]
 
-    # the canvas is as wide as the video tile, so neither panel has dead margins
-    figure = plt.figure(figsize=(13.0, 4.6), dpi=100)
-    top = figure.add_axes([0.0, 0.0, 0.62, 1.0])
-    bottom = figure.add_axes([0.62, 0.0, 0.38, 1.0], projection="3d")
+    # stacked: the video keeps its own aspect ratio, the 3D panel is a fixed 450 px
+    content_h = max(int(height - 580), 1)
+    display_h = 450.0 * content_h / float(height)
+    total_h = display_h + 450.0
+    figure = plt.figure(figsize=(width / 100, total_h / 100), dpi=100)
+    top = figure.add_axes([0.0, 450.0 / total_h, 1.0, display_h / total_h])
+    bottom = figure.add_axes([0.0, 0.0, 1.0, 450.0 / total_h], projection="3d")
     top.set_axis_off()
 
     # drawfigure_init(): everything below is drawn once. The arrows are anchored at
@@ -103,11 +106,9 @@ def render(name: str, spec: dict, limit: int | None, stride: int, fps: int) -> N
 
     # Scale the whole axes up by 1.5, centred, with a transparent background so the
     # enlarged panel does not paint over the video tile above it.
-    zoom = 1.4
-    left, bottom_edge, pane_w, pane_h = 0.62, 0.0, 0.38, 1.0
-    bottom.set_facecolor("#eef3f8")
-    bottom.patch.set_facecolor("#eef3f8")
-    bottom.patch.set_alpha(1.0)
+    zoom = 1.0
+    left, bottom_edge, pane_w, pane_h = 0.0, 0.0, 1.0, 450.0 / total_h
+    bottom.patch.set_alpha(0.0)
     bottom.set_position([left - pane_w * (zoom - 1) / 2,
                          bottom_edge - pane_h * (zoom - 1) / 2,
                          pane_w * zoom,
@@ -164,9 +165,9 @@ def render(name: str, spec: dict, limit: int | None, stride: int, fps: int) -> N
             top.clear()
             top.set_axis_off()
             if ok:
-                image = image[: int(height - 580), :, :]
-                top.imshow(cv2.cvtColor(cv2.resize(image, (width, 450)), cv2.COLOR_BGR2RGB),
-                           aspect="auto")
+                image = image[:content_h, :, :]
+                rendered = cv2.resize(image, (width, int(display_h)))
+                top.imshow(cv2.cvtColor(rendered, cv2.COLOR_BGR2RGB), aspect="auto")
 
             # drawfigure(): move the markers only, never redraw the axes
             xyz = data[frame].copy()
