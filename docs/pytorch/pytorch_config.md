@@ -1,4 +1,4 @@
-# Configuration
+# Configuration file reference
 
 AnimalPoseTracker reads configuration from three layers. Every value has one
 home, and the layers only decide "default vs project vs this command":
@@ -34,7 +34,7 @@ defaults, resolver, writer); nothing else reads or writes the project YAMLs.
 2. Give it a default in `cfg/training.yaml` or `cfg/runtime_defaults.yaml`.
 3. Run the tests (`tests/test_config_schema.py` checks the two stay aligned)
    and refresh this document:
-   `python -m animalposetracker.config.docs --write docs/configuration.md`.
+   `python -m animalposetracker.config.docs --write docs/pytorch/pytorch_config.md`.
 
 New projects receive the key automatically; existing test-stage projects are
 rebuilt rather than migrated (see the refactor plan, 2026-10-14).
@@ -43,7 +43,7 @@ rebuilt rather than migrated (see the refactor plan, 2026-10-14).
 
 <!-- BEGIN GENERATED REFERENCE -->
 
-This reference is generated from the key registry (`animalposetracker/config/schema.py`) and the defaults files (`cfg/training.yaml`, `cfg/runtime_defaults.yaml`). Do not edit it by hand -- run `python -m animalposetracker.config.docs --write docs/configuration.md` after changing the registry.
+This reference is generated from the key registry (`animalposetracker/config/schema.py`) and the defaults files (`cfg/training.yaml`, `cfg/runtime_defaults.yaml`). Do not edit it by hand -- run `python -m animalposetracker.config.docs --write docs/pytorch/pytorch_config.md` after changing the registry.
 
 ### Scope `train`
 
@@ -182,7 +182,7 @@ This reference is generated from the key registry (`animalposetracker/config/sch
 | key | type | default | apply | visibility | notes |
 |---|---|---|---|---|---|
 | `device` | str | `auto` | build | form | Device (auto, or a concrete device name) |
-| `project` | str | `runs` | build | form | Run output root |
+| `project` | str | `results` | build | form | Run output root |
 | `name` | str | `train` | build | form | Run name (output goes under project/name) |
 | `exist_ok` | bool | False | build | form | Allow writing into an existing output directory |
 | `selected_weights` | str | `null` | build | hidden | Explicitly selected weights or artifact path for val/predict/export (the GUI's model picker) |

@@ -1,4 +1,4 @@
-# Citation
+# How to cite AnimalPoseTracker
 
 Thank you for using AnimalPoseTracker. Here is what to cite, depending on which part of it
 you use.
@@ -104,3 +104,28 @@ you use.
 ```
 
 More on [the author's homepage](https://wux024.github.io).
+
+## Methods suggestion
+
+A paragraph you can adapt for a Methods section:
+
+> Pose estimation was performed with AnimalPoseTracker (Wu, 2026), a markerless toolbox that
+> trains and serves two model families from one project format. The one-stage AnimalRTPose
+> model (Wu et al., 2025) predicted boxes and keypoints in a single pass; the top-down
+> AnimalViTPose model (Wu et al., 2026) cropped each instance from an annotated box and decoded
+> SimCC keypoints. Keypoints were annotated in <software> and split into train/validation/test
+> sets of <n>/<n>/<n> frames. Models were trained for <epochs> epochs at <resolution> px and
+> evaluated on the validation split with OKS-based average precision. (For 3D: Multiple
+> synchronized cameras were calibrated from a ChArUco board, 2D predictions were associated
+> across views by the epipolar constraint, and 3D keypoints were obtained by triangulation
+> (Wu et al., 2022).)
+
+Replace the angle-bracketed values with your own; the sentences that carry a citation should
+stay as they are.
+
+## Graphics
+
+The logo (`docs/assets/logo.png`) and the demonstration clips in `docs/assets/demos/` may be
+used in talks and papers that describe work done with this toolbox. Do not use them to imply
+endorsement of a derived product.
+

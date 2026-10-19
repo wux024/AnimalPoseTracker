@@ -4,17 +4,109 @@ root: README
 parts:
   - caption: Getting started
     chapters:
-      - file: docs/getting_started
+      - file: docs/UseOverviewGuide
+      - file: docs/installation
+        sections:
+          - file: docs/docker
 
-  - caption: Workflows
+  - caption: Main workflows overview
     chapters:
-      - file: docs/demo
-      - file: docs/three_d
-      - file: docs/gui
-      - file: docs/pose_analysis_workflows
+      - file: docs/main-workflows/user-guide
+        sections:
+          - file: docs/quick-start/single_animal_quick_guide
+          - file: docs/quick-start/topdown_quick_guide
+          - file: docs/main-workflows/multi-camera-tracking
+      - file: docs/Overviewof3D
 
-  - caption: Reference
+  - caption: GUI workflow
     chapters:
-      - file: docs/configuration
-      - file: docs/deployment_formats
+      - file: docs/gui/PROJECT_GUI
+        sections:
+          - file: docs/beginner-guides/beginners-guide
+          - file: docs/beginner-guides/manage-project
+          - file: docs/beginner-guides/labeling
+          - file: docs/beginner-guides/Training-Evaluation
+          - file: docs/beginner-guides/video-analysis
+      - file: docs/gui/annotator_GUI
+        sections:
+          - file: docs/gui/annotator/basic_usage
+          - file: docs/gui/annotator/advanced_usage
+          - file: docs/gui/annotator/review_and_export
+
+  - caption: Notebooks & Demos
+    chapters:
+      - file: docs/notebooks/your_data
+        sections:
+          - file: docs/notebooks/your_data/01_annotate_and_export
+          - file: docs/notebooks/your_data/02_train_and_validate
+          - file: docs/notebooks/your_data/03_predict_and_export
+      - file: docs/notebooks/main_demos
+        sections:
+          - file: docs/notebooks/main_demos/01_quickstart_cli
+          - file: docs/notebooks/main_demos/02_topdown_vitpose
+          - file: docs/notebooks/main_demos/03_public_benchmark
+          - file: docs/notebooks/main_demos/04_tracking_and_filtering
+      - file: docs/notebooks/extra
+        sections:
+          - file: docs/notebooks/extra/01_export_matrix
+          - file: docs/notebooks/extra/02_live_stream
+          - file: docs/notebooks/extra/03_three_d_pipeline
+          - file: docs/notebooks/extra/04_python_api
+
+  - caption: PyTorch guides
+    chapters:
+      - file: docs/pytorch/index
+        sections:
+          - file: docs/pytorch/user_guide
+          - file: docs/pytorch/pytorch_config
+          - file: docs/pytorch/architectures
+          - file: docs/pytorch/benchmarking
+
+  - caption: Advanced, Performance & Live
+    chapters:
+      - file: docs/ModelZoo
+        sections:
+          - file: docs/recipes/fine_tuning
+      - file: docs/live/index
+      - file: docs/live/gui/index
+        sections:
+          - file: docs/live/gui/quickstart/install
+          - file: docs/live/gui/user_guide/overview
+          - file: docs/live/gui/user_guide/backends/engine_support
+            sections:
+              - file: docs/live/gui/user_guide/backends/onnx
+              - file: docs/live/gui/user_guide/backends/openvino
+              - file: docs/live/gui/user_guide/backends/tensorrt
+              - file: docs/live/gui/user_guide/backends/coreml
+          - file: docs/live/gui/user_guide/device_config
+          - file: docs/live/gui/user_guide/misc/records_format
+          - file: docs/live/gui/user_guide/misc/filter_settings
+      - file: docs/benchmark
+      - file: docs/recipes/TechHardware
+
+  - caption: Development
+    chapters:
+      - file: docs/development/index
+
+  - caption: Additional guides (Recipes)
+    chapters:
+      - file: docs/recipes/index
+        sections:
+          - file: docs/recipes/HelperFunctions
+          - file: docs/recipes/OtherData
+          - file: docs/recipes/io
+          - file: docs/recipes/nn
+          - file: docs/recipes/post
+          - file: docs/recipes/BatchProcessing
+          - file: docs/recipes/three_d_association
+          - file: docs/recipes/OpenVINO
+          - file: docs/recipes/flip_and_rotate
+          - file: docs/recipes/pose_cfg_file_breakdown
+      - file: docs/utils/index
+        sections:
+          - file: docs/utils/tools
+
+  - caption: Project & Community
+    chapters:
+      - file: CONTRIBUTING
       - file: docs/citation

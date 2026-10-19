@@ -4,16 +4,16 @@
 
 ![](docs/assets/demos/hand.gif) ![](docs/assets/demos/koi.gif) ![](docs/assets/demos/animals.gif)
 
-[📚 Documentation](docs/getting_started.md) |
+[📚 Documentation](docs/UseOverviewGuide.md) |
 <a href="#installation">🛠️ Installation</a> |
 <a href="#quick-start">🚀 Quick start</a> |
-[🎯 3D](docs/three_d.md) |
-[🖥️ GUI](docs/gui.md) |
+[🎯 3D](docs/Overviewof3D.md) |
+[🖥️ GUI](docs/gui/PROJECT_GUI.md) |
 <a href="https://github.com/wux024/AnimalPoseTracker/issues">🪲 Reporting Issues</a>
 
 <a href="#get-assistance">🫶 Getting Assistance</a> |
 <a href="#references--citations">📝 Publications</a> |
-[📦 Deployment formats](docs/deployment_formats.md) |
+[📦 Deployment formats](docs/recipes/OpenVINO.md) |
 <a href="https://github.com/wux024/AnimalPoseTracker">💻 Source</a>
 
 <a href="https://github.com/wux024/AnimalPoseTracker/actions/workflows/docs.yml"><img src="https://github.com/wux024/AnimalPoseTracker/actions/workflows/docs.yml/badge.svg" alt="Docs build"></a>
@@ -40,9 +40,9 @@ toolbox, as it assumes no particular species, viewpoint, or camera count.
 
 # Installation
 
-Please follow [Getting started](docs/getting_started.md) — it covers the conda environment,
-matching the PyTorch build to your hardware, and installing only the extras for the engine
-you deploy with. Python 3.10 or newer is required.
+Please follow [Installing AnimalPoseTracker](docs/installation.md) — it covers the conda
+environment, matching the PyTorch build to your hardware, and installing only the extras for
+the engine you deploy with. Python 3.10 or newer is required.
 
 ## Quick start
 
@@ -91,15 +91,15 @@ runs an exported engine (`.onnx`, `.engine`, `.mlpackage`, ...) without a projec
 |  | `animalpose-cli pose3d-render` | 3D video, trajectory plot, summary |
 
 Every command takes `--help`; the flags used most often are in
-[Getting started](docs/getting_started.md).
+[Getting started](docs/UseOverviewGuide.md).
 
-Each step is detailed in [Getting started](docs/getting_started.md); the desktop route
-through the same steps is in [Desktop applications](docs/gui.md).
+Each step is detailed in [Getting started](docs/UseOverviewGuide.md); the desktop route
+through the same steps is in [Desktop applications](docs/gui/PROJECT_GUI.md).
 
 # Usage demo
 
 One run end to end on a built-in dataset — create, train, predict — and the files each
-step leaves behind. [Walk through it](docs/demo.md).
+step leaves behind. [Walk through it](docs/quick-start/single_animal_quick_guide.md).
 
 # Why another pose tracker?
 

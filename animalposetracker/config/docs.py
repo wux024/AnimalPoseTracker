@@ -1,9 +1,9 @@
 """Render the configuration reference from the registry and the defaults.
 
-The reference in ``docs/configuration.md`` is generated, not hand-written:
+The reference in ``docs/pytorch/pytorch_config.md`` is generated, not hand-written:
 one key can be renamed in ``schema.py`` and the documentation follows. Run
 
-    python -m animalposetracker.config.docs --write docs/configuration.md
+    python -m animalposetracker.config.docs --write docs/pytorch/pytorch_config.md
 
 to refresh the marked section in place, or without ``--write`` to print it.
 """
@@ -73,7 +73,7 @@ def render_reference() -> str:
         "(`animalposetracker/config/schema.py`) and the defaults files "
         "(`cfg/training.yaml`, `cfg/runtime_defaults.yaml`). Do not edit it by "
         "hand -- run `python -m animalposetracker.config.docs --write "
-        "docs/configuration.md` after changing the registry.",
+        "docs/pytorch/pytorch_config.md` after changing the registry.",
         "",
     ]
     for scope in SCOPES:
@@ -137,7 +137,7 @@ def main(argv: Optional[List[str]] = None) -> int:
         written = write_reference(arguments[1])
         print(f"Reference updated: {written}")
         return 0
-    print("usage: python -m animalposetracker.config.docs [--write docs/configuration.md]")
+    print("usage: python -m animalposetracker.config.docs [--write docs/pytorch/pytorch_config.md]")
     return 2
 
 
