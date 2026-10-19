@@ -153,7 +153,7 @@ The same models on edge devices:
 | AnimalViTPose-L | 82.4 | 84.4 | 83.9 | 16.56 | 86.8 ms |
 | AnimalViTPose-H | 83.9 | 87.7 | 88.2 | 15.19 | 119.6 ms |
 
-Inference time on each machine the system was tested on:
+AnimalPoseTracker inference time on each machine it was tested on:
 
 | Machine | Compute unit | Inference |
 |---|---|---|
