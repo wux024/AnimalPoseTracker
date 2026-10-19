@@ -1,12 +1,14 @@
-"""Batched triangulation with four interchangeable backends.
+"""Batched triangulation with three interchangeable backends.
 
 ``numpy``   — the reference and the default. One batched SVD over the whole ``(K, 2C, 4)``
-              design matrix, no Python loop over points. Runs anywhere numpy does.
-``numba``   — a ``prange`` loop with one SVD per point, compiled to machine code. Competes
-              with ``jax-cpu`` on multi-core machines and needs no GPU.
-``jax-cpu`` — the same maths through ``jax.numpy``, pinned to the CPU device.
-``jax-gpu`` — the same, pinned to the GPU. This is the one that matters for hour-long
-              recordings, where the point count runs into the millions.
+              design matrix, no Python loop over points. Runs anywhere numpy does, and it
+              won the local benchmark at clip-sized batches.
+``numba``   — a ``prange`` loop with one SVD per point, compiled to machine code. Roughly
+              three times faster than numpy past sixty thousand points, so it is the CPU
+              answer for long recordings.
+``jax-gpu`` — the same maths through ``jax.numpy`` on a GPU. This is the one that matters
+              when the point count runs into the millions. A jax CPU backend was measured
+              and dropped: XLA's CPU SVD came out slower than plain numpy.
 
 ``auto`` means ``numpy``: installing an accelerator never changes behaviour on its own, the
 backend has to be asked for. Every path is compared against the per-point implementation in
@@ -25,22 +27,19 @@ import numpy as np
 
 __all__ = ["available_backends", "jax_available", "numba_available", "triangulate_batch"]
 
-_BACKENDS = ("auto", "numpy", "numba", "jax-cpu", "jax-gpu")
+_BACKENDS = ("auto", "numpy", "numba", "jax-gpu")
 
 
-def jax_available(device: Optional[str] = None) -> bool:
-    """True when jax imports and, if ``device`` is given, that device exists."""
+def jax_available() -> bool:
+    """True when jax imports with a visible GPU device (the ``pose3d-jax`` extra)."""
     try:
         import jax
     except Exception:
         return False
-    if device is None:
-        return True
     try:
-        jax.devices(device)
+        return bool(jax.devices("gpu"))
     except Exception:
         return False
-    return True
 
 
 def numba_available() -> bool:
@@ -54,12 +53,10 @@ def numba_available() -> bool:
 
 def available_backends() -> dict:
     """Describe what this machine can run, for the CLI banner and the tests."""
-    has_jax = jax_available()
     return {
         "numpy": True,
         "numba": numba_available(),
-        "jax-cpu": has_jax and jax_available("cpu"),
-        "jax-gpu": has_jax and jax_available("gpu"),
+        "jax-gpu": jax_available(),
     }
 
 
@@ -117,12 +114,12 @@ def _triangulate_numba(points, projection, weights) -> np.ndarray:
     return _to_cartesian(_solve(matrix))
 
 
-def _triangulate_jax(points, projection, weights, device: str) -> np.ndarray:
+def _triangulate_jax(points, projection, weights) -> np.ndarray:
     import jax
     import jax.numpy as jnp
 
     matrix = _design(points, projection, weights)
-    with jax.default_device(jax.devices(device)[0]):
+    with jax.default_device(jax.devices("gpu")[0]):
         matrix = jnp.asarray(matrix)
         _, _, vh = jnp.linalg.svd(matrix, full_matrices=False)
         homogeneous = np.asarray(vh[:, -1])
@@ -151,7 +148,7 @@ def triangulate_batch(
         points: ``(K, C, 2)`` normalised image coordinates, one row per camera.
         projection: ``(C, 3, 4)`` projection matrices, in the same camera order.
         weights: ``(K, C)`` per-observation confidence; ones when omitted.
-        backend: ``auto``, ``numpy``, ``jax-cpu`` or ``jax-gpu``.
+        backend: ``auto``, ``numpy``, ``numba`` or ``jax-gpu``.
 
     Returns:
         ``(K, 3)`` world points. Rows that could not be solved are ``nan``, matching the
@@ -176,8 +173,7 @@ def triangulate_batch(
             raise RuntimeError("backend='numba' needs the pose3d-numba extra installed")
         return _triangulate_numba(points, projection, weights)
     if not jax_available():
-        raise RuntimeError(f"backend='{resolved}' needs the pose3d-jax extra installed")
-    device = "gpu" if resolved == "jax-gpu" else "cpu"
-    if not jax_available(device):
-        raise RuntimeError(f"backend='{resolved}' needs a jax {device.upper()} device")
-    return _triangulate_jax(points, projection, weights, device)
+        raise RuntimeError(
+            "backend='jax-gpu' needs the pose3d-jax extra and a visible GPU device"
+        )
+    return _triangulate_jax(points, projection, weights)

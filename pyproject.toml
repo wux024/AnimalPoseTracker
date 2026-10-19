@@ -74,8 +74,7 @@ export-mnn = ["MNN>=2.9.6"]
 export-ncnn = ["ncnn"]
 predict-triton = ["tritonclient[http,grpc]"]
 pose3d-numba = ["numba>=0.62"]
-pose3d-jax = ["jax>=0.4.30"]
-pose3d-jax-cuda = ["jax[cuda12]>=0.4.30"]
+pose3d-jax = ["jax[cuda12]>=0.4.30"]
 
 
 # Package discovery configuration

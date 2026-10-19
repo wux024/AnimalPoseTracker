@@ -80,9 +80,6 @@ def test_backend_validation():
 
     if not jax_available():
         with pytest.raises(RuntimeError):
-            triangulate_batch(observations, projection, backend="jax-cpu")
-    if not jax_available("gpu"):
-        with pytest.raises(RuntimeError):
             triangulate_batch(observations, projection, backend="jax-gpu")
     if not numba_available():
         with pytest.raises(RuntimeError):
@@ -93,20 +90,10 @@ def test_available_backends_reports_numpy_always():
     reported = available_backends()
 
     assert reported["numpy"] is True
-    assert set(reported) == {"numpy", "numba", "jax-cpu", "jax-gpu"}
+    assert set(reported) == {"numpy", "numba", "jax-gpu"}
 
 
-@pytest.mark.skipif(not jax_available("cpu"), reason="needs the pose3d-jax extra")
-def test_jax_cpu_matches_numpy():
-    _, _, observations, projection = _scene()
-
-    baseline = triangulate_batch(observations, projection, backend="numpy")
-    accelerated = triangulate_batch(observations, projection, backend="jax-cpu")
-
-    assert np.allclose(accelerated, baseline, atol=1e-9)
-
-
-@pytest.mark.skipif(not jax_available("gpu"), reason="needs a jax GPU build and a device")
+@pytest.mark.skipif(not jax_available(), reason="needs a jax GPU build and a device")
 def test_jax_gpu_matches_numpy():
     _, _, observations, projection = _scene()
 
