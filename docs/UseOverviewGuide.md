@@ -4,6 +4,11 @@ Below we outline what you need to get started, the two model families the toolbo
 and the full workflow from an empty folder to a deployed model. It assumes nothing about
 your species, viewpoint or camera count.
 
+```{note}
+The documentation is being expanded. The user guide and the reference pages are complete;
+the demo walkthroughs are still being written and appear as short placeholders.
+```
+
 ```{hint}
 💡📚 If you are new to pose estimation, read *What we support* below first, then follow the
 [User guide](main-workflows/user-guide.md) from Phase 1. The [single-animal quick guide](quick-start/single_animal_quick_guide.md) is the

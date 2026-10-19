@@ -29,6 +29,8 @@
 <img src="https://img.shields.io/badge/PySide6-6.2%2B-41cd52" alt="PySide6 6.2+">
 <img src="https://img.shields.io/badge/ONNXRuntime-1.10%2B-005ced" alt="ONNXRuntime 1.10+">
 
+<p><sub>📝 The documentation is being expanded — the user guide and the reference pages are complete, the demo walkthroughs are still being written.</sub></p>
+
 </div>
 
 # Welcome! 👋
