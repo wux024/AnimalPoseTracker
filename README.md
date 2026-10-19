@@ -114,19 +114,37 @@ adapt it to your setting.
 
 ## Performance 🔥
 
-**AnimalRTPose** on AnimalPose, 640 x 640 input — Table 2 of the Neural Networks paper:
+**AnimalRTPose** on AnimalPose, 640 x 640 input (Neural Networks, 2025):
 
-| Model | AP<sub>50:95</sub> | AR<sub>50:95</sub> | Latency | Params |
-|---|---|---|---|---|
-| AnimalRTPose-N | 72.0 | 80.0 | 2.1 ms | 2.9 M |
-| AnimalRTPose-S | 76.0 | 83.4 | 3.6 ms | 9.8 M |
-| AnimalRTPose-M | 77.2 | 83.9 | 7.5 ms | 25.3 M |
-| AnimalRTPose-L | 77.8 | 84.4 | 11.3 ms | 47.9 M |
-| AnimalRTPose-X | 80.1 | 87.3 | 17.1 ms | 74.8 M |
-| *YOLOv8-Pose-X* | 79.0 | 86.1 | 18.6 ms | 69.5 M |
-| *RTMO-L* | 77.8 | 85.3 | 11.4 ms | 44.9 M |
+| Model | AP<sub>50:95</sub> | AR<sub>50:95</sub> | Params |
+|---|---|---|---|
+| AnimalRTPose-N | 72.0 | 80.0 | 2.9 M |
+| AnimalRTPose-S | 76.0 | 83.4 | 9.8 M |
+| AnimalRTPose-M | 77.2 | 83.9 | 25.3 M |
+| AnimalRTPose-L | 77.8 | 84.4 | 47.9 M |
+| AnimalRTPose-X | 80.1 | 87.3 | 74.8 M |
 
-**AnimalViTPose** on AP10K, 256 x 256 input — Table 2 of the EAAI paper:
+Inference latency on NVIDIA GPUs, in milliseconds:
+
+| Model | RTX 2080 Ti | RTX 3090 | A800 |
+|---|---|---|---|
+| AnimalRTPose-N | 2.1 | 1.3 | 0.9 |
+| AnimalRTPose-S | 3.6 | 2.5 | 1.3 |
+| AnimalRTPose-M | 7.5 | 4.9 | 2.4 |
+| AnimalRTPose-L | 11.3 | 7.5 | 3.7 |
+| AnimalRTPose-X | 17.1 | 11.9 | 5.6 |
+
+The same models on edge devices:
+
+| Model | Jetson AGX Orin | Raspberry Pi 5 + AI HAT+ | Atlas 200I |
+|---|---|---|---|
+| AnimalRTPose-N | 5.1 | 13.0 | 15.6 |
+| AnimalRTPose-S | 5.0 | 22.0 | 26.5 |
+| AnimalRTPose-M | 6.3 | 33.2 | 53.2 |
+| AnimalRTPose-L | 7.5 | 49.3 | 105.7 |
+| AnimalRTPose-X | 9.1 | 74.1 | 162.6 |
+
+**AnimalViTPose** on AP10K, 256 x 256 input (EAAI, 2026):
 
 | Model | AP<sub>50:95</sub> | AR | PCK | EPE | Latency |
 |---|---|---|---|---|---|
@@ -135,14 +153,14 @@ adapt it to your setting.
 | AnimalViTPose-L | 82.4 | 84.4 | 83.9 | 16.56 | 86.8 ms |
 | AnimalViTPose-H | 83.9 | 87.7 | 88.2 | 15.19 | 119.6 ms |
 
-Best results on the other evaluation sets, from the same two papers:
+Across the other evaluation sets:
 
-| Dataset | Model | AP | AR | Keypoints |
-|---|---|---|---|---|
-| ATRW (tiger) | AnimalRTPose-N | 82.8 | 89.0 | 15 |
-| TopViewMouse-5K | AnimalRTPose-L | 83.2 | 87.0 | 27 |
-| AP10K | AnimalRTPose-X | 65.1 | 74.4 | 17 |
-| Animal Kingdom | AnimalRTPose-X | 51.5 | 69.0 | 23 |
+| Dataset | Model | AP | AR |
+|---|---|---|---|
+| ATRW (tiger) | AnimalRTPose-N | 82.8 | 89.0 |
+| TopViewMouse-5K | AnimalRTPose-L | 83.2 | 87.0 |
+| AP10K | AnimalRTPose-X | 65.1 | 74.4 |
+| Animal Kingdom | AnimalRTPose-X | 51.5 | 69.0 |
 
 ## Models
 
