@@ -25,6 +25,7 @@ import matplotlib
 
 matplotlib.use("Agg")
 
+import matplotlib.patheffects as patheffects
 import matplotlib.pyplot as plt  # noqa: E402
 import numpy as np  # noqa: E402
 
@@ -86,12 +87,12 @@ def render(name: str, spec: dict, limit: int | None, stride: int, fps: int) -> N
     total = min(len(data), limit) if limit else len(data)
     index = {point: i for i, point in enumerate(spec["points"])}
     dx, dy, dz = -150.0, -80.0, -200.0
-    colours = [tuple(c) for c in plt.cm.tab20(np.linspace(0, 1, len(spec["points"])))]
+    colours = [tuple(c) for c in plt.cm.tab10(np.linspace(0, 1, len(spec["points"])))]
 
     # the canvas is as wide as the video tile, so neither panel has dead margins
-    figure = plt.figure(figsize=(width / 100, 9.0), dpi=100)
-    top = figure.add_axes([0.0, 0.5, 1.0, 0.5])
-    bottom = figure.add_axes([0.0, 0.0, 1.0, 0.5], projection="3d")
+    figure = plt.figure(figsize=(13.0, 4.6), dpi=100)
+    top = figure.add_axes([0.0, 0.0, 0.62, 1.0])
+    bottom = figure.add_axes([0.62, 0.0, 0.38, 1.0], projection="3d")
     top.set_axis_off()
 
     # drawfigure_init(): everything below is drawn once. The arrows are anchored at
@@ -102,9 +103,11 @@ def render(name: str, spec: dict, limit: int | None, stride: int, fps: int) -> N
 
     # Scale the whole axes up by 1.5, centred, with a transparent background so the
     # enlarged panel does not paint over the video tile above it.
-    zoom = 1.5
-    left, bottom_edge, pane_w, pane_h = 0.0, 0.0, 1.0, 0.5
-    bottom.patch.set_alpha(0.0)
+    zoom = 1.4
+    left, bottom_edge, pane_w, pane_h = 0.62, 0.0, 0.38, 1.0
+    bottom.set_facecolor("#eef3f8")
+    bottom.patch.set_facecolor("#eef3f8")
+    bottom.patch.set_alpha(1.0)
     bottom.set_position([left - pane_w * (zoom - 1) / 2,
                          bottom_edge - pane_h * (zoom - 1) / 2,
                          pane_w * zoom,
@@ -117,7 +120,7 @@ def render(name: str, spec: dict, limit: int | None, stride: int, fps: int) -> N
     xyz_all[:, :, 2] = -xyz_all[:, :, 2]
     low = xyz_all.min(axis=(0, 1))
     high = xyz_all.max(axis=(0, 1))
-    pad = (high - low) * 0.08 + 1e-6
+    pad = (high - low) * 0.02 + 1e-6
     low, high = low - pad, high + pad
     bottom.set_xlim(low[0], high[0])
     bottom.set_ylim(low[1], high[1])
@@ -133,10 +136,15 @@ def render(name: str, spec: dict, limit: int | None, stride: int, fps: int) -> N
     skeletons = []
     for chain in spec["chains"]:
         idx = [index[p] for p in chain]
-        skeletons.append(bottom.plot(first[idx, 0], first[idx, 1], first[idx, 2], "b-")[0])
-    dots = [bottom.plot(first[i, 0], first[i, 1], first[i, 2], marker="o",
-                        linestyle="none", color=colours[i], markersize=6)[0]
-            for i in range(len(spec["points"]))]
+        skeletons.append(bottom.plot(
+            first[idx, 0], first[idx, 1], first[idx, 2],
+            color="#17324d", linewidth=3.0, solid_capstyle="round",
+            path_effects=[patheffects.withStroke(linewidth=5.4, foreground="white")],
+        )[0])
+    dots = [bottom.plot(
+        first[i, 0], first[i, 1], first[i, 2], marker="o", linestyle="none",
+        color=colours[i], markersize=10, markeredgecolor="white", markeredgewidth=1.4,
+    )[0] for i in range(len(spec["points"]))]
     for direction, colour in (((1, 0, 0), "r"), ((0, 1, 0), "g"), ((0, 0, 1), "y")):
         bottom.quiver(dx, dy, dz, *direction, length=arrow_len, normalize=True,
                       color=colour, arrow_length_ratio=0.12)
@@ -157,7 +165,8 @@ def render(name: str, spec: dict, limit: int | None, stride: int, fps: int) -> N
             top.set_axis_off()
             if ok:
                 image = image[: int(height - 580), :, :]
-                top.imshow(cv2.cvtColor(cv2.resize(image, (width, 450)), cv2.COLOR_BGR2RGB))
+                top.imshow(cv2.cvtColor(cv2.resize(image, (width, 450)), cv2.COLOR_BGR2RGB),
+                           aspect="auto")
 
             # drawfigure(): move the markers only, never redraw the axes
             xyz = data[frame].copy()
