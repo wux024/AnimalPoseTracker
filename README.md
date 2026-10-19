@@ -114,36 +114,35 @@ adapt it to your setting.
 
 ## Performance 🔥
 
-Numbers below are the ones reported in the two papers, with the evaluation contract
-(splits, input sizes, evaluators) kept as it is stated there.
+**AnimalRTPose** on AnimalPose, 640 x 640 input — Table 2 of the Neural Networks paper:
 
-| Protocol | Checkpoint | Target | AP<sub>50:95</sub> | AR | PCK |
-|---|---|---|---|---|---|
-| Supervised | APT-36K | APT-36K | 85.5 | 88.2 | — |
-| Supervised | APT-36K | ATRW (tiger) | 88.4 | 92.5 | — |
-| Supervised | APT-36K | TopViewMouse-5K | 83.4 | 87.1 | — |
-| Supervised | Quadruped-80K | AP-10K | 83.9 | 87.7 | 88.2 |
-| Few-shot, 112 labels | APT-36K | Tri-Mouse | 99.9 | 99.9 | — |
-| Few-shot, 70 labels | APT-36K | Fish | 97.8 | 97.2 | — |
-| Few-shot, 900 labels | APT-36K | Vinegar Fly | 86.1 | 90.5 | — |
-
-Runtime on 640 x 480 mouse video with AnimalRTPose. The last column is the reciprocal of
-the summed stage times, not a measured sustained frame rate:
-
-| Configuration | Preprocess | Inference | Postprocess | FPS* |
+| Model | AP<sub>50:95</sub> | AR<sub>50:95</sub> | Latency | Params |
 |---|---|---|---|---|
-| Mac mini, Apple M4 | 2.8 ms | 3.2 ms | 13.7 ms | 50.8 |
-| Lenovo desktop, Core i5-12400 | 41.0 ms | 37.7 ms | 36.7 ms | 8.7 |
-| Workstation, RTX 4090 | 6.0 ms | 6.0 ms | 17.0 ms | 34.5 |
-| Workstation, RTX 4080 | 1.8 ms | 2.6 ms | 13.5 ms | 55.9 |
-| Jetson AGX Orin (inference only) | — | 4.2 ms | — | 238.1 |
-| Atlas 200I DK A2 (inference only) | — | 15.6 ms | — | 64.1 |
+| AnimalRTPose-N | 72.0 | 80.0 | 2.1 ms | 2.9 M |
+| AnimalRTPose-S | 76.0 | 83.4 | 3.6 ms | 9.8 M |
+| AnimalRTPose-M | 77.2 | 83.9 | 7.5 ms | 25.3 M |
+| AnimalRTPose-L | 77.8 | 84.4 | 11.3 ms | 47.9 M |
+| AnimalRTPose-X | 80.1 | 87.3 | 17.1 ms | 74.8 M |
+| *YOLOv8-Pose-X* | 79.0 | 86.1 | 18.6 ms | 69.5 M |
+| *RTMO-L* | 77.8 | 85.3 | 11.4 ms | 44.9 M |
 
-*Reciprocal of the summed stage times.
+**AnimalViTPose** on AP10K, 256 x 256 input — Table 2 of the EAAI paper:
 
-Postprocessing is the largest stage on the fast paths — 13.7 of 19.7 ms on the Mac mini,
-13.5 of 17.9 ms on the RTX 4080 — because it covers output parsing, confidence filtering,
-coordinate mapping and NMS. Speeding up the network alone therefore buys little.
+| Model | AP<sub>50:95</sub> | AR | PCK | EPE | Latency |
+|---|---|---|---|---|---|
+| AnimalViTPose-S | 70.2 | 72.5 | 73.0 | 25.35 | 45.5 ms |
+| AnimalViTPose-B | 78.3 | 79.7 | 79.6 | 20.03 | 49.0 ms |
+| AnimalViTPose-L | 82.4 | 84.4 | 83.9 | 16.56 | 86.8 ms |
+| AnimalViTPose-H | 83.9 | 87.7 | 88.2 | 15.19 | 119.6 ms |
+
+Best results on the other evaluation sets, from the same two papers:
+
+| Dataset | Model | AP | AR | Keypoints |
+|---|---|---|---|---|
+| ATRW (tiger) | AnimalRTPose-N | 82.8 | 89.0 | 15 |
+| TopViewMouse-5K | AnimalRTPose-L | 83.2 | 87.0 | 27 |
+| AP10K | AnimalRTPose-X | 65.1 | 74.4 | 17 |
+| Animal Kingdom | AnimalRTPose-X | 51.5 | 69.0 | 23 |
 
 ## Models
 
