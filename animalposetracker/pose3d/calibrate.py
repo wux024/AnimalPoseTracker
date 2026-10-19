@@ -29,6 +29,7 @@ from typing import Dict, List, Mapping, Optional, Sequence, Tuple
 
 import cv2
 import numpy as np
+from tqdm import tqdm
 import yaml
 
 from .bundle import BundleObservation, bundle_adjust
@@ -200,7 +201,10 @@ def detect_views(
         entries: Dict[int, Tuple[np.ndarray, np.ndarray]] = {}
         size = None
         processed = 0
-        for frame, gray in _iter_frames(view.path, frame_step):
+        for frame, gray in tqdm(
+                _iter_frames(view.path, frame_step),
+                desc=f"detect {view.camera}", unit="frame", disable=None,
+                dynamic_ncols=True, leave=False):
             if max_frames and processed >= max_frames:
                 break
             processed += 1

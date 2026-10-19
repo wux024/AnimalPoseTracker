@@ -15,6 +15,7 @@ from pathlib import Path
 from typing import Any, Dict, Iterable, List, Mapping, Optional, Sequence
 
 import numpy as np
+from tqdm import tqdm
 
 from .associate import associate_instances
 from .calibration import CameraRig, load_camera_rig
@@ -185,7 +186,9 @@ def reconstruct_project(
     unmatched_instances = {camera: 0 for camera in rig.cameras}
     matched_instances = 0
 
-    for frame_index in range(frame_counts[anchor]):
+    total_frames = frame_counts[anchor]
+    for frame_index in tqdm(range(total_frames), desc="triangulate", unit="frame",
+                            disable=None, dynamic_ncols=True, leave=True):
         per_view = [(view.camera,
                      [rig.undistort(view.camera, instance)
                       for instance in (_instances(view.records[frame_index + offsets[view.camera]])

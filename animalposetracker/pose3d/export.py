@@ -27,6 +27,7 @@ from pathlib import Path
 from typing import Dict, Iterable, List, Mapping, Optional, Sequence
 
 import numpy as np
+from tqdm import tqdm
 
 __all__ = ["load_poses", "iter_rows", "summarize", "write_csv", "write_plot", "run"]
 
@@ -96,7 +97,8 @@ def summarize(payload: Mapping[str, object]) -> Dict[str, object]:
     bounds_min = np.full(3, np.inf)
     bounds_max = np.full(3, -np.inf)
     per_frame_instances: List[int] = []
-    for frame in frames:
+    for frame in tqdm(frames, total=len(frames), desc="export", unit="frame",
+                      disable=None, dynamic_ncols=True, leave=True):
         frame_instances = list(frame.get("instances") or [])
         per_frame_instances.append(len(frame_instances))
         instances += len(frame_instances)
