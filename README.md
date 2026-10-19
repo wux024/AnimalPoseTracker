@@ -155,24 +155,24 @@ The same models on edge devices:
 
 Inference time on each machine the system was tested on:
 
-| Machine | Inference |
-|---|---|
-| Mac Mini, Apple M4 | 3.2 ms |
-| Lenovo laptop, Ryzen 7 5800H | 54.5 ms |
-| Lenovo desktop, Core i5-12400 | 37.7 ms |
-| Workstation 1-D, RTX 4090 | 6.0 ms |
-| Workstation 1-B, Intel integrated GPU | 10.0 ms |
-| Workstation 1-C, Intel NPU | 25.5 ms |
-| Workstation 1-A, CPU only | 18.2 ms |
-| Workstation 2-D, RTX 4080 | 2.6 ms |
-| Workstation 2-A, CPU only | 14.2 ms |
-| Jetson AGX Orin | 4.2 ms |
-| Atlas 200I DK A2 | 15.6 ms |
+| Machine | CPU | Compute unit | Inference |
+|---|---|---|---|
+| Mac Mini | Apple M4 | integrated | 3.2 ms |
+| Lenovo laptop | Ryzen 7 5800H | CPU only | 54.5 ms |
+| Lenovo desktop | Core i5-12400 | CPU only | 37.7 ms |
+| Workstation 1 | Intel Ultra 9 | RTX 4090 | 6.0 ms |
+| Workstation 1 | Intel Ultra 9 | Intel integrated GPU | 10.0 ms |
+| Workstation 1 | Intel Ultra 9 | Intel NPU | 25.5 ms |
+| Workstation 1 | Intel Ultra 9 | CPU only | 18.2 ms |
+| Workstation 2 | Intel Ultra 9 | RTX 4080 | 2.6 ms |
+| Workstation 2 | Intel Ultra 9 | CPU only | 14.2 ms |
+| Jetson AGX Orin | ARM Cortex-A78AE | Ampere GPU | 4.2 ms |
+| Atlas 200I DK A2 | TAISHANV200M | DAVINCI V300 | 15.6 ms |
 
-Workstation 1 is one machine with four selectable compute units — A runs on the CPU alone,
-B adds the Intel integrated GPU, C the Intel NPU, D the RTX 4090 — so the four rows show
-the same video on the same box. Workstation 2 carries an RTX 4080 under Ubuntu 24.04. The
-two edge devices were measured for inference only, without a display or disk write.
+Workstation 1 is one machine with four selectable compute units, so its four rows are the
+same video on the same box. Workstation 1 and 2 run Windows 11 and Ubuntu 24.04
+respectively; the two edge devices were measured for inference only, without a display or
+disk write.
 
 ## Models
 
