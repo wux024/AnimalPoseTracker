@@ -114,24 +114,36 @@ adapt it to your setting.
 
 ## Performance 🔥
 
-Measured by the built-in validator on a two-animal dataset (111 test images, 146 instances,
-300 epochs, one RTX 2080 Ti). Average precision is computed over OKS thresholds
-0.50:0.95; the OKS sigmas and PCK normalization follow the conventions stated in the paper
-below — this is an internal test set, not a public benchmark.
+Numbers below are the ones reported in the two papers, with the evaluation contract
+(splits, input sizes, evaluators) kept as it is stated there.
 
-| Model | AP<sub>50:95</sub> | AP<sub>50</sub> | AR | PCK | AUC | EPE |
-|---|---|---|---|---|---|---|
-| AnimalRTPose-N (one-stage, 640) | 0.995 | 1.000 | — | 0.984 | 0.850 | 3.90 px |
-| AnimalViTPose-S (two-stage, 256) | 0.998 | 1.000 | 0.999 | 0.997 | 0.889 | 2.64 px |
+| Protocol | Checkpoint | Target | AP<sub>50:95</sub> | AR | PCK |
+|---|---|---|---|---|---|
+| Supervised | APT-36K | APT-36K | 85.5 | 88.2 | — |
+| Supervised | APT-36K | ATRW (tiger) | 88.4 | 92.5 | — |
+| Supervised | APT-36K | TopViewMouse-5K | 83.4 | 87.1 | — |
+| Supervised | Quadruped-80K | AP-10K | 83.9 | 87.7 | 88.2 |
+| Few-shot, 112 labels | APT-36K | Tri-Mouse | 99.9 | 99.9 | — |
+| Few-shot, 70 labels | APT-36K | Fish | 97.8 | 97.2 | — |
+| Few-shot, 900 labels | APT-36K | Vinegar Fly | 86.1 | 90.5 | — |
 
-Deployment throughput, 959-frame clips at 640 input:
+Runtime on 640 x 480 mouse video with AnimalRTPose. The last column is the reciprocal of
+the summed stage times, not a measured sustained frame rate:
 
-| Path | Hardware | Throughput |
-|---|---|---|
-| AnimalRTPose-N, ONNX Runtime | RTX 2080 Ti | 56 fps |
-| RT-DETR-L + AnimalViTPose-S | RTX 2080 Ti | 24 fps |
-| RT-DETR-L + AnimalViTPose-S | RTX 4090 | 40 fps |
-| AnimalRTPose-N, ONNX Runtime | CPU only | 4.3 fps |
+| Configuration | Preprocess | Inference | Postprocess | FPS* |
+|---|---|---|---|---|
+| Mac mini, Apple M4 | 2.8 ms | 3.2 ms | 13.7 ms | 50.8 |
+| Lenovo desktop, Core i5-12400 | 41.0 ms | 37.7 ms | 36.7 ms | 8.7 |
+| Workstation, RTX 4090 | 6.0 ms | 6.0 ms | 17.0 ms | 34.5 |
+| Workstation, RTX 4080 | 1.8 ms | 2.6 ms | 13.5 ms | 55.9 |
+| Jetson AGX Orin (inference only) | — | 4.2 ms | — | 238.1 |
+| Atlas 200I DK A2 (inference only) | — | 15.6 ms | — | 64.1 |
+
+*Reciprocal of the summed stage times.
+
+Postprocessing is the largest stage on the fast paths — 13.7 of 19.7 ms on the Mac mini,
+13.5 of 17.9 ms on the RTX 4080 — because it covers output parsing, confidence filtering,
+coordinate mapping and NMS. Speeding up the network alone therefore buys little.
 
 ## Models
 
