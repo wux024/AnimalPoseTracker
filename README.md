@@ -160,12 +160,12 @@ Inference time on each machine the system was tested on:
 | Mac Mini | Apple M4 | integrated | 3.2 ms |
 | Lenovo laptop | Ryzen 7 5800H | CPU only | 54.5 ms |
 | Lenovo desktop | Core i5-12400 | CPU only | 37.7 ms |
-| Workstation 1 | Intel Ultra 9 | RTX 4090 | 6.0 ms |
-| Workstation 1 | Intel Ultra 9 | Intel integrated GPU | 10.0 ms |
-| Workstation 1 | Intel Ultra 9 | Intel NPU | 25.5 ms |
-| Workstation 1 | Intel Ultra 9 | CPU only | 18.2 ms |
-| Workstation 2 | Intel Ultra 9 | RTX 4080 | 2.6 ms |
-| Workstation 2 | Intel Ultra 9 | CPU only | 14.2 ms |
+| Workstation 1 | Intel Ultra 9 285K | RTX 4090 | 6.0 ms |
+| Workstation 1 | Intel Ultra 9 285K | Intel integrated GPU | 10.0 ms |
+| Workstation 1 | Intel Ultra 9 285K | Intel NPU | 25.5 ms |
+| Workstation 1 | Intel Ultra 9 285K | CPU only | 18.2 ms |
+| Workstation 2 | Intel Ultra 9 285K | RTX 4080 | 2.6 ms |
+| Workstation 2 | Intel Ultra 9 285K | CPU only | 14.2 ms |
 | Jetson AGX Orin | ARM Cortex-A78AE | Ampere GPU | 4.2 ms |
 | Atlas 200I DK A2 | TAISHANV200M | DAVINCI V300 | 15.6 ms |
 
