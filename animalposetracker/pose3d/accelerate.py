@@ -1,9 +1,15 @@
-"""Batched triangulation with JAX as an optional backend.
+"""Batched triangulation with three interchangeable backends.
 
-The numpy path is the reference implementation and runs everywhere. The JAX path exists for
-long recordings, where the point count runs into the millions and one batched SVD over the
-whole segment beats both a per-point loop and a chunked numpy version. Both paths are
-compared against each other in the tests.
+``numpy``   — the reference. One batched SVD over the whole ``(K, 2C, 4)`` design matrix,
+              no Python loop over points. Runs anywhere numpy does.
+``jax-cpu`` — the same maths through ``jax.numpy``, pinned to the CPU device. Faster than
+              numpy only when several cores are available and the batch is large.
+``jax-gpu`` — the same, pinned to the GPU. This is the one that matters for hour-long
+              recordings, where the point count runs into the millions.
+
+``auto`` picks ``jax-gpu`` when a GPU is visible, ``jax-cpu`` when jax is installed without
+one, and ``numpy`` when jax is absent. Every path is compared against the per-point
+implementation in the tests.
 
 ``animalpose-cli pose3d`` does not call this yet -- it still triangulates per keypoint,
 because the RANSAC step picks a different camera subset for each one. This module is the
@@ -16,23 +22,41 @@ from typing import Optional
 
 import numpy as np
 
-__all__ = ["jax_available", "triangulate_batch"]
+__all__ = ["available_backends", "jax_available", "triangulate_batch"]
+
+_BACKENDS = ("auto", "numpy", "jax-cpu", "jax-gpu")
 
 
-def jax_available() -> bool:
-    """True when jax imports cleanly (the ``pose3d-jax`` extra is installed)."""
+def jax_available(device: Optional[str] = None) -> bool:
+    """True when jax imports and, if ``device`` is given, that device exists."""
     try:
-        import jax  # noqa: F401
+        import jax
+    except Exception:
+        return False
+    if device is None:
+        return True
+    try:
+        jax.devices(device)
     except Exception:
         return False
     return True
 
 
+def available_backends() -> dict:
+    """Describe what this machine can run, for the CLI banner and the tests."""
+    has_jax = jax_available()
+    return {
+        "numpy": True,
+        "jax-cpu": has_jax and jax_available("cpu"),
+        "jax-gpu": has_jax and jax_available("gpu"),
+    }
+
+
 def _design(points: np.ndarray, projection: np.ndarray, weights: np.ndarray) -> np.ndarray:
     """Build the ``(K, 2C, 4)`` DLT design matrices.
 
-    ``points`` is ``(K, C, 2)``, ``projection`` is ``(C, 3, 4)`` and ``weights`` is
-    ``(K, C)``. Each camera contributes the two rows
+    ``points`` is ``(K, C, 2)`` in normalised image coordinates, ``projection`` is
+    ``(C, 3, 4)`` and ``weights`` is ``(K, C)``. Each camera contributes the two rows
 
         x * P[2] - P[0]
         y * P[2] - P[1]
@@ -63,13 +87,27 @@ def _triangulate_numpy(points, projection, weights) -> np.ndarray:
     return _to_cartesian(vh[:, -1])
 
 
-def _triangulate_jax(points, projection, weights) -> np.ndarray:
+def _triangulate_jax(points, projection, weights, device: str) -> np.ndarray:
+    import jax
     import jax.numpy as jnp
 
-    matrix = jnp.asarray(_design(points, projection, weights))
-    _, _, vh = jnp.linalg.svd(matrix, full_matrices=False)
-    homogeneous = np.asarray(vh[:, -1])
+    matrix = _design(points, projection, weights)
+    with jax.default_device(jax.devices(device)[0]):
+        matrix = jnp.asarray(matrix)
+        _, _, vh = jnp.linalg.svd(matrix, full_matrices=False)
+        homogeneous = np.asarray(vh[:, -1])
     return _to_cartesian(homogeneous)
+
+
+def _resolve(backend: str) -> str:
+    """Turn ``auto`` into a concrete backend, and validate the rest."""
+    if backend not in _BACKENDS:
+        raise ValueError(f"backend must be one of {', '.join(_BACKENDS)}")
+    if backend != "auto":
+        return backend
+    if not jax_available():
+        return "numpy"
+    return "jax-gpu" if jax_available("gpu") else "jax-cpu"
 
 
 def triangulate_batch(
@@ -82,11 +120,10 @@ def triangulate_batch(
     """Triangulate ``K`` points from up to ``C`` cameras in one call.
 
     Args:
-        points: ``(K, C, 2)`` image coordinates, one row per camera.
+        points: ``(K, C, 2)`` normalised image coordinates, one row per camera.
         projection: ``(C, 3, 4)`` projection matrices, in the same camera order.
         weights: ``(K, C)`` per-observation confidence; ones when omitted.
-        backend: ``"auto"`` uses JAX when it imports, ``"numpy"`` forces the baseline and
-            ``"jax"`` forces the accelerator (and fails if it is missing).
+        backend: ``auto``, ``numpy``, ``jax-cpu`` or ``jax-gpu``.
 
     Returns:
         ``(K, 3)`` world points. Rows that could not be solved are ``nan``, matching the
@@ -103,10 +140,12 @@ def triangulate_batch(
     else:
         weights = np.asarray(weights, dtype=np.float64)
 
-    if backend not in ("auto", "numpy", "jax"):
-        raise ValueError("backend must be 'auto', 'numpy' or 'jax'")
-    if backend == "jax" and not jax_available():
-        raise RuntimeError("backend='jax' needs the pose3d-jax extra installed")
-    use_jax = backend == "jax" or (backend == "auto" and jax_available())
-    return _triangulate_jax(points, projection, weights) if use_jax \
-        else _triangulate_numpy(points, projection, weights)
+    resolved = _resolve(backend)
+    if resolved == "numpy":
+        return _triangulate_numpy(points, projection, weights)
+    if not jax_available():
+        raise RuntimeError(f"backend='{resolved}' needs the pose3d-jax extra installed")
+    device = "gpu" if resolved == "jax-gpu" else "cpu"
+    if not jax_available(device):
+        raise RuntimeError(f"backend='{resolved}' needs a jax {device.upper()} device")
+    return _triangulate_jax(points, projection, weights, device)
