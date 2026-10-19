@@ -1,11 +1,8 @@
 name: docs
 
-# Builds the Jupyter Book in the repository root (README.md is the landing page).
-#
-# A push builds the book so a broken link or a bad heading fails CI, but it does not
-# publish: deployment only runs from a manual dispatch. That keeps the site offline while
-# Settings → Pages → Source is set to "None"; when the site is ready to be public, set the
-# source back to "GitHub Actions" and run this workflow from the Actions tab.
+# Builds and publishes the Jupyter Book in the repository root (README.md is the landing
+# page). A push to main builds the book and deploys it; run the workflow manually to
+# rebuild without a push.
 
 on:
   push:
@@ -56,8 +53,6 @@ jobs:
 
   deploy:
     needs: build
-    # Only a manual run publishes; a push verifies the book and stops there.
-    if: github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
     environment:
       name: github-pages
