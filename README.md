@@ -116,6 +116,8 @@ adapt it to your setting.
 
 **AnimalRTPose** on AnimalPose, 640 x 640 input (Neural Networks, 2025):
 
+<details open><summary>AnimalRTPose accuracy on AnimalPose</summary>
+
 | Model | AP<sub>50:95</sub> | AR<sub>50:95</sub> | Params |
 |---|---|---|---|
 | AnimalRTPose-N | 72.0 | 80.0 | 2.9 M |
@@ -124,7 +126,11 @@ adapt it to your setting.
 | AnimalRTPose-L | 77.8 | 84.4 | 47.9 M |
 | AnimalRTPose-X | 80.1 | 87.3 | 74.8 M |
 
+</details>
+
 Inference latency on NVIDIA GPUs, in milliseconds:
+
+<details open><summary>Latency on NVIDIA GPUs</summary>
 
 | Model | RTX 2080 Ti | RTX 3090 | A800 |
 |---|---|---|---|
@@ -134,7 +140,11 @@ Inference latency on NVIDIA GPUs, in milliseconds:
 | AnimalRTPose-L | 11.3 | 7.5 | 3.7 |
 | AnimalRTPose-X | 17.1 | 11.9 | 5.6 |
 
+</details>
+
 The same models on edge devices:
+
+<details open><summary>Latency on edge devices</summary>
 
 | Model | Jetson AGX Orin | Raspberry Pi 5 + AI HAT+ | Atlas 200I |
 |---|---|---|---|
@@ -144,7 +154,11 @@ The same models on edge devices:
 | AnimalRTPose-L | 7.5 | 49.3 | 105.7 |
 | AnimalRTPose-X | 9.1 | 74.1 | 162.6 |
 
+</details>
+
 **AnimalViTPose** on AP10K, 256 x 256 input (EAAI, 2026):
+
+<details open><summary>AnimalViTPose accuracy on AP10K</summary>
 
 | Model | AP<sub>50:95</sub> | AR | PCK | EPE | Latency |
 |---|---|---|---|---|---|
@@ -153,7 +167,11 @@ The same models on edge devices:
 | AnimalViTPose-L | 82.4 | 84.4 | 83.9 | 16.56 | 86.8 ms |
 | AnimalViTPose-H | 83.9 | 87.7 | 88.2 | 15.19 | 119.6 ms |
 
+</details>
+
 AnimalPoseTracker inference time on each machine it was tested on:
+
+<details open><summary>AnimalPoseTracker inference time per machine</summary>
 
 | Machine | Compute unit | Inference |
 |---|---|---|
@@ -168,6 +186,7 @@ AnimalPoseTracker inference time on each machine it was tested on:
 |  | CPU only | 14.2 ms |
 | Jetson AGX Orin | Ampere GPU | 4.2 ms |
 | Atlas 200I DK A2 | DAVINCI V300 | 15.6 ms |
+</details>
 
 CPUs: Apple M4, Ryzen 7 5800H, Core i5-12400, Intel Ultra 9 285K (both workstations),
 ARM Cortex-A78AE and TAISHANV200M on the two edge devices. Workstation 1 is one machine
