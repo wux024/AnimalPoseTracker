@@ -10,7 +10,7 @@ the CLI, so a run started in one can be inspected or continued in another.
 | Annotator | `animalpose-annotator` | Draw boxes, classes, keypoints and skeleton |
 | Inferencer | `animalpose-inferencer` | Run an exported artifact on a camera, video or stream |
 
-<img src="assets/screenshots/configure.png" alt="Manage Configure" width="880">
+![Manage Configure](assets/screenshots/configure.png)
 
 ## Train and test a model
 
@@ -34,7 +34,7 @@ the CLI, so a run started in one can be inspected or continued in another.
 
    https://github.com/user-attachments/assets/79636a6e-3813-40f1-8595-06040e2fe178
 
-   <img src="assets/screenshots/training.png" alt="Training Configure" width="880">
+   ![Training Configure](assets/screenshots/training.png)
 
 5. Evaluate on the test set, then predict on videos or the `test` split. For deployed
    artifacts use `animalpose-inferencer`.
