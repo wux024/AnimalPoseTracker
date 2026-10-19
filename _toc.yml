@@ -17,3 +17,4 @@ parts:
     chapters:
       - file: docs/configuration
       - file: docs/deployment_formats
+      - file: docs/citation

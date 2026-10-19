@@ -4,16 +4,16 @@
 
 ![](docs/assets/demos/hand.gif) ![](docs/assets/demos/koi.gif) ![](docs/assets/demos/animals.gif)
 
-<a href="docs/getting_started.md">📚 Documentation</a> |
+[📚 Documentation](docs/getting_started.md) |
 <a href="#installation">🛠️ Installation</a> |
 <a href="#quick-start">🚀 Quick start</a> |
-<a href="#multi-camera-3d">🎯 3D</a> |
-<a href="#desktop-applications">🖥️ GUI</a> |
+[🎯 3D](docs/three_d.md) |
+[🖥️ GUI](docs/gui.md) |
 <a href="https://github.com/wux024/AnimalPoseTracker/issues">🪲 Reporting Issues</a>
 
 <a href="#get-assistance">🫶 Getting Assistance</a> |
 <a href="#references--citations">📝 Publications</a> |
-<a href="docs/deployment_formats.md">📦 Deployment formats</a> |
+[📦 Deployment formats](docs/deployment_formats.md) |
 <a href="https://github.com/wux024/AnimalPoseTracker">💻 Source</a>
 
 <a href="https://github.com/wux024/AnimalPoseTracker/actions/workflows/docs.yml"><img src="https://github.com/wux024/AnimalPoseTracker/actions/workflows/docs.yml/badge.svg" alt="Docs build"></a>
@@ -93,7 +93,7 @@ runs an exported engine (`.onnx`, `.engine`, `.mlpackage`, ...) without a projec
 Every command takes `--help`; the flags used most often are in
 [Getting started](docs/getting_started.md).
 
-Steps 1–10 are detailed in [Getting started](docs/getting_started.md); the desktop route
+Each step is detailed in [Getting started](docs/getting_started.md); the desktop route
 through the same steps is in [Desktop applications](docs/gui.md).
 
 # Usage demo
@@ -113,6 +113,17 @@ Reading the two papers below is the shortest way to see what each model is for a
 adapt it to your setting.
 
 ## Performance 🔥
+
+Two model families share one training loop, CLI, validator and export path:
+
+- **AnimalRTPose** — single-stage, real-time; predicts boxes and keypoints in one pass, so it
+  runs without a detector. N/S/M/L/X scales.
+- **AnimalViTPose** — top-down ViT with a SimCC head; crops each instance from an annotated
+  or detected box and maps the prediction back. Small/Base/Large/Huge.
+
+Inference is not limited to these two. One-stage artifacts decode from any of three output
+layouts — raw pose head, NMS-applied head, end-to-end head. Two-stage artifacts (SimCC head)
+run as well, with `--detector-weights` supplying the boxes they crop from.
 
 **AnimalRTPose** on AnimalPose, 640 x 640 input (Neural Networks, 2025):
 
@@ -193,73 +204,46 @@ ARM Cortex-A78AE and TAISHANV200M on the two edge devices. Workstation 1 is one 
 with four selectable compute units, so its four rows are the same video on the same box.
 The edge devices were measured for inference only.
 
-## Models
-
-- **AnimalRTPose** — single-stage, real-time; predicts boxes and keypoints in one pass, so it
-  runs without a detector. N/S/M/L scales.
-- **AnimalViTPose** — top-down ViT with a SimCC head; crops each instance from an annotated
-  or detected box and maps the prediction back. Small/Base/Large/Huge.
-- Both train through the same loop, CLI, validator and export path; **RTMO** is supported as
-  an additional one-stage family.
-
 ## The history
 
-AnimalRTPose ([Neural Networks, 2025](https://doi.org/10.1016/j.neunet.2025.107685)) made
-cross-species real-time pose affordable on a single GPU. AnimalViTPose
-([EAAI, 2026](https://doi.org/10.1016/j.engappai.2025.112749)) added a feature-map
+### Development and applications
+
+The line starts in 2022 with motion parameters read off user-defined keypoints through 3D
+pose estimation ([EAAI, 2022](https://doi.org/10.1016/j.engappai.2022.104667)): geometry
+first, the network second. Two years later the same idea became a visual perception system
+for fish swimming ([IEEE Sensors, 2024](https://doi.org/10.1109/JSEN.2024.3374236)), where the
+tracked keypoints describe a behaviour rather than a coordinate.
+
+AnimalRTPose ([Neural Networks, 2025](https://doi.org/10.1016/j.neunet.2025.107685)) moved
+the other way — one stage that predicts boxes and keypoints in a single pass — which is what
+made cross-species real-time pose affordable on one GPU. The two single-pixel papers of the
+same year ([Optics and Lasers, 2025](https://doi.org/10.1016/j.optlaseng.2025.109198);
+[Chinese Optics Letters, 2025](https://doi.org/10.3788/COL202523.091101)) moved the input
+instead: pose from a sensor that never forms an image. AnimalViTPose
+([EAAI, 2026](https://doi.org/10.1016/j.engappai.2025.112749)) then added a feature-map
 orthogonal decomposition decoder that lifts accuracy without giving up the deployment path.
-This repository is the system that grew around the two: one project format, one trainer, one
-record schema, and the 3D stage that reuses it.
+
+None of them assumes a species, a viewpoint or a camera count, and the 3D question has been
+there since the first paper. This repository is the system that grew around that line: one
+project format, one trainer, one record schema, and the 3D stage that reuses it.
 
 ### Ecosystem
 
-The same lineage is available where it was first published:
+Every paper shipped its code where it was trained, and the pieces still line up:
 
-- [AnimalRTPose configs](https://github.com/wux024/ultralytics/tree/animalrtpose/configs) — the ultralytics fork the one-stage model was trained in
-- [AnimalViTPose configs](https://github.com/wux024/mmpose/tree/main/configs/animal_2d_keypoint/animalvitpose) — the MMPose config for the ViT model
-- [SPCPose](https://github.com/wux024/SPCPose) — pose estimation from a single-pixel camera
-- [AdamPose](https://github.com/wux024/AdamPose) — motion parameters from tracked keypoints
-
-# Multi-camera 3D
-
-Calibrate a rig, triangulate each camera's 2D records, and render the result:
-
-```bash
-animalpose-cli calibrate --view camA=frames/camA --view camB=frames/camB \
-    --board-squares 10x7 --square-size 22 --marker-size 16.5
-animalpose-cli pose3d --config configs/runtime.yaml --association epipolar
-animalpose-cli pose3d-render --config configs/runtime.yaml --video both
-```
-
-`epipolar` matching keeps identities when detection order changes or two animals cross.
-`--video overlay` projects the 3D keypoints back onto each camera — a correct rig lands the
-skeleton on the animal, a wrong one slides off. The whole stage, including the GUI tab and
-how to add 3D to an existing project, is in [Multi-camera 3D](docs/three_d.md).
-
-<img src="docs/assets/screenshots/pose3d.png" alt="The 3D Reconstruction tab" width="880">
-
-# Desktop applications
-
-| Window | Command | Purpose |
+| Paper | Code | What it covers |
 |---|---|---|
-| Workspace | `animalposetracker` | Project management, frame extraction, training, evaluation, prediction, export, 3D |
-| Annotator | `animalpose-annotator` | Boxes, classes, keypoints and skeleton |
-| Inferencer | `animalpose-inferencer` | An exported artifact on a camera, video or stream |
+| EAAI 2022; IEEE Sensors 2024 | [AdamPose](https://github.com/wux024/AdamPose), [AdamPosePlug](https://github.com/wux024/AdamPosePlug) | 3D motion parameters, fish swimming |
+| Neural Networks 2025 | [ultralytics fork](https://github.com/wux024/ultralytics/tree/animalrtpose/configs) | AnimalRTPose configs and training |
+| Chinese Optics Letters 2025 | [SPCPose](https://github.com/wux024/SPCPose) | pose from single-pixel input |
+| EAAI 2026 | [mmpose fork](https://github.com/wux024/mmpose/tree/main/configs/animal_2d_keypoint/animalvitpose) | AnimalViTPose configs |
 
-The windows read and write the same files as the CLI, so a run started in one can be
-continued in the other. Walkthroughs and screen recordings: [Desktop applications](docs/gui.md).
+The forks remain the reference for the original configs; AnimalPoseTracker implements the
+same contracts without depending on them.
 
-# Documentation
+### Code contributors
 
-| Document | Contents |
-|---|---|
-| [Getting started](docs/getting_started.md) | Installation, CLI workflows, configuration model, datasets, project layout |
-| [Multi-camera 3D](docs/three_d.md) | Calibration, triangulation, association, rendering, GUI tab |
-| [Desktop applications](docs/gui.md) | The three windows, in the order you use them |
-| [Configuration reference](docs/configuration.md) | Every registered key (generated from the schema) |
-| [Deployment formats](docs/deployment_formats.md) | Export/prediction format matrix and per-format extras |
-| [Pose analysis workflows](docs/pose_analysis_workflows.md) | Tracking/filtering API and multi-camera triangulation API |
-| [Example project](docs/project_config_example/project.yaml) | A complete project configuration |
+AnimalPoseTracker is written and maintained by [Xin Wu](https://github.com/wux024).
 
 # Get assistance
 
@@ -271,47 +255,8 @@ continued in the other. Walkthroughs and screen recordings: [Desktop application
 
 ## References & citations
 
-If you use this toolbox, please cite the two papers whose models it implements:
-
-```bibtex
-@article{Wu2026,
-   title = {Cross-species animal pose estimation via feature map orthogonal decomposition decoder},
-   journal = {Engineering Applications of Artificial Intelligence},
-   volume = {163},
-   pages = {112749},
-   year = {2026},
-   doi = {https://doi.org/10.1016/j.engappai.2025.112749},
-   author = {Xin Wu and Yanmei Wang and Lianming Wang and Jipeng Huang},
-   keywords = {Animal pose estimation, Vision transformer, Feature map decomposition}
-}
-@article{Wu2025,
-   title = {AnimalRTPose: Faster cross-species real-time animal pose estimation},
-   journal = {Neural Networks},
-   volume = {190},
-   pages = {107685},
-   year = {2025},
-   issn = {0893-6080},
-   doi = {https://doi.org/10.1016/j.neunet.2025.107685},
-   author = {Xin Wu and Lianming Wang and Jipeng Huang},
-   keywords = {Animal pose estimation, Real-time, Cross-species, Lightweight network}
-}
-```
-
-**Pose estimation beyond RGB.** The same group carries the problem into sensing regimes where
-a camera is not an option:
-
-- Wu, X., Zhou, C., Li, B., Huang, J., Meng, Y., & Song, L. (2025). [Cross-species pose estimation via ultra-low compression ratio array-light-based single-pixel imaging](https://doi.org/10.1016/j.optlaseng.2025.109198). *Optics and Lasers in Engineering*, 194, 109198.
-- Wu, X., Zhou, C., Li, B., Huang, J., Meng, Y., Song, L., & Han, S. (2025). [Image-free cross-species pose estimation via ultra-low sampling rate single-pixel camera](https://doi.org/10.3788/COL202523.091101). *Chinese Optics Letters*, 23(9), 091101.
-- Liu, Y., Wu, X., Zhou, C., Yao, D., Zhang, Q., Huang, J., Meng, Y., & Song, L. (2026). [Image-free three-dimensional human pose estimation based on single-pixel imaging with extremely low sampling rate](https://doi.org/10.1016/j.optlaseng.2026.109715). *Optics and Lasers in Engineering*, 201, 109715.
-
-**Where the pose records go next.** 3D motion parameters and behaviour read off tracked
-keypoints:
-
-- Wu, X., Wang, Y., Chen, L., Zhang, L., & Wang, L. (2022). [Motion parameters measurement of user-defined key points using 3D pose estimation](https://doi.org/10.1016/j.engappai.2022.104667). *Engineering Applications of Artificial Intelligence*, 110, 104667.
-- Wu, X., Huang, J., & Wang, L. (2024). [Pose estimation-based visual perception system for analyzing fish swimming](https://doi.org/10.1109/JSEN.2024.3374236). *IEEE Sensors Journal*, 24(8), 13293–13303.
-- 王连明, 吴鑫 (2023). [基于姿态估计的物体3D运动参数测量方法](http://jlgy.publish.founderss.cn/thesisDetails#10.13229/j.cnki.jdxbgxb.20210981&lang=zh). *吉林大学学报（工学版）*, 53(7), 2099–2108.
-
-More on [the author's homepage](https://wux024.github.io).
+Please see the [citation page](docs/citation.md) for the two bibtex entries and the
+related papers behind the 3D and single-pixel stages.
 
 ## License
 
@@ -319,16 +264,42 @@ More on [the author's homepage](https://wux024.github.io).
 the code comments mark the origin of the corresponding modules, and the project is released
 under the same license family those modules require.
 
-## Versions
+## Major Versions
 
-- **0.1.0** (2026-10) — first public version: two model families, ten CLI workflows, three
-  desktop applications, export matrix, multi-camera 3D with rendering.
+For every release, see the [releases page](https://github.com/wux024/AnimalPoseTracker/releases).
+
+**0.1.0** (2026-10) — first public version.
+
+- Two model families sharing one training loop: AnimalRTPose (one-stage, N/S/M/L/X) and
+  AnimalViTPose (top-down with a SimCC head, Small/Base/Large/Huge).
+- Ten CLI workflows from `create` to `pose3d-render`, plus three desktop applications that
+  read and write the same project files.
+- An export matrix covering PyTorch, TorchScript, ONNX, OpenVINO, TensorRT, CoreML, the
+  TensorFlow family, PaddlePaddle, MNN, NCNN, IMX500, RKNN and Triton, each behind its own
+  extra.
+- Multi-camera 3D: ChArUco calibration, index or epipolar association, batched
+  triangulation, reprojection and revolving 3D videos.
+- Tracking and temporal filtering on pose records, so a recorded sequence can be replayed
+  with another tracker without re-running the network.
 
 # News
 
-- **2026-10** — 0.1.0. Multi-camera 3D stage: ChArUco calibration, epipolar instance
-  association, reprojection and revolving 3D videos.
-- **2026-10** — Export sidecars: every artifact ships the preprocessing, NMS and class
-  contract the inferencer verifies before decoding.
-- **2026-10** — Tracking and temporal filtering run on pose records, so a recorded sequence
-  can be replayed with another tracker without re-running the network.
+- **2022** — The line starts: *Motion parameters measurement of user-defined key points using
+  3D pose estimation* appears in Engineering Applications of Artificial Intelligence.
+- **2024** — *Pose estimation-based visual perception system for analyzing fish swimming* in
+  IEEE Sensors Journal, where the tracked keypoints describe a behaviour rather than a
+  coordinate.
+- **2024-09** — The repository starts as AnimalPoseTracker.
+- **2025** — *AnimalRTPose* in Neural Networks; two single-pixel papers follow, moving the
+  input from a camera to a sensor that never forms an image.
+- **2025-11** — **v0.1.0-alpha** preview: the project workflow, training framework,
+  deployment pipeline and desktop GUIs.
+- **2026** — *AnimalViTPose* in Engineering Applications of Artificial Intelligence, adding
+  the feature-map orthogonal decomposition decoder.
+- **2026-10** — **0.1.0**: first public release — two model families, ten CLI workflows,
+  three desktop applications, an export matrix, multi-camera 3D with rendering.
+
+# Funding
+
+<!-- TODO: list the grants and institutional support behind this work. -->
+
