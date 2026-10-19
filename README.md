@@ -155,24 +155,24 @@ The same models on edge devices:
 
 Inference time on each machine the system was tested on:
 
-| Machine | CPU | Compute unit | Inference |
-|---|---|---|---|
-| Mac Mini | Apple M4 | integrated | 3.2 ms |
-| Lenovo laptop | Ryzen 7 5800H | CPU only | 54.5 ms |
-| Lenovo desktop | Core i5-12400 | CPU only | 37.7 ms |
-| Workstation 1 | Intel Ultra 9 285K | RTX 4090 | 6.0 ms |
-| Workstation 1 | Intel Ultra 9 285K | Intel integrated GPU | 10.0 ms |
-| Workstation 1 | Intel Ultra 9 285K | Intel NPU | 25.5 ms |
-| Workstation 1 | Intel Ultra 9 285K | CPU only | 18.2 ms |
-| Workstation 2 | Intel Ultra 9 285K | RTX 4080 | 2.6 ms |
-| Workstation 2 | Intel Ultra 9 285K | CPU only | 14.2 ms |
-| Jetson AGX Orin | ARM Cortex-A78AE | Ampere GPU | 4.2 ms |
-| Atlas 200I DK A2 | TAISHANV200M | DAVINCI V300 | 15.6 ms |
+| Machine | Compute unit | Inference |
+|---|---|---|
+| Mac Mini | integrated | 3.2 ms |
+| Lenovo laptop | CPU only | 54.5 ms |
+| Lenovo desktop | CPU only | 37.7 ms |
+| Workstation 1 | RTX 4090 | 6.0 ms |
+|  | Intel integrated GPU | 10.0 ms |
+|  | Intel NPU | 25.5 ms |
+|  | CPU only | 18.2 ms |
+| Workstation 2 | RTX 4080 | 2.6 ms |
+|  | CPU only | 14.2 ms |
+| Jetson AGX Orin | Ampere GPU | 4.2 ms |
+| Atlas 200I DK A2 | DAVINCI V300 | 15.6 ms |
 
-Workstation 1 is one machine with four selectable compute units, so its four rows are the
-same video on the same box. Workstation 1 and 2 run Windows 11 and Ubuntu 24.04
-respectively; the two edge devices were measured for inference only, without a display or
-disk write.
+CPUs: Apple M4, Ryzen 7 5800H, Core i5-12400, Intel Ultra 9 285K (both workstations),
+ARM Cortex-A78AE and TAISHANV200M on the two edge devices. Workstation 1 is one machine
+with four selectable compute units, so its four rows are the same video on the same box.
+The edge devices were measured for inference only.
 
 ## Models
 
