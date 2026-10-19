@@ -6,6 +6,7 @@ import pytest
 from animalposetracker.pose3d.accelerate import (
     available_backends,
     jax_available,
+    numba_available,
     triangulate_batch,
 )
 from animalposetracker.pose3d.core import CameraCalibration, _dlt_triangulate
@@ -83,13 +84,16 @@ def test_backend_validation():
     if not jax_available("gpu"):
         with pytest.raises(RuntimeError):
             triangulate_batch(observations, projection, backend="jax-gpu")
+    if not numba_available():
+        with pytest.raises(RuntimeError):
+            triangulate_batch(observations, projection, backend="numba")
 
 
 def test_available_backends_reports_numpy_always():
     reported = available_backends()
 
     assert reported["numpy"] is True
-    assert set(reported) == {"numpy", "jax-cpu", "jax-gpu"}
+    assert set(reported) == {"numpy", "numba", "jax-cpu", "jax-gpu"}
 
 
 @pytest.mark.skipif(not jax_available("cpu"), reason="needs the pose3d-jax extra")
@@ -108,5 +112,15 @@ def test_jax_gpu_matches_numpy():
 
     baseline = triangulate_batch(observations, projection, backend="numpy")
     accelerated = triangulate_batch(observations, projection, backend="jax-gpu")
+
+    assert np.allclose(accelerated, baseline, atol=1e-9)
+
+
+@pytest.mark.skipif(not numba_available(), reason="needs the pose3d-numba extra")
+def test_numba_matches_numpy():
+    _, _, observations, projection = _scene()
+
+    baseline = triangulate_batch(observations, projection, backend="numpy")
+    accelerated = triangulate_batch(observations, projection, backend="numba")
 
     assert np.allclose(accelerated, baseline, atol=1e-9)
