@@ -160,7 +160,7 @@ The same lineage is available where it was first published:
 - [SPCPose](https://github.com/wux024/SPCPose) — pose estimation from a single-pixel camera
 - [AdamPose](https://github.com/wux024/AdamPose) — motion parameters from tracked keypoints
 
-## Multi-camera 3D
+# Multi-camera 3D
 
 Calibrate a rig, triangulate each camera's 2D records, and render the result:
 
@@ -178,7 +178,7 @@ how to add 3D to an existing project, is in [Multi-camera 3D](docs/three_d.md).
 
 <img src="docs/assets/screenshots/pose3d.png" alt="The 3D Reconstruction tab" width="880">
 
-## Desktop applications
+# Desktop applications
 
 | Window | Command | Purpose |
 |---|---|---|
@@ -189,7 +189,7 @@ how to add 3D to an existing project, is in [Multi-camera 3D](docs/three_d.md).
 The windows read and write the same files as the CLI, so a run started in one can be
 continued in the other. Walkthroughs and screen recordings: [Desktop applications](docs/gui.md).
 
-## Documentation
+# Documentation
 
 | Document | Contents |
 |---|---|
@@ -201,7 +201,7 @@ continued in the other. Walkthroughs and screen recordings: [Desktop application
 | [Pose analysis workflows](docs/pose_analysis_workflows.md) | Tracking/filtering API and multi-camera triangulation API |
 | [Example project](docs/project_config_example/project.yaml) | A complete project configuration |
 
-## Get assistance
+# Get assistance
 
 | Where | For | Expectation |
 |---|---|---|
@@ -264,7 +264,7 @@ under the same license family those modules require.
 - **0.1.0** (2026-10) — first public version: two model families, ten CLI workflows, three
   desktop applications, export matrix, multi-camera 3D with rendering.
 
-## News
+# News
 
 - **2026-10** — 0.1.0. Multi-camera 3D stage: ChArUco calibration, epipolar instance
   association, reprojection and revolving 3D videos.
