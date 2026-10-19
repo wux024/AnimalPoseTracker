@@ -73,7 +73,7 @@ export-paddle = ["paddlepaddle>=3.0.0", "x2paddle"]
 export-mnn = ["MNN>=2.9.6"]
 export-ncnn = ["ncnn"]
 predict-triton = ["tritonclient[http,grpc]"]
-pose3d-numba = ["numba>=0.59"]
+pose3d-numba = ["numba>=0.61"]
 pose3d-jax = ["jax>=0.4.30"]
 pose3d-jax-cuda = ["jax[cuda12]>=0.4.30"]
 
