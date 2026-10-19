@@ -153,22 +153,26 @@ The same models on edge devices:
 | AnimalViTPose-L | 82.4 | 84.4 | 83.9 | 16.56 | 86.8 ms |
 | AnimalViTPose-H | 83.9 | 87.7 | 88.2 | 15.19 | 119.6 ms |
 
-The whole application on the hardware it was tested on — preprocess, inference, postprocess
-and the resulting frame rate:
+Inference time on each machine the system was tested on:
 
-| Machine | Preprocess | Inference | Postprocess | FPS |
-|---|---|---|---|---|
-| Mac Mini, Apple M4 | 2.8 ms | 3.2 ms | 13.7 ms | 50.8 |
-| Lenovo laptop, Ryzen 7 5800H | 59.0 ms | 54.5 ms | 66.8 ms | 5.5 |
-| Lenovo desktop, Core i5-12400 | 41.0 ms | 37.7 ms | 36.7 ms | 8.7 |
-| Workstation 1-A, CPU only | 6.0 ms | 18.2 ms | 17.5 ms | 24.0 |
-| Workstation 1-B, Intel integrated GPU | 7.0 ms | 10.0 ms | 18.0 ms | 28.6 |
-| Workstation 1-C, Intel NPU | 7.0 ms | 25.5 ms | 19.0 ms | 19.4 |
-| Workstation 1-D, RTX 4090 | 6.0 ms | 6.0 ms | 17.0 ms | 34.5 |
-| Workstation 2-A, CPU only | 2.5 ms | 14.2 ms | 16.0 ms | 30.6 |
-| Workstation 2-D, RTX 4080 | 1.8 ms | 2.6 ms | 13.5 ms | 55.9 |
-| Jetson AGX Orin | — | 4.2 ms | — | 238.1 |
-| Atlas 200I DK A2 | — | 15.6 ms | — | 64.1 |
+| Machine | Inference |
+|---|---|
+| Mac Mini, Apple M4 | 3.2 ms |
+| Lenovo laptop, Ryzen 7 5800H | 54.5 ms |
+| Lenovo desktop, Core i5-12400 | 37.7 ms |
+| Workstation 1-D, RTX 4090 | 6.0 ms |
+| Workstation 1-B, Intel integrated GPU | 10.0 ms |
+| Workstation 1-C, Intel NPU | 25.5 ms |
+| Workstation 1-A, CPU only | 18.2 ms |
+| Workstation 2-D, RTX 4080 | 2.6 ms |
+| Workstation 2-A, CPU only | 14.2 ms |
+| Jetson AGX Orin | 4.2 ms |
+| Atlas 200I DK A2 | 15.6 ms |
+
+Workstation 1 is one machine with four selectable compute units — A runs on the CPU alone,
+B adds the Intel integrated GPU, C the Intel NPU, D the RTX 4090 — so the four rows show
+the same video on the same box. Workstation 2 carries an RTX 4080 under Ubuntu 24.04. The
+two edge devices were measured for inference only, without a display or disk write.
 
 ## Models
 
