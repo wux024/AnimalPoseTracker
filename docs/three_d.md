@@ -49,7 +49,18 @@ The fit uses a bundle adjustment over all views; `--skip-joint` falls back to th
 animalpose-cli pose3d --config configs/runtime.yaml
 animalpose-cli pose3d --config configs/runtime.yaml --association epipolar
 animalpose-cli pose3d --config configs/runtime.yaml --check-sync
+animalpose-cli pose3d --config configs/runtime.yaml --no-refine
+animalpose-cli pose3d --config configs/runtime.yaml --backend numba
 ```
+
+Every frame is solved in blocks: one batched call per block of 2048 frames instead of one
+SVD per joint. `numpy` is the default and needs nothing extra; `numba` and `jax-gpu` need
+their extras and only pay off past roughly 60k points per block. There is no per-joint
+RANSAC — the whole camera set is solved first, a view that reprojects past
+`--reprojection-threshold` is dropped, and the joint is solved again from the rest.
+`--no-refine` skips the per-joint least-squares polish. On 200 frames of 17 keypoints a
+block takes 4.6 s, or 0.9 s with `--no-refine`; `report.json` records the settings under
+`triangulation`.
 
 `--views camera=path` overrides the per-camera prediction file; by default each camera is
 read from `results/predict/<camera>/predictions.json`, which is why multi-camera prediction

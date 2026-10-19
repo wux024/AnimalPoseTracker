@@ -46,6 +46,12 @@ def run(argv: Optional[Sequence[str]] = None) -> int:
     parser.add_argument("--max-sampson", type=float, default=25.0,
                         help="epipolar association: reject a pairing beyond this median Sampson "
                              "distance in px")
+    parser.add_argument("--backend", default="numpy", choices=["auto", "numpy", "numba", "jax-gpu"],
+                        help="batched solver: numpy needs nothing extra, numba and jax-gpu "
+                             "need their extras")
+    parser.add_argument("--no-refine", action="store_true",
+                        help="skip the per-joint least-squares polish; the batched path gets "
+                             "several times faster, the reprojection error grows slightly")
     parser.add_argument("--output", help="output directory (default: <project>/results/pose3d)")
     parser.add_argument("--confidence-threshold", type=float, default=0.05)
     parser.add_argument("--reprojection-threshold", type=float, default=8.0)
@@ -84,8 +90,10 @@ def run(argv: Optional[Sequence[str]] = None) -> int:
             max_sampson_px=args.max_sampson,
             check_sync=bool(args.check_sync),
             pose_filter=pose_filter,
+            backend=args.backend,
+            refine=not args.no_refine,
         )
-    except (CalibrationError, FileNotFoundError, ValueError) as exc:
+    except (CalibrationError, FileNotFoundError, ValueError, RuntimeError) as exc:
         print(f"pose3d failed: {exc}")
         return 1
 

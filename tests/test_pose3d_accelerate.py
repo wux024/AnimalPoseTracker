@@ -111,3 +111,73 @@ def test_numba_matches_numpy():
     accelerated = triangulate_batch(observations, projection, backend="numba")
 
     assert np.allclose(accelerated, baseline, atol=1e-9)
+
+
+def _pixel_poses(observations, count):
+    """Normalised observations to ``(K, 3)`` pixel poses for ``triangulate_keypoints``."""
+    pixels = observations * np.array([800.0, 800.0]) + np.array([320.0, 240.0])
+    return {
+        name: np.column_stack([pixels[:, index], np.ones(count)])
+        for index, name in enumerate(("a", "b", "c"))
+    }
+
+
+def test_the_batched_path_recovers_the_scene():
+    from animalposetracker.pose3d.core import triangulate_keypoints
+
+    cameras, points_3d, observations, _ = _scene(count=9)
+    mapping = {camera.camera_id: camera for camera in cameras}
+    poses = _pixel_poses(observations, len(points_3d))
+
+    result = triangulate_keypoints(poses, mapping, refine=False, reject_outliers=False)
+
+    assert np.allclose(result.points_3d, points_3d, atol=1e-3)
+    assert result.num_views.tolist() == [3] * len(points_3d)
+
+
+def test_joints_with_different_camera_sets_are_grouped():
+    from animalposetracker.pose3d.core import triangulate_keypoints
+
+    cameras, points_3d, observations, _ = _scene(count=9)
+    mapping = {camera.camera_id: camera for camera in cameras}
+    poses = _pixel_poses(observations, len(points_3d))
+    poses["c"][:4, 2] = 0.0  # the first four joints are seen by two cameras only
+
+    result = triangulate_keypoints(poses, mapping, refine=False)
+
+    assert result.num_views[:4].tolist() == [2, 2, 2, 2]
+    assert result.num_views[4:].tolist() == [3] * 5
+    assert np.allclose(result.points_3d, points_3d, atol=1e-3)
+
+
+def test_a_bad_camera_is_dropped_after_the_batch():
+    from animalposetracker.pose3d.core import triangulate_keypoints
+
+    cameras, points_3d, observations, _ = _scene(count=5)
+    mapping = {camera.camera_id: camera for camera in cameras}
+    poses = _pixel_poses(observations, len(points_3d))
+    poses["c"][0, 0] += 120.0  # the first joint is 120 px off in camera c
+
+    result = triangulate_keypoints(poses, mapping, reprojection_threshold=5.0)
+
+    assert result.num_views[0] == 2
+    assert "c" not in result.inlier_cameras[0]
+    assert np.allclose(result.points_3d[0], points_3d[0], atol=1e-2)
+    assert result.num_views[1:].tolist() == [3] * 4
+
+
+def test_every_group_of_a_block_is_solved_and_kept_apart():
+    from animalposetracker.pose3d.core import triangulate_groups
+
+    cameras, points_3d, observations, _ = _scene(count=6)
+    mapping = {camera.camera_id: camera for camera in cameras}
+    first = _pixel_poses(observations, len(points_3d))
+    second = {name: np.column_stack([pose[:, 0] + 40.0, pose[:, 1], pose[:, 2]])
+              for name, pose in first.items()}
+
+    solved = triangulate_groups([first, second], mapping, refine=False)
+
+    assert len(solved) == 2
+    for result in solved:
+        assert result.num_views.tolist() == [3] * len(points_3d)
+    assert not np.allclose(solved[0].points_3d, solved[1].points_3d)

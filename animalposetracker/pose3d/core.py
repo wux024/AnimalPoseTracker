@@ -7,8 +7,7 @@ cross-camera identities.
 """
 
 from dataclasses import dataclass
-from itertools import combinations
-from typing import Dict, Mapping, Optional, Sequence, Tuple
+from typing import Dict, List, Mapping, Optional, Sequence, Tuple
 
 import numpy as np
 from scipy.optimize import least_squares
@@ -265,33 +264,21 @@ def _refine_point(point, camera_ids, cameras, pixels, scores, max_nfev=40):
     return result.x if result.success and np.isfinite(result.x).all() else point
 
 
-def triangulate_keypoints(
-    poses_by_camera: Mapping[str, np.ndarray],
-    cameras: Mapping[str, CameraCalibration],
-    *,
-    confidence_threshold: float = 0.05,
-    reprojection_threshold: float = 8.0,
-    min_views: int = 2,
-    ransac: bool = True,
-    refine: bool = True,
-    max_ransac_pairs: int = 64,
-) -> TriangulationResult:
-    """Triangulate one already-associated animal pose from synchronized views.
+@dataclass(frozen=True)
+class _PreparedGroup:
+    """One associated pose, validated and undistorted once for the solver loop."""
 
-    Each mapping value is a per-camera ``(K, 2)`` or ``(K, 3)`` pose. The third
-    channel, when present, is per-keypoint confidence. All views must refer to
-    the same time and same animal identity; cross-camera matching is deliberately
-    left to the caller so this geometry module cannot silently combine animals.
-    """
+    camera_ids: Tuple[str, ...]
+    normalized: Dict[str, np.ndarray]
+    pixels: Dict[str, np.ndarray]
+    scores: Dict[str, np.ndarray]
+    keypoint_count: int
+
+
+def _prepare_pose_group(poses_by_camera, cameras, *, min_views) -> _PreparedGroup:
+    """Validate one group of per-camera poses and undistort them once."""
     if len(poses_by_camera) < int(min_views):
         raise ValueError("poses_by_camera contains fewer cameras than min_views")
-    if int(min_views) < 2:
-        raise ValueError("min_views must be at least 2")
-    if not 0.0 <= float(confidence_threshold) <= 1.0:
-        raise ValueError("confidence_threshold must be in [0, 1]")
-    if not np.isfinite(reprojection_threshold) or reprojection_threshold <= 0.0:
-        raise ValueError("reprojection_threshold must be finite and positive")
-
     camera_ids = tuple(poses_by_camera.keys())
     missing = [camera_id for camera_id in camera_ids if camera_id not in cameras]
     if missing:
@@ -301,8 +288,6 @@ def triangulate_keypoints(
     units = {cameras[camera_id].world_unit for camera_id in camera_ids}
     if len(units) != 1:
         raise ValueError("all camera calibrations must use the same world_unit")
-    if int(max_ransac_pairs) < 1:
-        raise ValueError("max_ransac_pairs must be positive")
     normalized, pixels, scores = {}, {}, {}
     keypoint_count = None
     for camera_id in camera_ids:
@@ -318,98 +303,239 @@ def triangulate_keypoints(
         pixels[camera_id] = safe_xy
         scores[camera_id] = confidence
         normalized[camera_id] = cameras[camera_id].undistort_points(safe_xy)
+    return _PreparedGroup(camera_ids, normalized, pixels, scores, int(keypoint_count or 0))
 
-    points_3d = np.full((keypoint_count, 3), np.nan, dtype=np.float32)
-    confidence_3d = np.zeros((keypoint_count,), dtype=np.float32)
-    reprojection = np.full((keypoint_count,), np.nan, dtype=np.float32)
-    num_views = np.zeros((keypoint_count,), dtype=np.int32)
-    per_joint_inliers = []
 
-    for joint in range(keypoint_count):
-        available = [
-            camera_id for camera_id in camera_ids
-            if scores[camera_id][joint] >= confidence_threshold
-            and scores[camera_id][joint] > 0.0
-            and np.isfinite(pixels[camera_id][joint]).all()
-        ]
-        if len(available) < min_views:
-            per_joint_inliers.append(tuple())
-            continue
+def _available_cameras(group: _PreparedGroup, joint: int, confidence_threshold: float) -> List[str]:
+    """Cameras whose observation of ``joint`` is finite and confident enough."""
+    return [
+        camera_id for camera_id in group.camera_ids
+        if group.scores[camera_id][joint] >= confidence_threshold
+        and group.scores[camera_id][joint] > 0.0
+        and np.isfinite(group.pixels[camera_id][joint]).all()
+    ]
 
-        inlier_ids = list(available)
-        best_point = None
-        if ransac and len(available) > min_views:
-            pairs = list(combinations(available, min_views))
-            if len(pairs) > max_ransac_pairs:
-                selection = np.linspace(0, len(pairs) - 1, max_ransac_pairs, dtype=int)
-                pairs = [pairs[index] for index in selection]
-            best_key = None
-            for pair in pairs:
-                pair_point = _dlt_triangulate(
-                    [normalized[camera_id][joint] for camera_id in pair],
-                    [cameras[camera_id] for camera_id in pair],
-                    [scores[camera_id][joint] for camera_id in pair],
-                )
-                if pair_point is None:
-                    continue
-                errors = _reprojection_errors(pair_point, available, cameras, [pixels[c][joint] for c in available])
-                candidate_inliers = [
-                    camera_id for camera_id, error in zip(available, errors)
-                    if error <= reprojection_threshold
-                ]
-                if len(candidate_inliers) < min_views:
-                    continue
-                inlier_errors = [errors[available.index(camera_id)] for camera_id in candidate_inliers]
-                weighted_error = float(np.average(
-                    inlier_errors,
-                    weights=[scores[camera_id][joint] for camera_id in candidate_inliers],
-                ))
-                key = (len(candidate_inliers), -weighted_error)
-                if best_key is None or key > best_key:
-                    best_key = key
-                    inlier_ids = candidate_inliers
-                    best_point = pair_point
 
-        point = _dlt_triangulate(
-            [normalized[camera_id][joint] for camera_id in inlier_ids],
-            [cameras[camera_id] for camera_id in inlier_ids],
-            [scores[camera_id][joint] for camera_id in inlier_ids],
-        )
-        if point is None:
-            per_joint_inliers.append(tuple())
-            continue
-        if refine:
-            point = _refine_point(
-                point,
-                inlier_ids,
-                cameras,
-                [pixels[camera_id][joint] for camera_id in inlier_ids],
-                [scores[camera_id][joint] for camera_id in inlier_ids],
-            )
+def _solve_subset(
+    group: _PreparedGroup,
+    joint: int,
+    camera_ids: Sequence[str],
+    cameras: Mapping[str, CameraCalibration],
+    backend: str,
+) -> Optional[np.ndarray]:
+    """Solve one joint from an explicit camera subset; ``None`` when it degenerates."""
+    from .accelerate import triangulate_batch
+
+    solved = triangulate_batch(
+        np.stack([group.normalized[camera_id][joint] for camera_id in camera_ids])[None],
+        np.stack([np.column_stack([cameras[camera_id].rotation_matrix,
+                                   cameras[camera_id].translation_vector])
+                  for camera_id in camera_ids]),
+        np.array([[group.scores[camera_id][joint] for camera_id in camera_ids]]),
+        backend=backend,
+    )[0]
+    return solved if np.isfinite(solved).all() else None
+
+
+def _drop_outlier_cameras(
+    group: _PreparedGroup,
+    joint: int,
+    point: np.ndarray,
+    available: Sequence[str],
+    cameras: Mapping[str, CameraCalibration],
+    *,
+    min_views: int,
+    reprojection_threshold: float,
+    backend: str,
+) -> Tuple[List[str], Optional[np.ndarray]]:
+    """Drop the worst reprojecting camera, re-solve, repeat until the rest agree.
+
+    The batched solve has no per-joint RANSAC to pick a subset, so every camera is
+    solved first and the odd one out is removed afterwards. Removing one view at a
+    time matters: an outlier drags the first solution towards itself, which makes
+    the good cameras look bad too, and dropping them all at once would throw the
+    joint away. Each pass costs one extra single-point solve and only runs when a
+    view actually exceeds the threshold.
+    """
+    kept = list(available)
+    current = point
+    while len(kept) > min_views:
         errors = _reprojection_errors(
-            point, inlier_ids, cameras, [pixels[camera_id][joint] for camera_id in inlier_ids]
+            current, kept, cameras, [group.pixels[camera_id][joint] for camera_id in kept]
         )
-        finite_errors = errors[np.isfinite(errors)]
-        if len(finite_errors) < min_views:
-            per_joint_inliers.append(tuple())
-            continue
-        mean_error = float(np.mean(finite_errors))
-        points_3d[joint] = point.astype(np.float32)
-        num_views[joint] = len(inlier_ids)
-        reprojection[joint] = mean_error
-        mean_score = float(np.mean([scores[camera_id][joint] for camera_id in inlier_ids]))
-        confidence_3d[joint] = np.clip(
-            mean_score * np.exp(-mean_error / float(reprojection_threshold)), 0.0, 1.0
-        )
-        per_joint_inliers.append(tuple(inlier_ids))
+        if np.all(errors <= reprojection_threshold):
+            break
+        kept.pop(int(np.argmax(errors)))
+        current = _solve_subset(group, joint, kept, cameras, backend)
+        if current is None:
+            return list(available), None
+    return kept, current
 
-    return TriangulationResult(
-        points_3d=points_3d,
-        confidence=confidence_3d,
-        reprojection_error=reprojection,
-        num_views=num_views,
-        inlier_cameras=tuple(per_joint_inliers),
-    )
+
+def triangulate_groups(
+    groups: Sequence[Mapping[str, np.ndarray]],
+    cameras: Mapping[str, CameraCalibration],
+    *,
+    confidence_threshold: float = 0.05,
+    reprojection_threshold: float = 8.0,
+    min_views: int = 2,
+    refine: bool = True,
+    reject_outliers: bool = True,
+    backend: str = "numpy",
+) -> List[TriangulationResult]:
+    """Triangulate several already-associated poses in one batched pass.
+
+    A frame with N animals is N groups; a recording is every frame's groups laid
+    end to end. Every joint of every group that shares a camera set is solved in a
+    single call, so one block covers tens of thousands of points — a per-frame call
+    would only ever see the handful of joints one animal carries.
+
+    ``backend`` names the solver and is the caller's choice: ``numpy`` needs nothing
+    extra, ``numba`` and ``jax-gpu`` need their extras and pay off on large blocks.
+
+    There is no per-joint RANSAC: every available camera is solved first, a view
+    that reprojects far off is dropped afterwards (``reject_outliers``), and the
+    joint is solved once more from what is left.
+    """
+    from .accelerate import BACKENDS
+
+    if backend not in BACKENDS:
+        raise ValueError(f"backend must be one of {', '.join(BACKENDS)}")
+    if int(min_views) < 2:
+        raise ValueError("min_views must be at least 2")
+    if not 0.0 <= float(confidence_threshold) <= 1.0:
+        raise ValueError("confidence_threshold must be in [0, 1]")
+    if not np.isfinite(reprojection_threshold) or reprojection_threshold <= 0.0:
+        raise ValueError("reprojection_threshold must be finite and positive")
+    if not groups:
+        return []
+
+    prepared = [_prepare_pose_group(poses, cameras, min_views=min_views) for poses in groups]
+
+    from .accelerate import triangulate_batch
+
+    solved: Dict[Tuple[int, int], Optional[np.ndarray]] = {}
+    by_camera_set: Dict[Tuple[str, ...], List[Tuple[int, int]]] = {}
+    for group_index, group in enumerate(prepared):
+        for joint in range(group.keypoint_count):
+            available = tuple(_available_cameras(group, joint, confidence_threshold))
+            if len(available) >= min_views:
+                by_camera_set.setdefault(available, []).append((group_index, joint))
+            else:
+                solved[(group_index, joint)] = None
+    for camera_set, entries in by_camera_set.items():
+        points = np.stack([
+            np.stack([prepared[group_index].normalized[camera_id][joint]
+                      for camera_id in camera_set])
+            for group_index, joint in entries
+        ])
+        projections = np.stack([
+            np.column_stack([cameras[camera_id].rotation_matrix,
+                             cameras[camera_id].translation_vector])
+            for camera_id in camera_set
+        ])
+        weights = np.stack([
+            np.array([prepared[group_index].scores[camera_id][joint]
+                      for camera_id in camera_set])
+            for group_index, joint in entries
+        ])
+        rows = triangulate_batch(points, projections, weights, backend=backend)
+        for row, entry in enumerate(entries):
+            point = rows[row]
+            solved[entry] = point if np.isfinite(point).all() else None
+
+    results: List[TriangulationResult] = []
+    for group_index, group in enumerate(prepared):
+        keypoint_count = group.keypoint_count
+        points_3d = np.full((keypoint_count, 3), np.nan, dtype=np.float32)
+        confidence_3d = np.zeros((keypoint_count,), dtype=np.float32)
+        reprojection = np.full((keypoint_count,), np.nan, dtype=np.float32)
+        num_views = np.zeros((keypoint_count,), dtype=np.int32)
+        per_joint_inliers = []
+
+        for joint in range(keypoint_count):
+            available = _available_cameras(group, joint, confidence_threshold)
+            if len(available) < min_views:
+                per_joint_inliers.append(tuple())
+                continue
+            inlier_ids = list(available)
+            point = solved.get((group_index, joint))
+            if point is not None and reject_outliers:
+                inlier_ids, point = _drop_outlier_cameras(
+                    group, joint, point, available, cameras,
+                    min_views=min_views,
+                    reprojection_threshold=reprojection_threshold,
+                    backend=backend,
+                )
+            if point is None:
+                per_joint_inliers.append(tuple())
+                continue
+            if refine:
+                point = _refine_point(
+                    point,
+                    inlier_ids,
+                    cameras,
+                    [group.pixels[camera_id][joint] for camera_id in inlier_ids],
+                    [group.scores[camera_id][joint] for camera_id in inlier_ids],
+                )
+            errors = _reprojection_errors(
+                point, inlier_ids, cameras,
+                [group.pixels[camera_id][joint] for camera_id in inlier_ids],
+            )
+            finite_errors = errors[np.isfinite(errors)]
+            if len(finite_errors) < min_views:
+                per_joint_inliers.append(tuple())
+                continue
+            mean_error = float(np.mean(finite_errors))
+            points_3d[joint] = point.astype(np.float32)
+            num_views[joint] = len(inlier_ids)
+            reprojection[joint] = mean_error
+            mean_score = float(np.mean([group.scores[camera_id][joint] for camera_id in inlier_ids]))
+            confidence_3d[joint] = np.clip(
+                mean_score * np.exp(-mean_error / float(reprojection_threshold)), 0.0, 1.0
+            )
+            per_joint_inliers.append(tuple(inlier_ids))
+
+        results.append(TriangulationResult(
+            points_3d=points_3d,
+            confidence=confidence_3d,
+            reprojection_error=reprojection,
+            num_views=num_views,
+            inlier_cameras=tuple(per_joint_inliers),
+        ))
+    return results
+
+
+def triangulate_keypoints(
+    poses_by_camera: Mapping[str, np.ndarray],
+    cameras: Mapping[str, CameraCalibration],
+    *,
+    confidence_threshold: float = 0.05,
+    reprojection_threshold: float = 8.0,
+    min_views: int = 2,
+    refine: bool = True,
+    reject_outliers: bool = True,
+    backend: str = "numpy",
+) -> TriangulationResult:
+    """Triangulate one already-associated animal pose from synchronized views.
+
+    Each mapping value is a per-camera ``(K, 2)`` or ``(K, 3)`` pose. The third
+    channel, when present, is per-keypoint confidence. All views must refer to
+    the same time and same animal identity; cross-camera matching is deliberately
+    left to the caller so this geometry module cannot silently combine animals.
+
+    This is :func:`triangulate_groups` with a single group: the joints are solved
+    in one batched call, and a camera that reprojects far off is dropped afterwards.
+    """
+    return triangulate_groups(
+        [poses_by_camera], cameras,
+        confidence_threshold=confidence_threshold,
+        reprojection_threshold=reprojection_threshold,
+        min_views=min_views,
+        refine=refine,
+        reject_outliers=reject_outliers,
+        backend=backend,
+    )[0]
 
 
 def triangulate_sequence(
@@ -436,13 +562,14 @@ def triangulate_sequence(
     confidence = np.zeros((frame_count, keypoint_count), dtype=np.float32)
     reprojection = np.full((frame_count, keypoint_count), np.nan, dtype=np.float32)
     num_views = np.zeros((frame_count, keypoint_count), dtype=np.int32)
+    # The whole sequence goes in at once so a backend can solve every frame that
+    # shares a camera set in one call; without one this is the same per-frame loop.
+    groups = [
+        {camera_id: values[frame_index] for camera_id, values in arrays.items()}
+        for frame_index in range(frame_count)
+    ]
     inlier_cameras = []
-    for frame_index in range(frame_count):
-        frame_result = triangulate_keypoints(
-            {camera_id: values[frame_index] for camera_id, values in arrays.items()},
-            cameras,
-            **kwargs,
-        )
+    for frame_index, frame_result in enumerate(triangulate_groups(groups, cameras, **kwargs)):
         points[frame_index] = frame_result.points_3d
         confidence[frame_index] = frame_result.confidence
         reprojection[frame_index] = frame_result.reprojection_error
@@ -461,6 +588,7 @@ __all__ = [
     "CameraCalibration",
     "TriangulationResult",
     "TriangulationSequence",
+    "triangulate_groups",
     "triangulate_keypoints",
     "triangulate_sequence",
 ]

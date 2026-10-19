@@ -104,7 +104,7 @@ class Pose3DTests(unittest.TestCase):
         self.assertEqual(result.inlier_cameras[0], ("left", "right", "top"))
         self.assertTrue(np.all(result.confidence > 0.0))
 
-    def test_ransac_drops_a_bad_camera_observation(self):
+    def test_an_outlier_camera_is_dropped(self):
         expected = np.asarray([[0.2, 0.15, 5.0]], dtype=np.float64)
         cameras = dict(self.cameras)
         cameras["rear"] = camera("rear", [1.0, 1.0, 0.0])
@@ -116,7 +116,7 @@ class Pose3DTests(unittest.TestCase):
             poses[camera_id] = np.asarray([[pixel[0], pixel[1], 0.9]], dtype=np.float64)
 
         result = triangulate_keypoints(
-            poses, cameras, reprojection_threshold=2.0, ransac=True, refine=True
+            poses, cameras, reprojection_threshold=2.0, refine=True
         )
 
         np.testing.assert_allclose(result.points_3d[0], expected[0], atol=1e-4)

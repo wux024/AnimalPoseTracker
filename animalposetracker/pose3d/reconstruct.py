@@ -12,14 +12,14 @@ from __future__ import annotations
 import json
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Dict, Iterable, List, Mapping, Optional, Sequence
+from typing import Any, Dict, Iterable, List, Mapping, Optional, Sequence, Tuple
 
 import numpy as np
 from tqdm import tqdm
 
 from .associate import associate_instances
 from .calibration import CameraRig, load_camera_rig
-from .core import triangulate_keypoints
+from .core import triangulate_groups
 
 SCHEMA = "pose3d/1"
 ASSOCIATIONS = {"index", "epipolar"}
@@ -115,8 +115,18 @@ def reconstruct_project(
     max_sampson_px: float = 25.0,
     pose_filter: Optional[Mapping[str, Any]] = None,
     check_sync: bool = False,
+    backend: str = "numpy",
+    refine: bool = True,
 ) -> Dict[str, Any]:
-    """Triangulate every frame of a 3D-enabled project and write the protocol files."""
+    """Triangulate every frame of a 3D-enabled project and write the protocol files.
+
+    ``backend`` picks the batched solver from
+    :mod:`animalposetracker.pose3d.accelerate` and is left to the caller: ``numpy``
+    is the default and needs no extra install; ``numba`` and ``jax-gpu`` are there
+    when a block is large enough to pay for them. ``refine`` keeps the per-joint
+    least-squares polish; turning it off is what makes the batched path several
+    times faster, at the cost of the last fraction of a pixel.
+    """
     project = Path(project_dir).expanduser().resolve()
     identity = _read_yaml(project / "project.yaml") if (project / "project.yaml").is_file() else {}
     if not identity:
@@ -187,58 +197,77 @@ def reconstruct_project(
     matched_instances = 0
 
     total_frames = frame_counts[anchor]
-    for frame_index in tqdm(range(total_frames), desc="triangulate", unit="frame",
-                            disable=None, dynamic_ncols=True, leave=True):
-        per_view = [(view.camera,
-                     [rig.undistort(view.camera, instance)
-                      for instance in (_instances(view.records[frame_index + offsets[view.camera]])
-                                       if 0 <= frame_index + offsets[view.camera] < len(view.records) else [])])
-                    for view in loaded]
-        view_map = dict(per_view)
-        if association == "index":
-            groups = _index_groups(per_view, min_views)
-        else:
-            # Matching is more sensitive to noise than triangulation: a wrong
-            # identity cannot be repaired later, so keep the joint keypoints at
-            # least reasonably confident even when the caller triangulates loose ones.
-            groups = associate_instances(
-                view_map, rig,
-                max_sampson_px=max_sampson_px,
-                confidence_threshold=max(float(confidence_threshold), 0.1),
-                min_views=min_views,
-            )
-            matched_instances += sum(len(group) for group in groups)
-            for camera, instances in per_view:
-                used = sum(1 for group in groups if camera in group)
-                unmatched_instances[camera] += len(instances) - used
+    # Frames are handled in blocks: association fills a block, one triangulate_groups
+    # call solves the whole block, then the block becomes output. A backend sees every
+    # frame in the block at once, which is what makes numba and jax worth naming, and
+    # the block keeps memory flat on recordings that run for tens of thousands of frames.
+    block_size = 2048
+    for block_start in tqdm(range(0, total_frames, block_size), desc="triangulate",
+                            unit="block", disable=None, dynamic_ncols=True, leave=True):
+        block_end = min(block_start + block_size, total_frames)
+        pending: List[Dict[str, np.ndarray]] = []
+        layout: List[Tuple[int, List[Tuple[Dict[str, int], int]]]] = []
+        for frame_index in range(block_start, block_end):
+            per_view = [(view.camera,
+                         [rig.undistort(view.camera, instance)
+                          for instance in (_instances(view.records[frame_index + offsets[view.camera]])
+                                           if 0 <= frame_index + offsets[view.camera] < len(view.records) else [])])
+                        for view in loaded]
+            view_map = dict(per_view)
+            if association == "index":
+                groups = _index_groups(per_view, min_views)
+            else:
+                # Matching is more sensitive to noise than triangulation: a wrong
+                # identity cannot be repaired later, so keep the joint keypoints at
+                # least reasonably confident even when the caller triangulates loose ones.
+                groups = associate_instances(
+                    view_map, rig,
+                    max_sampson_px=max_sampson_px,
+                    confidence_threshold=max(float(confidence_threshold), 0.1),
+                    min_views=min_views,
+                )
+                matched_instances += sum(len(group) for group in groups)
+                for camera, instances in per_view:
+                    used = sum(1 for group in groups if camera in group)
+                    unmatched_instances[camera] += len(instances) - used
 
-        frame_instances: List[Dict[str, Any]] = []
-        for group in groups:
-            poses: Dict[str, np.ndarray] = {
-                camera: view_map[camera][index] for camera, index in group.items()
-            }
-            result = triangulate_keypoints(
-                poses, rig.cameras,
-                confidence_threshold=confidence_threshold,
-                reprojection_threshold=reprojection_threshold,
-                min_views=min_views,
-            )
-            finite = np.isfinite(result.points_3d).all(axis=1)
-            total_points += int(finite.sum())
-            dropped_points += int((~finite).sum())
-            if finite.any():
-                errors.append(float(np.nanmedian(result.reprojection_error[finite])))
-            for camera in poses:
-                frames_per_camera[camera] += 1
-            frame_instances.append({
-                "keypoints_3d": np.nan_to_num(result.points_3d, nan=0.0).round(4).tolist(),
-                "valid": finite.tolist(),
-                "confidence": np.nan_to_num(result.confidence, nan=0.0).round(4).tolist(),
-                "reprojection_error": np.nan_to_num(result.reprojection_error, nan=0.0).round(3).tolist(),
-                "views": sorted(poses),
-                "view_indices": {camera: int(index) for camera, index in sorted(group.items())},
-            })
-        frames.append({"frame": frame_index, "instances": frame_instances})
+            slots: List[Tuple[Dict[str, int], int]] = []
+            for group in groups:
+                slots.append((group, len(pending)))
+                pending.append({camera: view_map[camera][index]
+                                for camera, index in group.items()})
+            layout.append((frame_index, slots))
+
+        solved = triangulate_groups(
+            pending, rig.cameras,
+            confidence_threshold=confidence_threshold,
+            reprojection_threshold=reprojection_threshold,
+            min_views=min_views,
+            refine=refine,
+            backend=backend,
+        )
+
+        for frame_index, slots in layout:
+            frame_instances: List[Dict[str, Any]] = []
+            for group, slot in slots:
+                result = solved[slot]
+                poses = pending[slot]
+                finite = np.isfinite(result.points_3d).all(axis=1)
+                total_points += int(finite.sum())
+                dropped_points += int((~finite).sum())
+                if finite.any():
+                    errors.append(float(np.nanmedian(result.reprojection_error[finite])))
+                for camera in poses:
+                    frames_per_camera[camera] += 1
+                frame_instances.append({
+                    "keypoints_3d": np.nan_to_num(result.points_3d, nan=0.0).round(4).tolist(),
+                    "valid": finite.tolist(),
+                    "confidence": np.nan_to_num(result.confidence, nan=0.0).round(4).tolist(),
+                    "reprojection_error": np.nan_to_num(result.reprojection_error, nan=0.0).round(3).tolist(),
+                    "views": sorted(poses),
+                    "view_indices": {camera: int(index) for camera, index in sorted(group.items())},
+                })
+            frames.append({"frame": frame_index, "instances": frame_instances})
 
     target = Path(output_dir or project / "results" / "pose3d")
     target.mkdir(parents=True, exist_ok=True)
@@ -266,6 +295,11 @@ def reconstruct_project(
             "matched_instances": int(matched_instances),
             "unmatched_instances": dict(unmatched_instances),
         } if association == "epipolar" else None,
+        "triangulation": {
+            "backend": backend,
+            "refine": bool(refine),
+            "reject_outliers": True,
+        },
         "world_unit": rig.world_unit,
         "sync": {"mode": rig.sync_mode, "declared_offsets": offsets, "check": sync_check},
         "calibration": {

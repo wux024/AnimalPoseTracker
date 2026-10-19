@@ -137,6 +137,52 @@ class ReconstructionTests(unittest.TestCase):
             self.assertFalse((project / "results" / "pose3d" / "poses3d-filter.json").exists())
             self.assertEqual(report["calibration"]["snapshot"]["cameras"]["camA"]["image_size"], [640, 480])
 
+    def test_the_batched_backend_recovers_the_same_skeleton(self):
+        rng = np.random.default_rng(3)
+        skeleton = rng.normal(scale=0.1, size=(5, 3))
+        cameras = {"camA": (1.2, 0.0, 0.3), "camB": (-0.9, 0.8, 0.3), "camC": (-0.5, -1.0, 0.2)}
+        with tempfile.TemporaryDirectory() as temporary:
+            project = _write_project(Path(temporary), pose3d=True)
+            payload = {
+                "world_unit": "mm",
+                "cameras": {name: _camera_block(eye, INTRINSIC) for name, eye in cameras.items()},
+            }
+            (project / "configs" / "cameras.yaml").write_text(yaml.safe_dump(payload), encoding="utf-8")
+            self._fake_predictions(skeleton, cameras, project)
+
+            report = reconstruct_project(project, backend="numpy")
+
+            poses = json.loads((project / "results" / "pose3d" / "poses3d.json").read_text(encoding="utf-8"))
+            recovered = np.asarray(poses["frames"][0]["instances"][0]["keypoints_3d"], dtype=np.float64)
+            self.assertLess(float(np.abs(recovered - skeleton).max()), 1e-3)
+            self.assertEqual(report["triangulation"],
+                             {"backend": "numpy", "refine": True, "reject_outliers": True})
+
+    def test_the_polished_and_unpolished_runs_agree(self):
+        rng = np.random.default_rng(5)
+        skeleton = rng.normal(scale=0.1, size=(5, 3))
+        cameras = {"camA": (1.2, 0.0, 0.3), "camB": (-0.9, 0.8, 0.3), "camC": (-0.5, -1.0, 0.2)}
+        with tempfile.TemporaryDirectory() as temporary:
+            project = _write_project(Path(temporary), pose3d=True)
+            payload = {
+                "world_unit": "mm",
+                "cameras": {name: _camera_block(eye, INTRINSIC) for name, eye in cameras.items()},
+            }
+            (project / "configs" / "cameras.yaml").write_text(yaml.safe_dump(payload), encoding="utf-8")
+            self._fake_predictions(skeleton, cameras, project, frames=6)
+
+            reconstruct_project(project, output_dir=project / "polished")
+            reconstruct_project(project, output_dir=project / "raw", refine=False)
+
+            def load(name):
+                path = project / name / "poses3d.json"
+                return json.loads(path.read_text(encoding="utf-8"))["frames"]
+
+            for polished, raw in zip(load("polished"), load("raw")):
+                for a, b in zip(polished["instances"], raw["instances"]):
+                    np.testing.assert_allclose(a["keypoints_3d"], b["keypoints_3d"], atol=1e-3)
+                    self.assertEqual(a["valid"], b["valid"])
+
     def test_filtering_writes_a_sibling_file(self):
         skeleton = np.zeros((3, 3))
         cameras = {"camA": (1.0, 0.0, 0.0), "camB": (-1.0, 0.0, 0.0)}

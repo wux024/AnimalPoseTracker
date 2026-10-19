@@ -14,9 +14,10 @@
 backend has to be asked for. Every path is compared against the per-point implementation in
 the tests.
 
-``animalpose-cli pose3d`` does not call this yet -- it still triangulates per keypoint,
-because the RANSAC step picks a different camera subset for each one. This module is the
-seat for the batched path, so a future long-video mode has somewhere to land.
+``animalpose-cli pose3d --backend <name>`` routes the DLT solve through this module.
+The batched solver takes one camera set per call, so the CLI turns RANSAC off when a
+backend is named: the per-point RANSAC path picks a different camera subset for every
+joint and cannot be batched. Without ``--backend`` the per-point path stays the default.
 """
 
 from __future__ import annotations
@@ -25,9 +26,11 @@ from typing import Optional
 
 import numpy as np
 
-__all__ = ["available_backends", "jax_available", "numba_available", "triangulate_batch"]
+__all__ = ["BACKENDS", "available_backends", "jax_available", "numba_available", "triangulate_batch"]
 
-_BACKENDS = ("auto", "numpy", "numba", "jax-gpu")
+BACKENDS = ("auto", "numpy", "numba", "jax-gpu")
+
+_BACKENDS = BACKENDS
 
 
 def jax_available() -> bool:

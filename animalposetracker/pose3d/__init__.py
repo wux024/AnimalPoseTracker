@@ -4,11 +4,12 @@ from .core import *
 from .associate import associate_instances
 from .calibration import CalibrationError, CameraRig, load_camera_rig
 from .core import CameraCalibration, TriangulationResult, TriangulationSequence
-from .core import triangulate_keypoints, triangulate_sequence
+from .core import triangulate_groups, triangulate_keypoints, triangulate_sequence
 from .reconstruct import reconstruct_project
 
 __all__ = [
     "CameraCalibration", "CameraRig", "CalibrationError", "TriangulationResult",
     "TriangulationSequence", "associate_instances", "load_camera_rig",
-    "reconstruct_project", "triangulate_keypoints", "triangulate_sequence",
+    "reconstruct_project", "triangulate_groups", "triangulate_keypoints",
+    "triangulate_sequence",
 ]
