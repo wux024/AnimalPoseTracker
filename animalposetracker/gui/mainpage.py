@@ -168,7 +168,7 @@ class AnimalPoseTrackerPage(QMainWindow, Ui_AnimalPoseTracker):
         self.generate_configure_trees()
 
         # Restore the theme the user last chose instead of always starting light.
-        saved_theme = QSettings("Northeast Normal University", "AnimalPoseTracker").value("theme")
+        saved_theme = QSettings("Jimei University", "AnimalPoseTracker").value("theme")
         self.onChangeTheme(saved_theme if saved_theme in ("dark", "light") else "light")
         self.SelectionVideosImagesLabel.setText("0 video or image selected")
 
@@ -498,7 +498,7 @@ class AnimalPoseTrackerPage(QMainWindow, Ui_AnimalPoseTracker):
 
     def loadRecentProjects(self):
         """Load saved projects from QSettings"""
-        settings = QSettings("Northeast Normal University", "AnimalPoseTracker")
+        settings = QSettings("Jimei University", "AnimalPoseTracker")
         try:
             projects = settings.value("recentProjects", [], type=list) or []
             # One damaged entry used to abort the whole constructor: `Path(None)` raises, and the
@@ -559,7 +559,7 @@ class AnimalPoseTrackerPage(QMainWindow, Ui_AnimalPoseTracker):
         self.updateRecentProjectsMenu()  # Update UI
 
     def saveRecentProjects(self):
-        settings = QSettings("Northeast Normal University", "AnimalPoseTracker")
+        settings = QSettings("Jimei University", "AnimalPoseTracker")
         settings.setValue("recentProjects", list(self.recent_projects))
         # Flushed explicitly: a crash before the next event-loop turn otherwise lost the write.
         settings.sync()
@@ -647,7 +647,7 @@ class AnimalPoseTrackerPage(QMainWindow, Ui_AnimalPoseTracker):
             if self.sub_page is not None:
                 self.sub_page.setStyleSheet(self.styleSheet())
             # Remembered so the choice survives a restart; it used to reset to light every launch.
-            QSettings("Northeast Normal University", "AnimalPoseTracker").setValue("theme", theme)
+            QSettings("Jimei University", "AnimalPoseTracker").setValue("theme", theme)
         except Exception as e:
             QMessageBox.warning(self, "Theme Error", str(e))
         

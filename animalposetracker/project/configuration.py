@@ -55,6 +55,9 @@ class ProjectConfigurationMixin:
         if dataname not in DATA_YAML_PATHS:
             raise ValueError(f"Invalid dataset name. Available: {list(DATA_YAML_PATHS.keys())}")
 
+        # Recorded before the configs are written: this field is what keeps the 3D stage out
+        # of a benchmark project later on, and the CLI's `create` records it the same way.
+        self.project_config["public_dataset"] = dataname
         self._create_project_structure()
         self._load_config_from_file("dataset", DATA_YAML_PATHS[dataname])
         self._update_configs_from_dataset()

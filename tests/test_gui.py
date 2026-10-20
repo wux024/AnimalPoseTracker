@@ -66,6 +66,35 @@ except ImportError:  # pragma: no cover - depends on the optional gui extra
     VideoWriterThread = None
 
 
+_SETTINGS_DIR = None
+
+
+def setUpModule():
+    """Point QSettings at a throwaway directory for this module.
+
+    `QSettings(org, app)` falls back to the Windows registry, so a page built in a test writes
+    into the store the installed application reads: a test that switched to the dark theme left
+    the real application opening dark, and recent-projects filled up with temp directories.
+    """
+    global _SETTINGS_DIR
+    if QApplication is None:  # pragma: no cover - the whole module is skipped anyway
+        return
+    from PySide6.QtCore import QSettings
+
+    _SETTINGS_DIR = tempfile.mkdtemp(prefix="apx-settings-")
+    QSettings.setDefaultFormat(QSettings.IniFormat)
+    QSettings.setPath(QSettings.IniFormat, QSettings.UserScope, _SETTINGS_DIR)
+
+
+def tearDownModule():
+    global _SETTINGS_DIR
+    if _SETTINGS_DIR:
+        import shutil
+
+        shutil.rmtree(_SETTINGS_DIR, ignore_errors=True)
+        _SETTINGS_DIR = None
+
+
 @unittest.skipUnless(QApplication is not None, "PySide6 (the gui extra) is not installed")
 class NewProjectFormTests(unittest.TestCase):
     """What the new-project form collects has to reach the configs the trainer reads."""
@@ -2291,7 +2320,7 @@ class ThemeTests(unittest.TestCase):
     def test_the_chosen_theme_survives_a_restart(self):
         from PySide6.QtCore import QSettings
 
-        settings = QSettings("Northeast Normal University", "AnimalPoseTracker")
+        settings = QSettings("Jimei University", "AnimalPoseTracker")
         previous = settings.value("theme")
         try:
             page = AnimalPoseTrackerPage()

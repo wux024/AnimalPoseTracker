@@ -56,7 +56,7 @@ class AnnotatorPage(QMainWindow, Ui_Annotator):
 
         # No hard-coded theme: the main window applies its current stylesheet to this window when
         # it opens it, and forcing light here left a light tool window inside a dark application.
-        saved_theme = QSettings("Northeast Normal University", "AnimalPoseTracker").value("theme")
+        saved_theme = QSettings("Jimei University", "AnimalPoseTracker").value("theme")
         self.onChangeTheme(saved_theme if saved_theme in ("dark", "light") else "light")
 
     def setupConnections(self):
