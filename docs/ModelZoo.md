@@ -33,18 +33,18 @@ with the expected names, or start from `--weights` instead.
 
 ## Public benchmark descriptors
 
-`animalposetracker/cfg/datasets/` holds 29 YAML files. 27 are registered by name and can be
-passed to `create --dataset <name>`; `realworldperson.yaml` and `twoperson.yaml` are
-file-only, so pass their path instead.
+`animalposetracker/cfg/datasets/` holds 27 YAML files, all registered by name — `create
+--dataset <name>` resolves any of them. Every descriptor opens with the dataset's source and
+download link, and its licence where the licence is explicit.
 
 | Kind | Examples |
 |---|---|
 | Animal pose benchmarks | `animalpose`, `ap10k`, `apt36k`, `atrw`, `horse10` |
 | Single-species sets | `trimouse`, `topviewmouse`, `fish`, `fly`, `locust` |
-| Human pose | `coco-pose`, `lsp`, `mhp`-style sets where present |
+| Human pose | `coco-pose`, `lsp` |
 
-Each descriptor carries the data's shape, not the data: the split folders point at wherever the
-images live, and the download (when the descriptor has one) is a one-time step.
+Each descriptor carries the data's shape, not the data: nothing is downloaded, the split
+folders point at wherever your copy lives.
 
 ### Training on a benchmark
 
@@ -84,6 +84,6 @@ to a new keypoint layout. The full recipe is in [Fine-tuning](recipes/fine_tunin
 
 | Symptom | Cause |
 |---|---|
-| `create` cannot resolve a dataset name | the YAML is file-only (`realworldperson`, `twoperson`) — pass a path |
+| `create` cannot resolve a dataset name | the name is not one of the packaged descriptors — pass a path to your own YAML, or drop `--dataset` and give `--keypoints`/`--classes` |
 | download stalls on the first run | the descriptor's host is unreachable; pre-place the file in `pretrained/` |
 | AP several points below the table | different split, or missing `kpt_oks_sigmas` |

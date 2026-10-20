@@ -5,6 +5,8 @@
 - `flip_idx` maps each keypoint to its left/right counterpart
 - a wrong table teaches the model that left and right are the same landmark
 - keypoints without a counterpart map to themselves
+- no table at all means horizontal flips stay off: mirroring coordinates without swapping the
+  labels is worse than no flip augmentation
 
 ## Geometric augmentation
 

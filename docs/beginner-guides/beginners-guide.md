@@ -34,9 +34,10 @@ window never stores state of its own, so closing it and reopening the project lo
 
 ## New project step-by-step
 
-1. **Pick the dataset.** A packaged descriptor (Tri-Mouse, AP-10K, AnimalPose, …) or a path to
-   your own `dataset.yaml`. The descriptor supplies the keypoint names, the skeleton, the OKS
-   sigmas and the split folders.
+1. **Pick the dataset.** A packaged descriptor (Tri-Mouse, AP-10K, AnimalPose, …), a path to
+   your own `dataset.yaml`, or — from the command line — the layout itself:
+   `--keypoints 12 --classes 2 --class-names pup,mus`. Whichever you pick supplies the keypoint
+   names, the skeleton, the OKS sigmas and the split folders.
 2. **Pick the model family.** AnimalRTPose for one-stage, AnimalViTPose for top-down. This is
    written into `project.yaml` and cannot be changed later.
 3. **Pick the scale.** N/S/M/L/X for the one-stage family, Small/Base/Large/Huge for the

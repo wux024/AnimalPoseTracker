@@ -23,5 +23,6 @@ different part of the toolbox.
 
 ## Before you start
 
-The packaged descriptors download their splits on first use, so the first `create` on a new
-machine takes longer than the rest. Nothing else needs preparing.
+The packaged descriptors carry the keypoints, skeleton and class names — not the images.
+Have a local copy of the dataset and point `--dataset-root` at it; `create` never downloads
+data.

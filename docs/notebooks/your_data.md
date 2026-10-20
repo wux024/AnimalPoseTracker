@@ -15,6 +15,23 @@ a terminal or from Python.
 - a short clip — a minute is enough to see whether the labels are right;
 - a decision about keypoints: which landmarks you will track, in which order.
 
+(create-the-project-first)=
+## Create the project first
+
+The walkthroughs start from an empty project. Your own frames have no descriptor to name, so
+the layout goes on the command line:
+
+```bash
+animalpose-cli create --keypoints 12 --classes 2 --class-names pup,mus \
+    --skeleton 0-1,1-2 --name mice --date run1
+```
+
+That writes `mice-user-AnimalRTPose-N-run1/` in the current directory, with the shape in
+`configs/dataset.yaml`; `--workspace` puts it somewhere else. Add `flip_idx` to that file when
+the keypoints have left/right pairs — without it, horizontal flips stay off rather than mirror
+labels that never swapped. The keys are in
+[Bringing your own dataset](../recipes/OtherData.md).
+
 ## The three walkthroughs
 
 1. [Annotate a few frames and export labels](your_data/01_annotate_and_export.md) — the

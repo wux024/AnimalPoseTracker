@@ -1,7 +1,11 @@
 # Bringing your own dataset
 
 A dataset is described by one YAML. This recipe shows the keys, the two label layouts, and the
-two ways to point `create` at it.
+three ways to point `create` at your data — a packaged name, your own YAML, or the layout flags
+`--keypoints`/`--classes` with no file at all.
+
+Descriptors for 27 public datasets ship under `animalposetracker/cfg/datasets/`; each one
+opens with its source and download link. The toolbox never downloads dataset images.
 
 ## Descriptor keys
 
@@ -69,12 +73,16 @@ Two keys decide whether your metric is meaningful and whether augmentation helps
 - **`kpt_oks_sigmas`** — one positive value per keypoint. Without it the trainer warns and falls
   back to a uniform `1 / K`, which makes AP incomparable with published numbers.
 - **`flip_idx`** — maps each keypoint to its left/right counterpart. Flip augmentation uses it;
-  a wrong table teaches the model that left and right are the same landmark.
+  a wrong table teaches the model that left and right are the same landmark. Leave it out and
+  training keeps horizontal flips off, so nothing is mirrored without swapping labels.
 
-## Register vs path
+## Three ways to describe the layout
 
 - **Register** a descriptor under `animalposetracker/cfg/datasets/` to pass it by name
   (`--dataset trimouse`). Useful when the layout is stable and shared.
 - **Pass a path** (`--dataset /data/mouse/dataset.yaml`) for anything local or one-off.
+- **Describe it inline** (`--keypoints 12 --classes 2 --class-names pup,mus`) when there is no
+  file to keep: `--keypoint-names` and `--skeleton 0-1,1-2` are optional. A `flip_idx` table has
+  no inline form — keep one in a file when you want flip augmentation.
 
-Both are the same call; only the lookup differs.
+All three end in the same `configs/dataset.yaml`; only the source differs.

@@ -5,8 +5,8 @@ and the full workflow from an empty folder to a deployed model. It assumes nothi
 your species, viewpoint or camera count.
 
 ```{note}
-The documentation is being expanded. The user guide and the reference pages are complete;
-the demo walkthroughs are still being written and appear as short placeholders.
+The documentation is being expanded. The user guide, the reference pages and the demo
+walkthroughs are complete; the notebooks section will gain executable examples later.
 ```
 
 ```{hint}

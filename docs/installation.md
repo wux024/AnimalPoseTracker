@@ -201,8 +201,8 @@ finished in a different one. `pip show animalposetracker` prints where it landed
 **Imports fail after `git pull`.** A dependency changed. Re-run the `pip install -e` line for
 the extras you use.
 
-**`create` reports a dataset descriptor it cannot resolve.** Pass a path to the YAML instead
-of a registered name; the packaged names live in `animalposetracker/cfg/datasets/`.
+**`create` cannot resolve a dataset name.** The error lists the packaged names; pass one of
+those, a path to your own YAML, or describe the layout with `--keypoints` and `--classes`.
 
 ## System-wide installation considerations
 

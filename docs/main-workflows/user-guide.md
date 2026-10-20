@@ -35,14 +35,24 @@ from the CLI and vice versa. See [Desktop applications](../gui/PROJECT_GUI.md).
 directory name is built from the arguments — `name-worker-model-scale-date` — so the model
 and the run date are visible without opening anything.
 
-`--dataset` accepts two things:
+The keypoint and class layout comes from one of three places:
 
-- a **packaged descriptor name**, resolved from `animalposetracker/cfg/datasets/` (29 YAML
-  files ship; 27 are registered by name);
-- a **path to your own YAML**, which must carry the same keys.
+- `--dataset <name>` — a **packaged descriptor**, resolved from `animalposetracker/cfg/datasets/`
+  (27 YAML files ship, each one registered by name and headed with its source and download link);
+- `--dataset <path>` — **your own YAML**, carrying the same keys;
+- `--keypoints 12 --classes 2 --class-names pup,mus` — the layout **on the command line**, with no
+  file at all. `--keypoint-names` and `--skeleton 0-1,1-2` are optional, and `--no-visible` makes
+  the keypoints x, y only.
 
-Either way the descriptor supplies what describes the data rather than the model: keypoint
+Whichever you pick, the descriptor supplies what describes the data rather than the model: keypoint
 names and count, class names, the skeleton, the OKS sigmas and the split folders.
+
+`--name` is the only flag you have to give. `--workspace` defaults to the current directory,
+`--worker` to `user`, the model to `AnimalRTPose` at scale `N`, and the date to now.
+
+Neither the flags nor the form can say which keypoint mirrors onto which, so a project created
+without a descriptor carries no `flip_idx` and training leaves horizontal flips off. Put the
+table in a dataset YAML when the keypoints have left/right pairs.
 
 ##### Code example
 
@@ -56,6 +66,13 @@ The same call for the top-down family:
 ```bash
 animalpose-cli create --dataset trimouse --workspace projects --name demo --worker me \
     --model AnimalViTPose --scale B --date demo
+```
+
+On your own images, with no descriptor file at all:
+
+```bash
+animalpose-cli create --keypoints 12 --classes 3 --class-names mus1,mus2,mus3 \
+    --skeleton 0-1,0-2,1-3 --workspace projects --name demo --worker me --date demo
 ```
 
 `create` also accepts runtime values, which are written into `configs/runtime.yaml` so the
