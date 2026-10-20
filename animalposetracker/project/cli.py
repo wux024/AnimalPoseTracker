@@ -114,10 +114,9 @@ def _make_create_parser() -> argparse.ArgumentParser:
                     help=f"deprecated alias of {primary}",
                 )
 
-    parser.add_argument("--cache", nargs="?", const=True, type=_parse_cache_value,
-                        default=argparse.SUPPRESS)
-    parser.add_argument("--no-cache", dest="cache", action="store_const", const=False,
-                        default=argparse.SUPPRESS)
+    parser.add_argument("--cache", nargs="?", const="ram", type=_parse_cache_value,
+                        default=argparse.SUPPRESS,
+                        help="Cache decoded samples in memory (bare) or on disk (--cache disk)")
     pretrained = parser.add_mutually_exclusive_group()
     pretrained.add_argument(
         "--pretrained",

@@ -261,14 +261,11 @@ _CLI_OVERRIDE_ENV = "ANIMALPOSE_TRAIN_OVERRIDES"
 
 
 def _parse_cache_value(value: str):
+    """The cache mode behind `--cache`: only the two places it can live."""
     normalized = str(value).strip().lower()
-    if normalized in {"1", "true", "yes", "on"}:
-        return True
-    if normalized in {"0", "false", "no", "off", "none"}:
-        return False
     if normalized in {"ram", "disk"}:
         return normalized
-    raise argparse.ArgumentTypeError("cache must be false, true, 'ram', or 'disk'")
+    raise argparse.ArgumentTypeError("cache takes 'ram' or 'disk'; bare --cache means ram")
 
 
 def _parse_pretrained_value(value: str):
@@ -496,8 +493,9 @@ def _make_argument_parser() -> argparse.ArgumentParser:
                     help=f"deprecated alias of {primary}",
                 )
 
-    parser.add_argument("--cache", nargs="?", const=True, type=_parse_cache_value, default=argparse.SUPPRESS)
-    parser.add_argument("--no-cache", dest="cache", action="store_const", const=False, default=argparse.SUPPRESS)
+    parser.add_argument("--cache", nargs="?", const="ram", type=_parse_cache_value,
+                        default=argparse.SUPPRESS,
+                        help="Cache decoded samples in memory (bare) or on disk (--cache disk)")
     pretrained = parser.add_mutually_exclusive_group()
     pretrained.add_argument(
         "--pretrained", nargs="?", const=True, type=_parse_pretrained_value,
