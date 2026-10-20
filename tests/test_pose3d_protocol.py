@@ -219,7 +219,7 @@ class ReconstructionTests(unittest.TestCase):
                 [sys.executable, "-m", "animalposetracker.cli", "create",
                  "--dataset", str(packaged), "--dataset-root", temporary,
                  "--workspace", temporary, "--name", "public3d", "--worker", "t",
-                 "--model", "AnimalRTPose", "--scale", "N", "--no-pretrained", "--pose3d"],
+                 "--model", "AnimalRTPose", "--scale", "N", "--pose3d"],
                 capture_output=True, text=True,
             )
         self.assertNotEqual(completed.returncode, 0)

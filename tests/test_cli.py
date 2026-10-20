@@ -89,7 +89,6 @@ class CommandDispatcherTests(unittest.TestCase):
                     "--model", "AnimalRTPose",
                     "--scale", "N",
                     "--date", "20261009-120000",
-                    "--no-pretrained",
                 ])
 
             project = workspace / "trimouse-test-AnimalRTPose-N-20261009-120000"
@@ -101,9 +100,9 @@ class CommandDispatcherTests(unittest.TestCase):
             self.assertEqual(saved_data["path"], str(dataset_root.resolve()))
             self.assertEqual(saved_data["annotation_format"], "yolo")
             saved_runtime = yaml.safe_load((project / "configs" / "runtime.yaml").read_text(encoding="utf-8"))
-            self.assertFalse(
-                saved_runtime["train"]["shared"]["runtime"]["pretrained"]
-            )
+            # `create` no longer takes training flags, so the runtime file carries the profile
+            # default rather than an override the caller passed.
+            self.assertTrue(saved_runtime["train"]["shared"]["runtime"]["pretrained"])
 
     def test_project_create_keeps_the_templates_flip_table(self):
         # The create flow carries the template's shape keys into the project; flip_idx has to
@@ -136,7 +135,6 @@ class CommandDispatcherTests(unittest.TestCase):
                     "--model", "AnimalRTPose",
                     "--scale", "N",
                     "--date", "20261013-190000",
-                    "--no-pretrained",
                 ])
 
             project = workspace / "twoperson-test-AnimalRTPose-N-20261013-190000"
@@ -163,7 +161,6 @@ class CommandDispatcherTests(unittest.TestCase):
                     "--model", "AnimalRTPose",
                     "--scale", "N",
                     "--date", "20261020-200000",
-                    "--no-pretrained",
                 ])
 
             project = workspace / "mice-test-AnimalRTPose-N-20261020-200000"
@@ -187,7 +184,6 @@ class CommandDispatcherTests(unittest.TestCase):
                     "--workspace", str(Path(temporary_directory) / "workspace"),
                     "--name", "clash",
                     "--date", "20261020-200000",
-                    "--no-pretrained",
                 ])
             self.assertIn("--keypoints", str(caught.exception))
 
@@ -199,7 +195,6 @@ class CommandDispatcherTests(unittest.TestCase):
                     "--workspace", str(Path(temporary_directory) / "workspace"),
                     "--name", "empty",
                     "--date", "20261020-200000",
-                    "--no-pretrained",
                 ])
             self.assertIn("--keypoints", str(caught.exception))
 
@@ -212,7 +207,6 @@ class CommandDispatcherTests(unittest.TestCase):
                     "--workspace", str(Path(temporary_directory) / "workspace"),
                     "--name", "gone",
                     "--date", "20261020-200000",
-                    "--no-pretrained",
                 ])
             message = str(caught.exception)
             self.assertIn("Packaged datasets", message)
@@ -232,7 +226,6 @@ class CommandDispatcherTests(unittest.TestCase):
                         "--class-names", "mouse",
                         "--name", "here",
                         "--date", "20261020-200000",
-                        "--no-pretrained",
                     ])
             finally:
                 os.chdir(previous)
@@ -370,7 +363,13 @@ class PublicDatasetProjectTests(unittest.TestCase):
 
 
 class ProjectCreatePretrainedTests(unittest.TestCase):
-    def test_create_with_default_pretrained_does_not_detect_or_download(self):
+    """`create` writes the project; picking weights belongs to `train`.
+
+    Its old `--pretrained` / `--no-pretrained` flags are gone, so what is left to guard is
+    that creation never reaches for a checkpoint and leaves the profile default in place.
+    """
+
+    def test_create_does_not_resolve_pretrained_weights(self):
         with tempfile.TemporaryDirectory() as temporary_directory:
             root = Path(temporary_directory)
             with patch.object(
@@ -380,23 +379,6 @@ class ProjectCreatePretrainedTests(unittest.TestCase):
                 result, saved_runtime = _run_create(root)
             self.assertEqual(result, 0)
             self.assertTrue(saved_runtime["train"]["shared"]["runtime"]["pretrained"])
-
-    def test_create_records_explicit_pretrained_path(self):
-        with tempfile.TemporaryDirectory() as temporary_directory:
-            root = Path(temporary_directory)
-            weights_path = root / "weights" / "animalrtpose-n.pt"
-            result, saved_runtime = _run_create(root, "--pretrained", str(weights_path))
-            self.assertEqual(result, 0)
-            self.assertEqual(
-                saved_runtime["train"]["shared"]["runtime"]["pretrained"],
-                str(weights_path),
-            )
-
-    def test_create_no_pretrained_flag_still_records_false(self):
-        with tempfile.TemporaryDirectory() as temporary_directory:
-            result, saved_runtime = _run_create(Path(temporary_directory), "--no-pretrained")
-            self.assertEqual(result, 0)
-            self.assertFalse(saved_runtime["train"]["shared"]["runtime"]["pretrained"])
 
 
 class DefaultPretrainedResolutionTests(unittest.TestCase):
@@ -675,7 +657,6 @@ class ConsoleBannerTests(unittest.TestCase):
                     "--model", "AnimalRTPose",
                     "--scale", "N",
                     "--date", "20261009-120000",
-                    "--no-pretrained",
                 ])
             self.assertEqual(result, 0)
             banner = stream.getvalue()
@@ -683,7 +664,7 @@ class ConsoleBannerTests(unittest.TestCase):
             self.assertIn("Model", banner)
             self.assertIn("AnimalRTPose-N", banner)
             self.assertIn("Next: animalpose-cli train --config", banner)
-            self.assertIn("disabled (train from scratch)", banner)
+            self.assertIn("auto (resolved from the project pretrained/ directory", banner)
 
 
 class InferenceCliRenderTests(unittest.TestCase):

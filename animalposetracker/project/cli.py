@@ -2,7 +2,6 @@
 
 import argparse
 from typing import Optional
-from dataclasses import fields as dataclass_fields
 from datetime import datetime
 from pathlib import Path
 
@@ -13,24 +12,12 @@ from .api import AnimalPoseTrackerProject
 
 
 def _make_create_parser() -> argparse.ArgumentParser:
-    from animalposetracker.training.cli import (
-        _CLI_ALIASES,
-        _CLI_COMMAND_FIELDS,
-        _CLI_FIELD_TO_KEY,
-        _CLI_INTERNAL_FIELDS,
-        _CLI_SPECIAL_TYPES,
-        _add_bool_options,
-        _parse_cache_value,
-        _parse_pretrained_value,
-    )
-    from animalposetracker.training.config import TrainingConfig
-
     parser = argparse.ArgumentParser(
         prog="animalpose-cli create",
         description="Create a project from a dataset YAML without copying the dataset.",
         epilog=(
-            "Short spellings (--batch, --imgsz, --lr0, ...) remain accepted as "
-            "deprecated aliases; the full names are canonical."
+            "Training values are not create's business: this writes the project and its "
+            "configs, and `animalpose-cli train` (or configs/runtime.yaml) sets the rest."
         ),
     )
     parser.add_argument(
@@ -78,107 +65,12 @@ def _make_create_parser() -> argparse.ArgumentParser:
         help="Comma-separated keypoint links, for example 0-1,1-2,0-2",
     )
 
-    # Match train's config flags and parsing rules, while retaining create's
-    # own --model/--scale names for model type and model scale.
-    excluded_fields = _CLI_INTERNAL_FIELDS | {
-        "model", "data", "pretrained_weights", "project_dir", "output_dir",
-        "resume_from", "train_dataset_size", "resolved_optimizer",
-        "resolved_learning_rate", "resolved_momentum", "resolved_weight_decay",
-    }
-    field_types = {
-        field.name: _CLI_SPECIAL_TYPES.get(field.name, type(field.default))
-        for field in dataclass_fields(TrainingConfig)
-    }
-    for name in _CLI_COMMAND_FIELDS:
-        if name in excluded_fields or name == "cache":
-            continue
-        dest = "augmentation_scale" if name == "scale" else name
-        value_type = field_types[name]
-        if name == "scale":
-            parser.add_argument(
-                "--augment-scale", dest=dest, type=value_type, default=argparse.SUPPRESS,
-                help="Training scale augmentation; --scale selects the model scale.",
-            )
-            continue
-        primary = f"--{name.replace('_', '-')}"
-        aliases = _CLI_ALIASES.get(name, ())
-        if value_type is bool:
-            _add_bool_options(parser, (primary,), dest)
-            for alias in aliases:
-                _add_bool_options(parser, (alias,), dest, deprecated_for=primary)
-        else:
-            parser.add_argument(primary, dest=dest, type=value_type, default=argparse.SUPPRESS)
-            for alias in aliases:
-                parser.add_argument(
-                    alias, dest=dest, type=value_type, default=argparse.SUPPRESS,
-                    help=f"deprecated alias of {primary}",
-                )
-
-    parser.add_argument("--cache", nargs="?", const="ram", type=_parse_cache_value,
-                        default=argparse.SUPPRESS,
-                        help="Cache decoded samples in memory (bare) or on disk (--cache disk)")
-    pretrained = parser.add_mutually_exclusive_group()
-    pretrained.add_argument(
-        "--pretrained",
-        nargs="?",
-        const=True,
-        type=_parse_pretrained_value,
-        default=argparse.SUPPRESS,
-        metavar="PATH",
-        help=(
-            "Start from pretrained weights. Optionally record a local "
-            "checkpoint path in configs/runtime.yaml; nothing is checked or "
-            "downloaded at create time."
-        ),
-    )
-    pretrained.add_argument(
-        "--no-pretrained",
-        dest="pretrained",
-        action="store_const",
-        const=False,
-        default=argparse.SUPPRESS,
-        help="Train from scratch.",
-    )
     parser.add_argument(
         "--pose3d",
         action="store_true",
         help="Enable multi-view 3D reconstruction (adds configs/cameras.yaml and results/pose3d)",
     )
-    parser.add_argument("--no-gradient-clip", dest="gradient_clip_norm",
-                        action="store_const", const=None, default=argparse.SUPPRESS)
-    parser.add_argument("--quiet", dest="verbose", action="store_const", const=False,
-                        default=argparse.SUPPRESS)
     return parser
-
-
-def _collect_create_training_overrides(args) -> dict:
-    from animalposetracker.training.cli import (
-        _CLI_COMMAND_FIELDS,
-        _CLI_FIELD_TO_KEY,
-        _CLI_INTERNAL_FIELDS,
-    )
-
-    excluded_fields = _CLI_INTERNAL_FIELDS | {
-        "model", "data", "pretrained_weights", "project_dir", "output_dir",
-        "resume_from", "train_dataset_size", "resolved_optimizer",
-        "resolved_learning_rate", "resolved_momentum", "resolved_weight_decay",
-    }
-    values = {}
-    for name in _CLI_COMMAND_FIELDS:
-        if name in excluded_fields:
-            continue
-        dest = "augmentation_scale" if name == "scale" else name
-        if hasattr(args, dest):
-            values[_CLI_FIELD_TO_KEY[name]] = getattr(args, dest)
-    if hasattr(args, "cache"):
-        values["cache"] = args.cache
-    if hasattr(args, "pretrained"):
-        values["pretrained"] = args.pretrained
-        if args.pretrained is False:
-            values["pretrained_weights"] = None
-        elif isinstance(args.pretrained, str):
-            values["pretrained_weights"] = args.pretrained
-    return values
 
 
 def _normalize_dataset_name(value: str) -> str:
@@ -391,9 +283,6 @@ def _create_project(args: argparse.Namespace) -> AnimalPoseTrackerProject:
     project.set_runtime_value("common.project", "results")
     project.set_runtime_value("common.name", "train")
     project.set_runtime_value("common.exist_ok", False)
-    project.apply_runtime_overrides(_collect_create_training_overrides(args))
-    # Pretrained weight resolution is deferred to training time so project
-    # creation never performs file checks or network downloads.
     project.save_configs("all")
     _print_create_banner(args, project, dataset_root)
     return project

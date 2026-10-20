@@ -75,16 +75,9 @@ animalpose-cli create --keypoints 12 --classes 3 --class-names mus1,mus2,mus3 \
     --skeleton 0-1,0-2,1-3 --workspace projects --name demo --worker me --date demo
 ```
 
-`create` also accepts runtime values, which are written into `configs/runtime.yaml` so the
-first `train` does not need flags:
-
-```bash
-animalpose-cli create --dataset trimouse --workspace projects --name demo --worker me \
-    --model AnimalRTPose --scale N --date demo \
-    --epochs 100 --batch-size 8 --image-size 640 --device 0
-```
-
-Anything you do not pass keeps the model profile's default.
+`create` stops at the project: identity, `configs/`, and the dataset layout. Training values
+are `train`'s business, or an edit to `configs/runtime.yaml` — which `create` fills with the
+model profile's defaults, so a plain `animalpose-cli train --config ...` already works.
 
 ##### Output & directory structure
 
