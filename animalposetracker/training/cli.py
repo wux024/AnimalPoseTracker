@@ -402,8 +402,6 @@ def _collect_cli_overrides(args):
             values["pretrained_weights"] = None
         elif isinstance(args.pretrained, str):
             values["pretrained_weights"] = args.pretrained
-    if hasattr(args, "pretrained_weights"):
-        values["pretrained_weights"] = args.pretrained_weights
 
     fields = {
         field_name: values[key]
@@ -507,7 +505,6 @@ def _make_argument_parser() -> argparse.ArgumentParser:
         help="Use pretrained weights, optionally naming a local checkpoint.",
     )
     pretrained.add_argument("--no-pretrained", dest="pretrained", action="store_const", const=False, default=argparse.SUPPRESS)
-    pretrained.add_argument("--pretrained-weights", dest="pretrained_weights", default=argparse.SUPPRESS)
     parser.add_argument("--no-gradient-clip", dest="gradient_clip_norm", action="store_const", const=None, default=argparse.SUPPRESS)
     parser.add_argument("--quiet", dest="verbose", action="store_const", const=False, default=argparse.SUPPRESS)
     return parser

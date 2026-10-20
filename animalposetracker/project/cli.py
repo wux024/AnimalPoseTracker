@@ -145,10 +145,6 @@ def _make_create_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="Enable multi-view 3D reconstruction (adds configs/cameras.yaml and results/pose3d)",
     )
-    pretrained.add_argument(
-        "--pretrained-weights", dest="pretrained_weights", default=argparse.SUPPRESS,
-        help="Record a local checkpoint path in configs/runtime.yaml.",
-    )
     parser.add_argument("--no-gradient-clip", dest="gradient_clip_norm",
                         action="store_const", const=None, default=argparse.SUPPRESS)
     parser.add_argument("--quiet", dest="verbose", action="store_const", const=False,
@@ -183,8 +179,6 @@ def _collect_create_training_overrides(args) -> dict:
             values["pretrained_weights"] = None
         elif isinstance(args.pretrained, str):
             values["pretrained_weights"] = args.pretrained
-    if hasattr(args, "pretrained_weights"):
-        values["pretrained_weights"] = args.pretrained_weights
     return values
 
 
