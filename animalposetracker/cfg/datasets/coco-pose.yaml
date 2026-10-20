@@ -1,11 +1,9 @@
-# Ultralytics YOLO 🚀, AGPL-3.0 license
-# COCO8-pose dataset (first 8 images from COCO train2017) by Ultralytics
-# Documentation: https://docs.ultralytics.com/datasets/pose/coco8-pose/
-# Example usage: yolo train data=coco8-pose.yaml
-# parent
-# ├── ultralytics
-# └── datasets
-#     └── coco8-pose  ← downloads here (1 MB)
+# COCO Keypoints: 17-keypoint person annotations (Lin et al., ECCV 2014)
+# Download: https://cocodataset.org/#keypoints-2017
+
+# Keypoint order: nose, left eye, right eye, left ear, right ear, left shoulder, right shoulder,
+# left elbow, right elbow, left wrist, right wrist, left hip, right hip, left knee, right knee,
+# left ankle, right ankle.
 
 # Train/val/test sets as 1) dir: path/to/imgs, 2) file: path/to/imgs.txt, or 3) list: [path/to/imgs1, path/to/imgs2, ..]
 path: person # dataset root dir

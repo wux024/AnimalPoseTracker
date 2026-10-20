@@ -1,3 +1,7 @@
+# AwA-Pose: 39 dense keypoints across 35 quadruped species (Banik et al., 2021)
+# Download: https://github.com/prinik/AwA-Pose
+# License: annotations MIT; images follow the AwA2 terms
+
 # Train/val/test sets as 1) dir: path/to/imgs, 2) file: path/to/imgs.txt, or 3) list: [path/to/imgs1, path/to/imgs2, ..]
 path: awa # dataset root dir
 train: images/train # train images (relative to 'path') 4 images

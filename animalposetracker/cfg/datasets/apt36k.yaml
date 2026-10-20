@@ -1,3 +1,6 @@
+# APT-36K: 15-frame clips of 30 species, 17 keypoints plus identities (Yang et al., NeurIPS 2023)
+# Download: https://github.com/pandorgan/APT-36K
+
 # Train/val/test sets as 1) dir: path/to/imgs, 2) file: path/to/imgs.txt, or 3) list: [path/to/imgs1, path/to/imgs2, ..]
 path: apt36k # dataset root dir
 train: images/train # train images (relative to 'path') 4 images

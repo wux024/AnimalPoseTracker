@@ -1,3 +1,6 @@
+# LoTE-Animal, web subset: 17 keypoints, 11 endangered species (Liu et al., ICCV 2023)
+# Download: https://lote-animal.github.io/ (web dataset)
+
 # Train/val/test sets as 1) dir: path/to/imgs, 2) file: path/to/imgs.txt, or 3) list: [path/to/imgs1, path/to/imgs2, ..]
 path: lote_web # dataset root dir
 train: images/train # train images (relative to 'path') 4 images

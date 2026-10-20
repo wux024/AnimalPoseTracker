@@ -1,3 +1,7 @@
+# Horse-10: 22 keypoints on 30 Thoroughbreds (Mathis et al., WACV 2021)
+# Download: http://www.mackenziemathislab.org/horse10 (images: https://huggingface.co/datasets/mwmathis/Horse-30)
+# License: non-commercial use only
+
 # Train/val/test sets as 1) dir: path/to/imgs, 2) file: path/to/imgs.txt, or 3) list: [path/to/imgs1, path/to/imgs2, ..]
 path: horse10 # dataset root dir
 train: images/train # train images (relative to 'path') 4 images

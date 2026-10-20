@@ -1,3 +1,6 @@
+# MacaquePose: 17 keypoints, about 13k macaque images (Labuguen et al., 2020)
+# Download: https://www.pri.kyoto-u.ac.jp/datasets/macaquepose/index.html
+
 # Train/val/test sets as 1) dir: path/to/imgs, 2) file: path/to/imgs.txt, or 3) list: [path/to/imgs1, path/to/imgs2, ..]
 path: macaque # dataset root dir
 train: images/train # train images (relative to 'path') 4 images
