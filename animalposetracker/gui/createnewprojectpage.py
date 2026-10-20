@@ -373,7 +373,7 @@ class CreateNewProjectPage(ProjectFormBase, QWidget, Ui_CreateNewProject):
 
         The dataset file is the shape's single source now, so every shape
         edit (keypoint count, class count, name lists, visibility) lands
-        there; flip_idx and the OKS sigmas follow the count.
+        there; the OKS sigmas follow the count.
         """
         keypoints_count = max(int(self.KeypointConfig.value()), 1)
         class_names = self._fit_names(
@@ -385,7 +385,9 @@ class CreateNewProjectPage(ProjectFormBase, QWidget, Ui_CreateNewProject):
         self.project.dataset_config.setdefault("keypoints_name", [])
         self.project.update_config("dataset", {
             "kpt_shape": [keypoints_count, 3 if self.VisibleSelection.isChecked() else 2],
-            "flip_idx": list(range(keypoints_count)),
+            # The form knows the count, not which points mirror onto which: leaving `flip_idx`
+            # empty keeps horizontal flips off instead of mirroring labels that never swapped.
+            "flip_idx": None,
             "kpt_oks_sigmas": [1.0 / keypoints_count] * keypoints_count,
             "names": dict(enumerate(class_names)),
             "keypoints_name": keypoint_names,

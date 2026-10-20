@@ -123,7 +123,11 @@ class AnimalPoseTrackerProject(ProjectConfigurationMixin, ProjectFilesMixin, Pro
             'val': 'images/val',
             'test': 'images/test',
             'kpt_shape': kpt_shape,
-            'flip_idx': list(range(keypoints)),
+            # No left/right table yet: a keypoint count says nothing about which points mirror
+            # onto which, and a made-up identity table would mirror the coordinates without
+            # swapping the labels. Training reads the absence and leaves flips off until a real
+            # table arrives (a descriptor, or an edit to dataset.yaml).
+            'flip_idx': None,
             'names': dict(enumerate(classes_name)),
             'skeleton': skeleton or [],
             'kpt_oks_sigmas': kpt_oks_sigmas,

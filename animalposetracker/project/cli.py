@@ -35,20 +35,48 @@ def _make_create_parser() -> argparse.ArgumentParser:
     )
     parser.add_argument(
         "--dataset",
-        required=True,
-        help="Built-in dataset name (for example trimouse) or a dataset YAML file",
+        help=(
+            "Packaged dataset name (for example trimouse) or the path to your own dataset YAML. "
+            "Leave it out to describe the layout with --keypoints and --classes instead."
+        ),
     )
     parser.add_argument(
         "--dataset-root",
         help="Dataset directory (defaults to <project>/datasets)",
     )
-    parser.add_argument("--workspace", required=True, help="Directory where the project is created")
+    parser.add_argument(
+        "--workspace", default=".",
+        help="Directory where the project is created (default: the current directory)",
+    )
     parser.add_argument("--name", required=True, help="Project name")
     parser.add_argument("--worker", default="user")
     parser.add_argument("--model", default="AnimalRTPose")
     parser.add_argument("--scale", default="N")
     parser.add_argument("--date", default=datetime.now().strftime("%Y%m%d-%H%M%S"))
     parser.add_argument("--annotation-format", choices=("auto", "coco", "yolo"), default="auto")
+
+    # The keypoint and class layout, described on the command line instead of in a descriptor
+    # file. `--dataset` carries the same layout for a packaged benchmark or a hand-written YAML;
+    # these flags are the way to build a project on your own images without writing one.
+    parser.add_argument("--keypoints", type=int, help="Number of keypoints per animal")
+    parser.add_argument(
+        "--visible", dest="visible", action="store_true", default=True,
+        help="Keypoints carry a visibility flag (default)",
+    )
+    parser.add_argument(
+        "--no-visible", dest="visible", action="store_false",
+        help="Keypoints are x, y only",
+    )
+    parser.add_argument("--classes", type=int, help="Number of classes")
+    parser.add_argument("--class-names", help="Comma-separated class names, for example pup,mus")
+    parser.add_argument(
+        "--keypoint-names",
+        help="Comma-separated keypoint names, for example nose,left_eye,right_eye",
+    )
+    parser.add_argument(
+        "--skeleton",
+        help="Comma-separated keypoint links, for example 0-1,1-2,0-2",
+    )
 
     # Match train's config flags and parsing rules, while retaining create's
     # own --model/--scale names for model type and model scale.
@@ -188,7 +216,92 @@ def _project_path_from_args(args: argparse.Namespace) -> Path:
     return Path(args.workspace).expanduser().resolve() / project_dir_name
 
 
+def _infer_annotation_format(dataset_root: Path) -> str:
+    annotations = dataset_root / "annotations"
+    return "coco" if any(annotations.glob("*.json")) else "yolo"
+
+
+def _split_list(value: Optional[str]):
+    """Split a comma-separated CLI value, ignoring spacing and empty entries."""
+    if not value:
+        return []
+    return [item.strip() for item in value.split(",") if item.strip()]
+
+
+def _parse_skeleton(value: str, keypoints: int):
+    """Turn ``0-1,1-2`` into the ``[[0, 1], [1, 2]]`` shape the descriptors use."""
+    edges = []
+    for entry in _split_list(value):
+        left, separator, right = entry.replace(" ", "").partition("-")
+        if not separator or not left.isdigit() or not right.isdigit():
+            raise SystemExit(f"--skeleton entry '{entry}' is not a pair like 0-1")
+        first, second = int(left), int(right)
+        if first == second or first >= keypoints or second >= keypoints:
+            raise SystemExit(
+                f"--skeleton entry '{entry}' does not connect two different "
+                f"keypoints below {keypoints}"
+            )
+        edges.append([first, second])
+    return edges
+
+
+def _describe_dataset(args: argparse.Namespace, dataset_root: Path) -> dict:
+    """Build the dataset layout from the flags, with no descriptor file involved."""
+    if args.keypoints is None:
+        raise SystemExit(
+            "Describe the dataset: pass --dataset <packaged name or YAML path>, or "
+            "--keypoints <n> with --classes <n> --class-names ..."
+        )
+    keypoints = int(args.keypoints)
+    if keypoints < 1:
+        raise SystemExit("--keypoints must be at least 1")
+
+    class_names = _split_list(args.class_names)
+    if args.classes is None:
+        classes = len(class_names) or 1
+    else:
+        classes = int(args.classes)
+        if classes < 1:
+            raise SystemExit("--classes must be at least 1")
+        if class_names and len(class_names) != classes:
+            raise SystemExit(
+                f"--class-names lists {len(class_names)} names but --classes is {classes}"
+            )
+    if not class_names:
+        class_names = [f"class{index + 1}" for index in range(classes)]
+
+    keypoint_names = _split_list(args.keypoint_names)
+    if keypoint_names and len(keypoint_names) != keypoints:
+        raise SystemExit(
+            f"--keypoint-names lists {len(keypoint_names)} names but --keypoints is {keypoints}"
+        )
+
+    config = {
+        "kpt_shape": [keypoints, 3 if args.visible else 2],
+        "names": dict(enumerate(class_names)),
+        "path": str(dataset_root),
+        "annotation_format": (
+            args.annotation_format
+            if args.annotation_format != "auto"
+            else _infer_annotation_format(dataset_root)
+        ),
+    }
+    if keypoint_names:
+        config["keypoint_names"] = keypoint_names
+    if args.skeleton:
+        config["skeleton"] = _parse_skeleton(args.skeleton, keypoints)
+    return config
+
+
 def _load_dataset_config(path: Path, dataset_root: Path, annotation_format: str) -> dict:
+    if not path.exists():
+        packaged = ", ".join(sorted(DATA_YAML_PATHS, key=str.casefold))
+        raise SystemExit(
+            f"No dataset at {path}.\n"
+            f"Packaged datasets: {packaged}.\n"
+            "Or pass the path to your own YAML, or describe the layout with "
+            "--keypoints and --classes."
+        )
     with path.open("r", encoding="utf-8") as stream:
         config = yaml.safe_load(stream) or {}
     if not isinstance(config, dict):
@@ -198,19 +311,37 @@ def _load_dataset_config(path: Path, dataset_root: Path, annotation_format: str)
     if annotation_format != "auto":
         config["annotation_format"] = annotation_format
     elif not config.get("annotation_format"):
-        annotation_dir = dataset_root / "annotations"
-        config["annotation_format"] = "coco" if any(annotation_dir.glob("*.json")) else "yolo"
+        config["annotation_format"] = _infer_annotation_format(dataset_root)
     return config
 
 
 def _create_project(args: argparse.Namespace) -> AnimalPoseTrackerProject:
-    dataset_path = _resolve_dataset_path(args.dataset)
+    dataset_path = None
     dataset_root = (
         Path(args.dataset_root).expanduser().resolve()
         if args.dataset_root
         else _project_path_from_args(args) / "datasets"
     )
-    dataset_config = _load_dataset_config(dataset_path, dataset_root, args.annotation_format)
+    if args.dataset:
+        conflicting = [
+            flag for flag, given in (
+                ("--keypoints", args.keypoints is not None),
+                ("--classes", args.classes is not None),
+                ("--class-names", bool(args.class_names)),
+                ("--keypoint-names", bool(args.keypoint_names)),
+                ("--skeleton", bool(args.skeleton)),
+                ("--no-visible", not args.visible),
+            ) if given
+        ]
+        if conflicting:
+            raise SystemExit(
+                f"{', '.join(conflicting)} and --dataset describe the same layout; "
+                "keep one of them."
+            )
+        dataset_path = _resolve_dataset_path(args.dataset)
+        dataset_config = _load_dataset_config(dataset_path, dataset_root, args.annotation_format)
+    else:
+        dataset_config = _describe_dataset(args, dataset_root)
 
     keypoint_count, keypoint_dims = dataset_config["kpt_shape"]
     class_names = {int(key): str(value) for key, value in dataset_config["names"].items()}
@@ -219,7 +350,7 @@ def _create_project(args: argparse.Namespace) -> AnimalPoseTrackerProject:
         "keypoint_names", [f"kpt_{index}" for index in range(keypoint_count)]
     )
 
-    public_name = _public_dataset_name(dataset_path)
+    public_name = _public_dataset_name(dataset_path) if dataset_path else None
     if getattr(args, "pose3d", False) and public_name:
         raise SystemExit(
             f"'{public_name}' is a public benchmark dataset; 3D reconstruction needs a "

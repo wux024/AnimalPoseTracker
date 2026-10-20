@@ -1,4 +1,5 @@
 import io
+import os
 import unittest
 import tempfile
 import warnings
@@ -143,6 +144,101 @@ class CommandDispatcherTests(unittest.TestCase):
             saved_data = yaml.safe_load((project / "configs" / "dataset.yaml").read_text(encoding="utf-8"))
             self.assertEqual(saved_data["flip_idx"], [1, 0])
 
+    def test_project_create_accepts_the_layout_flags_instead_of_a_dataset_file(self):
+        # A project on your own images needs no descriptor: --keypoints/--classes carry the
+        # same layout a packaged YAML would supply.
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            workspace = Path(temporary_directory) / "workspace"
+            with patch("sys.stdout"):
+                result = main([
+                    "create",
+                    "--keypoints", "6",
+                    "--classes", "2",
+                    "--class-names", "pup,mus",
+                    "--keypoint-names", "nose,left_eye,right_eye,left_ear,right_ear,tail",
+                    "--skeleton", "0-1,1-3,2-4",
+                    "--workspace", str(workspace),
+                    "--name", "mice",
+                    "--worker", "test",
+                    "--model", "AnimalRTPose",
+                    "--scale", "N",
+                    "--date", "20261020-200000",
+                    "--no-pretrained",
+                ])
+
+            project = workspace / "mice-test-AnimalRTPose-N-20261020-200000"
+            saved = yaml.safe_load((project / "configs" / "dataset.yaml").read_text(encoding="utf-8"))
+            self.assertEqual(result, 0)
+            self.assertEqual(saved["kpt_shape"], [6, 3])
+            self.assertEqual(saved["names"], {0: "pup", 1: "mus"})
+            self.assertEqual(saved["skeleton"], [[0, 1], [1, 3], [2, 4]])
+            self.assertEqual(
+                saved["keypoint_names"],
+                ["nose", "left_eye", "right_eye", "left_ear", "right_ear", "tail"],
+            )
+
+    def test_project_create_rejects_layout_flags_next_to_a_dataset(self):
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            with self.assertRaises(SystemExit) as caught:
+                main([
+                    "create",
+                    "--dataset", "trimouse",
+                    "--keypoints", "5",
+                    "--workspace", str(Path(temporary_directory) / "workspace"),
+                    "--name", "clash",
+                    "--date", "20261020-200000",
+                    "--no-pretrained",
+                ])
+            self.assertIn("--keypoints", str(caught.exception))
+
+    def test_project_create_asks_for_a_layout_when_neither_is_given(self):
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            with self.assertRaises(SystemExit) as caught:
+                main([
+                    "create",
+                    "--workspace", str(Path(temporary_directory) / "workspace"),
+                    "--name", "empty",
+                    "--date", "20261020-200000",
+                    "--no-pretrained",
+                ])
+            self.assertIn("--keypoints", str(caught.exception))
+
+    def test_project_create_names_the_packaged_datasets_when_the_value_is_unknown(self):
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            with self.assertRaises(SystemExit) as caught:
+                main([
+                    "create",
+                    "--dataset", "twoperson",
+                    "--workspace", str(Path(temporary_directory) / "workspace"),
+                    "--name", "gone",
+                    "--date", "20261020-200000",
+                    "--no-pretrained",
+                ])
+            message = str(caught.exception)
+            self.assertIn("Packaged datasets", message)
+            self.assertIn("Tri-Mouse", message)
+
+    def test_project_create_defaults_the_workspace_to_the_current_directory(self):
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            root = Path(temporary_directory)
+            previous = Path.cwd()
+            os.chdir(root)
+            try:
+                with patch("sys.stdout"):
+                    result = main([
+                        "create",
+                        "--keypoints", "4",
+                        "--classes", "1",
+                        "--class-names", "mouse",
+                        "--name", "here",
+                        "--date", "20261020-200000",
+                        "--no-pretrained",
+                    ])
+            finally:
+                os.chdir(previous)
+            self.assertEqual(result, 0)
+            self.assertTrue((root / "here-user-AnimalRTPose-N-20261020-200000").exists())
+
     def test_no_arguments_prints_help(self):
         with patch("sys.stdout"):
             self.assertEqual(main([]), 0)
@@ -188,7 +284,9 @@ class ProjectDatasetShapeTests(unittest.TestCase):
         self.assertEqual(dataset["kpt_shape"], [5, 3])
         self.assertEqual(dataset["names"], {0: "cat", 1: "dog"})
         self.assertEqual(dataset["skeleton"], [[0, 1], [2, 3]])
-        self.assertEqual(dataset["flip_idx"], [0, 1, 2, 3, 4])
+        # A keypoint count carries no left/right mapping, so no table is written and training
+        # leaves horizontal flips off rather than mirroring labels that never swapped.
+        self.assertIsNone(dataset["flip_idx"])
         self.assertEqual(len(dataset["kpt_oks_sigmas"]), 5)
         self.assertEqual(model["kpt_shape"], [5, 3])
         self.assertEqual(model["nc"], 2)
@@ -248,6 +346,27 @@ def _run_create(root: Path, *extra_args):
     project = workspace / "trimouse-test-AnimalRTPose-N-20261009-120000"
     saved_runtime = yaml.safe_load((project / "configs" / "runtime.yaml").read_text(encoding="utf-8"))
     return result, saved_runtime
+
+
+class PublicDatasetProjectTests(unittest.TestCase):
+    """A benchmark project has to record where it came from.
+
+    `public_dataset` is what keeps the 3D stage out of the project later, so the GUI's
+    benchmark page and `create --dataset` must write the same field.
+    """
+
+    def test_public_dataset_project_records_the_benchmark_name(self):
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            project = AnimalPoseTrackerProject(
+                local_path=Path(temporary_directory),
+                project_name="bench",
+                date="20261020-200000",
+            )
+            project.create_public_dataset_project("AP10K")
+            saved = yaml.safe_load(
+                (project.project_path / "project.yaml").read_text(encoding="utf-8")
+            )
+            self.assertEqual(saved["public_dataset"], "AP10K")
 
 
 class ProjectCreatePretrainedTests(unittest.TestCase):
