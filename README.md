@@ -54,8 +54,9 @@ From an empty folder to an exportable model in two steps. The install above is a
 
 ```bash
 animalpose-cli create --dataset trimouse --workspace projects --name smoke --worker user \
-    --model AnimalRTPose --scale N --date demo --epochs 100 --batch-size 8 --image-size 640
-animalpose-cli train --config projects/smoke-user-AnimalRTPose-N-demo/configs/runtime.yaml
+    --model AnimalRTPose --scale N --date demo
+animalpose-cli train --config projects/smoke-user-AnimalRTPose-N-demo/configs/runtime.yaml \
+    --epochs 100 --batch-size 8 --image-size 640
 ```
 
 - [2] Evaluate it, then export the checkpoint:
@@ -67,7 +68,8 @@ animalpose-cli export --config <project>/configs/runtime.yaml \
     --weights <project>/results/train/weights/best.pt --format onnx --dynamic --opset 17
 ```
 
-`create` saves only what you pass; everything else keeps the model profile's defaults.
+`create` writes the project and its four configs, filled from the model profile's defaults;
+`train` takes the values you want to change for this run.
 `load` validates a project and prints a summary without opening the GUI or writing files.
 Command-line values override `configs/runtime.yaml` for that run and are never written back.
 
