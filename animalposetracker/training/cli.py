@@ -271,15 +271,6 @@ def _parse_cache_value(value: str):
     raise argparse.ArgumentTypeError("cache must be false, true, 'ram', or 'disk'")
 
 
-def _parse_bool_value(value: str) -> bool:
-    normalized = str(value).strip().lower()
-    if normalized in {"1", "true", "yes", "on"}:
-        return True
-    if normalized in {"0", "false", "no", "off"}:
-        return False
-    raise argparse.ArgumentTypeError("expected true or false")
-
-
 def _parse_pretrained_value(value: str):
     normalized = str(value).strip().lower()
     if normalized in {"1", "true", "yes", "on"}:
@@ -381,12 +372,13 @@ _CLI_SPECIAL_TYPES = {
 def _add_bool_options(parser: argparse.ArgumentParser, flags, dest: str, deprecated_for: str = None) -> None:
     help_text = f"deprecated alias of {deprecated_for}" if deprecated_for else None
     for flag in flags:
-        parser.add_argument(
-            flag, dest=dest, nargs="?", const=True, type=_parse_bool_value,
-            default=argparse.SUPPRESS, help=help_text,
-        )
+        # A bare switch: the flag is on, `--no-` turns it off, and leaving both out keeps the
+        # value unresolved so the config file still decides. Accepting `--flag true` as well
+        # made the help read `[--flag [FLAG]]`, which suggests a value is expected.
+        parser.add_argument(flag, dest=dest, action="store_true",
+                            default=argparse.SUPPRESS, help=help_text)
         negative = "--no-" + flag[2:]
-        parser.add_argument(negative, dest=dest, action="store_const", const=False,
+        parser.add_argument(negative, dest=dest, action="store_false",
                             default=argparse.SUPPRESS, help=help_text)
 
 

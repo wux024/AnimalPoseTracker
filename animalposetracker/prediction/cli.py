@@ -633,10 +633,9 @@ def _make_argument_parser():
         "--keypoint-score-threshold", type=float,
         help="Hide keypoints below this confidence threshold",
     )
-    parser.add_argument("--agnostic-nms", nargs="?", const=True, type=_parse_bool_value,
+    parser.add_argument("--agnostic-nms", dest="agnostic_nms", action="store_true", default=None)
+    parser.add_argument("--no-agnostic-nms", dest="agnostic_nms", action="store_false",
                         default=None)
-    parser.add_argument("--no-agnostic-nms", dest="agnostic_nms", action="store_const",
-                        const=False, default=None)
     for option, config_key in (
         ("show-boxes", "show_boxes"),
         ("show-labels", "show_labels"),
@@ -644,27 +643,18 @@ def _make_argument_parser():
         ("show-keypoints", "show_keypoints"),
         ("show-skeletons", "show_skeletons"),
     ):
-        parser.add_argument(
-            f"--{option}", dest=config_key, nargs="?", const=True, type=_parse_bool_value,
-            default=None,
-        )
-        parser.add_argument(
-            f"--no-{option}", dest=config_key, action="store_const", const=False,
-            default=None,
-        )
-    parser.add_argument("--kpt-line", dest="show_skeletons", nargs="?", const=True,
-                        type=_parse_bool_value, default=None,
+        parser.add_argument(f"--{option}", dest=config_key, action="store_true", default=None)
+        parser.add_argument(f"--no-{option}", dest=config_key, action="store_false", default=None)
+    parser.add_argument("--kpt-line", dest="show_skeletons", action="store_true", default=None,
                         help="deprecated alias of --show-skeletons")
-    parser.add_argument("--no-kpt-line", dest="show_skeletons", action="store_const",
-                        const=False, default=None,
-                        help="deprecated alias of --no-show-skeletons")
+    parser.add_argument("--no-kpt-line", dest="show_skeletons", action="store_false",
+                        default=None, help="deprecated alias of --no-show-skeletons")
     parser.add_argument("--line-width", type=int)
     parser.add_argument("--point-radius", dest="point_radius", type=int)
     parser.add_argument("--kpt-radius", dest="point_radius", type=int,
                         help="deprecated alias of --point-radius")
-    parser.add_argument("--exist-ok", nargs="?", const=True, type=_parse_bool_value, default=None)
-    parser.add_argument("--no-exist-ok", dest="exist_ok", action="store_const", const=False,
-                        default=None)
+    parser.add_argument("--exist-ok", dest="exist_ok", action="store_true", default=None)
+    parser.add_argument("--no-exist-ok", dest="exist_ok", action="store_false", default=None)
     tracker_group = parser.add_mutually_exclusive_group()
     tracker_group.add_argument(
         "--tracker",
@@ -689,22 +679,12 @@ def _make_argument_parser():
         flag = f"--track-{name.replace('_', '-')}"
         value_type = _parse_float_list if name == "kpt_oks_sigmas" else type(item.default)
         if value_type is bool:
-            parser.add_argument(flag, dest=f"track_{name}", nargs="?", const=True,
-                                type=_parse_bool_value, default=None)
-            parser.add_argument(f"--no-{flag[2:]}", dest=f"track_{name}", action="store_const",
-                                const=False, default=None)
+            parser.add_argument(flag, dest=f"track_{name}", action="store_true", default=None)
+            parser.add_argument(f"--no-{flag[2:]}", dest=f"track_{name}", action="store_false",
+                                default=None)
         else:
             parser.add_argument(flag, dest=f"track_{name}", type=value_type, default=None)
     return parser
-
-
-def _parse_bool_value(value: str) -> bool:
-    normalized = str(value).strip().lower()
-    if normalized in {"1", "true", "yes", "on"}:
-        return True
-    if normalized in {"0", "false", "no", "off"}:
-        return False
-    raise argparse.ArgumentTypeError("expected true or false")
 
 
 def _parse_float_list(value: str) -> Tuple[float, ...]:

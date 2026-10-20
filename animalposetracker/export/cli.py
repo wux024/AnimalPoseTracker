@@ -64,24 +64,11 @@ def _make_argument_parser():
     parser.add_argument("--rknn-target", dest="rknn_target", help="Rockchip NPU target (for example rk3588)")
     for option in ("half", "dynamic", "simplify", "optimize", "int8", "nms", "keras", "exist-ok"):
         dest = option.replace("-", "_")
-        parser.add_argument(
-            f"--{option}", dest=dest, nargs="?", const=True, type=_parse_bool_value,
-            default=None,
-        )
-        parser.add_argument(
-            f"--no-{option}", dest=dest, action="store_const", const=False,
-            default=None,
-        )
+        # Bare switches: `--half` turns it on, `--no-half` off, neither leaves the project
+        # setting in charge.
+        parser.add_argument(f"--{option}", dest=dest, action="store_true", default=None)
+        parser.add_argument(f"--no-{option}", dest=dest, action="store_false", default=None)
     return parser
-
-
-def _parse_bool_value(value: str) -> bool:
-    normalized = str(value).strip().lower()
-    if normalized in {"1", "true", "yes", "on"}:
-        return True
-    if normalized in {"0", "false", "no", "off"}:
-        return False
-    raise argparse.ArgumentTypeError("expected true or false")
 
 
 def _export_onnx(adapter, dummy, path, context, values):
