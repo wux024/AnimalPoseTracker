@@ -64,10 +64,12 @@ def _make_argument_parser():
     parser.add_argument("--rknn-target", dest="rknn_target", help="Rockchip NPU target (for example rk3588)")
     for option in ("half", "dynamic", "simplify", "optimize", "int8", "nms", "keras", "exist-ok"):
         dest = option.replace("-", "_")
-        # Bare switches: `--half` turns it on, `--no-half` off, neither leaves the project
-        # setting in charge.
+        # Bare switch: present turns it on, absent leaves the project setting in charge.
+        # `simplify` is the only one whose project default is on, so it is also the only one
+        # that needs a way to turn it off for a single run.
         parser.add_argument(f"--{option}", dest=dest, action="store_true", default=None)
-        parser.add_argument(f"--no-{option}", dest=dest, action="store_false", default=None)
+        if option == "simplify":
+            parser.add_argument(f"--no-{option}", dest=dest, action="store_false", default=None)
     return parser
 
 
