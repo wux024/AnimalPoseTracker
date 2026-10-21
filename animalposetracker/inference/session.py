@@ -123,7 +123,9 @@ def _parse_inference_config(mapping: Mapping[str, Any]) -> InferenceConfigSummar
     file's directory).
     """
     class_names = _as_name_list(mapping.get("names") or mapping.get("classes_name"))
-    keypoints_name = tuple(str(name) for name in (mapping.get("keypoints_name") or []))
+    keypoints_name = tuple(str(name) for name in (
+        mapping.get("keypoint_names") or mapping.get("keypoints_name") or []
+    ))
     skeleton = tuple(
         tuple(int(index) for index in pair) for pair in (mapping.get("skeleton") or [])
     )
@@ -208,13 +210,13 @@ def read_inference_config(config_arg) -> InferenceConfigSummary:
         )
     if not summary.num_keypoints:
         raise ValueError(
-            "The configuration file has no keypoint count: expected keypoints_name "
+            "The configuration file has no keypoint count: expected keypoint_names "
             "(project style) or kpt_shape (dataset style)."
         )
     if summary.kpt_shape is None:
         raise ValueError(
             "Could not parse the keypoint count from the configuration file: "
-            "check kpt_shape or keypoints_name."
+            "check kpt_shape or keypoint_names."
         )
 
     if summary.weights_path or summary.detector_weights_path:
@@ -422,7 +424,7 @@ def build_inference_session(
     if kpt_shape is None:
         raise ValueError(
             "kpt_shape is unknown: pass a config yaml with kpt_shape (or a project yaml with "
-            "keypoints_name), or use an artifact exported with sidecar metadata"
+            "keypoint_names), or use an artifact exported with sidecar metadata"
         )
     input_size = tuple(map(int, metadata.get("input_size") or (imgsz, imgsz)))
 

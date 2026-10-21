@@ -2055,8 +2055,8 @@ class NewProjectSafetyTests(unittest.TestCase):
             config = page.getAllProjectConfig()
 
             # The annotator reads names positionally, so a short list left keypoints unnamed.
-            self.assertEqual(len(config["keypoints_name"]), config["keypoints"])
-            self.assertEqual(config["keypoints_name"][0], "nose")
+            self.assertEqual(len(config["keypoint_names"]), config["keypoints"])
+            self.assertEqual(config["keypoint_names"][0], "nose")
 
 
 @unittest.skipUnless(QApplication is not None, "PySide6 (the gui extra) is not installed")
@@ -2101,7 +2101,7 @@ class AnnotatorRoundTripTests(unittest.TestCase):
         config.write_text(
             yaml.safe_dump(
                 {
-                    "keypoints_name": list(keypoints),
+                    "keypoint_names": list(keypoints),
                     "classes_name": ["mouse"],
                     "skeleton": [list(edge) for edge in skeleton],
                     "keypoints": len(keypoints),
@@ -2123,6 +2123,18 @@ class AnnotatorRoundTripTests(unittest.TestCase):
         page.current_image_path = str(temporary)
         page.labels_cache = {}
         return page, image, config
+
+    def test_the_old_keypoints_name_spelling_is_still_read(self):
+        normalized = AnnotatorPage._normalize_shape_config({
+            "keypoints_name": ["a", "b"],
+            "classes_name": ["mouse"],
+            "skeleton": [[0, 1]],
+            "kpt_shape": [2, 3],
+        })
+
+        # Old files keep working; the canonical spelling is all that is written back.
+        self.assertEqual(normalized["keypoint_names"], ["a", "b"])
+        self.assertNotIn("keypoints_name", normalized)
 
     @staticmethod
     def _target(keypoints, box=True):
@@ -2183,7 +2195,7 @@ class AnnotatorRoundTripTests(unittest.TestCase):
 
             self.assertTrue(box.warning.called)
             saved = yaml.safe_load(config.read_text(encoding="utf-8"))
-            self.assertEqual(saved["keypoints_name"], ["a", "b", "c"])
+            self.assertEqual(saved["keypoint_names"], ["a", "b", "c"])
 
     def test_deleting_an_unreferenced_keypoint_row_renumbers_consistently(self):
         with tempfile.TemporaryDirectory() as temporary, patch(
@@ -2200,10 +2212,10 @@ class AnnotatorRoundTripTests(unittest.TestCase):
             page._SaveConfigChanges("keypoints")
 
             saved = yaml.safe_load(config.read_text(encoding="utf-8"))
-            self.assertEqual(saved["keypoints_name"], ["a", "b"])
+            self.assertEqual(saved["keypoint_names"], ["a", "b"])
             for source, destination in saved["skeleton"]:
-                self.assertLess(source, len(saved["keypoints_name"]))
-                self.assertLess(destination, len(saved["keypoints_name"]))
+                self.assertLess(source, len(saved["keypoint_names"]))
+                self.assertLess(destination, len(saved["keypoint_names"]))
 
     def test_editing_classes_then_keypoints_writes_the_right_key(self):
         with tempfile.TemporaryDirectory() as temporary, patch(
@@ -2224,8 +2236,8 @@ class AnnotatorRoundTripTests(unittest.TestCase):
             saved = yaml.safe_load(config.read_text(encoding="utf-8"))
             # One shared edit flag meant this save wrote the *keypoints* list into whichever key
             # the button pair happened to leave active -- the class list could end up in
-            # `keypoints_name` and a skeleton list in `classes_name`.
-            self.assertEqual(saved["keypoints_name"], ["nose", "ear"])
+            # the keypoint list and a skeleton list in `classes_name`.
+            self.assertEqual(saved["keypoint_names"], ["nose", "ear"])
             self.assertEqual(saved["classes_name"], ["mouse"])
 
 

@@ -265,9 +265,9 @@ class AnnotatorPage(QMainWindow, Ui_Annotator):
                     x, y, v = kpt_data[idx], kpt_data[idx+1], kpt_data[idx+2]
                     
                     # Get keypoint name from config if available
-                    kpt_name = (self.project_config['keypoints_name'][kpt_id] 
-                            if ('keypoints_name' in self.project_config and 
-                                kpt_id < len(self.project_config['keypoints_name']))
+                    kpt_name = (self.project_config['keypoint_names'][kpt_id] 
+                            if ('keypoint_names' in self.project_config and 
+                                kpt_id < len(self.project_config['keypoint_names']))
                             else f"kpt_{kpt_id}")
                     
                     target.keypoints[kpt_id] = {
@@ -366,9 +366,9 @@ class AnnotatorPage(QMainWindow, Ui_Annotator):
         """Expose the three edited lists regardless of the file's spelling.
 
         The shape's home is dataset.yaml now (``names`` as a mapping); this
-        page still edits the historical ``classes_name`` / ``keypoints_name``
-        / ``skeleton`` lists, so accept both spellings on the way in and
-        write the file's own spelling back out.
+        page still edits ``classes_name`` (historical) and ``keypoint_names``
+        / ``skeleton`` lists, so it accepts the old ``keypoints_name``
+        spelling on the way in and writes only the canonical one.
         """
         normalized = dict(config or {})
         class_names = normalized.get("classes_name")
@@ -379,9 +379,14 @@ class AnnotatorPage(QMainWindow, Ui_Annotator):
             elif isinstance(names, (list, tuple)):
                 class_names = [str(value) for value in names]
         normalized["classes_name"] = list(class_names or [])
-        if not normalized.get("keypoints_name"):
+        if not normalized.get("keypoint_names"):
+            # `keypoints_name` is the old spelling; read it, never keep it.
+            legacy = normalized.get("keypoints_name")
             shape = normalized.get("kpt_shape") or [0]
-            normalized["keypoints_name"] = [f"kpt_{index}" for index in range(int(shape[0]))]
+            normalized["keypoint_names"] = list(legacy) if legacy else [
+                f"kpt_{index}" for index in range(int(shape[0]))
+            ]
+        normalized.pop("keypoints_name", None)
         normalized.setdefault("skeleton", [])
         return normalized
 
@@ -405,7 +410,7 @@ class AnnotatorPage(QMainWindow, Ui_Annotator):
             self.EditClasses.setEnabled(True)
             
             # Validate required sections
-            required = ['keypoints_name', 'classes_name', 'skeleton']
+            required = ['keypoint_names', 'classes_name', 'skeleton']
             if not all(k in self.project_config for k in required):
                 raise ValueError("Missing required config sections")
                 
@@ -421,7 +426,7 @@ class AnnotatorPage(QMainWindow, Ui_Annotator):
         self.SkeletonSelection.clear()
         
         self.KeypointsSeletion.addItems(
-            self.project_config['keypoints_name'])
+            self.project_config['keypoint_names'])
         self.ClassesSelection.addItems(
             self.project_config['classes_name'])
         
@@ -649,7 +654,7 @@ class AnnotatorPage(QMainWindow, Ui_Annotator):
 
         Each button tracks its own state. One shared flag meant "Edit Classes" followed by
         "Edit Keypoints" saved the second button's type against the first button's data -- the
-        class list was written into `keypoints_name`, and a skeleton list into `classes_name`.
+        class list was written into the keypoint list, and a skeleton list into the class list.
         """
         button = self.sender()
         button_map = {
@@ -722,7 +727,7 @@ class AnnotatorPage(QMainWindow, Ui_Annotator):
             if config_type == 'classes':
                 self.project_config['classes_name'] = updated_data
             elif config_type == 'keypoints':
-                self.project_config['keypoints_name'] = updated_data
+                self.project_config['keypoint_names'] = updated_data
             elif config_type =='skeleton':
                 self.project_config['skeleton'] = updated_data
             
@@ -748,7 +753,7 @@ class AnnotatorPage(QMainWindow, Ui_Annotator):
         """Generic handler for configuration display (DRY)"""
         config_map = {
             'classes': ('classes_name', ['Class ID', 'Class Name']),
-            'keypoints': ('keypoints_name', ['Keypoint ID', 'Keypoint Name']),
+            'keypoints': ('keypoint_names', ['Keypoint ID', 'Keypoint Name']),
             'skeleton': ('skeleton', ['Link ID', 'Connection'])
         }
         
@@ -796,8 +801,8 @@ class AnnotatorPage(QMainWindow, Ui_Annotator):
                     if row < len(self.project_config.get('classes_name', [])):
                         self.project_config['classes_name'][row] = new_value
                 elif self.EditKeypoints.text().startswith('Save'):
-                    if row < len(self.project_config.get('keypoints_name', [])):
-                        self.project_config['keypoints_name'][row] = new_value
+                    if row < len(self.project_config.get('keypoint_names', [])):
+                        self.project_config['keypoint_names'][row] = new_value
                 elif self.EditSkeleton.text().startswith('Save'):
                     if row < len(self.project_config.get('skeleton', [])):
                         self.project_config['skeleton'][row] = [

@@ -21,7 +21,7 @@ It is drawn, not labelled — every instance of the class shares it. If the draw
 between the wrong joints, the descriptor is wrong, not the annotation.
 
 The keypoint **order** matters more than the names: the model learns position in the vector.
-Reordering `keypoints_name` without reordering the labels shifts every point.
+Reordering `keypoint_names` without reordering the labels shifts every point.
 
 ## Multiple instances per frame
 

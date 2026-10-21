@@ -269,14 +269,14 @@ class CreateNewProjectPage(ProjectFormBase, QWidget, Ui_CreateNewProject):
             "model_scale": self.ModelScaleSelection.currentText(),
             "keypoints": keypoints,
             "visible": self.VisibleSelection.isChecked(),
-            "keypoints_name": self.keypoint_manager.get_list_data(),
+            "keypoint_names": self.keypoint_manager.get_list_data(),
             "classes": classes,
             "classes_name": self.class_manager.get_list_data(),
         }
         # Both lists have to line up with their counts: the annotator and the dataset config read
         # them positionally, so a short list left the later keypoints unnamed.
-        project_config["keypoints_name"] = self._fit_names(
-            project_config["keypoints_name"], keypoints, "keypoint"
+        project_config["keypoint_names"] = self._fit_names(
+            project_config["keypoint_names"], keypoints, "keypoint"
         )
         project_config["classes_name"] = self._fit_names(
             project_config["classes_name"], classes, "class"
@@ -314,7 +314,7 @@ class CreateNewProjectPage(ProjectFormBase, QWidget, Ui_CreateNewProject):
 
         project_identity = {
             key: value for key, value in project_config.items()
-            if key not in {"keypoints", "visible", "classes", "keypoints_name", "classes_name"}
+            if key not in {"keypoints", "visible", "classes", "keypoint_names", "classes_name"}
         }
         self.project.update_config("project", project_identity)
         # The checkbox drives both the layout (dirs + calibration template) and the file.
@@ -382,7 +382,7 @@ class CreateNewProjectPage(ProjectFormBase, QWidget, Ui_CreateNewProject):
         keypoint_names = self._fit_names(
             self.keypoint_manager.get_list_data(), keypoints_count, "keypoint"
         )
-        self.project.dataset_config.setdefault("keypoints_name", [])
+        self.project.dataset_config.setdefault("keypoint_names", [])
         self.project.update_config("dataset", {
             "kpt_shape": [keypoints_count, 3 if self.VisibleSelection.isChecked() else 2],
             # The form knows the count, not which points mirror onto which: leaving `flip_idx`
@@ -390,7 +390,7 @@ class CreateNewProjectPage(ProjectFormBase, QWidget, Ui_CreateNewProject):
             "flip_idx": None,
             "kpt_oks_sigmas": [1.0 / keypoints_count] * keypoints_count,
             "names": dict(enumerate(class_names)),
-            "keypoints_name": keypoint_names,
+            "keypoint_names": keypoint_names,
         })
 
     def onKeypointConfigChanged(self, keypoints):

@@ -24,7 +24,7 @@ automatically, filtered by what the artifact can run on.
 https://github.com/user-attachments/assets/db726dd8-a092-40e3-94ea-e3d423973a03
 
 The configuration file describes the classes and keypoints. Either style is accepted: a
-project YAML (`classes_name` / `keypoints_name` / `skeleton`) or a dataset YAML (`names` /
+project YAML (`classes_name` / `keypoint_names` / `skeleton`) or a dataset YAML (`names` /
 `kpt_shape` / `skeleton`). These keys are not only labels — their counts tell the decoder how
 the output tensor is laid out, so a configuration that disagrees with the artifact shifts the
 keypoint block and decodes nonsense.

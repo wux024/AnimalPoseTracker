@@ -134,8 +134,9 @@ class AnimalPoseTrackerProject(ProjectConfigurationMixin, ProjectFilesMixin, Pro
         }
         if keypoints_name is not None:
             # The dataset file is the keypoint names' home now; the project
-            # file keeps identity only.
-            self.dataset_config["keypoints_name"] = [str(name) for name in keypoints_name]
+            # file keeps identity only. `keypoint_names` is the canonical key --
+            # the old `keypoints_name` spelling is still read, never written.
+            self.dataset_config["keypoint_names"] = [str(name) for name in keypoints_name]
 
         self.model_config = {
             'nc': classes,

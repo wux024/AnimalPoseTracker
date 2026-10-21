@@ -148,7 +148,8 @@ def convert_labels_to_coco(labels_path, project_config, output_dir=None):
             class_names = [str(value) for _, value in sorted(names.items())]
         else:
             class_names = list(names or [])
-    keypoints_name = project_config.get("keypoints_name")
+    keypoints_name = (project_config.get("keypoint_names")
+                      or project_config.get("keypoints_name"))
     if not keypoints_name:
         shape = project_config.get("kpt_shape") or [0]
         keypoints_name = [f"kpt_{index}" for index in range(int(shape[0]))]

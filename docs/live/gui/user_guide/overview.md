@@ -6,7 +6,7 @@ it sees.
 ## Select config and weights
 
 The configuration file describes the classes and keypoints — either a project YAML
-(`classes_name` / `keypoints_name` / `skeleton`) or a dataset YAML (`names` / `kpt_shape` /
+(`classes_name` / `keypoint_names` / `skeleton`) or a dataset YAML (`names` / `kpt_shape` /
 `skeleton`). The counts are not labels only: they tell the decoder how the output tensor is laid
 out, so a configuration that disagrees with the artifact decodes nonsense.
 

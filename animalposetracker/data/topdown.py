@@ -94,7 +94,9 @@ class TopDownPoseDataset(Dataset):
         ):
             raise ValueError("flip_idx must be a permutation of keypoint indices")
 
-        body_names = self.data_config.get("keypoint_names") or self.data_config.get("keypoints")
+        body_names = (self.data_config.get("keypoint_names")
+                      or self.data_config.get("keypoints_name")
+                      or self.data_config.get("keypoints"))
         if isinstance(body_names, dict):
             body_names = list(body_names.values())
         keypoint_types = self.data_config.get("keypoint_types")
