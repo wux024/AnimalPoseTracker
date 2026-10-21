@@ -95,4 +95,4 @@ machine with no PyTorch.
 | `export_with_backend(weights, format=..., ...)` | one export call, the one the CLI makes |
 
 Formats load lazily, so the import cost is paid only for the format you use. The format list is
-the [deployment matrix](OpenVINO.md).
+the [deployment matrix](DeploymentFormats.md).

@@ -579,7 +579,7 @@ animalpose-cli val --config configs/runtime.yaml --weights results/train/weights
 ##### Overview
 
 `export` turns a checkpoint into a deployment artifact and a sidecar JSON. One flag decides the
-format; [Deployment formats](../recipes/OpenVINO.md) lists what each one needs.
+format; [Deployment formats](../recipes/DeploymentFormats.md) lists what each one needs.
 
 ##### Code example
 
@@ -629,5 +629,5 @@ rendering; the Python API is in [Pose analysis workflows](../recipes/post.md).
 ### Additional helper functions
 
 - [Configuration reference](../pytorch/pytorch_config.md) — every registered key.
-- [Deployment formats](../recipes/OpenVINO.md) — the export matrix and per-format extras.
+- [Deployment formats](../recipes/DeploymentFormats.md) — the export matrix and per-format extras.
 - [Desktop applications](../gui/PROJECT_GUI.md) — the same stages through windows.

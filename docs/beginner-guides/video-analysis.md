@@ -21,7 +21,7 @@ Pick the format and the tab calls the same exporter the CLI uses. Each artifact 
 
 ![Export configuration](../assets/screenshots/export.png)
 
-The format list is the [deployment matrix](../recipes/OpenVINO.md); only the row you pick needs
+The format list is the [deployment matrix](../recipes/DeploymentFormats.md); only the row you pick needs
 its extra installed.
 
 ## The inferencer

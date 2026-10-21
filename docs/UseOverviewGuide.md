@@ -198,5 +198,5 @@ that run only — nothing is written back.
 - [Installing AnimalPoseTracker](installation.md) — environment, extras, engines.
 - [User guide](main-workflows/user-guide.md) — the workflow in five phases.
 - [Multi-camera 3D](Overviewof3D.md) — the 3D stage.
-- [Deployment formats](recipes/OpenVINO.md) — the export matrix.
+- [Deployment formats](recipes/DeploymentFormats.md) — the export matrix.
 - [Citation](citation.md) — what to cite for each part.

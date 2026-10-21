@@ -50,7 +50,7 @@ animalpose-cli export --config configs/runtime.yaml \
 
 Each format needs its own SDK, loaded lazily — you only install what you export
 (`.[export-openvino]`, `.[export-tensorflow]`, and so on; see
-[Deployment formats](../../recipes/OpenVINO.md) for the per-format requirements). TensorRT
+[Deployment formats](../../recipes/DeploymentFormats.md) for the per-format requirements). TensorRT
 (`engine`) additionally requires a CUDA device at export time. Formats that need vendor
 toolchains beyond pip (Edge TPU, IMX500, RKNN) fail with a format-specific message when the
 pieces are missing — that is a dependency statement, not a crash.
@@ -77,6 +77,6 @@ step 4.
 
 ## Where to go next
 
-- [Deployment formats](../../recipes/OpenVINO.md) — the full matrix with runtime
+- [Deployment formats](../../recipes/DeploymentFormats.md) — the full matrix with runtime
   requirements.
 - [Live inference](02_live_stream.md) — running the artifact you just verified.

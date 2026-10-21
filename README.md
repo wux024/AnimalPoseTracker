@@ -13,7 +13,7 @@
 
 <a href="#get-assistance">🫶 Getting Assistance</a> |
 <a href="#references--citations">📝 Publications</a> |
-[📦 Deployment formats](docs/recipes/OpenVINO.md) |
+[📦 Deployment formats](docs/recipes/DeploymentFormats.md) |
 <a href="https://github.com/wux024/AnimalPoseTracker">💻 Source</a>
 
 <a href="https://github.com/wux024/AnimalPoseTracker/actions/workflows/docs.yml"><img src="https://github.com/wux024/AnimalPoseTracker/actions/workflows/docs.yml/badge.svg" alt="Docs build"></a>

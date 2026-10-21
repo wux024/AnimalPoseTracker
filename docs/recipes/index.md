@@ -14,7 +14,7 @@ shows the smallest set of commands or calls that solves the problem.
 | [Tracking and multi-view post-processing](post.md) | the tracking, filtering and triangulation API |
 | [Batch and multi-camera runs](BatchProcessing.md) | running many sources without a loop in Python |
 | [3D association and rendering](three_d_association.md) | index vs epipolar, and the render options |
-| [Deployment formats](OpenVINO.md) | the export matrix and the sidecar contract |
+| [Deployment formats](DeploymentFormats.md) | the export matrix and the sidecar contract |
 | [Augmentation and flip tables](flip_and_rotate.md) | how left/right keypoints stay consistent |
 | [model.yaml breakdown](pose_cfg_file_breakdown.md) | every key in a model file |
 | [Utility scripts](../utils/index.md) | what ships in `tools/` |

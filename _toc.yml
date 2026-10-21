@@ -99,7 +99,7 @@ parts:
           - file: docs/recipes/post
           - file: docs/recipes/BatchProcessing
           - file: docs/recipes/three_d_association
-          - file: docs/recipes/OpenVINO
+          - file: docs/recipes/DeploymentFormats
           - file: docs/recipes/flip_and_rotate
           - file: docs/recipes/pose_cfg_file_breakdown
       - file: docs/utils/index
