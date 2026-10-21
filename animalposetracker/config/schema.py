@@ -139,7 +139,7 @@ FIELDS: Tuple[Field, ...] = (
     _f("profile", "train", "shared.runtime", bool, "Per-stage timing profile", visibility="advanced", views=("train", "evaluate")),
     _f("plots", "train", "shared.runtime", bool, "Save training curve plots", visibility="form", views=("train", "evaluate")),
     _f("validation_enabled", "train", "shared.runtime", bool, "Run validation during training", visibility="form", legacy=("val",), views=("train",)),
-    _f("seed", "train", "shared.runtime", int, "Random seed", visibility="form"),
+    _f("seed", "train", "shared.runtime", int, "Random seed; ViTPose projects start at 21", visibility="form", views=("train",)),
     _f("deterministic", "train", "shared.runtime", bool, "Deterministic algorithms", visibility="advanced"),
     _f("save", "train", "shared.runtime", bool, "Save checkpoints", visibility="form", views=("train", "infer")),
     _f("save_period", "train", "shared.runtime", int, "Save an epoch checkpoint every N epochs; 0 = off", visibility="advanced", views=("train",)),
@@ -185,7 +185,6 @@ FIELDS: Tuple[Field, ...] = (
     _f("ema", "train", "models.training", bool, "Exponential moving average", visibility="form"),
     _f("close_mosaic", "train", "models.training", int, "Disable mosaic for the last N epochs", visibility="form", views=("train",)),
     _f("layer_decay_rate", "train", "models.training", float, "ViT layer decay rate", visibility="advanced"),
-    _f("seed", "train", "models.training", int, "Recipe-level random seed (beats shared.runtime.seed)", visibility="advanced", views=("train",)),
 
     # train -- models.loss
     _f("box_loss_weight", "train", "models.loss", float, "Box regression loss weight", visibility="form", legacy=("box",), views=("train",)),

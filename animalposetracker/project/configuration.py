@@ -189,6 +189,7 @@ class ProjectConfigurationMixin:
         later package update never rewrites a project's behaviour silently.
         """
         from animalposetracker.config import default_subtree
+        from animalposetracker.config.defaults import MODEL_SEED_DEFAULTS
 
         self.runtime_config = {
             "common": default_subtree("common"),
@@ -196,6 +197,11 @@ class ProjectConfigurationMixin:
             "predict": default_subtree("predict"),
             "export": default_subtree("export"),
         }
+        # One seed key, filled with the recipe's own value: the ViTPose configs seed at 21,
+        # and a project that wants another number edits the same line everyone else edits.
+        recipe_seed = MODEL_SEED_DEFAULTS.get(str(self.project_config.get("model_type")))
+        if recipe_seed is not None:
+            self.runtime_config["train"]["shared"]["runtime"]["seed"] = recipe_seed
         self._save_config("runtime")
 
     def set_runtime_value(self, dotted_path: str, value: Any) -> None:

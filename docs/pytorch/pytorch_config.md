@@ -60,7 +60,7 @@ This reference is generated from the key registry (`animalposetracker/config/sch
 | `profile` | bool | False | build | advanced | Per-stage timing profile |
 | `plots` | bool | True | build | form | Save training curve plots |
 | `validation_enabled` | bool | True | build | form | Run validation during training |
-| `seed` | int | 0 | build | form | Random seed |
+| `seed` | int | 0 | build | form | Random seed; ViTPose projects start at 21 |
 | `deterministic` | bool | True | build | advanced | Deterministic algorithms |
 | `save` | bool | True | build | form | Save checkpoints |
 | `save_period` | int | 0 | build | advanced | Save an epoch checkpoint every N epochs; 0 = off |
@@ -100,7 +100,6 @@ This reference is generated from the key registry (`animalposetracker/config/sch
 | `ema` | bool | True / False (RTPose / ViTPose) | build | form | Exponential moving average |
 | `close_mosaic` | int | 10 / — (RTPose / ViTPose) | build | form | Disable mosaic for the last N epochs |
 | `layer_decay_rate` | float | `null` / — (RTPose / ViTPose) | build | advanced | ViT layer decay rate |
-| `seed` | int | — / 21 (RTPose / ViTPose) | build | advanced | Recipe-level random seed (beats shared.runtime.seed) |
 
 **`train.shared.training`**
 

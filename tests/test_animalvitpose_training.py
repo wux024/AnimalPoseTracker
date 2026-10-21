@@ -804,6 +804,8 @@ class SimCCTrainingTests(unittest.TestCase):
             self.assertNotIn("model_scale", profile)
             self.assertNotIn("copy_paste", profile["shared"])
             self.assertEqual(profile["shared"]["training"]["lr_gamma"], 0.1)
+            # One seed key, filled with the ViTPose recipe's own value.
+            self.assertEqual(profile["shared"]["runtime"]["seed"], 21)
             self.assertNotIn("lr_gamma", profile["models"]["AnimalViTPose"]["training"])
             self.assertEqual(profile["models"]["AnimalViTPose"]["training"]["batch_size"], 64)
             self.assertNotIn("model_scales", profile["models"]["AnimalViTPose"])
@@ -841,20 +843,17 @@ class SimCCTrainingTests(unittest.TestCase):
             self.assertIn("kpt_oks_sigmas", dataset_config)
             self.assertNotIn("oks_sigmas", dataset_config)
 
-            # A value written by path lands in the deciding profile section and
-            # survives both a re-read and the flatten; seed lands on the ViTPose
-            # recipe row, where the flatten actually decides it.
+            # A value written by path lands in the deciding section and survives both a
+            # re-read and the flatten.
             project.set_runtime_value("train.models.AnimalViTPose.training.batch_size", 7)
             project.set_runtime_value("train.shared.training.lr_gamma", 0.2)
-            project.set_runtime_value("train.models.AnimalViTPose.training.seed", 24)
+            project.set_runtime_value("train.shared.runtime.seed", 24)
             project.save_configs("runtime")
             saved_runtime = yaml.safe_load(
                 (config_dir / "runtime.yaml").read_text(encoding="utf-8")
             )
             self.assertEqual(saved_runtime["train"]["shared"]["training"]["lr_gamma"], 0.2)
-            self.assertEqual(
-                saved_runtime["train"]["models"]["AnimalViTPose"]["training"]["seed"], 24
-            )
+            self.assertEqual(saved_runtime["train"]["shared"]["runtime"]["seed"], 24)
             self.assertEqual(
                 saved_runtime["train"]["models"]["AnimalViTPose"]["training"]["batch_size"], 7
             )

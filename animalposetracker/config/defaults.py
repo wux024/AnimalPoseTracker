@@ -24,6 +24,7 @@ from animalposetracker.cfg import TRAINING_CFG_PATH
 
 __all__ = [
     "RUNTIME_DEFAULTS_PATH",
+    "MODEL_SEED_DEFAULTS",
     "runtime_defaults",
     "training_defaults",
     "default_subtree",
@@ -32,6 +33,10 @@ __all__ = [
 ]
 
 RUNTIME_DEFAULTS_PATH = Path(TRAINING_CFG_PATH).parent / "runtime_defaults.yaml"
+
+#: Recipes whose own training setup seeds differently. `create` writes the value into the one
+#: `train.shared.runtime.seed` key, so a project has a single seed to read and edit.
+MODEL_SEED_DEFAULTS: Dict[str, int] = {"AnimalViTPose": 21}
 
 _RUNTIME_SCOPES: Tuple[str, ...] = ("common", "predict", "export")
 
