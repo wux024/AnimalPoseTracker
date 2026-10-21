@@ -14,7 +14,7 @@ train:
       profile: false
       plots: true
       validation_enabled: true
-      seed: 0
+      seed: 21
       deterministic: true
       save: true
       save_period: 0
@@ -108,7 +108,6 @@ train:
         gradient_accumulation_steps: 1
         validation_interval: 10
         log_interval: 50
-        seed: 21
         ema: false
         amp: false
         layer_decay_rate_by_scale:
