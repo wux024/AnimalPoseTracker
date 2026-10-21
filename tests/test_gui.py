@@ -2011,15 +2011,19 @@ class NewProjectSafetyTests(unittest.TestCase):
 
             self.assertTrue(box.warning.called)
 
-    def test_the_recorded_path_matches_the_created_directory(self):
+    def test_the_project_lands_where_its_name_says(self):
         with tempfile.TemporaryDirectory() as temporary:
             page = self._page(temporary)
             page.onCreateProjectClicked()
 
+            project_dir = page.project.project_path
+            self.assertTrue((project_dir / "project.yaml").is_file())
+            # The directory name carries the identity; the file does not repeat the path,
+            # so moving the project cannot leave a stale one behind.
             recorded = yaml.safe_load(
-                (page.project.project_path / "project.yaml").read_text(encoding="utf-8")
+                (project_dir / "project.yaml").read_text(encoding="utf-8")
             )
-            self.assertEqual(recorded["project_path"], str(page.project.project_path))
+            self.assertNotIn("project_path", recorded)
 
     def test_an_existing_project_is_not_overwritten(self):
         with tempfile.TemporaryDirectory() as temporary:

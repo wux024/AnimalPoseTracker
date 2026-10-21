@@ -70,7 +70,6 @@ class PublicDatasetProjectPage(ProjectFormBase, QWidget, Ui_PublicDatasetProject
     
     def getAllProjectConfig(self):
         project_config = {
-            "project_path": str(self.project.project_path),
             "project_name": self.ProjectConfig.text(),
             "worker": self.WorkerConfig.text(),
             "model_type": self.ModelTypeSelection.currentText(),

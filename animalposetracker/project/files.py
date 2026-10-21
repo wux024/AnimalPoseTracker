@@ -20,12 +20,6 @@ class ProjectFilesMixin:
         """Set the local path of the project."""
         self._local_path = Path(value)
         self._project_path = self._generate_project_path()
-        # Keep the recorded path in step. The GUI sets `local_path` *after* pushing the form's
-        # name/worker/model into the config, and without this the file kept the path computed
-        # from the previous location -- a directory that never existed.
-        config = getattr(self, "project_config", None)
-        if isinstance(config, dict):
-            config["project_path"] = str(self._project_path)
 
     @property
     def project_path(self) -> Path:

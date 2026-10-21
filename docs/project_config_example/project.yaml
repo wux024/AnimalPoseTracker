@@ -1,4 +1,3 @@
-project_path: .
 project_name: trimouse-example
 worker: example
 model_type: AnimalViTPose

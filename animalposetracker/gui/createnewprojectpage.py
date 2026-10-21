@@ -262,7 +262,6 @@ class CreateNewProjectPage(ProjectFormBase, QWidget, Ui_CreateNewProject):
         keypoints = self.KeypointConfig.value()
         classes = self.ClassConfig.value()
         project_config = {
-            "project_path": str(self.project.project_path),
             "project_name": self.ProjectConfig.text(),
             "worker": self.WorkerConfig.text(),
             "model_type": self.ModelTypeSelection.currentText(),

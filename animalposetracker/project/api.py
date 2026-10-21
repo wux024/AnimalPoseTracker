@@ -102,7 +102,6 @@ class AnimalPoseTrackerProject(ProjectConfigurationMixin, ProjectFilesMixin, Pro
         ]
 
         self.project_config = {
-            "project_path": None,
             "project_name": project_name,
             "worker": worker,
             "model_type": model_type,
@@ -152,7 +151,6 @@ class AnimalPoseTrackerProject(ProjectConfigurationMixin, ProjectFilesMixin, Pro
 
         # Generate project path and initialize configurations
         self.local_path = Path(local_path) if local_path else Path.cwd()
-        self.project_config['project_path'] = str(self._project_path)
 
         # process
         self.process = None
