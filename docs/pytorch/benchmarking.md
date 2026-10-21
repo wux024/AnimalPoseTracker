@@ -70,7 +70,7 @@ annotations, so the comparison stays fair.
 
 ## Published numbers
 
-The README carries three tables, measured once on fixed hardware:
+The README carries four tables, measured once on fixed hardware:
 
 - AnimalRTPose accuracy on AnimalPose at 640×640, per scale;
 - inference latency on NVIDIA GPUs, per scale;

@@ -10,7 +10,7 @@ without changing the live inference engine or GUI.
 
 ```python
 project.predict(
-    inference_source=["videos/camera_1.mp4"],
+    inference_source="videos/camera_1.mp4",
     tracker="bytetrack",
     pose_filter="median",
 )
@@ -42,8 +42,9 @@ predict:
     confidence_threshold: 0.25
 ```
 
-If a pose filter is requested without an explicit tracker, the workflow uses
-ByteTrack so that filtering is performed separately for each identity. Tracker
+If a pose filter is requested without an explicit tracker, this Python path uses ByteTrack so
+that filtering is performed separately for each identity. The CLI is stricter: `predict`
+rejects `--pose-filter` without `--tracker`, so a shell pipeline has to name both. Tracker
 tuning beyond `enabled` and `algorithm` (`track_buffer`, `gmc_method`, ...) is
 not part of the runtime configuration; pass it on the command line's
 `--track-*` flags. Set `gmc_method` to a supported camera-motion method only

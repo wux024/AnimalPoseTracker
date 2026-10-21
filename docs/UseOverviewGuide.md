@@ -43,18 +43,21 @@ the rest stays at the model profile's values.
 There are **two model families**, and the choice between them is the first decision a
 project makes:
 
-- **AnimalRTPose** — one stage. Boxes and keypoints come out of a single forward pass, so it
-  needs no detector and no instance crop. Scales N / S / M / L / X. This is the default, and
-  the right starting point for most single-animal and small-group recordings.
+- **AnimalRTPose** — one stage (bottom-up in the papers). Boxes and keypoints come out of a
+  single forward pass, so it needs no detector and no instance crop. Scales N / S / M / L / X.
+  This is the default, and the right starting point for most single-animal and small-group
+  recordings.
 - **AnimalViTPose** — top-down. A box is supplied (from your labels, or from a detector in
   live inference), the instance is cropped and resized, a ViT with a SimCC head predicts the
   keypoints inside the crop, and the points are mapped back to the source image. Scales
   Small / Base / Large / Huge. This is the accuracy path when boxes are available.
 
-To note: there is no multi-animal project mode, no bundled model zoo and no detector shipped
-with the package. The one-stage family predicts instances directly; the top-down family
-needs boxes, which the project reads from the split's annotations or the live inferencer
-obtains from `--detector-weights`.
+To note: there is no multi-animal project mode, no task-specific model collection and no detector
+shipped with the package. The packaged weights are family-level pretrained checkpoints (see
+[Pretrained weights and benchmarks](ModelZoo.md)), not models trained for a particular species.
+The one-stage family predicts instances directly; the top-down family needs boxes, which the
+project reads from the split's annotations or the live inferencer obtains from
+`--detector-weights`.
 
 ```{tip}
 Start with AnimalRTPose on a packaged dataset, even if your goal is the top-down family. One
@@ -106,8 +109,8 @@ desktop applications; step 8 needs a calibrated camera rig.
 | 3 | Train | `animalpose-cli train` |
 | 4 | Validate on the validation split | `animalpose-cli val` |
 | 5 | Predict on images, videos or the test split | `animalpose-cli predict` |
-| 6 | Run an exported artifact live | `animalpose-cli infer` |
-| 7 | Export to a deployment format | `animalpose-cli export` |
+| 6 | Export to a deployment format | `animalpose-cli export` |
+| 7 | Run an exported artifact live | `animalpose-cli infer` |
 | 8 | Calibrate, triangulate, render 3D | `calibrate` / `pose3d` / `pose3d-render` |
 
 You can have as many projects on one machine as you wish. Each stage resumes from the
@@ -127,7 +130,8 @@ project directory, so a run can be stopped and continued without re-deriving any
   `--model AnimalViTPose`.
 - **You want to compare both:** create two projects on the same dataset descriptor and run
   the same `train` / `val`. `metrics.json` is directly comparable because the split, the OKS
-  sigmas and the decoder are the same.
+  sigmas and the metric definitions are the same; the decoders differ (one-stage head vs
+  SimCC), which is part of what you are comparing.
 
 ```{important}
 The model family is fixed per project: it is written into `project.yaml` at `create` time

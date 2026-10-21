@@ -7,14 +7,14 @@ like, and your labels only have to teach it the landmarks.
 
 ```bash
 animalpose-cli train --config configs/runtime.yaml \
-    --weights pretrained/best.pt --epochs 60 --freeze 10
+    --pretrained pretrained/best.pt --epochs 60 --freeze 10
 ```
 
 Three things differ from a from-scratch run:
 
 | Setting | From scratch | Fine-tune |
 |---|---|---|
-| `--weights` | omitted (profile pretraining) | a checkpoint |
+| `--pretrained` | `--no-pretrained` (or `pretrained: false` in the config) | a checkpoint path |
 | `--freeze` | 0 | 5–10 |
 | `--learning-rate` | profile default | a tenth of it |
 

@@ -98,7 +98,8 @@ projects/demo-me-AnimalRTPose-N-demo/
 ##### API Docs
 
 - `animalposetracker.project.cli` — the `create` and `load` commands.
-- `animalposetracker.project.api.Project.create` — the same call from Python.
+- `animalposetracker.project.api.AnimalPoseTrackerProject` — `create_new_project` and the
+  project methods behind every stage.
 - `animalposetracker.cfg` — descriptor resolution and the model registry.
 
 #### (B) Configure the Project
@@ -121,11 +122,20 @@ Edit `configs/runtime.yaml` for a durable change:
 
 ```yaml
 train:
-  epochs: 200
-  batch_size: 8
-  image_size: 640
-  early_stopping_patience: 30
+  shared:
+    training:
+      early_stopping_patience: 30
+  models:
+    AnimalRTPose:
+      training:
+        epochs: 200
+        batch_size: 8
+        image_size: 640
 ```
+
+The nesting is the file's own shape: values shared by both families sit under `train.shared`,
+and per-family values under `train.models.<Family>`. A flat `train: epochs: 200` is not a key the
+resolver accepts — [the configuration reference](../pytorch/pytorch_config.md) lists every path.
 
 Override it for one run on the command line:
 
@@ -166,10 +176,11 @@ datasets/
 └── annotations/                  COCO json, when that format is used
 ```
 
-Frame extraction is a desktop step: the workspace's **Manage** tab extracts frames from a
-video automatically (uniform sampling) or manually (scrub and capture), and writes them into
-`sources/extracted/`. The CLI has no `extract` subcommand — move the frames into the split
-folders yourself, or point `dataset.yaml` at wherever they already are.
+Frame extraction is a desktop step: the workspace's **Manage** tab samples a video
+automatically — `kmeans` clustering by default, or `uniform` spacing — and writes frames into
+`sources/extracted/`. Manual capture lives in the annotator (`Start Label Frames`). The CLI has
+no `extract` subcommand — move the frames into the split folders yourself, or point
+`dataset.yaml` at wherever they already are.
 
 ##### Code example
 
@@ -292,8 +303,8 @@ The knobs that matter first:
 | `--num-workers` | dataloader processes |
 | `--freeze` | freeze the backbone for the first N epochs |
 | `--optimizer` | `auto` picks MuSGD for the one-stage family, AdamW for the top-down |
-| `--resume` | continue from a run's `last.pt` |
-| `--weights` | start from a checkpoint instead of the pretrained profile |
+| `--pretrained` | bare for the profile's automatic checkpoint, a path to start from a local one, `--no-pretrained` for from scratch |
+| `--resume` | continue an interrupted run from its `last.pt` |
 
 Early stopping counts **epochs since the best validation** (`epoch - best_epoch`), so it
 means the same thing at any validation interval. `early_stopping_patience: 0` disables it.
@@ -315,7 +326,7 @@ Start from a checkpoint with a frozen backbone:
 
 ```bash
 animalpose-cli train --config configs/runtime.yaml \
-    --weights projects/old/results/train/weights/best.pt --freeze 10
+    --pretrained projects/old/results/train/weights/best.pt --freeze 10
 ```
 
 ##### What it writes
@@ -542,8 +553,8 @@ split.
 
 - **Add frames** to the same split folders, or create a new split and point
   `configs/dataset.yaml` at it.
-- **Retrain from `best.pt`** with `--weights`, so the new run starts from what already works
-  rather than from the pretrained profile.
+- **Retrain from `best.pt`** with `--pretrained`, so the new run starts from what already works
+  rather than from the profile checkpoint.
 - **Freeze the backbone** for the first epochs with `--freeze N` when the new frames are few.
 - **Compare** `metrics.json` before and after — same split, same decoder, so the numbers are
   directly comparable.
@@ -552,14 +563,56 @@ split.
 
 ```bash
 animalpose-cli train --config configs/runtime.yaml \
-    --weights results/train/weights/best.pt --freeze 10 --epochs 60
+    --pretrained results/train/weights/best.pt --freeze 10 --epochs 60
 animalpose-cli val --config configs/runtime.yaml --weights results/train/weights/best.pt
 ```
 
 ##### API Docs
 
-- `animalposetracker.training.cli` — `--weights`, `--freeze`, `--epochs`.
+- `animalposetracker.training.cli` — `--pretrained`, `--freeze`, `--epochs`.
 - `animalposetracker.training.checkpoint` — how a checkpoint is resumed.
+
+### Phase 6 — Deployment
+
+#### (O) Export the Trained Network
+
+##### Overview
+
+`export` turns a checkpoint into a deployment artifact and a sidecar JSON. One flag decides the
+format; [Deployment formats](../recipes/OpenVINO.md) lists what each one needs.
+
+##### Code example
+
+```bash
+animalpose-cli export --config configs/runtime.yaml \
+    --weights results/train/weights/best.pt --format onnx --dynamic --opset 17
+```
+
+`results/export/` holds the artifact and `<artifact>.json`. The sidecar carries what the graph
+cannot: the head, the input size, the colour order, the keypoint shape and — for SimCC heads —
+the normalisation and crop padding.
+
+##### API Docs
+
+- `animalposetracker.export` — the format matrix and the per-backend exporters.
+
+#### (P) Run the Artifact Live
+
+##### Overview
+
+`infer` reads no project configuration: the artifact, its sidecar, and an optional YAML. It
+takes a camera index, a video file or a stream URL, and `--records` writes the same record
+schema `predict` writes.
+
+```bash
+animalpose-cli infer --poser-weights results/export/best.onnx --source 0 --records live.json
+```
+
+A SimCC artifact also needs `--detector-weights`; without it the inferencer refuses the model.
+
+##### API Docs
+
+- `animalposetracker.inference` — the engine and the stream pipeline.
 
 ## Resources and further reading
 

@@ -29,7 +29,7 @@ model — the head is trained on your data.
 
 Nothing downloads at install time. A checkpoint is fetched the first time a run needs it, into
 `<project>/pretrained/`, and reused after that. An offline machine can pre-place the files there
-with the expected names, or start from `--weights` instead.
+with the expected names, or point `--pretrained` at a local file instead.
 
 ## Public benchmark descriptors
 
@@ -65,7 +65,7 @@ Starting from a checkpoint rather than from scratch is one flag:
 
 ```bash
 animalpose-cli train --config configs/runtime.yaml \
-    --weights pretrained/best.pt --freeze 10 --epochs 60
+    --pretrained pretrained/best.pt --freeze 10 --epochs 60
 ```
 
 `--freeze 10` keeps the backbone fixed for ten epochs, which is usually enough to adapt the head

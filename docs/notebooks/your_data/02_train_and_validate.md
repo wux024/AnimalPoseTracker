@@ -29,8 +29,11 @@ first pass on your own labels, set a small budget in `configs/runtime.yaml` firs
 
 ```yaml
 train:
-  epochs: 30
-  batch_size: 8
+  models:
+    AnimalRTPose:
+      training:
+        epochs: 30
+        batch_size: 8
 ```
 
 Early stopping can end the run before the epoch budget; that is a normal, successful exit

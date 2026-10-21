@@ -49,7 +49,7 @@ On the workstations the toolbox was developed on (same video, same box):
 | Workstation 2 | CPU only | 14.2 ms |
 
 The full machine list, including the laptops and the Mac Mini, is in
-[Hardware considerations](recipes/TechHardware.md).
+[Hardware considerations](installation.md) (end of the page).
 
 ## Reproducing a row
 

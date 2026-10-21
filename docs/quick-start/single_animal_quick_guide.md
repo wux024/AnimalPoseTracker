@@ -31,9 +31,12 @@ Defaults are already usable. Change what matters for your data in `configs/runti
 
 ```yaml
 train:
-  epochs: 100
-  batch_size: 8
-  image_size: 640
+  models:
+    AnimalRTPose:
+      training:
+        epochs: 100
+        batch_size: 8
+        image_size: 640
 ```
 
 `configs/dataset.yaml` already carries the keypoint names, the skeleton and the split
@@ -47,9 +50,10 @@ Frame extraction is a desktop step. Open the workspace and use the **Manage** ta
 animalposetracker
 ```
 
-Automatic extraction samples the video uniformly; manual extraction lets you scrub and
-capture. Frames land in `sources/extracted/`. The CLI has no `extract` subcommand — copy the
-frames into `datasets/images/<split>/` yourself if you prefer the terminal.
+Automatic extraction samples the video — `kmeans` clustering by default (one representative per
+appearance cluster), or `uniform` spacing; manual capture happens in the annotator. Frames land
+in `sources/extracted/`. The CLI has no `extract` subcommand — copy the frames into
+`datasets/images/<split>/` yourself if you prefer the terminal.
 
 ### 4. Label frames
 

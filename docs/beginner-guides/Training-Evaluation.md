@@ -53,6 +53,7 @@ labels or the crop need attention.
 
 1. Look at the per-keypoint AP — a single bad landmark is usually a labelling problem.
 2. Render predictions for a few frames and watch where the skeleton slides off.
-3. Relabel those frames, retrain from `best.pt` with a frozen backbone for the first epochs.
+3. Relabel those frames, then retrain with `--pretrained best.pt` and a frozen backbone for the
+   first epochs.
 
 The full loop is Phase 5 of the [User guide](../main-workflows/user-guide.md).

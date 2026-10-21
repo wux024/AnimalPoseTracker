@@ -1,70 +1,87 @@
 # Public API map
 
 Where each capability lives, for people driving the toolbox from Python rather than the CLI.
+Every name below exists in the installed package; the signatures are the ones the CLI calls.
 
 ## Project API
 
-`animalposetracker.Project` is the entry point for a project:
+`animalposetracker.project.api.AnimalPoseTrackerProject` is the entry point:
+
+```python
+from animalposetracker.project.api import AnimalPoseTrackerProject
+
+project = AnimalPoseTrackerProject()
+project.load_project_config("projects/demo-me-AnimalRTPose-N-demo/project.yaml")
+```
 
 | Call | Does |
 |---|---|
-| `Project.open(path)` | open an existing project directory |
-| `Project.create(...)` | the same as `animalpose-cli create` |
-| `.train(...)` | training, with the same flags the CLI exposes |
-| `.evaluate(...)` | validation on the configured split |
-| `.predict(...)` | prediction on a split, folder or video |
-| `.export(format=...)` | export to a deployment format |
+| `create_new_project()` | the same as `animalpose-cli create` |
+| `create_public_dataset_project(name)` | create from a packaged benchmark descriptor |
+| `load_project_config(path)` | read `project.yaml` and its `configs/` companions |
+| `train()` | one training run, configured by `configs/runtime.yaml` |
+| `evaluate()` | validation on the configured split, writes `results/val/metrics.json` |
+| `predict(inference_source=None, split=None, tracker=None, pose_filter=None)` | prediction; returns the run directory |
+| `resume(resume_path)` | continue from `last.pt` or a path you pass |
+| `export(format=None)` | export the current checkpoint |
+| `triangulate(predictions_by_camera, cameras, identity_map=None, source_by_camera=None)` | the 3D stage |
+| `enable_pose3d()` | add the 3D flag and `configs/cameras.yaml` to an existing project |
+| `get_runtime_value(...)` / `set_runtime_value(...)` | read or set one runtime key |
+| `request_training_stop()` | ask a running training to stop at the next batch |
 
-The object is a thin wrapper over the CLI paths: it resolves the config, calls the same
-functions, and returns the same result dictionaries.
+`train()`, `evaluate()` and `export()` take no per-call overrides — set values in
+`configs/runtime.yaml` (or use the CLI) first.
 
 ## Tracking API
 
 `animalposetracker.tracking`:
 
-| Function | Does |
+| Name | Does |
 |---|---|
-| `track_records(records, tracker=...)` | adds ids to a pose record list |
-| `available_trackers()` | the six names the CLI accepts |
+| `create_tracker(config=None, **overrides)` | build one of the six trackers |
+| `ALGORITHMS` | the names `--tracker` accepts |
+| `TrackerConfig` | the per-tracker settings (`track_buffer`, `match_thresh`, …) |
 
-The input is the `predictions.json` shape; the output is the same shape plus `track_id`.
+`create_tracker("bytetrack")` and `create_tracker({"algorithm": "ocsort", "track_buffer": 45})`
+both work; keyword overrides win over the mapping.
 
 ## Post-processing API
 
 `animalposetracker.postprocessing`:
 
-| Function | Does |
+| Name | Does |
 |---|---|
-| `filter_records(records, method="median", ...)` | smooths per track |
-| `decode_outputs(...)` | the shared decoder used by training, validation and deployment |
+| `track_frame_predictions(detections, tracker, frame_index, frame=None, class_names=None)` | one frame through a tracker, returns detections with `track_id` |
+| `filter_tracked_video_records(frame_records, method="median", window_length=5, polyorder=2, confidence_threshold=None, max_gap=0)` | smooth each track over a recorded sequence |
+| `filter_pose_2d(...)` / `filter_pose_3d(...)` | the same smoothers for plain 2D/3D arrays |
+| `decode_pose_outputs(...)` | the decoder training, validation and deployment share |
 
-`decode_outputs` is the contract that keeps a metric honest: if you reimplement decoding
-elsewhere, the number you report no longer describes what ships.
+`decode_pose_outputs` is the contract that keeps a metric honest: a number produced by a
+separate decoder no longer describes what ships.
 
 ## Pose3d API
 
 `animalposetracker.pose3d`:
 
-| Function | Does |
+| Name | Does |
 |---|---|
-| `calibrate_rig(...)` | fit intrinsics and extrinsics from ChArUco views |
-| `associate_views(...)` | match instances across cameras (index or epipolar) |
-| `triangulate_groups(groups, cameras, ...)` | batched triangulation of associated poses |
-| `reconstruct_project(project)` | the full stage: predict records → 3D → report |
-| `render_project(project, ...)` | CSV, summary, plot, videos |
-
-`triangulate_groups` is the same function the `pose3d` command calls; passing `backend="numpy"`
-or `"numba"` selects the batched solver.
+| `CameraCalibration` / `CameraRig` | one camera, or the whole rig; `CameraCalibration.from_mapping(...)` reads a calibration mapping |
+| `load_camera_rig(path)` | read `configs/cameras.yaml` |
+| `associate_instances(...)` | match instances across cameras (index or epipolar) |
+| `triangulate_keypoints(...)` | one frame, one keypoint set |
+| `triangulate_groups(groups, cameras, ...)` | batched triangulation, the function `pose3d` calls |
+| `triangulate_sequence(...)` | a whole sequence |
+| `reconstruct_project(project)` | predict records → 3D → report |
 
 ## Inference API
 
 `animalposetracker.inference`:
 
-| Function | Does |
+| Name | Does |
 |---|---|
-| `InferenceEngine(config=..., weights_path=...)` | loads an exported artifact |
-| `.model_init()` | resolves the runtime and the output shapes |
-| `resolve_output_schema(...)` | decides which decoder the artifact needs |
+| `InferenceEngine(config=..., weights_path=...)` | loads an exported artifact and its sidecar |
+| `StreamInferencePipeline` | the camera/video loop behind `infer` and the GUI |
+| `DetectorProvider` / `DetectorBox` | adapts a detector artifact to boxes for SimCC models |
 
 The inferencer has no dependency on the training stack: an artifact plus this module runs on a
 machine with no PyTorch.
@@ -73,9 +90,9 @@ machine with no PyTorch.
 
 `animalposetracker.export`:
 
-| Function | Does |
+| Name | Does |
 |---|---|
-| `export_model(weights, format=..., ...)` | one export call, same as the CLI |
-| `available_formats()` | the rows of the [deployment matrix](OpenVINO.md) |
+| `export_with_backend(weights, format=..., ...)` | one export call, the one the CLI makes |
 
-Each format is loaded lazily, so the import cost is paid only when that format is used.
+Formats load lazily, so the import cost is paid only for the format you use. The format list is
+the [deployment matrix](OpenVINO.md).

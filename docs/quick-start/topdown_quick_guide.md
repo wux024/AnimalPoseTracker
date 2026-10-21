@@ -44,11 +44,11 @@ for this family, an unlabelled animal is not "learned as background", it is simp
 
 How the crop is built, and where to tune it:
 
-| Setting | Meaning |
-|---|---|
-| `model.crop_padding` | padding around the box before resizing |
-| `image_size` | the square the crop is resized to |
-| `model.simcc_split_ratio` | SimCC binning granularity |
+| Setting | Meaning | Lives in |
+|---|---|---|
+| `bbox_padding` | padding around the box before resizing (default 1.25) | `configs/model.yaml` |
+| `image_size` | the square the crop is resized to | `configs/runtime.yaml` (`train.models.AnimalViTPose.training`) |
+| `simcc_split_ratio` | SimCC binning granularity | `configs/model.yaml` |
 
 ### 3. Train
 

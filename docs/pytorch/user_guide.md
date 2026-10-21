@@ -15,14 +15,16 @@ animalpose-cli train --config configs/runtime.yaml \
 Through Python:
 
 ```python
-from animalposetracker import Project
+from animalposetracker.project.api import AnimalPoseTrackerProject
 
-project = Project.open("projects/demo-me-AnimalRTPose-N-demo")
-project.train(epochs=200, batch_size=8, device=0)
+project = AnimalPoseTrackerProject()
+project.load_project_config("projects/demo-me-AnimalRTPose-N-demo/project.yaml")
+project.train()          # reads configs/runtime.yaml; no per-call arguments
 ```
 
 Both paths build the same `TrainingConfig`, call the same engine, and write the same files.
-A run started one way can be resumed the other.
+The Python call takes no overrides — edit `configs/runtime.yaml` (or use the CLI) for a
+one-off value. A run started one way can be resumed the other.
 
 ## Major concepts
 
@@ -49,12 +51,14 @@ setting — on a device without tensor cores it degrades to full precision rathe
 
 - `--freeze N` freezes the backbone for the first N epochs, then unfreezes. Useful when the new
   data is small and the checkpoint already knows the domain.
-- `--weights path` starts from a checkpoint instead of the profile's pretrained weights.
-- `--resume path` continues a run: optimizer state, epoch counter and EMA are restored, so the
-  schedule continues rather than restarting.
+- `--pretrained <path>` starts a new run from a checkpoint; bare `--pretrained` takes the
+  profile's automatic one, `--no-pretrained` starts from scratch.
+- `--resume path` continues an interrupted run: optimizer state, epoch counter and EMA are
+  restored, so the schedule continues rather than restarting.
 
-`--weights` and `--resume` are not the same thing: the first starts a new run from a model, the
-second continues an interrupted one.
+`--pretrained` and `--resume` are not the same thing: the first starts a new run from a model,
+the second continues an interrupted one. (`train --weights` exists too, but only for
+`--validate-only` — it picks the checkpoint to score, not the one to learn from.)
 
 ### Early stopping
 

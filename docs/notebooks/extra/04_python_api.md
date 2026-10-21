@@ -23,14 +23,14 @@ project.train()      # runs the configured training; writes results/train/
 project.evaluate()   # validates the best checkpoint; writes results/val/metrics.json
 ```
 
-Both are blocking calls over the same engine the CLI drives. `project.resume()` continues
-from `results/train/weights/last.pt`, or from a path you pass.
+Both are blocking calls over the same engine the CLI drives. `project.resume(path)` continues
+from `results/train/weights/last.pt`, or from the checkpoint you pass.
 
 ## Prediction with tracking and filtering
 
 ```python
 output_dir = project.predict(
-    inference_source=["videos/camA.mp4"],
+    inference_source="videos/camA.mp4",
     tracker="bytetrack",
     pose_filter="median",
 )

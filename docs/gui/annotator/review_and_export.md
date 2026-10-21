@@ -12,7 +12,7 @@ The practical order:
 2. train 50 epochs and run `val`;
 3. predict on the labelled frames and render the overlay;
 4. relabel the frames where the overlay disagrees with the animal;
-5. retrain from `best.pt` with `--freeze` for the first epochs.
+5. retrain with `--pretrained best.pt` and `--freeze` for the first epochs.
 
 ## Correcting labels
 

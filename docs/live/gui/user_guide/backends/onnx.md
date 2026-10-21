@@ -12,7 +12,7 @@ Runs `.onnx` artifacts through the ONNX runtime.
 
 ## When to use it
 
-Pick this engine when the deployment machine is cpu and the
+Pick this engine when the deployment machine is CPU and the
 artifact was exported for it. The engine is implied by the artifact's extension;
 `--engine` overrides the choice when a format has several runtimes.
 

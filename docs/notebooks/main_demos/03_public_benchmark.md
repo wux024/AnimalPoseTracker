@@ -76,4 +76,4 @@ this toolbox is two `val` runs on the same project.
 
 - [Benchmarking and evaluation](../../pytorch/benchmarking.md) — metric definitions and the
   latency side.
-- [Model Zoo](../../ModelZoo.md) — scales and variants per family.
+- [Pretrained weights and datasets](../../ModelZoo.md) — scales, variants and what ships.

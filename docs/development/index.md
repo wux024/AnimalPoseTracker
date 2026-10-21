@@ -91,8 +91,9 @@ python -m pytest tests/test_pose3d_protocol.py -q
 
 ## CI and docs build
 
-`.github/workflows/docs.yml` builds this book on every push and deploys it on manual dispatch.
-For a local build:
+`.github/workflows/docs.yml` builds this book on every push to `main` that touches the book
+(`README.md`, `docs/**`, the build config) and deploys it; `workflow_dispatch` rebuilds without a
+push. For a local build:
 
 ```bash
 jupyter-book build .

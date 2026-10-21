@@ -18,12 +18,17 @@ reports a key it cannot parse rather than silently keeping the old value.
 
 ## Sources and frame extraction
 
-Frames come from videos in `sources/`. The tab offers two extraction modes:
+Frames come from videos in `sources/`. The tab offers two modes:
 
-- **Automatic** — samples the video uniformly; set the count and it picks evenly spaced
-  frames. Best when the behaviour is spread throughout the recording.
-- **Manual** — scrub the video and capture the frames you want. Best when the interesting
-  moments are rare.
+- **Automatic** — pick an algorithm, a cluster count and a sample interval, and it samples
+  the video for you: `kmeans` (the default) clusters frames by appearance and keeps one
+  representative per cluster, so a long static recording does not drown the dataset in
+  near-duplicates; `uniform` takes evenly spaced frames instead.
+- **Manual** — capture specific moments by hand. This runs in the annotator
+  (`Start Label Frames`), not in this tab; the button here only reminds you.
+
+The extraction backend also offers `adaptive_kmeans`, `hierarchical` and `dbscan`
+(`animalposetracker.utils.extract_frame`), reachable from Python.
 
 Extracted frames land in `sources/extracted/` with the source name in the filename, so a frame
 can always be traced back to the video and timestamp it came from.

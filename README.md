@@ -88,8 +88,8 @@ runs an exported engine (`.onnx`, `.engine`, `.mlpackage`, ...) without a projec
 | 3. Train | `animalpose-cli train` | `best.pt`, `training.jsonl`, `results.png` |
 | 4. Evaluate | `animalpose-cli val` | `metrics.json` — AP, AR, PCK, AUC, EPE |
 | 5. Predict | `animalpose-cli predict` | `predictions.json`, rendered video |
-| 6. Infer | `animalpose-cli infer` | Live overlay from camera or stream |
-| 7. Export | `animalpose-cli export` | `<model>.<format>` + `.json` sidecar |
+| 6. Export | `animalpose-cli export` | `<model>.<format>` + `.json` sidecar |
+| 7. Infer | `animalpose-cli infer` | Live overlay from camera or stream |
 | 8. 3D | `animalpose-cli calibrate` | Rig intrinsics and extrinsics (ChArUco) |
 |  | `animalpose-cli pose3d` | `results/pose3d/...csv` — 3D keypoints |
 |  | `animalpose-cli pose3d-render` | 3D video, trajectory plot, summary |

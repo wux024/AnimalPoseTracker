@@ -34,13 +34,13 @@ animalpose-cli load .
 ```
 
 For this family an unlabelled animal is not "learned as background" — an image with no box
-is skipped entirely. The crop settings live in `configs/runtime.yaml`:
+is skipped entirely. The crop is built from `configs/model.yaml`:
 
-| Setting | Meaning |
-|---|---|
-| `model.crop_padding` | padding around the box before resizing |
-| `image_size` | the square the crop is resized to |
-| `model.simcc_split_ratio` | SimCC binning granularity |
+| Setting | Meaning | Lives in |
+|---|---|---|
+| `bbox_padding` | padding around the box before resizing (default 1.25) | `configs/model.yaml` |
+| `image_size` | the square the crop is resized to | `configs/runtime.yaml` |
+| `simcc_split_ratio` | SimCC binning granularity | `configs/model.yaml` |
 
 ### 3. Train
 

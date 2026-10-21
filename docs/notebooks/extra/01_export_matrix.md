@@ -34,8 +34,10 @@ what the graph cannot say about itself:
 
 Never edit or delete the sidecar for a SimCC artifact: mmpose-style graphs do not bake
 normalization into the graph, so a missing sidecar means the inferencer feeds raw 0–255
-pixels and the decoded pose scatters. If the sidecar is missing, pass `--imgsz` and accept
-that top-down models will not run correctly without their preprocessing keys.
+pixels and the decoded pose scatters. A one-stage artifact can survive a missing sidecar if
+you pass `--imgsz`; a top-down one cannot — without `pixel_mean`, `pixel_std`, `bbox_padding`
+and `simcc_split_ratio` the decoder cannot reproduce the training preprocessing, so re-export
+instead of running it.
 
 ### 3. The derivatives
 
