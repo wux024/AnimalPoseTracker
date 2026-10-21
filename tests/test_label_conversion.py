@@ -14,7 +14,7 @@ from pathlib import Path
 from animalposetracker.utils.dataset import convert_labels_to_coco, convert_labels_to_yolo
 
 PROJECT_CONFIG = {
-    "keypoints_name": ["head", "tail"],
+    "keypoint_names": ["head", "tail"],
     "classes_name": ["mouse"],
     "skeleton": [[0, 1]],
 }

@@ -366,9 +366,8 @@ class AnnotatorPage(QMainWindow, Ui_Annotator):
         """Expose the three edited lists regardless of the file's spelling.
 
         The shape's home is dataset.yaml now (``names`` as a mapping); this
-        page still edits ``classes_name`` (historical) and ``keypoint_names``
-        / ``skeleton`` lists, so it accepts the old ``keypoints_name``
-        spelling on the way in and writes only the canonical one.
+        page still edits ``classes_name`` and ``keypoint_names`` /
+        ``skeleton`` lists and writes the file's own spelling back out.
         """
         normalized = dict(config or {})
         class_names = normalized.get("classes_name")
@@ -380,13 +379,8 @@ class AnnotatorPage(QMainWindow, Ui_Annotator):
                 class_names = [str(value) for value in names]
         normalized["classes_name"] = list(class_names or [])
         if not normalized.get("keypoint_names"):
-            # `keypoints_name` is the old spelling; read it, never keep it.
-            legacy = normalized.get("keypoints_name")
             shape = normalized.get("kpt_shape") or [0]
-            normalized["keypoint_names"] = list(legacy) if legacy else [
-                f"kpt_{index}" for index in range(int(shape[0]))
-            ]
-        normalized.pop("keypoints_name", None)
+            normalized["keypoint_names"] = [f"kpt_{index}" for index in range(int(shape[0]))]
         normalized.setdefault("skeleton", [])
         return normalized
 

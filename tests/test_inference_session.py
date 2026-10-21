@@ -25,7 +25,7 @@ PROJECT_STYLE = {
     "project_name": "probe",
     "keypoints": 5,
     "visible": True,
-    "keypoints_name": ["a", "b", "c", "d", "e"],
+    "keypoint_names": ["a", "b", "c", "d", "e"],
     "classes": 2,
     "classes_name": ["cat", "dog"],
     "skeleton": [[0, 1], [2, 3]],

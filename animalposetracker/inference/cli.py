@@ -56,7 +56,7 @@ _INFER_FILE_KEYS = frozenset({
     "output", "records", "show", "max_frames",
 })
 _DATA_DESCRIPTION_KEYS = frozenset({
-    "names", "classes_name", "keypoints_name", "keypoints", "skeleton",
+    "names", "classes_name", "keypoints", "skeleton",
     "kpt_shape", "visible", "output_schema",
     # dataset-style keys, for a file borrowed from a dataset.yaml
     "path", "train", "val", "test", "annotation_format", "flip_idx",

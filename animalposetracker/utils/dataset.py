@@ -148,18 +148,17 @@ def convert_labels_to_coco(labels_path, project_config, output_dir=None):
             class_names = [str(value) for _, value in sorted(names.items())]
         else:
             class_names = list(names or [])
-    keypoints_name = (project_config.get("keypoint_names")
-                      or project_config.get("keypoints_name"))
-    if not keypoints_name:
+    keypoint_names = project_config.get("keypoint_names")
+    if not keypoint_names:
         shape = project_config.get("kpt_shape") or [0]
-        keypoints_name = [f"kpt_{index}" for index in range(int(shape[0]))]
+        keypoint_names = [f"kpt_{index}" for index in range(int(shape[0]))]
     skeleton = project_config.get("skeleton") or []
     coco["categories"] = [
         {
             "supercategory": "",
             "id": i+1,
             "name": name,
-            "keypoints": keypoints_name,
+            "keypoints": keypoint_names,
             "skeleton": skeleton
         } for i, name in enumerate(class_names)
     ]

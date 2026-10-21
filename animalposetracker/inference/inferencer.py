@@ -197,7 +197,7 @@ class InferenceEngine:
             raise ValueError("Invalid data config type. Please provide either a path to a YAML file or a dictionary.")
 
         self.classes = config.get('classes_name', [])
-        self.keypoints = config.get('keypoint_names') or config.get('keypoints_name', [])
+        self.keypoints = config.get('keypoint_names', [])
         self.skeleton = config.get('skeleton', [])
 
         # Generate a color palette for the classes

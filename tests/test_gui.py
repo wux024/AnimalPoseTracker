@@ -2124,18 +2124,6 @@ class AnnotatorRoundTripTests(unittest.TestCase):
         page.labels_cache = {}
         return page, image, config
 
-    def test_the_old_keypoints_name_spelling_is_still_read(self):
-        normalized = AnnotatorPage._normalize_shape_config({
-            "keypoints_name": ["a", "b"],
-            "classes_name": ["mouse"],
-            "skeleton": [[0, 1]],
-            "kpt_shape": [2, 3],
-        })
-
-        # Old files keep working; the canonical spelling is all that is written back.
-        self.assertEqual(normalized["keypoint_names"], ["a", "b"])
-        self.assertNotIn("keypoints_name", normalized)
-
     @staticmethod
     def _target(keypoints, box=True):
         target = AnnotationTarget(0, None)

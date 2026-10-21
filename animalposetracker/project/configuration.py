@@ -13,13 +13,13 @@ class ProjectConfigurationMixin:
     def _validate_keypoints_params(
         self,
         keypoints: int,
-        keypoints_name: Optional[List[str]],
+        keypoint_names: Optional[List[str]],
         skeleton: Optional[List[List[int]]]
     ) -> None:
         """Validate keypoints-related parameters."""
-        if keypoints_name is not None and len(keypoints_name) != keypoints:
+        if keypoint_names is not None and len(keypoint_names) != keypoints:
             raise ValueError(
-                f"keypoints_name length ({len(keypoints_name)}) must match keypoints ({keypoints})"
+                f"keypoint_names length ({len(keypoint_names)}) must match keypoints ({keypoints})"
             )
 
         if skeleton is not None:

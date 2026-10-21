@@ -764,7 +764,7 @@ class SimCCTrainingTests(unittest.TestCase):
                 model_scale="S",
                 keypoints=12,
                 classes=3,
-                keypoints_name=[f"point_{index}" for index in range(12)],
+                keypoint_names=[f"point_{index}" for index in range(12)],
                 skeleton=[[0, 1]],
             )
             project.create_new_project()
@@ -1103,7 +1103,7 @@ class SimCCTrainingTests(unittest.TestCase):
                 model_scale="small",
                 keypoints=2,
                 classes=1,
-                keypoints_name=["nose", "tail"],
+                keypoint_names=["nose", "tail"],
                 skeleton=[[0, 1]],
                 classes_name=["mouse"],
             )

@@ -250,7 +250,7 @@ def _create_project(args: argparse.Namespace) -> AnimalPoseTrackerProject:
         keypoints=keypoint_count,
         visible=(keypoint_dims == 3),
         classes=len(class_names),
-        keypoints_name=keypoint_names,
+        keypoint_names=keypoint_names,
         skeleton=dataset_config.get("skeleton", []),
         kpt_oks_sigmas=dataset_config.get("kpt_oks_sigmas"),
         classes_name=ordered_names,

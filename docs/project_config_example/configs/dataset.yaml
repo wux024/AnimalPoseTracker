@@ -56,7 +56,7 @@ kpt_oks_sigmas:
 - 0.08333333333333333
 - 0.08333333333333333
 - 0.08333333333333333
-keypoints_name:
+keypoint_names:
 - kpt_0
 - kpt_1
 - kpt_2

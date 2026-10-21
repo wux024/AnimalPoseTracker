@@ -225,9 +225,9 @@ def build_coco_ground_truth(dataset, use_coco_api: bool = True):
                 "iscrowd": 0,
             })
 
-    keypoint_names = (dataset.data_config.get("keypoint_names")
-                      or dataset.data_config.get("keypoints_name")
-                      or [str(index) for index in range(dataset.num_keypoints)])
+    keypoint_names = dataset.data_config.get("keypoint_names") or [
+        str(index) for index in range(dataset.num_keypoints)
+    ]
     categories = []
     for class_id, class_name in enumerate(dataset.source_class_names):
         categories.append({

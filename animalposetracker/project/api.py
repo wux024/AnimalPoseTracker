@@ -43,7 +43,7 @@ class AnimalPoseTrackerProject(ProjectConfigurationMixin, ProjectFilesMixin, Pro
                  keypoints: int = 17,
                  visible: bool = True,
                  classes: int = 1,
-                 keypoints_name: Optional[List[str]] = None,
+                 keypoint_names: Optional[List[str]] = None,
                  skeleton: Optional[List[List[int]]] = None,
                  kpt_oks_sigmas: Optional[List[float]] = None,
                  classes_name: Optional[List[str]] = None,
@@ -63,7 +63,7 @@ class AnimalPoseTrackerProject(ProjectConfigurationMixin, ProjectFilesMixin, Pro
             keypoints: Number of keypoints (default: 17)
             visible: Whether keypoints have visibility info (default: True)
             classes: Number of classes (default: 1)
-            keypoints_name: Names of keypoints (default: auto-generated)
+            keypoint_names: Names of keypoints (default: auto-generated)
             skeleton: connections between keypoints (default: empty)
             kpt_oks_sigmas: Per-keypoint OKS sigmas (default: uniform distribution)
             classes_name: Names of classes (default: ['person'])
@@ -72,9 +72,9 @@ class AnimalPoseTrackerProject(ProjectConfigurationMixin, ProjectFilesMixin, Pro
             pose3d: Enable multi-view 3D reconstruction (default: False)
         """
         # Validate keypoints-related parameters
-        if keypoints_name is not None and len(keypoints_name) != keypoints:
+        if keypoint_names is not None and len(keypoint_names) != keypoints:
             raise ValueError(
-                f"keypoints_name length ({len(keypoints_name)}) must match keypoints ({keypoints})"
+                f"keypoint_names length ({len(keypoint_names)}) must match keypoints ({keypoints})"
             )
 
         if skeleton is not None:
@@ -132,11 +132,11 @@ class AnimalPoseTrackerProject(ProjectConfigurationMixin, ProjectFilesMixin, Pro
             'skeleton': skeleton or [],
             'kpt_oks_sigmas': kpt_oks_sigmas,
         }
-        if keypoints_name is not None:
+        if keypoint_names is not None:
             # The dataset file is the keypoint names' home now; the project
             # file keeps identity only. `keypoint_names` is the canonical key --
-            # the old `keypoints_name` spelling is still read, never written.
-            self.dataset_config["keypoint_names"] = [str(name) for name in keypoints_name]
+            # the old `keypoint_names` spelling is still read, never written.
+            self.dataset_config["keypoint_names"] = [str(name) for name in keypoint_names]
 
         self.model_config = {
             'nc': classes,

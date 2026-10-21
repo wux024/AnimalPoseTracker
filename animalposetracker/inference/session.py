@@ -50,7 +50,7 @@ class InferenceConfigSummary:
     """
 
     class_names: Tuple[str, ...] = ()
-    keypoints_name: Tuple[str, ...] = ()
+    keypoint_names: Tuple[str, ...] = ()
     skeleton: Tuple[Tuple[int, int], ...] = ()
     kpt_shape: Optional[Tuple[int, int]] = None
     schema: Optional[str] = None
@@ -66,7 +66,7 @@ class InferenceConfigSummary:
 
     @property
     def num_keypoints(self) -> int:
-        return self.kpt_shape[0] if self.kpt_shape else len(self.keypoints_name)
+        return self.kpt_shape[0] if self.kpt_shape else len(self.keypoint_names)
 
 
 @dataclass(frozen=True)
@@ -116,16 +116,14 @@ def _parse_inference_config(mapping: Mapping[str, Any]) -> InferenceConfigSummar
     """Interpret one config mapping, accepting either the project or the dataset spelling.
 
     A dataset yaml carries ``names``/``kpt_shape``; a project yaml carries
-    ``classes_name``/``keypoints_name``/``visible`` and no shape at all, so its keypoint count
+    ``classes_name``/``keypoint_names``/``visible`` and no shape at all, so its keypoint count
     has to be derived. Both are accepted because both are what a user reasonably points at.
     Either may also declare the model weights to adopt: ``poser_weights`` and
     ``detector_weights`` (raw values here; the strict reader resolves them against the config
     file's directory).
     """
     class_names = _as_name_list(mapping.get("names") or mapping.get("classes_name"))
-    keypoints_name = tuple(str(name) for name in (
-        mapping.get("keypoint_names") or mapping.get("keypoints_name") or []
-    ))
+    keypoint_names = tuple(str(name) for name in (mapping.get("keypoint_names") or []))
     skeleton = tuple(
         tuple(int(index) for index in pair) for pair in (mapping.get("skeleton") or [])
     )
@@ -134,7 +132,7 @@ def _parse_inference_config(mapping: Mapping[str, Any]) -> InferenceConfigSummar
     if mapping.get("kpt_shape"):
         kpt_shape = tuple(int(value) for value in mapping["kpt_shape"])
     else:
-        keypoint_count = len(keypoints_name) or int(mapping.get("keypoints") or 0)
+        keypoint_count = len(keypoint_names) or int(mapping.get("keypoints") or 0)
         if keypoint_count:
             kpt_shape = (keypoint_count, 3 if mapping.get("visible") else 2)
 
@@ -150,7 +148,7 @@ def _parse_inference_config(mapping: Mapping[str, Any]) -> InferenceConfigSummar
 
     return InferenceConfigSummary(
         class_names=tuple(class_names),
-        keypoints_name=keypoints_name,
+        keypoint_names=keypoint_names,
         skeleton=skeleton,
         kpt_shape=kpt_shape,
         schema=schema,
