@@ -305,6 +305,7 @@ The knobs that matter first:
 | `--optimizer` | `auto` picks MuSGD for the one-stage family, AdamW for the top-down |
 | `--pretrained` | bare for the profile's automatic checkpoint, a path to start from a local one, `--no-pretrained` for from scratch |
 | `--resume` | continue an interrupted run from its `last.pt` |
+| `--seed` | random seed for the run; `train.shared.runtime.seed` defaults to 0, the ViTPose recipe overrides it with 21 |
 
 Early stopping counts **epochs since the best validation** (`epoch - best_epoch`), so it
 means the same thing at any validation interval. `early_stopping_patience: 0` disables it.
