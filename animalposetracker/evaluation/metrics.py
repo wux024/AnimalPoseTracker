@@ -546,8 +546,10 @@ def evaluate_coco_keypoints(
         evaluator = COCOeval(eval_coco_gt, coco_dt, "keypoints")
         evaluator.params.kpt_oks_sigmas = sigma_values
         evaluator.params.iouThrs = IOU_THRESHOLDS.cpu().numpy().astype(np.float64)
-        # Keep the COCO keypoint default (20) so stock summarize() remains valid,
-        # and accumulate the requested cap as an additional operating point.
+        # COCOeval.summarize() hard-codes the 20-detection cap for keypoints and
+        # looks it up in params.maxDets, so 20 has to stay in the list. The numbers
+        # this function returns are read at the requested cap instead, through
+        # max_det_index below (300 on the Ultralytics-parity path).
         evaluator.params.maxDets = sorted({20, int(max_detections)})
         if image_ids is not None:
             evaluator.params.imgIds = sorted({int(image_id) for image_id in image_ids})
