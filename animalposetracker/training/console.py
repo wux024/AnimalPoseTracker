@@ -11,6 +11,8 @@ progress rendering.
 """
 
 import sys
+import time
+from datetime import datetime, timedelta
 from typing import NamedTuple, Optional, TextIO, Tuple
 
 from tqdm import tqdm
@@ -84,6 +86,18 @@ def _fmt(value: float) -> str:
     return f"{value:.4g}"
 
 
+def _format_duration(seconds: float) -> str:
+    """Render a duration the way a person reads it: ``1h02m``, ``5m12s``, ``42s``."""
+    remaining = int(max(seconds, 0.0))
+    hours, rest = divmod(remaining, 3600)
+    minutes, secs = divmod(rest, 60)
+    if hours:
+        return f"{hours}h{minutes:02d}m"
+    if minutes:
+        return f"{minutes}m{secs:02d}s"
+    return f"{secs}s"
+
+
 def _speed_text(metrics, prefix: str = "") -> str:
     stages = (
         ("preprocess", "preprocess"),
@@ -147,6 +161,11 @@ class PrettyTrainingRenderer:
         self.columns = columns
         self._header_epoch = None
         self._progress = None
+        # Wall-clock bookkeeping for the finish estimate. The clock starts with the first
+        # batch of this process, so a resumed run reports the pace it is actually achieving
+        # now instead of averaging in the epochs that were trained in an earlier session.
+        self._started_at: Optional[float] = None
+        self._first_completed_epoch: Optional[int] = None
 
     def _close_progress(self) -> None:
         if self._progress is not None:
@@ -158,11 +177,46 @@ class PrettyTrainingRenderer:
         self.stream.write(text + "\n")
         self.stream.flush()
 
+    def _emit_epoch_timing(self, event: TrainingEvent) -> None:
+        """Print the pace and the wall-clock finish estimate under the validation table.
+
+        Everything here is measured in this process: elapsed time, epoch pace and the
+        projected finish. A resumed run starts its clock at its first batch, so the pace
+        reflects the current hardware rather than a mix of two sessions.
+        """
+        now = time.monotonic()
+        if self._started_at is None:
+            self._started_at = now
+        epoch = int(event.epoch or 1)
+        if self._first_completed_epoch is None:
+            self._first_completed_epoch = epoch
+        completed = max(epoch - self._first_completed_epoch + 1, 1)
+        elapsed = now - self._started_at
+        if elapsed < 0.5:
+            # The first epoch can finish before the clock has anything to average; an
+            # estimate from a fraction of a second is noise, so stay quiet until it means
+            # something.
+            return
+        per_epoch = elapsed / completed
+        total = int(event.epochs or 0)
+        remaining_epochs = max(total - epoch, 0)
+        remaining = per_epoch * remaining_epochs
+        finish = datetime.now() + timedelta(seconds=remaining)
+        pace = f"{per_epoch:.1f}s" if per_epoch < 60 else _format_duration(per_epoch)
+        self._line(
+            f"[time] {_format_duration(elapsed)} elapsed | "
+            f"{pace}/epoch | "
+            f"ETA {_format_duration(remaining)}"
+            + (f" (finish ~{finish:%m-%d %H:%M})" if remaining_epochs else " (last epoch)")
+        )
+
     def emit(self, event: TrainingEvent) -> None:
         metrics = event.metrics or {}
         name = event.event
 
         if name == "batch":
+            if self._started_at is None:
+                self._started_at = time.monotonic()
             train_columns = self.columns.train
             if self._header_epoch != event.epoch:
                 self._close_progress()
@@ -249,6 +303,7 @@ class PrettyTrainingRenderer:
             header, row = _validation_table(metrics, self.columns.validation, prefix="val_")
             self._line(header)
             self._line(row)
+            self._emit_epoch_timing(event)
             return
 
         if name in {"started", "finished", "stopped", "plot", "profile"}:
