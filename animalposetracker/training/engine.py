@@ -203,8 +203,13 @@ def build_optimizer(model, config: TrainingConfig):
         class_count = int(getattr(model, "nc", 10))
         fitted_lr = round(0.002 * 5 / (4 + class_count), 6)
         if iterations > 10000:
-            name, learning_rate, momentum = "musgd", 0.01, 0.9
+            # "auto" picks the optimizer family and its momentum here; the learning rate
+            # stays whatever the config resolved, so a value written in runtime.yaml or
+            # passed on the command line actually reaches the optimizer.
+            name, momentum = "musgd", 0.9
         else:
+            # AdamW's step size is derived from the class count, so this is the one case
+            # where "auto" also decides the rate.
             name, learning_rate, momentum = "adamw", fitted_lr, 0.9
         config.warmup_bias_lr = 0.0
 
