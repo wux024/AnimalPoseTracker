@@ -6,7 +6,9 @@ import multiprocessing
 import os
 import random
 import tempfile
+import time
 import warnings
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Sequence, Tuple, Union
 
@@ -388,6 +390,37 @@ class PoseTextDataset(Dataset):
             self.disk_cache_dir.mkdir(parents=True, exist_ok=True)
         elif self.cache_mode not in ("none", "ram"):
             raise ValueError("cache must be false, true, 'ram' or 'disk'")
+        if self.cache_mode == "ram":
+            self._preload_ram_cache()
+
+    def _preload_ram_cache(self) -> None:
+        """Decode every image once, in the parent process.
+
+        The loader workers inherit this dictionary through fork and only read from it, so
+        the decoded images occupy memory once. Filling the cache lazily inside
+        ``__getitem__`` (the previous behaviour) gave every worker its own dictionary, and
+        because mosaic sampled from the whole dataset instead of a local window, most
+        steps missed the cache and decoded fresh files -- which is what turned a 30 GB
+        dataset into a triple-digit memory graph with the GPU sitting idle.
+        """
+        total = len(self.image_paths)
+        if total == 0:
+            return
+        estimated = total * self.image_size * self.image_size * 3
+        print(
+            f"[cache] preloading {total} {self.split} images into RAM "
+            f"(~{estimated / 1e9:.1f} GB), one pass ..."
+        )
+        started = time.perf_counter()
+        workers = max(1, min(32, (os.cpu_count() or 8)))
+        step = max(total // 10, 1)
+        with ThreadPoolExecutor(max_workers=workers) as pool:
+            for index, sample in enumerate(pool.map(self._load_base_item, range(total))):
+                self._ram_cache[index] = sample
+                if (index + 1) % step == 0:
+                    print(f"[cache] {index + 1}/{total}")
+        elapsed = time.perf_counter() - started
+        print(f"[cache] ready in {elapsed:.1f}s, {len(self._ram_cache)} images resident")
 
     def __len__(self) -> int:
         return len(self.image_paths)
@@ -400,9 +433,10 @@ class PoseTextDataset(Dataset):
                 self._load_base_item,
                 len(self.image_paths),
                 allow_mosaic=self._mosaic_enabled(),
-                mosaic_indices=(
-                    None if self.cache_mode == "ram" else self._mosaic_buffer
-                ),
+                # Mosaic always draws from the recent-access window. Passing None under
+                # cache=ram made the augmenter fall back to sampling the entire dataset,
+                # which defeats any locality the cache could have provided.
+                mosaic_indices=self._mosaic_buffer,
             )
             image, classes, boxes, keypoints = (
                 sample["image"], sample["classes"], sample["boxes"], sample["keypoints"]
