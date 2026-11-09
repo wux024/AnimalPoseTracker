@@ -8,7 +8,7 @@ shared:
   runtime:
     num_workers: 8
     time_hours:
-    cache: false
+    cache: true
     fraction: 1.0
     profile: false
     plots: true

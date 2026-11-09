@@ -407,6 +407,19 @@ class PoseTextDataset(Dataset):
         if total == 0:
             return
         estimated = total * self.image_size * self.image_size * 3
+        # Never trade a crash for speed: on a small machine the preload would be swapped
+        # out or OOM-killed, which is worse than decoding on demand.
+        available = None
+        try:
+            available = os.sysconf("SC_AVPHYS_PAGES") * os.sysconf("SC_PAGE_SIZE")
+        except (AttributeError, ValueError, OSError):
+            pass
+        if available is not None and estimated > 0.8 * available:
+            print(
+                f"[cache] skipped: needs ~{estimated / 1e9:.1f} GB but only "
+                f"{available / 1e9:.1f} GB is free; falling back to on-demand loading"
+            )
+            return
         print(
             f"[cache] preloading {total} {self.split} images into RAM "
             f"(~{estimated / 1e9:.1f} GB), one pass ..."
