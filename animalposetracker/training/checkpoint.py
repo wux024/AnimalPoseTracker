@@ -119,22 +119,37 @@ def _rng_state() -> Dict[str, Any]:
 
 
 def _restore_rng_state(state: Optional[Mapping[str, Any]]) -> None:
+    """Restore what can be restored; the rest is optional.
+
+    Random state is a nicety, not a correctness requirement -- Ultralytics does not
+    persist it at all. A checkpoint written by a different torch version hands back plain
+    lists where tensors are expected, and refusing to resume over that is a bad trade.
+    """
     if not state:
         return
     torch = _torch()
     if "python" in state:
-        random.setstate(state["python"])
+        try:
+            random.setstate(state["python"])
+        except (TypeError, ValueError):
+            pass
     if "torch" in state:
-        torch.set_rng_state(state["torch"].cpu())
+        try:
+            torch.set_rng_state(state["torch"].cpu())
+        except (AttributeError, TypeError, RuntimeError):
+            pass
     if "numpy" in state:
         try:
             import numpy as np
 
             np.random.set_state(state["numpy"])
-        except ImportError:
+        except (ImportError, TypeError, ValueError):
             pass
     if "cuda" in state and torch.cuda.is_available():
-        torch.cuda.set_rng_state_all(state["cuda"])
+        try:
+            torch.cuda.set_rng_state_all(state["cuda"])
+        except (AttributeError, TypeError, RuntimeError):
+            pass
 
 
 def _numpy_checkpoint_globals():
