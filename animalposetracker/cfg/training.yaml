@@ -37,7 +37,7 @@ metrics:
   pck_threshold: 0.05
   auc_norm_factor: 30.0
   auc_thresholds: 20
-  coco_max_detections: 300 # keep the NMS cap; truncating to 20 throws away recall at conf=0.001
+  coco_max_detections: 20 # COCO keypoint evaluation maxDets, fixed at 20 by pycocotools; the YOLO path ignores it
 
 models:
   AnimalRTPose:
