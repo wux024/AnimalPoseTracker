@@ -14,6 +14,7 @@ common:
 
 predict:
   source:
+  split: auto
   confidence: 0.25
   iou: 0.7
   max_det: 300

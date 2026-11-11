@@ -1213,7 +1213,7 @@ class Trainer:
                     "Ultralytics AP",
                     ("val_YOLO/AP", "val_YOLO/AP50", "val_YOLO/AP75"),
                 )
-                recall_chart = ("Ultralytics precision / recall", ("val_ultralytics/P", "val_ultralytics/R"))
+                recall_chart = ("Ultralytics precision / recall", ("val_YOLO/P", "val_YOLO/R"))
             else:
                 ap_chart = (
                     "COCO AP",

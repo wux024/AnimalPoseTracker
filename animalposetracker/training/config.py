@@ -253,6 +253,9 @@ class TrainingConfig:
         accumulation = values.get("gradient_accumulation_steps")
         if accumulation is None:
             accumulation = max(round(nominal_batch_size / batch_size), 1)
+        # ``gradient_clip_norm: null`` is the documented way to switch clipping off; only a
+        # missing key (old checkpoints) falls back to the historical 10.0.
+        clip_norm = values.get("gradient_clip_norm", 10.0)
 
         pretrained = values.get("pretrained_weights")
         if pretrained is None and isinstance(values.get("pretrained"), str):
@@ -324,9 +327,8 @@ class TrainingConfig:
             "nominal_batch_size": nominal_batch_size,
             "gradient_accumulation_steps": accumulation,
             "gradient_clip_norm": (
-                None if values.get("gradient_clip_norm") is False
-                else 10.0 if values.get("gradient_clip_norm") is None
-                else float(values["gradient_clip_norm"])
+                None if clip_norm is None or clip_norm is False
+                else float(clip_norm)
             ),
             "layer_decay_rate": (
                 None if values.get("layer_decay_rate") is None

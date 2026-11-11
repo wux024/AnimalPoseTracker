@@ -166,3 +166,6 @@ cython_debug/
 
 # Documentation build (Jupyter Book)
 _build/
+
+# macOS
+.DS_Store

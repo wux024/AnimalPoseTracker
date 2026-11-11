@@ -7,6 +7,7 @@ from PySide6.QtWidgets import (QWidget, QHBoxLayout, QLabel, QLineEdit,
 from PySide6.QtGui import (QPainter, QPixmap, QPen, QColor,QWheelEvent, QBrush, 
                            QStandardItemModel, QStandardItem, QFontMetrics)
 from typing import List
+from pathlib import Path
 import json
 import math
 import shutil
@@ -486,8 +487,21 @@ def create_coco_annotations(annotations_input_dir,
     # filename → image_id
     # image_id → image_info
     # image_id → [annotations]
-    file_name_to_image_id = {img['file_name']: img['id'] for img in source_ann['images']}
-    image_id_to_info = {img['id']: img for img in source_ann['images']}
+    #
+    # A flat export drops the source subdirectory, so images are matched on the basename. That
+    # is only safe while the basename is unique: two source images called ``same.png`` used to
+    # collapse into one entry, silently attaching one image's instances to the other.
+    basename_to_image_ids = {}
+    for img in source_ann.get('images', []):
+        basename = Path(str(img.get('file_name', ''))).name
+        basename_to_image_ids.setdefault(basename, []).append(img['id'])
+    file_name_to_image_id = {
+        basename: ids[0] for basename, ids in basename_to_image_ids.items() if len(ids) == 1
+    }
+    ambiguous_names = {
+        basename: ids for basename, ids in basename_to_image_ids.items() if len(ids) > 1
+    }
+    image_id_to_info = {img['id']: img for img in source_ann.get('images', [])}
     image_id_to_anns = {img_id: [] for img_id in image_id_to_info}
     
     # Build annotation index (preserve original IDs)
@@ -497,8 +511,8 @@ def create_coco_annotations(annotations_input_dir,
     # Process each split
     for split_name, pairs in [('train', train_pairs), ('val', val_pairs), ('test', test_pairs)]:
         split_ann = {
-            "info": source_ann['info'],
-            "licenses": source_ann['licenses'],
+            "info": source_ann.get('info', {}),
+            "licenses": source_ann.get('licenses', []),
             "categories": source_ann['categories'],
             "images": [],
             "annotations": []
@@ -507,7 +521,14 @@ def create_coco_annotations(annotations_input_dir,
         # Process each image in current split
         for img_path in pairs[0]:  # pairs[0] = image paths
             filename = img_path.name
-            
+
+            if filename in ambiguous_names:
+                raise ValueError(
+                    f"Cannot export {img_path.name!r}: the source annotations contain several "
+                    f"images with that file name (ids {ambiguous_names[filename]}). Keep the "
+                    f"source subdirectories or rename the duplicates before splitting."
+                )
+
             if filename not in file_name_to_image_id:
                 continue  # Skip if not in original annotations
                 

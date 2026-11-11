@@ -58,7 +58,13 @@ class ReviewFixTests(unittest.TestCase):
             default_config = TrainingConfig.from_mapping(
                 {"epochs": 1, "gradient_clip_norm": None}, project_dir=temporary
             )
-            self.assertEqual(default_config.gradient_clip_norm, 10.0)
+            # ``null`` is the documented way to switch clipping off; a mapping that merely
+            # omits the key keeps the historical 10.0 default.
+            self.assertIsNone(default_config.gradient_clip_norm)
+            self.assertEqual(
+                TrainingConfig.from_mapping({"epochs": 1}, project_dir=temporary).gradient_clip_norm,
+                10.0,
+            )
             config = TrainingConfig.from_mapping({
                 "epochs": 2,
                 "batch": 1,

@@ -1124,7 +1124,7 @@ class InferencerPage(QWidget, Ui_Inferencer):
                             name: index
                         })
                         cap.release()
-                except:
+                except (OSError, RuntimeError, cv2.error):
                     continue
         elif system_name == 'darwin':
             index = 0
@@ -1139,7 +1139,7 @@ class InferencerPage(QWidget, Ui_Inferencer):
                     })
                     cap.release()
                     index += 1
-                except:
+                except (OSError, RuntimeError, cv2.error):
                     continue
         else:
             raise ValueError(f"Unsupported platform: {system_name}")
@@ -1650,7 +1650,7 @@ class InferencerPage(QWidget, Ui_Inferencer):
                 current_text = self.CameraVideosSelection.currentText()
                 cam_index = self.camera_list[current_text]
                 return cam_index
-            except:
+            except (KeyError, TypeError, ValueError):
                 QMessageBox.warning(self, "Camera", "Failed to parse camera index")
                 return None
         else:

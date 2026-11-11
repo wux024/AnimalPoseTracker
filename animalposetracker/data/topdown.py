@@ -17,7 +17,7 @@ from scipy.stats import truncnorm
 from torch.utils.data import DataLoader, Dataset, SequentialSampler
 from torch.utils.data.distributed import DistributedSampler
 
-from animalposetracker.data.pose import PoseTextDataset, _read_yaml
+from animalposetracker.data.pose import PoseTextDataset, _read_yaml, _seed_pose_worker
 from animalposetracker.preprocessing.topdown import (
     _fix_aspect_ratio, _topdown_warp_matrix,
 )
@@ -501,6 +501,9 @@ def build_topdown_dataloaders(
         "num_workers": int(num_workers),
         "pin_memory": torch.cuda.is_available(),
         "persistent_workers": int(num_workers) > 0,
+        # Reseed numpy/random per worker so the augmentation stream honours the run seed,
+        # matching the AnimalRTPose loader.
+        "worker_init_fn": _seed_pose_worker,
     }
     train_loader = DataLoader(
         train_dataset,

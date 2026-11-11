@@ -332,6 +332,7 @@ _CLI_ALIASES = {
 # Field name -> canonical key, only where the two spellings differ.
 _CLI_FIELD_TO_CANONICAL = {
     "validation_confidence": "confidence",
+    "validation_iou": "iou",
     "max_detections": "max_det",
 }
 
@@ -920,7 +921,7 @@ def run(argv=None) -> int:
                         if config.best_metric in {"COCO/AP", "YOLO/AP"}
                         else "COCO/AP"
                     ),
-                    max_detections=config.max_detections,
+                    yolo_max_detections=config.max_detections,
                 )
                 if validation_loader is not None else None
             )
@@ -995,7 +996,10 @@ def run(argv=None) -> int:
                     keypoint_pck_threshold=float(KEYPOINT_METRICS.get("pck_threshold", 0.05)),
                     keypoint_auc_norm_factor=float(KEYPOINT_METRICS.get("auc_norm_factor", 30.0)),
                     keypoint_auc_thresholds=int(KEYPOINT_METRICS.get("auc_thresholds", 20)),
-                    coco_max_detections=config.max_detections,
+                    coco_max_detections=int(values.get(
+                        "coco_max_detections",
+                        KEYPOINT_METRICS.get("coco_max_detections", 20),
+                    )),
                     oks_area_mode=config.oks_area_mode,
                     ap_metric=(
                         config.best_metric

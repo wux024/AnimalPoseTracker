@@ -560,6 +560,8 @@ class PoseTextDataset(Dataset):
         index = int(index) % len(self.image_paths)
         if self.cache_mode == "ram" and index in self._ram_cache:
             cached = self._ram_cache[index]
+            # Keep the mosaic window tracking recent accesses, exactly like the disk branch.
+            self._remember_mosaic_index(index)
             return {key: value.copy() if isinstance(value, np.ndarray) else value for key, value in cached.items()}
         cache_path = self._cache_path(index) if self.cache_mode == "disk" else None
         if cache_path is not None and cache_path.is_file():

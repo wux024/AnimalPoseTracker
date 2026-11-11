@@ -249,6 +249,7 @@ FIELDS: Tuple[Field, ...] = (
     # predict
     # ------------------------------------------------------------------
     _f("source", "predict", "", str, "Default input source (image / video / directory / glob)", visibility="form", views=("infer",)),
+    _f("split", "predict", "", str, "Dataset split used when no source is given: auto / train / val / test", visibility="advanced"),
     _f("confidence", "predict", "", float, "Prediction confidence threshold", apply="live", visibility="form", legacy=("prediction_confidence", "conf"), views=("infer",)),
     _f("iou", "predict", "", float, "Prediction NMS IoU", apply="live", visibility="form", legacy=("prediction_iou",), views=("infer",)),
     _f("max_det", "predict", "", int, "Max detections per image", apply="live", visibility="form", views=("infer",)),
