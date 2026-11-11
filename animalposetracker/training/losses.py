@@ -254,11 +254,14 @@ class PoseDetectionLoss(nn.Module):
         )
         metrics = {
             "loss": total.detach(),
-            "box": box_loss.detach(),
-            "pose": pose_loss.detach(),
-            "kobj": keypoint_object_loss.detach(),
-            "class": class_loss.detach(),
-            "dfl": dfl_loss.detach(),
+            # Report the weighted per-task terms, matching the Ultralytics logging
+            # convention where each item already carries its hyp weight. The gradient
+            # path is unchanged; only the numbers written to the training log differ.
+            "box": (self.box_weight * box_loss).detach(),
+            "pose": (self.keypoint_weight * pose_loss).detach(),
+            "kobj": (self.visibility_weight * keypoint_object_loss).detach(),
+            "class": (self.class_weight * class_loss).detach(),
+            "dfl": (self.distribution_weight * dfl_loss).detach(),
         }
         # The referenced trainer backpropagates the per-batch sum and reports
         # detached per-batch loss items separately.

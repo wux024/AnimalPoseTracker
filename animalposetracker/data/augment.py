@@ -303,6 +303,11 @@ class PoseAugment:
                 boxes[:, 1], boxes[:, 3] = size - boxes[:, 3], size - y1
             if keypoints.size:
                 keypoints[..., 1] = size - keypoints[..., 1]
+                # Ultralytics passes flip_idx to both RandomFlip directions and swaps the
+                # left/right semantics whenever either flip fires, so mirror the vertical
+                # case too. flipud defaults to 0, so this only matters when it is enabled.
+                if self.flip_idx is not None:
+                    keypoints = keypoints[:, self.flip_idx, :]
         if random.random() < float(self.settings.get("fliplr", 0.0)):
             image = np.ascontiguousarray(image[:, ::-1])
             if boxes.size:

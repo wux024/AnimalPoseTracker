@@ -305,15 +305,25 @@ class PoseTextDataset(Dataset):
             )
         self.kpt_oks_sigmas = self.data_config.get("kpt_oks_sigmas")
         if self.kpt_oks_sigmas is None:
-            self.kpt_oks_sigmas = [1.0 / self.num_keypoints] * self.num_keypoints
-            warnings.warn(
-                f"No per-keypoint OKS sigma vector is configured for {self.config_path}; "
-                f"using the uniform 1/{self.num_keypoints} custom-keypoint fallback. "
-                "Set kpt_oks_sigmas in the dataset YAML for "
-                "dataset-specific animal keypoint tolerances.",
-                UserWarning,
-                stacklevel=2,
-            )
+            if self.num_keypoints == 17:
+                # Match Ultralytics, which falls back to the COCO person sigmas whenever
+                # the dataset declares 17 keypoints. A uniform 1/17 vector is far stricter
+                # than these and would silently depress OKS and the keypoint losses.
+                self.kpt_oks_sigmas = [
+                    0.026, 0.025, 0.025, 0.035, 0.035,
+                    0.079, 0.079, 0.072, 0.072, 0.062, 0.062,
+                    0.107, 0.107, 0.087, 0.087, 0.089, 0.089,
+                ]
+            else:
+                self.kpt_oks_sigmas = [1.0 / self.num_keypoints] * self.num_keypoints
+                warnings.warn(
+                    f"No per-keypoint OKS sigma vector is configured for {self.config_path}; "
+                    f"using the uniform 1/{self.num_keypoints} custom-keypoint fallback. "
+                    "Set kpt_oks_sigmas in the dataset YAML for "
+                    "dataset-specific animal keypoint tolerances.",
+                    UserWarning,
+                    stacklevel=2,
+                )
         self.kpt_oks_sigmas = np.asarray(
             self.kpt_oks_sigmas, dtype=np.float32
         ).reshape(-1).tolist()
