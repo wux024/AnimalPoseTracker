@@ -603,6 +603,18 @@ class PoseTextDataset(Dataset):
             scale_x = resized_width / source_width
             scale_y = resized_height / source_height
             norm_width, norm_height = map(float, target_shape[::-1])
+            # Record the transform that was actually applied. ``_configure_rectangles``
+            # can only approximate it: the loader composes two resizes (long side first,
+            # then letterbox with scaleup disabled), while the precomputed version assumes
+            # a single step. The two disagree whenever a bucket is smaller than image_size
+            # or when the source is smaller than image_size, and the evaluator inverts the
+            # recorded values -- so any drift there puts every restored keypoint off target.
+            self._rect_geometry_by_path[str(path.resolve())] = (
+                scale_x,
+                scale_y,
+                float(pad_x),
+                float(pad_y),
+            )
         else:
             image, scale, pad_x, pad_y = _letterbox(image, self.image_size)
             scale_x = scale_y = scale

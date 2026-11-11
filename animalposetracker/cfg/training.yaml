@@ -33,11 +33,11 @@ shared:
     best_metric_mode: max
 
 metrics:
-  oks_area_mode: annotation # annotation uses the dataset area; bbox uses 0.53 * bbox area
+  oks_area_mode: bbox # matches ultralytics (0.53 * bbox area); annotation uses the dataset area
   pck_threshold: 0.05
   auc_norm_factor: 30.0
   auc_thresholds: 20
-  coco_max_detections: 20
+  coco_max_detections: 300 # keep the NMS cap; truncating to 20 throws away recall at conf=0.001
 
 models:
   AnimalRTPose:
