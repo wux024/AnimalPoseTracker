@@ -834,6 +834,7 @@ def build_pose_dataloaders(
     close_mosaic: int = 10,
     single_cls: bool = False,
     device: str = "auto",
+    rect: bool = False,
 ) -> Tuple[DataLoader, Optional[DataLoader], Dict[str, Any]]:
     """Construct project-owned training and validation loaders from dataset YAML."""
     config_path = Path(data_yaml).expanduser().resolve()
@@ -861,7 +862,7 @@ def build_pose_dataloaders(
             image_size,
             cache=cache,
             single_cls=single_cls,
-            rect=True,
+            rect=rect,
             batch_size=int(validation_batch_size or batch_size),
             stride=32,
         ) if validation_value else None
