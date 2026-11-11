@@ -538,18 +538,16 @@ class PoseTextDataset(Dataset):
         )
 
         for index, (source_height, source_width) in enumerate(image_shapes.astype(np.int64)):
-            resized_width = min(
-                self.image_size,
-                max(1, int(math.ceil(source_width * self.image_size / max(source_height, source_width)))),
-            )
-            resized_height = min(
-                self.image_size,
-                max(1, int(math.ceil(source_height * self.image_size / max(source_height, source_width)))),
-            )
             target_height, target_width = map(int, self.rect_shapes[batch_indices[index]])
-            scale = min(target_height / resized_height, target_width / resized_width, 1.0)
-            final_width = max(1, int(round(resized_width * scale)))
-            final_height = max(1, int(round(resized_height * scale)))
+            # Mirror ``_letterbox_to_shape`` exactly: one scale straight from the source
+            # size to the bucket shape. The old two-step version resized to the long side
+            # first and clamped with min(..., 1.0), which disagrees with the loader whenever
+            # the bucket is smaller than image_size -- the recorded scale/pad then describe a
+            # transform the loader never applied, and every evaluated keypoint lands on the
+            # wrong pixel.
+            scale = min(target_height / source_height, target_width / source_width, 1.0)
+            final_width = max(1, int(round(source_width * scale)))
+            final_height = max(1, int(round(source_height * scale)))
             pad_x = int(round((target_width - final_width) / 2 - 0.1))
             pad_y = int(round((target_height - final_height) / 2 - 0.1))
             path_key = str(self.image_paths[index].resolve())
