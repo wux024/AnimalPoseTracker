@@ -475,7 +475,7 @@ def evaluate_coco_keypoints(
     use_categories: bool = True,
     max_detections: int = 20,
     return_matches: bool = False,
-    oks_area_mode: str = "annotation",
+    oks_area_mode: str = "bbox",
     ap_metric: str = "COCO/AP",
     yolo_max_detections: int = 300,
 ):

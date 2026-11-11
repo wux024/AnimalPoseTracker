@@ -40,8 +40,12 @@ class PoseDetectionValidator:
         keypoint_pck_threshold: float = 0.05,
         keypoint_auc_norm_factor: float = 30.0,
         keypoint_auc_thresholds: int = 20,
-        coco_max_detections: int = 300,
-        oks_area_mode: str = "annotation",
+        # pycocotools fixes maxDets at [20] for keypoint evaluation, so this default has to
+        # match cfg/training.yaml and topdown.py. It used to be 300 here, which meant any
+        # caller that did not pass the value explicitly evaluated against a different cap
+        # than the one written in the config.
+        coco_max_detections: int = 20,
+        oks_area_mode: str = "bbox",
         ap_metric: str = "COCO/AP",
     ) -> None:
         if not 0.0 <= confidence_threshold <= 1.0:
