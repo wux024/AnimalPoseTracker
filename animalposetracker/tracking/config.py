@@ -142,8 +142,8 @@ class TrackerConfig:
     init_pose_suppress: float = 0.85
 
     lost_match_thr: float = 0.0
-    pose_weight: float = 1.0
-    box_weight: float = 0.0
+    pose_weight: float = 0.0
+    box_weight: float = 1.0
     reid_weight: float = 0.50
     conf_weight: float = 0.10
     angle_weight: float = 0.05
