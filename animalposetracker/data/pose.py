@@ -460,8 +460,12 @@ class PoseTextDataset(Dataset):
                 sample["image"], sample["classes"], sample["boxes"], sample["keypoints"]
             )
             image_paths = sample["path"]
-        image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
-        image_tensor = torch.from_numpy(np.ascontiguousarray(image.transpose(2, 0, 1)))
+        # Channel swap and HWC->CHW in a single copy. ``cvtColor`` followed by
+        # ``transpose`` + ``ascontiguousarray`` materialised the image twice; the negated
+        # stride below is a view, so only one contiguous allocation happens.
+        image_tensor = torch.from_numpy(
+            np.ascontiguousarray(image[:, :, ::-1].transpose(2, 0, 1))
+        )
 
         return {
             "images": image_tensor,
@@ -559,10 +563,14 @@ class PoseTextDataset(Dataset):
     def _load_base_item(self, index: int) -> Dict[str, np.ndarray]:
         index = int(index) % len(self.image_paths)
         if self.cache_mode == "ram" and index in self._ram_cache:
-            cached = self._ram_cache[index]
             # Keep the mosaic window tracking recent accesses, exactly like the disk branch.
             self._remember_mosaic_index(index)
-            return {key: value.copy() if isinstance(value, np.ndarray) else value for key, value in cached.items()}
+            # Hand out the cached arrays directly. Every consumer clones what it mutates:
+            # the augmenter copies the image and the box/keypoint arrays before touching
+            # them, and mosaicking only reads a crop onto a fresh canvas. Copying here as
+            # well meant two full-image copies per sample, which on a 1080p dataset is
+            # ~12 MB of extra memory traffic per image and was the loader's main cost.
+            return self._ram_cache[index]
         cache_path = self._cache_path(index) if self.cache_mode == "disk" else None
         if cache_path is not None and cache_path.is_file():
             try:
@@ -626,7 +634,9 @@ class PoseTextDataset(Dataset):
             finally:
                 temporary.unlink(missing_ok=True)
         self._remember_mosaic_index(index)
-        return {key: value.copy() if isinstance(value, np.ndarray) else value for key, value in sample.items()}
+        # The caller clones before mutating (see the RAM-cache branch above), so the
+        # freshly built sample can be handed over as-is instead of being copied again.
+        return sample
 
     def _remember_mosaic_index(self, index: int) -> None:
         if self._mosaic_buffer_limit <= 0 or index in self._mosaic_buffer_members:
