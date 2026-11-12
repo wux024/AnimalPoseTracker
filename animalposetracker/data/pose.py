@@ -195,9 +195,11 @@ class PoseTextDataset(Dataset):
         self.rect = bool(rect and split == "val")
         self.rect_batch_size = max(int(batch_size or 1), 1)
         self.rect_stride = max(int(stride), 1)
-        self._resize_mode = (
-            "rect" if self.rect else "train_aspect" if self.augmentation else "letterbox"
-        )
+        # Ultralytics letterboxes every split, so training and validation see the same
+        # padding. The removed ``train_aspect`` branch resized the long side and skipped
+        # padding entirely, which meant the model trained on edge-to-edge crops and was
+        # then evaluated on images surrounded by grey bars.
+        self._resize_mode = "rect" if self.rect else "letterbox"
         self.rect_shapes = np.empty((0, 2), dtype=np.int64)
         self._rect_geometry_by_path = {}
         self.mosaic_batch_size = max(int(batch_size or 1), 1)
@@ -600,11 +602,7 @@ class PoseTextDataset(Dataset):
         if image is None:
             raise ValueError(f"Could not read image: {path}")
         source_height, source_width = image.shape[:2]
-        if self._resize_mode == "train_aspect":
-            image, scale_x, scale_y = _resize_long_side(image, self.image_size)
-            pad_x = pad_y = 0.0
-            norm_width = norm_height = float(self.image_size)
-        elif self._resize_mode == "rect":
+        if self._resize_mode == "rect":
             image, _, _ = _resize_long_side(image, self.image_size)
             target_shape = self.rect_shapes[index // self.rect_batch_size]
             image, _, pad_x, pad_y, resized_width, resized_height = _letterbox_to_shape(
