@@ -163,18 +163,29 @@ class PoseAugment:
                 x1a, y1a, x2a, y2a = center_x, center_y, min(center_x + width, size * 2), min(center_y + height, size * 2)
                 x1b, y1b, x2b, y2b = 0, 0, x2a - x1a, y2a - y1a
 
-            canvas[y1a:y2a, x1a:x2a] = sample["image"][y1b:y2b, x1b:x2b]
-            boxes = _box_xywh_to_xyxy(sample["boxes"], size)
-            boxes[:, [0, 2]] += x1a - x1b
-            boxes[:, [1, 3]] += y1a - y1b
-            keypoints = sample["keypoints"].copy()
-            if keypoints.size:
-                keypoints[..., 0] = keypoints[..., 0] * size + x1a - x1b
-                keypoints[..., 1] = keypoints[..., 1] * size + y1a - y1b
-            all_classes.append(sample["classes"])
-            all_boxes.append(boxes)
-            all_keypoints.append(keypoints)
-            paths.append(sample["path"])
+            # A centre outside the canvas produces reversed or out-of-range slices. Clamp
+            # the destination rectangle to the canvas and shift the source by the same
+            # amount, then skip tiles that end up empty. Ultralytics relies on numpy's
+            # silent clipping; doing it explicitly keeps the box/keypoint offsets correct.
+            canvas_x1, canvas_y1 = max(x1a, 0), max(y1a, 0)
+            canvas_x2, canvas_y2 = min(x2a, size * 2), min(y2a, size * 2)
+            x1b, y1b = x1b + (canvas_x1 - x1a), y1b + (canvas_y1 - y1a)
+            x2b, y2b = x2b + (canvas_x2 - x2a), y2b + (canvas_y2 - y2a)
+            x1a, y1a, x2a, y2a = canvas_x1, canvas_y1, canvas_x2, canvas_y2
+            if x1a < x2a and y1a < y2a:
+                x1b, y1b = max(0, x1b), max(0, y1b)
+                canvas[y1a:y2a, x1a:x2a] = sample["image"][y1b:y2b, x1b:x2b]
+                boxes = _box_xywh_to_xyxy(sample["boxes"], size)
+                boxes[:, [0, 2]] += x1a - x1b
+                boxes[:, [1, 3]] += y1a - y1b
+                keypoints = sample["keypoints"].copy()
+                if keypoints.size:
+                    keypoints[..., 0] = keypoints[..., 0] * size + x1a - x1b
+                    keypoints[..., 1] = keypoints[..., 1] * size + y1a - y1b
+                all_classes.append(sample["classes"])
+                all_boxes.append(boxes)
+                all_keypoints.append(keypoints)
+                paths.append(sample["path"])
 
         boxes = np.concatenate(all_boxes, axis=0) if all_boxes else np.zeros((0, 4), np.float32)
         keypoints = np.concatenate(all_keypoints, axis=0) if all_keypoints else np.zeros((0, 0, 3), np.float32)
