@@ -341,6 +341,7 @@ def _predict_frame(image, model, config, context, settings, external_backend=Fal
         iou_threshold=settings["iou"],
         max_detections=settings["max_detections"],
         agnostic=settings["agnostic_nms"],
+        multi_label=False,  # prediction keeps only the best class, like Ultralytics predict
     )[0]
 
     boxes, scores, classes, keypoints = detections

@@ -1,3 +1,4 @@
+from typing import Optional
 """Ultralytics-compatible NMS for AnimalRTPose detections."""
 
 import logging
@@ -31,6 +32,7 @@ def pose_non_max_suppression(
     iou_threshold: float = TRAINING_NMS_IOU,
     max_detections: int = TRAINING_NMS_MAX_DET,
     agnostic: bool = TRAINING_NMS_AGNOSTIC,
+    multi_label: Optional[bool] = None,
 ):
     """Apply Ultralytics PoseValidator's multi-label box NMS to pose predictions."""
     if not 0.0 <= confidence_threshold <= 1.0:
@@ -46,7 +48,10 @@ def pose_non_max_suppression(
     class_end = 4 + int(num_classes)
     extra_size = predictions.shape[1] - class_end
     candidates = predictions[:, 4:class_end].amax(1) > confidence_threshold
-    multi_label = num_classes > 1
+    # Ultralytics keeps one row per class above the threshold during validation but only
+    # the single best class during prediction. Default to the validation behaviour and
+    # let the prediction path override it.
+    multi_label = (num_classes > 1) if multi_label is None else bool(multi_label)
     max_candidates = 30000
     class_offset = 7680
     time_limit = 2.0 + 0.05 * batch_size

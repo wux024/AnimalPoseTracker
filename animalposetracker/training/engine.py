@@ -542,13 +542,12 @@ class Trainer:
         head = head[-1] if head is not None and len(head) else None
         strides = getattr(head, "stride", None)
         stride = max(int(strides.max().item()), 1) if strides is not None else 32
-        # Ultralytics always samples the 0.5x-1.5x window regardless of the flag's
-        # numeric value; only its truthiness matters. Honour that so enabling
-        # multi_scale produces the same size distribution as the reference trainer.
+        # The setting is the half-width of the sampling window: 0.2 means
+        # image_size * (1 +/- 0.2), exactly like the reference trainer.
         size = (
             random.randrange(
-                int(self.config.image_size * 0.5),
-                int(self.config.image_size * 1.5 + stride),
+                max(stride, int(self.config.image_size * (1.0 - scale_range))),
+                int(self.config.image_size * (1.0 + scale_range) + stride),
             )
             // stride
             * stride

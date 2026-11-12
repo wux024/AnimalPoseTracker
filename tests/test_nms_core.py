@@ -175,18 +175,26 @@ class LetterboxCoreTests(unittest.TestCase):
 
         image = np.full((5, 7, 3), 9, dtype=np.uint8)
 
+        # Default path: sources smaller than the canvas keep their own scale, so the
+        # image sits inside a padded frame instead of being stretched to fill it.
         canvas, scale, left, top = letterbox_image(image, 10, 8)
         shared_scale = letterbox_scale(7, 5, 10, 8)
         self.assertEqual(scale, shared_scale)
+        self.assertEqual(scale, 1.0)
         resized_w, resized_h = letterbox_resized_size(7, 5, shared_scale)
         self.assertEqual((left, top), letterbox_padding(10, 8, resized_w, resized_h))
-        # This geometry pads only the bottom: the corner pixel is image content (9), and the
-        # first row below the pasted image is the pad (114).
-        self.assertEqual(int(canvas[0, 0, 0]), 9)
-        self.assertEqual(int(canvas[top + resized_h, 0, 0]), PAD_VALUE)
+        self.assertEqual(int(canvas[0, 0, 0]), PAD_VALUE)
+        self.assertEqual(int(canvas[top, left, 0]), 9)
 
         _out, inverse = preprocess_live_frame(image, 10, 8)
         self.assertAlmostEqual(float(np.asarray(inverse)[0][0]), 1.0 / shared_scale, places=5)
+
+        # Explicit upscaling path still fills the canvas and pads only the bottom.
+        up_scale = letterbox_scale(7, 5, 10, 8, scaleup=True)
+        up_w, up_h = letterbox_resized_size(7, 5, up_scale)
+        up_canvas, _s, _l, up_top = letterbox_image(image, 10, 8, scaleup=True)
+        self.assertEqual(int(up_canvas[0, 0, 0]), 9)
+        self.assertEqual(int(up_canvas[up_top + up_h, 0, 0]), PAD_VALUE)
 
 
 if __name__ == "__main__":

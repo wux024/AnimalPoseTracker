@@ -18,9 +18,17 @@ measuring what the other side's consumers expect.
 PAD_VALUE = 114
 
 
-def letterbox_scale(src_w: int, src_h: int, dst_w: int, dst_h: int) -> float:
-    """The shared fit scale: ``min(dst_w / src_w, dst_h / src_h)``."""
-    return min(dst_w / src_w, dst_h / src_h)
+def letterbox_scale(
+    src_w: int, src_h: int, dst_w: int, dst_h: int, scaleup: bool = False
+) -> float:
+    """The shared fit scale: ``min(dst_w / src_w, dst_h / src_h)``.
+
+    ``scaleup=False`` (the default) keeps sources smaller than the canvas at their own
+    scale and pads the remainder, which is what training and validation do. Only callers
+    that genuinely want a stretched small image should pass ``scaleup=True``.
+    """
+    scale = min(dst_w / src_w, dst_h / src_h)
+    return scale if scaleup else min(scale, 1.0)
 
 
 def letterbox_resized_size(src_w: int, src_h: int, scale: float):

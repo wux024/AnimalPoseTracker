@@ -11,10 +11,10 @@ from animalposetracker.preprocessing.letterbox_core import (
 )
 
 
-def letterbox_image(image: np.ndarray, width: int, height: int):
+def letterbox_image(image: np.ndarray, width: int, height: int, scaleup: bool = False):
     """Resize an image into a fixed canvas and return scale plus integer padding."""
     original_height, original_width = image.shape[:2]
-    scale = letterbox_scale(original_width, original_height, width, height)
+    scale = letterbox_scale(original_width, original_height, width, height, scaleup=scaleup)
     resized_width, resized_height = letterbox_resized_size(original_width, original_height, scale)
     resized = cv2.resize(image, (resized_width, resized_height), interpolation=cv2.INTER_LINEAR)
     left, top = letterbox_padding(width, height, resized_width, resized_height)

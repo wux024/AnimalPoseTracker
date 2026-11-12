@@ -141,8 +141,11 @@ class PoseAugment:
 
     def _mosaic(self, samples):
         size = self.image_size
-        center_x = int(random.uniform(size * 0.5, size * 1.5))
-        center_y = int(random.uniform(size * 0.5, size * 1.5))
+        # Ultralytics samples from (-0.5s, 1.5s), so half the time the mosaic centre
+        # falls outside the canvas and only one or two tiles are visible. Clamping to
+        # (0.5s, 1.5s) kept all four tiles inside and halved the augmentation strength.
+        center_x = int(random.uniform(-size * 0.5, size * 1.5))
+        center_y = int(random.uniform(-size * 0.5, size * 1.5))
         canvas = np.full((size * 2, size * 2, 3), 114, dtype=np.uint8)
         all_classes, all_boxes, all_keypoints, paths = [], [], [], []
         for index, sample in enumerate(samples):

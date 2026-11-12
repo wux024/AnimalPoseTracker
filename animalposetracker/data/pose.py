@@ -107,9 +107,16 @@ def _label_path(image_path: Path) -> Path:
     return image_path.with_suffix(".txt")
 
 
-def _letterbox(image: np.ndarray, size: int) -> Tuple[np.ndarray, float, float, float]:
+def _letterbox(
+    image: np.ndarray, size: int, scaleup: bool = False
+) -> Tuple[np.ndarray, float, float, float]:
     height, width = image.shape[:2]
     scale = min(size / width, size / height)
+    if not scaleup:
+        # Ultralytics never upscales during training or validation: a 300x200 source
+        # stays 300x200 and is padded, instead of being stretched to 640 and losing
+        # the scale prior the network learned.
+        scale = min(scale, 1.0)
     resized_width = max(1, int(round(width * scale)))
     resized_height = max(1, int(round(height * scale)))
     resized = cv2.resize(image, (resized_width, resized_height), interpolation=cv2.INTER_LINEAR)
@@ -201,6 +208,7 @@ class PoseTextDataset(Dataset):
         # then evaluated on images surrounded by grey bars.
         self._resize_mode = "rect" if self.rect else "letterbox"
         self.rect_shapes = np.empty((0, 2), dtype=np.int64)
+        self._source_shapes: List[Tuple[int, int]] = []
         self._rect_geometry_by_path = {}
         self.mosaic_batch_size = max(int(batch_size or 1), 1)
         self._mosaic_buffer = []
@@ -307,7 +315,7 @@ class PoseTextDataset(Dataset):
             )
         self.kpt_oks_sigmas = self.data_config.get("kpt_oks_sigmas")
         if self.kpt_oks_sigmas is None:
-            if self.num_keypoints == 17:
+            if self.num_keypoints == 17 and self.keypoint_dimensions == 3:
                 # Match Ultralytics, which falls back to the COCO person sigmas whenever
                 # the dataset declares 17 keypoints. A uniform 1/17 vector is far stricter
                 # than these and would silently depress OKS and the keypoint losses.
@@ -549,26 +557,47 @@ class PoseTextDataset(Dataset):
             * self.rect_stride
         )
 
-        for index, (source_height, source_width) in enumerate(image_shapes.astype(np.int64)):
+        self._source_shapes = image_shapes.astype(np.int64).tolist()
+        for index, (source_height, source_width) in enumerate(
+            image_shapes.astype(np.int64)
+        ):
             target_height, target_width = map(int, self.rect_shapes[batch_indices[index]])
-            # Mirror ``_letterbox_to_shape`` exactly: one scale straight from the source
-            # size to the bucket shape. The old two-step version resized to the long side
-            # first and clamped with min(..., 1.0), which disagrees with the loader whenever
-            # the bucket is smaller than image_size -- the recorded scale/pad then describe a
-            # transform the loader never applied, and every evaluated keypoint lands on the
-            # wrong pixel.
-            scale = min(target_height / source_height, target_width / source_width, 1.0)
-            final_width = max(1, int(round(source_width * scale)))
-            final_height = max(1, int(round(source_height * scale)))
-            pad_x = int(round((target_width - final_width) / 2 - 0.1))
-            pad_y = int(round((target_height - final_height) / 2 - 0.1))
-            path_key = str(self.image_paths[index].resolve())
-            self._rect_geometry_by_path[path_key] = (
-                final_width / float(source_width),
-                final_height / float(source_height),
-                float(pad_x),
-                float(pad_y),
+            self._remember_rect_geometry(
+                index, int(source_height), int(source_width),
+                int(target_height), int(target_width),
             )
+
+    def _remember_rect_geometry(
+        self, index: int, source_height: int, source_width: int,
+        target_height: int, target_width: int,
+    ) -> None:
+        """Record the transform the rect branch actually applies.
+
+        The loader composes two resizes: the long side is first brought to
+        ``image_size`` (upscaling allowed), then letterboxed into the bucket without
+        scaling up again. Any shortcut that skips the first step produces a scale the
+        loader never applied, so keep this as the single source of truth and call it
+        both after reading an image and when serving a cached sample.
+        """
+        long_side = max(source_height, source_width)
+        first_scale = self.image_size / float(long_side)
+        first_width = min(self.image_size, max(1, int(math.ceil(source_width * first_scale))))
+        first_height = min(self.image_size, max(1, int(math.ceil(source_height * first_scale))))
+        second_scale = min(
+            target_height / float(first_height),
+            target_width / float(first_width),
+            1.0,
+        )
+        final_width = max(1, int(round(first_width * second_scale)))
+        final_height = max(1, int(round(first_height * second_scale)))
+        pad_x = int(round((target_width - final_width) / 2 - 0.1))
+        pad_y = int(round((target_height - final_height) / 2 - 0.1))
+        self._rect_geometry_by_path[str(self.image_paths[index].resolve())] = (
+            final_width / float(source_width),
+            final_height / float(source_height),
+            float(pad_x),
+            float(pad_y),
+        )
 
     def _load_base_item(self, index: int) -> Dict[str, np.ndarray]:
         index = int(index) % len(self.image_paths)
@@ -592,6 +621,14 @@ class PoseTextDataset(Dataset):
                         "keypoints": cached["keypoints"].copy(),
                         "path": str(self.image_paths[index]),
                     }
+                if self._resize_mode == "rect" and self._source_shapes:
+                    source_height, source_width = self._source_shapes[index]
+                    target_height, target_width = map(
+                        int, self.rect_shapes[index // self.rect_batch_size]
+                    )
+                    self._remember_rect_geometry(
+                        index, source_height, source_width, target_height, target_width
+                    )
                 self._remember_mosaic_index(index)
                 return sample
             except (OSError, ValueError, KeyError):
@@ -611,17 +648,9 @@ class PoseTextDataset(Dataset):
             scale_x = resized_width / source_width
             scale_y = resized_height / source_height
             norm_width, norm_height = map(float, target_shape[::-1])
-            # Record the transform that was actually applied. ``_configure_rectangles``
-            # can only approximate it: the loader composes two resizes (long side first,
-            # then letterbox with scaleup disabled), while the precomputed version assumes
-            # a single step. The two disagree whenever a bucket is smaller than image_size
-            # or when the source is smaller than image_size, and the evaluator inverts the
-            # recorded values -- so any drift there puts every restored keypoint off target.
-            self._rect_geometry_by_path[str(path.resolve())] = (
-                scale_x,
-                scale_y,
-                float(pad_x),
-                float(pad_y),
+            self._remember_rect_geometry(
+                index, source_height, source_width,
+                int(target_shape[0]), int(target_shape[1]),
             )
         else:
             image, scale, pad_x, pad_y = _letterbox(image, self.image_size)
