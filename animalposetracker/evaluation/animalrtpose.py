@@ -33,9 +33,6 @@ class PoseDetectionValidator:
         iou_threshold: float = TRAINING_NMS_IOU,
         max_detections: int = TRAINING_NMS_MAX_DET,
         agnostic_nms: bool = TRAINING_NMS_AGNOSTIC,
-        plots: bool = False,
-        output_dir: Optional[str] = None,
-        class_names: Optional[Sequence[str]] = None,
         validation_dataset=None,
         keypoint_pck_threshold: float = 0.05,
         keypoint_auc_norm_factor: float = 30.0,
@@ -59,9 +56,6 @@ class PoseDetectionValidator:
         self.iou_threshold = float(iou_threshold)
         self.max_detections = int(max_detections)
         self.agnostic_nms = bool(agnostic_nms)
-        self.plots = bool(plots)
-        self.output_dir = Path(output_dir).expanduser().resolve() if output_dir else None
-        self.class_names = list(class_names) if class_names is not None else None
         self.validation_dataset = validation_dataset
         self.keypoint_pck_threshold = float(keypoint_pck_threshold)
         self.keypoint_auc_norm_factor = float(keypoint_auc_norm_factor)

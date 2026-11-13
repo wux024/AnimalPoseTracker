@@ -500,7 +500,7 @@ class ReviewFixTests(unittest.TestCase):
             self.assertEqual(second, Path(temporary) / "train2")
             self.assertTrue(first.is_dir())
 
-    def test_coco_2d_dataset_rejects_unlabeled_landmarks(self):
+    def test_coco_2d_dataset_warns_on_unlabeled_landmarks(self):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
             image_dir = root / "images" / "train"
@@ -535,7 +535,9 @@ class ReviewFixTests(unittest.TestCase):
             }), encoding="utf-8")
 
             dataset = PoseTextDataset(data_path, split="train", image_size=32)
-            with self.assertRaisesRegex(ValueError, "unlabeled keypoints"):
+            # A 2-channel kpt_shape has no visibility slot, so the point is kept at the
+            # origin with a warning instead of aborting the dataset.
+            with self.assertWarns(UserWarning):
                 dataset[0]
 
     def test_project_source_copy_preserves_subfolders_and_deduplicates(self):

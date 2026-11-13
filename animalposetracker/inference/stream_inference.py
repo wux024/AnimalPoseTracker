@@ -11,6 +11,7 @@ import cv2
 import numpy as np
 
 from animalposetracker.preprocessing.topdown import _rotate_point as _rotate_point_radians, _topdown_warp_matrix as _topdown_warp_matrix_with_rotation, _fix_aspect_ratio
+from animalposetracker.preprocessing.letterbox_core import PAD_VALUE
 from animalposetracker.postprocessing.output_decoders import (
     RTMO_MMDEPLOY,
     RTMPOSE_SIMCC,
@@ -82,7 +83,7 @@ class StreamInputConfig:
     input_scale: float = 1.0
     pixel_mean: Tuple[float, float, float] = (0.0, 0.0, 0.0)
     pixel_std: Tuple[float, float, float] = (1.0, 1.0, 1.0)
-    pad_value: float = 114.0
+    pad_value: float = float(PAD_VALUE)
     bbox_padding: float = 1.25
 
     def __post_init__(self):

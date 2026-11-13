@@ -98,7 +98,7 @@ def _export_onnx(adapter, dummy, path, context, values):
         input_names=["images"],
         output_names=output_names,
         dynamic_axes=dynamic_axes if dynamic else None,
-        opset_version=int(values.get("opset") or 17),
+        opset_version=int(values.get("opset") or default_subtree("export").get("opset", 17)),
         do_constant_folding=True,
     )
 

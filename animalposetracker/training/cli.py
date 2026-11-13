@@ -987,15 +987,18 @@ def run(argv=None) -> int:
                     iou_threshold=config.validation_iou,
                     max_detections=config.max_detections,
                     agnostic_nms=config.agnostic_nms,
-                    plots=config.plots and rank == 0,
-                    output_dir=str(config.output_dir),
-                    class_names=metadata["class_names"],
                     validation_dataset=(
                         validation_loader.dataset if validation_loader is not None else None
                     ),
-                    keypoint_pck_threshold=float(KEYPOINT_METRICS.get("pck_threshold", 0.05)),
-                    keypoint_auc_norm_factor=float(KEYPOINT_METRICS.get("auc_norm_factor", 30.0)),
-                    keypoint_auc_thresholds=int(KEYPOINT_METRICS.get("auc_thresholds", 20)),
+                    keypoint_pck_threshold=float(
+                        values.get("pck_threshold", KEYPOINT_METRICS.get("pck_threshold", 0.05))
+                    ),
+                    keypoint_auc_norm_factor=float(
+                        values.get("auc_norm_factor", KEYPOINT_METRICS.get("auc_norm_factor", 30.0))
+                    ),
+                    keypoint_auc_thresholds=int(
+                        values.get("auc_thresholds", KEYPOINT_METRICS.get("auc_thresholds", 20))
+                    ),
                     coco_max_detections=int(values.get(
                         "coco_max_detections",
                         KEYPOINT_METRICS.get("coco_max_detections", 20),

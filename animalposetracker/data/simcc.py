@@ -39,17 +39,11 @@ class SimCCLabel:
         split_points = np.around(keypoints * self.split_ratio).astype(np.int64)
         x_grid = np.arange(bins_x, dtype=np.float32)
         y_grid = np.arange(bins_y, dtype=np.float32)
-        radius = self.sigma * 3.0
 
         for index, (mu_x, mu_y) in enumerate(split_points):
             if weights[index] < 0.5:
                 continue
             if mu_x < 0 or mu_y < 0 or mu_x >= bins_x or mu_y >= bins_y:
-                weights[index] = 0.0
-                continue
-            left, top = mu_x - radius, mu_y - radius
-            right, bottom = mu_x + radius + 1, mu_y + radius + 1
-            if left >= bins_x or top >= bins_y or right < 0 or bottom < 0:
                 weights[index] = 0.0
                 continue
             labels_x[index] = np.exp(-((x_grid - mu_x) ** 2) / (2.0 * self.sigma**2))

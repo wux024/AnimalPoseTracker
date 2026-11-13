@@ -25,6 +25,7 @@ from animalposetracker.project.model_context import (
 )
 from animalposetracker.artifacts import detect_artifact_format, read_artifact_metadata
 from animalposetracker.preprocessing.letterbox import letterbox_image
+from animalposetracker.postprocessing.simcc_decode import simcc_argmax
 from animalposetracker.postprocessing.nms_params import (
     PREDICT_NMS_AGNOSTIC,
     PREDICT_NMS_CONF,
@@ -369,8 +370,6 @@ def _predict_frame(image, model, config, context, settings, external_backend=Fal
     return rendered, records
 
 
-def _letterbox_shape(image: np.ndarray, width: int, height: int):
-    return letterbox_image(image, width, height)
 
 
 class InstanceBoxProvider:
@@ -427,12 +426,18 @@ def _predict_topdown_image(image, image_path, boxes, model, context, settings, e
     records = []
     width, height = context["topdown_input_size"]
     padding = float(context["preprocessing"].get("bbox_padding", 1.25))
+    from animalposetracker.data.topdown_defaults import ANIMALVITPOSE_PREPROCESSING
+
     mean = np.asarray(
-        context["preprocessing"].get("pixel_mean", [123.675, 116.28, 103.53]),
+        context["preprocessing"].get(
+            "pixel_mean", ANIMALVITPOSE_PREPROCESSING["pixel_mean"]
+        ),
         dtype=np.float32,
     ).reshape(1, 1, 3)
     std = np.asarray(
-        context["preprocessing"].get("pixel_std", [58.395, 57.12, 57.375]),
+        context["preprocessing"].get(
+            "pixel_std", ANIMALVITPOSE_PREPROCESSING["pixel_std"]
+        ),
         dtype=np.float32,
     ).reshape(1, 1, 3)
     ratio = float(context["simcc_split_ratio"])
@@ -461,12 +466,9 @@ def _predict_topdown_image(image, image_path, boxes, model, context, settings, e
             pred_x = pred_x.detach().cpu()
             pred_y = pred_y.detach().cpu()
 
-        max_x, coords_x = pred_x[0].max(dim=-1)
-        max_y, coords_y = pred_y[0].max(dim=-1)
-        keypoint_scores = torch.minimum(max_x, max_y).numpy()
-        coordinates = torch.stack((coords_x, coords_y), dim=-1).float().numpy() / ratio
-        invalid = keypoint_scores <= 0
-        coordinates[invalid] = -1.0 / ratio
+        coordinates_batched, scores_batched = simcc_argmax(pred_x, pred_y, ratio)
+        coordinates = coordinates_batched[0]
+        keypoint_scores = scores_batched[0]
         homogeneous = np.concatenate(
             [coordinates, np.ones((len(coordinates), 1), dtype=np.float32)], axis=-1
         )
@@ -835,7 +837,11 @@ def run(argv=None, box_provider: InstanceBoxProvider = None) -> int:
     predict_values = context["resolved"].nested_for("predict")
     source_value = args.source or predict_values.get("source")
     dataset_predict = source_value is None
+    # An explicit --split wins; otherwise honour predict.split from the project so the
+    # CLI and the GUI pick the same dataset instead of the CLI silently defaulting to auto.
     split_request = args.split
+    if split_request == "auto":
+        split_request = str(predict_values.get("split") or "auto")
     data_dataset = None
     topdown_dataset = None
     if head_name == "SimCCHead":

@@ -17,7 +17,6 @@ from animalposetracker.config import (
     display_path,
     field_for,
     fields,
-    find_by_legacy,
     missing_field_defaults,
     orphan_default_paths,
     runtime_defaults,
@@ -59,19 +58,6 @@ class RegistryShapeTests(unittest.TestCase):
         self.assertEqual(to_cli_name("batch_size"), "--batch-size")
         self.assertEqual(display_path(field_for("method", "predict", "pose_filter")),
                          "predict.pose_filter.method")
-
-    def test_legacy_spellings_point_back_at_their_fields(self):
-        for legacy, expected in {
-            "batch": "batch_size",
-            "imgsz": "image_size",
-            "val": "validation_enabled",
-            "kpt_line": "show_skeletons",
-            "prediction_confidence": "confidence",
-        }.items():
-            with self.subTest(legacy=legacy):
-                matches = find_by_legacy(legacy)
-                self.assertTrue(matches)
-                self.assertIn(expected, [field.key for field in matches])
 
     def test_type_acceptance_treats_bools_strictly(self):
         integer = field_for("epochs", "train", "models.training")

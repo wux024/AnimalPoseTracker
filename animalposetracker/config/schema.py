@@ -30,7 +30,6 @@ Terminology (mirrors the W0 concept dictionary, 2026-10-14):
 - ``views``: the configure forms the key appears in -- ``train`` / ``evaluate`` /
   ``infer`` / ``export``. The GUI's parameter trees are generated from these
   annotations; a key without views stays off the forms.
-- ``legacy``: spellings that appear in pre-refactor files or older CLI flags.
   NOT used for compatibility reads (old files are rejected); used to turn a
   stray old spelling into a helpful error message.
 """
@@ -51,7 +50,6 @@ __all__ = [
     "field_for",
     "to_cli_name",
     "display_path",
-    "find_by_legacy",
 ]
 
 
@@ -85,7 +83,6 @@ class Field:
     note: str
     apply: str = "build"
     visibility: str = "form"
-    legacy: Tuple[str, ...] = ()
     views: Tuple[str, ...] = ()
 
     def __post_init__(self) -> None:
@@ -119,10 +116,9 @@ def _f(
     note: str,
     apply: str = "build",
     visibility: str = "form",
-    legacy: Sequence[str] = (),
     views: Sequence[str] = (),
 ) -> Field:
-    return Field(key, scope, group, type, note, apply, visibility, tuple(legacy), tuple(views))
+    return Field(key, scope, group, type, note, apply, visibility, tuple(views))
 
 
 # ---------------------------------------------------------------------------
@@ -132,13 +128,13 @@ def _f(
 FIELDS: Tuple[Field, ...] = (
     _f("model", "train", "shared.runtime", str, "Model graph path (derived from the project layout, not persisted)", visibility="hidden", views=("train",)),
     _f("data", "train", "shared.runtime", str, "Dataset path (derived from the project layout, not persisted)", visibility="hidden", views=("train", "evaluate", "export")),
-    _f("num_workers", "train", "shared.runtime", int, "Data loading worker count", visibility="form", legacy=("workers",), views=("train", "evaluate")),
-    _f("time_hours", "train", "shared.runtime", float, "Training time cap in hours; overrides epochs when set", visibility="advanced", legacy=("time",), views=("train",)),
+    _f("num_workers", "train", "shared.runtime", int, "Data loading worker count", visibility="form", views=("train", "evaluate")),
+    _f("time_hours", "train", "shared.runtime", float, "Training time cap in hours; overrides epochs when set", visibility="advanced", views=("train",)),
     _f("cache", "train", "shared.runtime", (bool, str), "Data cache: false / true (ram) / ram / disk", visibility="form", views=("train",)),
     _f("fraction", "train", "shared.runtime", float, "Fraction of the training set to use", visibility="form", views=("train", "export")),
     _f("profile", "train", "shared.runtime", bool, "Per-stage timing profile", visibility="advanced", views=("train", "evaluate")),
     _f("plots", "train", "shared.runtime", bool, "Save training curve plots", visibility="form", views=("train", "evaluate")),
-    _f("validation_enabled", "train", "shared.runtime", bool, "Run validation during training", visibility="form", legacy=("val",), views=("train",)),
+    _f("validation_enabled", "train", "shared.runtime", bool, "Run validation during training", visibility="form", views=("train",)),
     _f("seed", "train", "shared.runtime", int, "Random seed; ViTPose projects start at 21", visibility="form", views=("train",)),
     _f("deterministic", "train", "shared.runtime", bool, "Deterministic algorithms", visibility="advanced"),
     _f("save", "train", "shared.runtime", bool, "Save checkpoints", visibility="form", views=("train", "infer")),
@@ -157,21 +153,21 @@ FIELDS: Tuple[Field, ...] = (
     _f("log_interval", "train", "models.training", int, "Log every N batches", visibility="advanced"),
     _f("best_metric", "train", "shared.training", str, "Best-checkpoint metric (COCO/AP or YOLO/AP)", visibility="advanced"),
     _f("best_metric_mode", "train", "shared.training", str, "Selection direction: max / min", visibility="advanced"),
-    _f("early_stopping_patience", "train", "shared.training", int, "Early-stopping patience in epochs", visibility="form", legacy=("patience",), views=("train",)),
+    _f("early_stopping_patience", "train", "shared.training", int, "Early-stopping patience in epochs", visibility="form", views=("train",)),
 
     # train -- shared.training
     _f("single_cls", "train", "shared.training", bool, "Train multi-class data as a single class", visibility="advanced", views=("evaluate",)),
-    _f("multi_scale", "train", "shared.training", bool, "Multi-scale jittering", visibility="advanced"),
+    _f("multi_scale", "train", "shared.training", float, "Multi-scale jitter half-width (0 disables; 0.2 means image_size * (1 +/- 0.2))", visibility="advanced"),
     _f("freeze", "train", "shared.training", (int, list), "Freeze the first n layers, or explicit layer indices", visibility="advanced"),
 
     # train -- models.training (the per-model recipe)
     _f("epochs", "train", "models.training", int, "Training epochs", visibility="form", views=("train",)),
-    _f("batch_size", "train", "models.training", int, "Training batch size ('auto' on the training CLI probes the largest batch that fits 60% of the GPU memory)", visibility="form", legacy=("batch",), views=("train", "evaluate", "infer", "export")),
-    _f("validation_batch_size", "train", "models.training", int, "Validation batch size", visibility="advanced", legacy=("val_batch",)),
-    _f("image_size", "train", "models.training", int, "Model input size (a model property; follows the model recipe)", visibility="form", legacy=("imgsz",), views=("train", "evaluate", "infer", "export")),
+    _f("batch_size", "train", "models.training", int, "Training batch size ('auto' on the training CLI probes the largest batch that fits 60% of the GPU memory)", visibility="form", views=("train", "evaluate", "infer", "export")),
+    _f("validation_batch_size", "train", "models.training", int, "Validation batch size", visibility="advanced"),
+    _f("image_size", "train", "models.training", int, "Model input size (a model property; follows the model recipe)", visibility="form", views=("train", "evaluate", "infer", "export")),
     _f("optimizer", "train", "models.training", str, "Optimizer (auto, or a concrete name)", visibility="form", views=("train",)),
-    _f("learning_rate", "train", "models.training", float, "Initial learning rate", visibility="form", legacy=("lr0",), views=("train",)),
-    _f("final_lr_factor", "train", "models.training", float, "Final learning-rate factor", visibility="form", legacy=("lrf",), views=("train",)),
+    _f("learning_rate", "train", "models.training", float, "Initial learning rate", visibility="form", views=("train",)),
+    _f("final_lr_factor", "train", "models.training", float, "Final learning-rate factor", visibility="form", views=("train",)),
     _f("momentum", "train", "models.training", float, "SGD momentum / Adam beta1", visibility="form", views=("train",)),
     _f("weight_decay", "train", "models.training", float, "Weight decay", visibility="form", views=("train",)),
     _f("warmup_epochs", "train", "models.training", float, "Warmup epochs", visibility="form", views=("train",)),
@@ -179,19 +175,19 @@ FIELDS: Tuple[Field, ...] = (
     _f("warmup_start_factor", "train", "models.training", float, "Warmup start learning-rate factor", visibility="advanced"),
     _f("warmup_momentum", "train", "models.training", float, "Warmup start momentum", visibility="advanced", views=("train",)),
     _f("warmup_bias_lr", "train", "models.training", float, "Warmup learning rate for the bias group", visibility="advanced", views=("train",)),
-    _f("nominal_batch_size", "train", "models.training", int, "Nominal batch size (used to scale the learning rate)", visibility="advanced", legacy=("nbs",), views=("train",)),
-    _f("cosine_schedule", "train", "models.training", bool, "Cosine learning-rate schedule", visibility="form", legacy=("cos_lr",), views=("train",)),
+    _f("nominal_batch_size", "train", "models.training", int, "Nominal batch size (used to scale the learning rate)", visibility="advanced", views=("train",)),
+    _f("cosine_schedule", "train", "models.training", bool, "Cosine learning-rate schedule", visibility="form", views=("train",)),
     _f("amp", "train", "models.training", bool, "Mixed-precision training", visibility="form", views=("train",)),
     _f("ema", "train", "models.training", bool, "Exponential moving average", visibility="form"),
     _f("close_mosaic", "train", "models.training", int, "Disable mosaic for the last N epochs", visibility="form", views=("train",)),
     _f("layer_decay_rate", "train", "models.training", float, "ViT layer decay rate", visibility="advanced"),
 
     # train -- models.loss
-    _f("box_loss_weight", "train", "models.loss", float, "Box regression loss weight", visibility="form", legacy=("box",), views=("train",)),
-    _f("class_loss_weight", "train", "models.loss", float, "Classification loss weight", visibility="form", legacy=("cls",), views=("train",)),
-    _f("distribution_loss_weight", "train", "models.loss", float, "DFL distribution loss weight", visibility="form", legacy=("dfl",), views=("train",)),
-    _f("keypoint_loss_weight", "train", "models.loss", float, "Keypoint loss weight", visibility="form", legacy=("pose",), views=("train",)),
-    _f("visibility_loss_weight", "train", "models.loss", float, "Visibility loss weight", visibility="form", legacy=("kobj",), views=("train",)),
+    _f("box_loss_weight", "train", "models.loss", float, "Box regression loss weight", visibility="form", views=("train",)),
+    _f("class_loss_weight", "train", "models.loss", float, "Classification loss weight", visibility="form", views=("train",)),
+    _f("distribution_loss_weight", "train", "models.loss", float, "DFL distribution loss weight", visibility="form", views=("train",)),
+    _f("keypoint_loss_weight", "train", "models.loss", float, "Keypoint loss weight", visibility="form", views=("train",)),
+    _f("visibility_loss_weight", "train", "models.loss", float, "Visibility loss weight", visibility="form", views=("train",)),
     _f("label_sigma", "train", "models.loss", float, "SimCC label Gaussian sigma", visibility="advanced"),
     _f("kl_beta", "train", "models.loss", float, "SimCC KL loss beta", visibility="advanced"),
 
@@ -201,7 +197,7 @@ FIELDS: Tuple[Field, ...] = (
     _f("hsv_v", "train", "models.augmentation", float, "Value augmentation gain", visibility="advanced"),
     _f("degrees", "train", "models.augmentation", float, "Rotation augmentation (+/- degrees)", visibility="advanced"),
     _f("translate", "train", "models.augmentation", float, "Translation augmentation fraction", visibility="advanced"),
-    _f("scale", "train", "models.augmentation", float, "Scale augmentation gain", visibility="advanced", legacy=("augment_scale",)),
+    _f("scale", "train", "models.augmentation", float, "Scale augmentation gain", visibility="advanced"),
     _f("shear", "train", "models.augmentation", float, "Shear augmentation (+/- degrees)", visibility="advanced"),
     _f("perspective", "train", "models.augmentation", float, "Perspective augmentation", visibility="advanced"),
     _f("flipud", "train", "models.augmentation", float, "Vertical flip probability", visibility="advanced"),
@@ -221,7 +217,7 @@ FIELDS: Tuple[Field, ...] = (
     _f("bbox_rotation_factor", "train", "models.augmentation", float, "Box rotation factor (degrees)", visibility="advanced"),
 
     # train -- models.validation
-    _f("confidence", "train", "models.validation", float, "Validation confidence threshold", visibility="advanced", legacy=("conf",), views=("evaluate",)),
+    _f("confidence", "train", "models.validation", float, "Validation confidence threshold", visibility="advanced", views=("evaluate",)),
     _f("iou", "train", "models.validation", float, "Validation NMS IoU", visibility="advanced", views=("evaluate",)),
     _f("max_det", "train", "models.validation", int, "Validation max detections per image", visibility="advanced", views=("evaluate",)),
     _f("agnostic_nms", "train", "models.validation", bool, "Validation class-agnostic NMS", visibility="advanced", views=("evaluate",)),
@@ -250,19 +246,19 @@ FIELDS: Tuple[Field, ...] = (
     # ------------------------------------------------------------------
     _f("source", "predict", "", str, "Default input source (image / video / directory / glob)", visibility="form", views=("infer",)),
     _f("split", "predict", "", str, "Dataset split used when no source is given: auto / train / val / test", visibility="advanced"),
-    _f("confidence", "predict", "", float, "Prediction confidence threshold", apply="live", visibility="form", legacy=("prediction_confidence", "conf"), views=("infer",)),
-    _f("iou", "predict", "", float, "Prediction NMS IoU", apply="live", visibility="form", legacy=("prediction_iou",), views=("infer",)),
+    _f("confidence", "predict", "", float, "Prediction confidence threshold", apply="live", visibility="form", views=("infer",)),
+    _f("iou", "predict", "", float, "Prediction NMS IoU", apply="live", visibility="form", views=("infer",)),
     _f("max_det", "predict", "", int, "Max detections per image", apply="live", visibility="form", views=("infer",)),
     _f("agnostic_nms", "predict", "", bool, "Class-agnostic NMS", apply="live", visibility="form", views=("infer",)),
-    _f("keypoint_confidence", "predict", "", float, "Keypoint draw/filter threshold", apply="live", visibility="form", legacy=("keypoint_score_threshold",)),
+    _f("keypoint_confidence", "predict", "", float, "Keypoint draw/filter threshold", apply="live", visibility="form"),
     _f("dnn", "predict", "", bool, "Infer through the OpenCV DNN backend", visibility="advanced"),
     _f("show_labels", "predict", "", bool, "Draw class labels", apply="live", visibility="form"),
     _f("show_conf", "predict", "", bool, "Draw confidence", apply="live", visibility="form", views=("infer",)),
     _f("show_boxes", "predict", "", bool, "Draw detection boxes", apply="live", visibility="form", views=("infer",)),
     _f("show_keypoints", "predict", "", bool, "Draw keypoints", apply="live", visibility="form"),
-    _f("show_skeletons", "predict", "", bool, "Draw skeleton lines", apply="live", visibility="form", legacy=("kpt_line",), views=("infer",)),
+    _f("show_skeletons", "predict", "", bool, "Draw skeleton lines", apply="live", visibility="form", views=("infer",)),
     _f("line_width", "predict", "", int, "Box/skeleton line width", apply="live", visibility="form", views=("infer",)),
-    _f("point_radius", "predict", "", int, "Keypoint radius", apply="live", visibility="form", legacy=("kpt_radius",), views=("infer",)),
+    _f("point_radius", "predict", "", int, "Keypoint radius", apply="live", visibility="form", views=("infer",)),
     _f("enabled", "predict", "tracking", bool, "Cross-frame tracking switch", visibility="form", views=("infer",)),
     _f("algorithm", "predict", "tracking", str, "Tracking algorithm (six options, e.g. bytetrack)", visibility="form", views=("infer",)),
     _f("method", "predict", "pose_filter", str, "Temporal smoothing method: none / median / savgol", apply="run_end", visibility="form", views=("infer",)),
@@ -321,7 +317,3 @@ def display_path(field: Field) -> str:
         return f"{field.scope}.{field.group}.{field.key}"
     return f"{field.scope}.{field.key}"
 
-
-def find_by_legacy(name: str) -> Tuple[Field, ...]:
-    """Fields whose legacy spellings include ``name`` (for error hints)."""
-    return tuple(field for field in FIELDS if name in field.legacy)

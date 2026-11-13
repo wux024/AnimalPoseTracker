@@ -101,17 +101,6 @@ class YOLOPoseHead(nn.Module):
 
     def __init__(self, nc=80, kpt_shape=(17, 3), ch=(), rle=False):
         super().__init__()
-        if not self.legacy:
-            # Upstream cv3 has two variants: the non-legacy one combines DWConv with a 1x1 conv,
-            # which produces different parameter names and shapes, so weights cannot be shared.
-            # Fail loudly here instead of silently building a mismatched structure that would only
-            # blow up later at load_state_dict time.
-            raise NotImplementedError(
-                "Non-legacy cv3 structure is not implemented (all checkpoints in this project are "
-                "legacy: 3 plain conv layers). To support it, port the else branch from the "
-                "training-side nn/modules/head.py."
-            )
-
         self.nc = nc  # number of classes
         self.nl = len(ch)  # number of detection layers
         self.reg_max = 16  # DFL channels

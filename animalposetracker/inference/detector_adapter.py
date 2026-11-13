@@ -36,6 +36,7 @@ import numpy as np
 
 from animalposetracker.inference.stream_inference import DetectorBox
 from animalposetracker.postprocessing.nms_params import DEPLOY_DETECTOR_CONF
+from animalposetracker.preprocessing.letterbox_core import PAD_VALUE
 
 _COORD_MODES = ("normalized", "pixels")
 _PREPROCESS_MODES = ("stretch", "letterbox")
@@ -112,7 +113,7 @@ class OnnxDetectorAdapter:
         if self.preprocess_mode == "letterbox":
             scale = min(self.input_size / width, self.input_size / height)
             new_w, new_h = round(width * scale), round(height * scale)
-            canvas = np.full((self.input_size, self.input_size, 3), 114, dtype=np.uint8)
+            canvas = np.full((self.input_size, self.input_size, 3), PAD_VALUE, dtype=np.uint8)
             pad_x, pad_y = (self.input_size - new_w) // 2, (self.input_size - new_h) // 2
             resized = cv2.resize(frame, (new_w, new_h))
             canvas[pad_y : pad_y + new_h, pad_x : pad_x + new_w] = resized

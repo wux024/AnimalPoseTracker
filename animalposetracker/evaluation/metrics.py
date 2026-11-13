@@ -21,135 +21,11 @@ IOU_THRESHOLDS = torch.linspace(0.50, 0.95, 10)
 OKS_BBOX_AREA_FACTOR = 0.53
 
 
-def box_iou(boxes1: torch.Tensor, boxes2: torch.Tensor, eps: float = 1e-7) -> torch.Tensor:
-    """Pairwise IoU for xyxy boxes, returning a ``(len(boxes1), len(boxes2))`` matrix."""
-    if not boxes1.numel() or not boxes2.numel():
-        return boxes1.new_zeros((boxes1.shape[0], boxes2.shape[0]))
-    top_left = torch.maximum(boxes1[:, None, :2], boxes2[None, :, :2])
-    bottom_right = torch.minimum(boxes1[:, None, 2:], boxes2[None, :, 2:])
-    intersection = (bottom_right - top_left).clamp_(min=0).prod(dim=-1)
-    area1 = (boxes1[:, 2:] - boxes1[:, :2]).clamp_(min=0).prod(dim=-1)
-    area2 = (boxes2[:, 2:] - boxes2[:, :2]).clamp_(min=0).prod(dim=-1)
-    return intersection / (area1[:, None] + area2[None, :] - intersection + eps)
 
-def keypoint_oks(
-    ground_truth: torch.Tensor,
-    prediction: torch.Tensor,
-    area: torch.Tensor,
-    kpt_oks_sigmas: Sequence[float],
-    eps: float = 1e-7,
-) -> torch.Tensor:
-    """Pairwise OKS over the visible GT keypoints, normalised by the supplied object area."""
-    if not ground_truth.numel() or not prediction.numel():
-        return ground_truth.new_zeros((ground_truth.shape[0], prediction.shape[0]))
-    squared_distance = (
-        ground_truth[:, None, :, 0] - prediction[None, :, :, 0]
-    ).square() + (
-        ground_truth[:, None, :, 1] - prediction[None, :, :, 1]
-    ).square()
-    visible = ground_truth[..., 2] != 0
-    sigma = torch.as_tensor(
-        kpt_oks_sigmas, device=ground_truth.device, dtype=ground_truth.dtype
-    )
-    error = squared_distance / (
-        (2.0 * sigma).square()[None, None, :] * (area[:, None, None] + eps) * 2.0
-    )
-    return (torch.exp(-error) * visible[:, None, :]).sum(dim=-1) / (
-        visible.sum(dim=-1, keepdim=True) + eps
-    )
 
-def match_predictions(
-    similarity: torch.Tensor,
-    prediction_classes: torch.Tensor,
-    target_classes: torch.Tensor,
-    thresholds: torch.Tensor = IOU_THRESHOLDS,
-) -> torch.Tensor:
-    """Greedily match same-class predictions and targets at each metric threshold."""
-    correct = np.zeros((prediction_classes.shape[0], thresholds.numel()), dtype=bool)
-    if not prediction_classes.numel() or not target_classes.numel():
-        return torch.from_numpy(correct)
 
-    overlaps = similarity.detach().float().cpu().numpy().copy()
-    pred_cls = prediction_classes.detach().cpu().numpy()
-    target_cls = target_classes.detach().cpu().numpy()
-    overlaps *= target_cls[:, None] == pred_cls[None, :]
-    for threshold_index, threshold in enumerate(thresholds.tolist()):
-        matches = np.array(np.nonzero(overlaps >= threshold)).T
-        if matches.shape[0] > 1:
-            matches = matches[overlaps[matches[:, 0], matches[:, 1]].argsort()[::-1]]
-            matches = matches[np.unique(matches[:, 1], return_index=True)[1]]
-            matches = matches[np.unique(matches[:, 0], return_index=True)[1]]
-        if matches.shape[0]:
-            correct[matches[:, 1].astype(int), threshold_index] = True
-    return torch.from_numpy(correct)
 
-def _compute_ap(recall: np.ndarray, precision: np.ndarray) -> float:
-    """Use the same 101-point AP integration as Ultralytics main."""
-    return _yolo_compute_ap(recall, precision)
 
-def _smooth(values: np.ndarray, fraction: float = 0.1) -> np.ndarray:
-    """Smooth a curve with the moving-average window used to select max-F1 P/R."""
-    window = round(values.size * fraction * 2) // 2 + 1
-    padding = np.ones(window // 2)
-    padded = np.concatenate((padding * values[0], values, padding * values[-1]))
-    return np.convolve(padded, np.ones(window) / window, mode="valid")
-
-def summarize_ap(
-    true_positives: Sequence[np.ndarray],
-    confidences: Sequence[np.ndarray],
-    prediction_classes: Sequence[np.ndarray],
-    target_classes: Sequence[np.ndarray],
-) -> Tuple[float, float, float, float]:
-    """Return mean precision, recall, AP50 and AP50-95 as in the reference metrics."""
-    tp = np.concatenate(true_positives, axis=0) if true_positives else np.zeros((0, 10), dtype=bool)
-    conf = np.concatenate(confidences) if confidences else np.zeros((0,), dtype=np.float32)
-    pred_cls = np.concatenate(prediction_classes) if prediction_classes else np.zeros((0,), dtype=np.int64)
-    target_cls = np.concatenate(target_classes) if target_classes else np.zeros((0,), dtype=np.int64)
-    classes, target_counts = np.unique(target_cls, return_counts=True)
-    if classes.size == 0:
-        return 0.0, 0.0, 0.0, 0.0
-
-    order = np.argsort(-conf)
-    tp, conf, pred_cls = tp[order], conf[order], pred_cls[order]
-    x = np.linspace(0.0, 1.0, 1000)
-    precision_curves = np.zeros((classes.size, x.size), dtype=np.float64)
-    recall_curves = np.zeros_like(precision_curves)
-    ap = np.zeros((classes.size, 10), dtype=np.float64)
-
-    for class_index, class_id in enumerate(classes):
-        selected = pred_cls == class_id
-        number_of_labels = target_counts[class_index]
-        if not selected.any() or number_of_labels == 0:
-            continue
-        class_confidence = conf[selected]
-        class_tp = tp[selected].astype(np.float64)
-        false_positives = (1.0 - class_tp).cumsum(axis=0)
-        true_positives_cumulative = class_tp.cumsum(axis=0)
-        recall = true_positives_cumulative / (number_of_labels + 1e-16)
-        precision = true_positives_cumulative / (
-            true_positives_cumulative + false_positives
-        )
-        recall_curves[class_index] = np.interp(
-            -x, -class_confidence, recall[:, 0], left=0.0
-        )
-        precision_curves[class_index] = np.interp(
-            -x, -class_confidence, precision[:, 0], left=1.0
-        )
-        for threshold_index in range(10):
-            ap[class_index, threshold_index] = _compute_ap(
-                recall[:, threshold_index], precision[:, threshold_index]
-            )
-
-    f1_curve = 2.0 * precision_curves * recall_curves / (
-        precision_curves + recall_curves + 1e-16
-    )
-    best_index = int(_smooth(f1_curve.mean(axis=0)).argmax())
-    return (
-        float(precision_curves[:, best_index].mean()),
-        float(recall_curves[:, best_index].mean()),
-        float(ap[:, 0].mean()),
-        float(ap.mean()),
-    )
 
 def _coco_keypoint_api():
     """Return pycocotools classes used for standard COCO keypoint evaluation."""
@@ -281,6 +157,14 @@ def _yolo_match_predictions(
             if threshold_index == 0:
                 matches_at_50 = matches
     return correct, matches_at_50
+
+
+def _smooth(values: np.ndarray, fraction: float = 0.1) -> np.ndarray:
+    """Smooth a curve with the moving-average window used to select max-F1 P/R."""
+    window = round(values.size * fraction * 2) // 2 + 1
+    padding = np.ones(window // 2)
+    padded = np.concatenate((padding * values[0], values, padding * values[-1]))
+    return np.convolve(padded, np.ones(window) / window, mode="valid")
 
 
 def _yolo_compute_ap(recall: np.ndarray, precision: np.ndarray) -> float:
@@ -499,7 +383,7 @@ def evaluate_coco_keypoints(
         raise ValueError("Keypoint AP evaluation needs one finite positive OKS sigma per keypoint")
     if ap_metric == "YOLO/AP":
         coco_dataset = coco_gt.dataset if hasattr(coco_gt, "dataset") else coco_gt
-        metrics, matched_pairs = _yolo_pose_ap(
+        result = _yolo_pose_ap(
             coco_dataset,
             detections,
             sigma_values,
@@ -510,7 +394,12 @@ def evaluate_coco_keypoints(
             int(yolo_max_detections),
             return_matches,
         )
-        return (metrics, matched_pairs) if return_matches else metrics
+        # _yolo_pose_ap returns a bare dict when matches were not requested; unpacking it
+        # unconditionally made every val() run without matches fail.
+        if return_matches:
+            metrics, matched_pairs = result
+            return metrics, matched_pairs
+        return result
 
     COCO, COCOeval = _coco_keypoint_api()
     with contextlib.redirect_stdout(io.StringIO()):
@@ -610,12 +499,21 @@ def keypoint_error_metrics(
     auc_norm_factor: float = 30.0,
     auc_thresholds: int = 20,
 ) -> Dict[str, float]:
-    """Compute MMPose-style PCK, AUC and EPE from per-instance point errors."""
+    """Compute MMPose-style PCK, AUC and distance statistics from per-instance point errors.
+
+    ``EPE`` is the mean point distance (SLEAP's ``dist.avg``), ``EPE-pXX`` are its
+    percentiles (SLEAP keeps p50/p75/p90/p95/p99), and ``RMSE`` is the root mean square
+    so the numbers line up with DeepLabCut's metric of the same name.
+    """
     error_values = np.asarray(errors, dtype=np.float32)
     visible = np.asarray(visible, dtype=bool)
     bbox_sizes = np.maximum(np.asarray(bbox_sizes, dtype=np.float32).reshape(-1), 1.0)
     if error_values.size == 0 or visible.size == 0:
-        return {"PCK": 0.0, "AUC": 0.0, "EPE": 0.0}
+        return {
+            "PCK": 0.0, "AUC": 0.0, "EPE": 0.0, "RMSE": 0.0,
+            "EPE-p50": 0.0, "EPE-p75": 0.0, "EPE-p90": 0.0,
+            "EPE-p95": 0.0, "EPE-p99": 0.0,
+        }
     if error_values.shape != visible.shape or error_values.shape[0] != bbox_sizes.shape[0]:
         raise ValueError("Keypoint errors, visibility masks and bbox sizes must align")
     normalized = error_values / bbox_sizes[:, None]
@@ -639,10 +537,22 @@ def keypoint_error_metrics(
                     float((normalized_for_auc[valid, keypoint_index] < threshold).mean())
                 )
         auc_values.append(float(np.mean(per_keypoint)) if per_keypoint else 0.0)
+    distances = error_values[visible]
+    if distances.size:
+        rmse = float(np.sqrt(np.mean(distances.astype(np.float64) ** 2)))
+        percentiles = {
+            f"EPE-p{level}": float(np.percentile(distances, level))
+            for level in (50, 75, 90, 95, 99)
+        }
+    else:
+        rmse = 0.0
+        percentiles = {f"EPE-p{level}": 0.0 for level in (50, 75, 90, 95, 99)}
     return {
         "PCK": float(np.mean(per_keypoint_pck)) if per_keypoint_pck else 0.0,
         "AUC": float(np.mean(auc_values)),
-        "EPE": float(error_values[visible].mean()) if visible.any() else 0.0,
+        "EPE": float(distances.mean()) if distances.size else 0.0,
+        "RMSE": rmse,
+        **percentiles,
     }
 
 def keypoint_error_metrics_from_coco_matches(
@@ -665,7 +575,11 @@ def keypoint_error_metrics_from_coco_matches(
         bbox = ground_truth.get("bbox", (0.0, 0.0, 1.0, 1.0))
         bbox_sizes.append(max(float(bbox[2]), float(bbox[3]), 1.0))
     if not errors:
-        return {"PCK": 0.0, "AUC": 0.0, "EPE": 0.0}
+        return {
+            "PCK": 0.0, "AUC": 0.0, "EPE": 0.0, "RMSE": 0.0,
+            "EPE-p50": 0.0, "EPE-p75": 0.0, "EPE-p90": 0.0,
+            "EPE-p95": 0.0, "EPE-p99": 0.0,
+        }
     return keypoint_error_metrics(
         np.stack(errors),
         np.stack(visibility),
@@ -675,118 +589,13 @@ def keypoint_error_metrics_from_coco_matches(
         auc_thresholds=auc_thresholds,
     )
 
-def update_confusion_matrix(
-    matrix: np.ndarray,
-    box_similarity: torch.Tensor,
-    prediction_classes: torch.Tensor,
-    target_classes: torch.Tensor,
-    threshold: float = 0.5,
-) -> None:
-    """Accumulate class-agnostic IoU matches; the final row/column is background."""
-    number_of_classes = matrix.shape[0] - 1
-    pred_cls = prediction_classes.detach().cpu().numpy().astype(np.int64, copy=False)
-    target_cls = target_classes.detach().cpu().numpy().astype(np.int64, copy=False)
-    overlaps = box_similarity.detach().float().cpu().numpy()
-    matches = np.array(np.nonzero(overlaps >= threshold)).T
-    if matches.shape[0] > 1:
-        matches = matches[overlaps[matches[:, 0], matches[:, 1]].argsort()[::-1]]
-        matches = matches[np.unique(matches[:, 1], return_index=True)[1]]
-        matches = matches[np.unique(matches[:, 0], return_index=True)[1]]
-    matched_targets = set()
-    matched_predictions = set()
-    for target_index, prediction_index in matches:
-        target_class = int(target_cls[target_index])
-        prediction_class = int(pred_cls[prediction_index])
-        if 0 <= target_class < number_of_classes and 0 <= prediction_class < number_of_classes:
-            matrix[target_class, prediction_class] += 1
-        matched_targets.add(int(target_index))
-        matched_predictions.add(int(prediction_index))
-    for target_index, target_class in enumerate(target_cls):
-        if target_index not in matched_targets and 0 <= int(target_class) < number_of_classes:
-            matrix[int(target_class), number_of_classes] += 1
-    for prediction_index, prediction_class in enumerate(pred_cls):
-        if prediction_index not in matched_predictions and 0 <= int(prediction_class) < number_of_classes:
-            matrix[number_of_classes, int(prediction_class)] += 1
 
-def plot_precision_recall(
-    true_positives: Sequence[np.ndarray],
-    confidences: Sequence[np.ndarray],
-    prediction_classes: Sequence[np.ndarray],
-    target_classes: Sequence[np.ndarray],
-    destination,
-    title: str,
-    class_names: Optional[Sequence[str]] = None,
-) -> None:
-    """Write per-class AP50 precision-recall curves."""
-    tp = np.concatenate(true_positives, axis=0) if true_positives else np.zeros((0, 10), dtype=bool)
-    conf = np.concatenate(confidences) if confidences else np.zeros((0,), dtype=np.float32)
-    pred_cls = np.concatenate(prediction_classes) if prediction_classes else np.zeros((0,), dtype=np.int64)
-    target_cls = np.concatenate(target_classes) if target_classes else np.zeros((0,), dtype=np.int64)
-    classes, counts = np.unique(target_cls, return_counts=True)
-    import matplotlib
 
-    matplotlib.use("Agg")
-    import matplotlib.pyplot as plt
-
-    figure, axis = plt.subplots(figsize=(7, 6), constrained_layout=True)
-    order = np.argsort(-conf)
-    tp, conf, pred_cls = tp[order], conf[order], pred_cls[order]
-    for class_id, count in zip(classes, counts):
-        selected = pred_cls == class_id
-        if not selected.any():
-            continue
-        class_tp = tp[selected, 0].astype(np.float64)
-        cumulative_tp = class_tp.cumsum()
-        recall = cumulative_tp / max(int(count), 1)
-        precision = cumulative_tp / (np.arange(class_tp.size) + 1)
-        precision = np.flip(np.maximum.accumulate(np.flip(precision)))
-        name = (
-            str(class_names[int(class_id)])
-            if class_names is not None and int(class_id) < len(class_names)
-            else str(int(class_id))
-        )
-        axis.plot(recall, precision, label=name)
-    axis.set(xlim=(0, 1), ylim=(0, 1), xlabel="Recall", ylabel="Precision", title=title)
-    axis.grid(True, alpha=0.25)
-    if classes.size:
-        axis.legend(fontsize="small")
-    figure.savefig(destination, dpi=150)
-    plt.close(figure)
-
-def plot_confusion_matrix(matrix: np.ndarray, class_names: Sequence[str], destination) -> None:
-    """Write a row-normalized class confusion matrix with a background category."""
-    import matplotlib
-
-    matplotlib.use("Agg")
-    import matplotlib.pyplot as plt
-
-    names = [str(name) for name in class_names] + ["background"]
-    row_sum = matrix.sum(axis=1, keepdims=True)
-    normalized = matrix / np.maximum(row_sum, 1)
-    figure, axis = plt.subplots(figsize=(max(7, len(names) * 0.8), max(6, len(names) * 0.7)), constrained_layout=True)
-    image = axis.imshow(normalized, interpolation="nearest", cmap="Blues", vmin=0, vmax=1)
-    figure.colorbar(image, ax=axis, fraction=0.046, pad=0.04)
-    axis.set(
-        xticks=np.arange(len(names)),
-        yticks=np.arange(len(names)),
-        xticklabels=names,
-        yticklabels=names,
-        xlabel="Predicted class",
-        ylabel="True class",
-        title="Validation confusion matrix",
-    )
-    plt.setp(axis.get_xticklabels(), rotation=45, ha="right", rotation_mode="anchor")
-    for row in range(normalized.shape[0]):
-        for column in range(normalized.shape[1]):
-            value = normalized[row, column]
-            axis.text(column, row, f"{value:.2f}", ha="center", va="center", color="white" if value > 0.5 else "black", fontsize=8)
-    figure.savefig(destination, dpi=150)
-    plt.close(figure)
 
 __all__ = [
-    "IOU_THRESHOLDS", "box_iou", "build_coco_ground_truth",
+    "IOU_THRESHOLDS", "build_coco_ground_truth",
     "evaluate_coco_keypoints", "keypoint_error_metrics",
-    "keypoint_error_metrics_from_coco_matches", "keypoint_oks",
-    "match_predictions", "plot_confusion_matrix", "plot_precision_recall",
-    "summarize_ap", "update_confusion_matrix",
+    "keypoint_error_metrics_from_coco_matches", 
+    
+    
 ]

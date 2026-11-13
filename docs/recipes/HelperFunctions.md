@@ -54,7 +54,7 @@ both work; keyword overrides win over the mapping.
 | `track_frame_predictions(detections, tracker, frame_index, frame=None, class_names=None)` | one frame through a tracker, returns detections with `track_id` |
 | `filter_tracked_video_records(frame_records, method="median", window_length=5, polyorder=2, confidence_threshold=None, max_gap=0)` | smooth each track over a recorded sequence |
 | `filter_pose_2d(...)` / `filter_pose_3d(...)` | the same smoothers for plain 2D/3D arrays |
-| `decode_pose_outputs(...)` | the decoder training, validation and deployment share |
+| `decode_pose_outputs(...)` | deployment decoder; validation and prediction share `simcc_argmax` for the SimCC argmax step |
 
 `decode_pose_outputs` is the contract that keeps a metric honest: a number produced by a
 separate decoder no longer describes what ships.

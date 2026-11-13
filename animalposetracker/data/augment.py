@@ -6,6 +6,7 @@ from typing import Callable, Dict, Optional, Sequence
 
 import cv2
 import numpy as np
+from animalposetracker.preprocessing.letterbox_core import PAD_VALUE
 
 
 def _box_xywh_to_xyxy(boxes: np.ndarray, size: int) -> np.ndarray:
@@ -146,7 +147,7 @@ class PoseAugment:
         # (0.5s, 1.5s) kept all four tiles inside and halved the augmentation strength.
         center_x = int(random.uniform(-size * 0.5, size * 1.5))
         center_y = int(random.uniform(-size * 0.5, size * 1.5))
-        canvas = np.full((size * 2, size * 2, 3), 114, dtype=np.uint8)
+        canvas = np.full((size * 2, size * 2, 3), PAD_VALUE, dtype=np.uint8)
         all_classes, all_boxes, all_keypoints, paths = [], [], [], []
         for index, sample in enumerate(samples):
             height, width = sample["image"].shape[:2]
@@ -227,9 +228,9 @@ class PoseAugment:
         translate[1, 2] = random.uniform(0.5 - float(self.settings.get("translate", 0.0)), 0.5 + float(self.settings.get("translate", 0.0))) * size
         matrix = translate @ shear @ rotation @ perspective @ center
         if float(self.settings.get("perspective", 0.0)):
-            image = cv2.warpPerspective(image, matrix, dsize=(size, size), borderValue=(114, 114, 114))
+            image = cv2.warpPerspective(image, matrix, dsize=(size, size), borderValue=(PAD_VALUE, PAD_VALUE, PAD_VALUE))
         else:
-            image = cv2.warpAffine(image, matrix[:2], dsize=(size, size), borderValue=(114, 114, 114))
+            image = cv2.warpAffine(image, matrix[:2], dsize=(size, size), borderValue=(PAD_VALUE, PAD_VALUE, PAD_VALUE))
         if not boxes.size:
             return image, boxes.reshape(0, 4), keypoints, np.zeros((0,), dtype=bool)
 

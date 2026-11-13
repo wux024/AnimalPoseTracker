@@ -39,7 +39,6 @@ from animalposetracker.config.schema import (
     display_path,
     field_for,
     fields,
-    find_by_legacy,
     to_cli_name,
 )
 from animalposetracker.config.writer import write_scope
@@ -56,7 +55,6 @@ __all__ = [
     "field_for",
     "to_cli_name",
     "display_path",
-    "find_by_legacy",
     # defaults
     "RUNTIME_DEFAULTS_PATH",
     "runtime_defaults",

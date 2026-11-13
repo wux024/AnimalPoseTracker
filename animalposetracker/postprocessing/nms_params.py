@@ -27,7 +27,6 @@ PREDICT_NMS_MAX_DET = 300
 DEPLOY_NMS_CONF = 0.25
 DEPLOY_NMS_IOU = 0.45
 DEPLOY_NMS_AGNOSTIC = True
-DEPLOY_NMS_MAX_DET = 300
 
 # Default confidence of the second-stage detector (the inferencer's top-down stream).
 DEPLOY_DETECTOR_CONF = 0.5
@@ -44,6 +43,5 @@ __all__ = [
     "DEPLOY_NMS_CONF",
     "DEPLOY_NMS_IOU",
     "DEPLOY_NMS_AGNOSTIC",
-    "DEPLOY_NMS_MAX_DET",
     "DEPLOY_DETECTOR_CONF",
 ]

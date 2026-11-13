@@ -8,6 +8,7 @@ from pathlib import Path
 from typing import Any, Dict
 
 import numpy as np
+from animalposetracker.preprocessing.letterbox_core import PAD_VALUE
 
 
 def _require(module_name: str, pip_name: str = None):
@@ -162,7 +163,7 @@ def _representative_dataset(context, metadata, values, sample_count=100):
         resized_width = max(1, int(round(source_width * scale)))
         resized_height = max(1, int(round(source_height * scale)))
         resized = cv2.resize(image, (resized_width, resized_height), interpolation=cv2.INTER_LINEAR)
-        canvas = np.full((height, width, 3), 114, dtype=np.uint8)
+        canvas = np.full((height, width, 3), PAD_VALUE, dtype=np.uint8)
         left, top = (width - resized_width) // 2, (height - resized_height) // 2
         canvas[top:top + resized_height, left:left + resized_width] = resized
         rgb = cv2.cvtColor(canvas, cv2.COLOR_BGR2RGB).astype(np.float32) / 255.0

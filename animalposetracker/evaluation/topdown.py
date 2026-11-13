@@ -4,6 +4,8 @@ import warnings
 from typing import Optional, Sequence, Tuple
 
 import numpy as np
+
+from animalposetracker.postprocessing.simcc_decode import simcc_argmax
 import torch
 from tqdm import tqdm
 
@@ -98,15 +100,7 @@ class SimCCPoseValidator:
                     pred_x = (pred_x + flipped_x) * 0.5
                     pred_y = (pred_y + flipped_y) * 0.5
 
-                max_x, coords_x = pred_x.max(dim=-1)
-                max_y, coords_y = pred_y.max(dim=-1)
-                keypoint_scores = torch.minimum(max_x, max_y)
-                crop_coords = torch.stack((coords_x, coords_y), dim=-1).float()
-                crop_coords /= self.split_ratio
-                invalid = keypoint_scores <= 0
-                crop_coords[invalid] = -1.0 / self.split_ratio
-                crop_coords = crop_coords.detach().cpu().numpy()
-                keypoint_scores = keypoint_scores.detach().cpu().numpy()
+                crop_coords, keypoint_scores = simcc_argmax(pred_x, pred_y, self.split_ratio)
                 inverse = targets["warp_inverse"].numpy()
                 homogeneous = np.concatenate(
                     [crop_coords, np.ones((*crop_coords.shape[:2], 1), dtype=np.float32)], axis=-1

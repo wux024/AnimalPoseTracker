@@ -19,10 +19,6 @@ from animalposetracker.artifacts import (
     EXPORT_FORMATS, PREDICT_FORMATS, detect_artifact_format, read_artifact_metadata,
 )
 
-from animalposetracker.artifacts import (
-    EXPORT_FORMATS, PREDICT_FORMATS, detect_artifact_format, read_artifact_metadata,
-)
-
 def _ordered_outputs(outputs: Iterable[Any], names: Optional[List[str]] = None):
     if isinstance(outputs, dict):
         if names:

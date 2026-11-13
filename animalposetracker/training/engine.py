@@ -687,9 +687,9 @@ class Trainer:
                     )
                     final_metrics.update({f"val_{key}": value for key, value in validation_metrics.items()})
 
-                    monitored = final_metrics.get(self.config.best_metric)
-                    if monitored is None:
-                        monitored = validation_metrics.get(self.config.best_metric)
+                    # final_metrics keys are prefixed (train_* / val_*), so only the
+                    # validation lookup can ever match the bare metric name.
+                    monitored = validation_metrics.get(self.config.best_metric)
                     if monitored is None:
                         raise KeyError(
                             f"best_metric '{self.config.best_metric}' was not returned by validation"

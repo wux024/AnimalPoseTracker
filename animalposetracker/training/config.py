@@ -75,9 +75,9 @@ class TrainingConfig:
     validation_confidence: float = TRAINING_NMS_CONF
     validation_iou: float = TRAINING_NMS_IOU
     max_detections: int = TRAINING_NMS_MAX_DET
-    oks_area_mode: str = "annotation"
+    oks_area_mode: str = "bbox"
     agnostic_nms: bool = TRAINING_NMS_AGNOSTIC
-    best_metric: str = "COCO/AP"
+    best_metric: str = "YOLO/AP"
     best_metric_mode: str = "max"
     early_stopping_patience: int = 300
     save_period: int = 0
@@ -347,12 +347,12 @@ class TrainingConfig:
             ),
             "validation_iou": float(values.get("iou", 0.7)),
             "max_detections": int(values.get("max_det", 300)),
-            "oks_area_mode": values.get("oks_area_mode", "annotation"),
+            "oks_area_mode": values.get("oks_area_mode", "bbox"),
             "agnostic_nms": values.get("agnostic_nms", False),
-            "best_metric": values.get("best_metric", "COCO/AP"),
+            "best_metric": values.get("best_metric", "YOLO/AP"),
             "best_metric_mode": values.get(
                 "best_metric_mode",
-                "min" if values.get("best_metric", "COCO/AP") in {"loss", "val_loss"} else "max",
+                "min" if values.get("best_metric", "YOLO/AP") in {"loss", "val_loss"} else "max",
             ),
             "early_stopping_patience": values.get(
                 "early_stopping_patience", values.get("patience", 300)
@@ -385,22 +385,6 @@ class TrainingConfig:
             "close_mosaic": int(values.get("close_mosaic", 10)),
         }
         return cls(**known)
-
-    @classmethod
-    def from_yaml(
-        cls,
-        path: PathLike,
-        project_dir: Optional[PathLike] = None,
-    ) -> "TrainingConfig":
-        """Load a YAML configuration without changing the source project file."""
-        import yaml
-
-        config_path = Path(path).expanduser().resolve()
-        with config_path.open("r", encoding="utf-8") as stream:
-            values = yaml.safe_load(stream) or {}
-        if not isinstance(values, dict):
-            raise ValueError(f"Training configuration must be a YAML mapping: {config_path}")
-        return cls.from_mapping(values, project_dir=project_dir or config_path.parent.parent)
 
     def to_dict(self) -> Dict[str, Any]:
         """Return a serialization-friendly copy of this configuration."""

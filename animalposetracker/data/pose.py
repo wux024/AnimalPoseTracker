@@ -20,6 +20,13 @@ from torch.utils.data.distributed import DistributedSampler
 
 from .augment import PoseAugment
 from .coco import annotation_source_for_split, load_coco_pose_index
+from animalposetracker.preprocessing.letterbox import letterbox_image
+from animalposetracker.preprocessing.letterbox_core import (
+    PAD_VALUE,
+    letterbox_padding,
+    letterbox_resized_size,
+    letterbox_scale,
+)
 
 
 IMAGE_SUFFIXES = {".bmp", ".jpeg", ".jpg", ".png", ".tif", ".tiff", ".webp"}
@@ -110,20 +117,8 @@ def _label_path(image_path: Path) -> Path:
 def _letterbox(
     image: np.ndarray, size: int, scaleup: bool = False
 ) -> Tuple[np.ndarray, float, float, float]:
-    height, width = image.shape[:2]
-    scale = min(size / width, size / height)
-    if not scaleup:
-        # Ultralytics never upscales during training or validation: a 300x200 source
-        # stays 300x200 and is padded, instead of being stretched to 640 and losing
-        # the scale prior the network learned.
-        scale = min(scale, 1.0)
-    resized_width = max(1, int(round(width * scale)))
-    resized_height = max(1, int(round(height * scale)))
-    resized = cv2.resize(image, (resized_width, resized_height), interpolation=cv2.INTER_LINEAR)
-    left = (size - resized_width) // 2
-    top = (size - resized_height) // 2
-    canvas = np.full((size, size, 3), 114, dtype=np.uint8)
-    canvas[top:top + resized_height, left:left + resized_width] = resized
+    """Square letterbox; shares its geometry with the offline preprocessing path."""
+    canvas, scale, left, top = letterbox_image(image, size, size, scaleup=scaleup)
     return canvas, scale, float(left), float(top)
 
 
@@ -133,21 +128,15 @@ def _letterbox_to_shape(
     """Letterbox to an explicit (height, width), using Ultralytics rounding."""
     height, width = image.shape[:2]
     target_height, target_width = map(int, shape)
-    scale = min(target_height / height, target_width / width)
-    if not scaleup:
-        scale = min(scale, 1.0)
-    resized_width = max(1, int(round(width * scale)))
-    resized_height = max(1, int(round(height * scale)))
-    pad_width = (target_width - resized_width) / 2
-    pad_height = (target_height - resized_height) / 2
-    left = int(round(pad_width - 0.1))
-    right = int(round(pad_width + 0.1))
-    top = int(round(pad_height - 0.1))
-    bottom = int(round(pad_height + 0.1))
+    scale = letterbox_scale(width, height, target_width, target_height, scaleup=scaleup)
+    resized_width, resized_height = letterbox_resized_size(width, height, scale)
+    left, top = letterbox_padding(target_width, target_height, resized_width, resized_height)
+    right = target_width - resized_width - left
+    bottom = target_height - resized_height - top
     if (resized_width, resized_height) != (width, height):
         image = cv2.resize(image, (resized_width, resized_height), interpolation=cv2.INTER_LINEAR)
     image = cv2.copyMakeBorder(
-        image, top, bottom, left, right, cv2.BORDER_CONSTANT, value=(114, 114, 114)
+        image, top, bottom, left, right, cv2.BORDER_CONSTANT, value=(PAD_VALUE, PAD_VALUE, PAD_VALUE)
     )
     return image, scale, float(left), float(top), resized_width, resized_height
 
@@ -178,7 +167,6 @@ class PoseTextDataset(Dataset):
         image_size: int = 640,
         cache: Union[bool, str] = False,
         fraction: float = 1.0,
-        seed: int = 0,
         augmentation: Optional[Dict[str, Any]] = None,
         epochs: int = 100,
         close_mosaic: int = 10,
@@ -771,10 +759,13 @@ class PoseTextDataset(Dataset):
             bbox = np.asarray(record.get("bbox", ()), dtype=np.float32)
             if bbox.shape != (4,) or not np.isfinite(bbox).all() or bbox[2] <= 0 or bbox[3] <= 0:
                 continue
-            x1 = float(np.clip(bbox[0], 0, image_width))
-            y1 = float(np.clip(bbox[1], 0, image_height))
-            x2 = float(np.clip(bbox[0] + bbox[2], 0, image_width))
-            y2 = float(np.clip(bbox[1] + bbox[3], 0, image_height))
+            # Keep out-of-frame boxes as annotated. Clipping compresses the target and
+            # makes the visible part look like the whole animal; the reference converter
+            # only rejects degenerate boxes and lets the assigner decide what is usable.
+            x1 = float(bbox[0])
+            y1 = float(bbox[1])
+            x2 = float(bbox[0] + bbox[2])
+            y2 = float(bbox[1] + bbox[3])
             if x2 <= x1 or y2 <= y1:
                 continue
             boxes.append([
@@ -798,9 +789,17 @@ class PoseTextDataset(Dataset):
                 if not np.isfinite(points3).all():
                     raise ValueError(f"Non-finite COCO keypoint annotation for image {image_path}")
                 if self.keypoint_dimensions == 2 and np.any(points3[:, 2] == 0):
-                    raise ValueError(
-                        f"COCO annotation {record.get('id', '<unknown>')} contains unlabeled "
-                        "keypoints, but kpt_shape has no visibility channel"
+                    # A 2-channel kpt_shape has nowhere to store visibility. Rather than
+                    # refusing the whole dataset, keep the point but drop the coordinate:
+                    # the reference implementation pads a missing visibility channel the
+                    # same way, and a zero coordinate cannot be mistaken for a real joint
+                    # once flip/affine augmentation moves everything away from the corner.
+                    warnings.warn(
+                        f"COCO annotation {record.get('id', '<unknown>')} has unlabeled "
+                        "keypoints but kpt_shape=[k, 2]; those points are kept with "
+                        "zero coordinates",
+                        UserWarning,
+                        stacklevel=2,
                     )
                 points[:, :2] = points3[:, :2] / np.asarray(
                     [image_width, image_height], dtype=np.float32
@@ -810,9 +809,11 @@ class PoseTextDataset(Dataset):
             elif self.keypoint_dimensions == 3:
                 points[:, 2] = 0.0
             else:
-                raise ValueError(
-                    f"COCO annotation {record.get('id', '<unknown>')} has no keypoints, but "
-                    f"kpt_shape=[{self.num_keypoints}, 2] has no visibility mask"
+                warnings.warn(
+                    f"COCO annotation {record.get('id', '<unknown>')} has no keypoints but "
+                    f"kpt_shape=[{self.num_keypoints}, 2]; keeping zeros",
+                    UserWarning,
+                    stacklevel=2,
                 )
             classes.append(0 if self.single_cls else class_id)
             keypoints.append(points.tolist())
@@ -871,7 +872,6 @@ def build_pose_dataloaders(
         image_size,
         cache=cache,
         fraction=fraction,
-        seed=seed,
         augmentation=augmentation,
         epochs=epochs,
         close_mosaic=close_mosaic,

@@ -55,7 +55,7 @@ This reference is generated from the key registry (`animalposetracker/config/sch
 | `data` | str | — | build | hidden | Dataset path (derived from the project layout, not persisted) |
 | `num_workers` | int | 8 | build | form | Data loading worker count |
 | `time_hours` | float | `null` | build | advanced | Training time cap in hours; overrides epochs when set |
-| `cache` | bool / str | False | build | form | Data cache: false / true (ram) / ram / disk |
+| `cache` | bool / str | True | build | form | Data cache: false / true (ram) / ram / disk |
 | `fraction` | float | 1.0 | build | form | Fraction of the training set to use |
 | `profile` | bool | False | build | advanced | Per-stage timing profile |
 | `plots` | bool | True | build | form | Save training curve plots |
@@ -106,11 +106,11 @@ This reference is generated from the key registry (`animalposetracker/config/sch
 | key | type | default | apply | visibility | notes |
 |---|---|---|---|---|---|
 | `lr_gamma` | float | 0.1 | build | advanced | Learning-rate decay at milestones |
-| `best_metric` | str | `COCO/AP` | build | advanced | Best-checkpoint metric (COCO/AP or YOLO/AP) |
+| `best_metric` | str | `YOLO/AP` | build | advanced | Best-checkpoint metric (COCO/AP or YOLO/AP) |
 | `best_metric_mode` | str | `max` | build | advanced | Selection direction: max / min |
 | `early_stopping_patience` | int | 300 | build | form | Early-stopping patience in epochs |
 | `single_cls` | bool | False | build | advanced | Train multi-class data as a single class |
-| `multi_scale` | bool | False | build | advanced | Multi-scale jittering |
+| `multi_scale` | float | False | build | advanced | Multi-scale jitter half-width (0 disables; 0.2 means image_size * (1 +/- 0.2)) |
 | `freeze` | int / list | `null` | build | advanced | Freeze the first n layers, or explicit layer indices |
 
 **`train.models.loss`**
@@ -168,7 +168,7 @@ This reference is generated from the key registry (`animalposetracker/config/sch
 
 | key | type | default | apply | visibility | notes |
 |---|---|---|---|---|---|
-| `oks_area_mode` | str | `annotation` | build | advanced | OKS area basis: annotation / bbox |
+| `oks_area_mode` | str | `bbox` | build | advanced | OKS area basis: annotation / bbox |
 | `pck_threshold` | float | 0.05 | build | advanced | PCK threshold (as a fraction of the normalized distance) |
 | `auc_norm_factor` | float | 30.0 | build | advanced | AUC normalization factor |
 | `auc_thresholds` | int | 20 | build | advanced | AUC threshold sample count |
@@ -193,6 +193,7 @@ This reference is generated from the key registry (`animalposetracker/config/sch
 | key | type | default | apply | visibility | notes |
 |---|---|---|---|---|---|
 | `source` | str | `null` | build | form | Default input source (image / video / directory / glob) |
+| `split` | str | `auto` | build | advanced | Dataset split used when no source is given: auto / train / val / test |
 | `confidence` | float | 0.25 | live | form | Prediction confidence threshold |
 | `iou` | float | 0.7 | live | form | Prediction NMS IoU |
 | `max_det` | int | 300 | live | form | Max detections per image |

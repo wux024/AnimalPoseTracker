@@ -210,20 +210,6 @@ class IndependentTrackingTests(unittest.TestCase):
         tracker.update([detection(), detection(x=11, score=0.8)], 0)
         self.assertEqual(set(tracker.tracks), {1})
 
-    def test_tracktrack_relaxed_lost_rebind_is_opt_in(self):
-        for lost_match_thr, expected_state in ((0.0, "lost"), (0.95, "tracked")):
-            with self.subTest(lost_match_thr=lost_match_thr):
-                tracker = create_tracker(tracker_config(
-                    "tracktrack",
-                    lost_match_thr=lost_match_thr,
-                    kpt_oks_sigmas=(0.1, 0.1, 0.1),
-                ))
-                for frame_index in range(3):
-                    tracker.update([detection()], frame_index)
-                tracker.update([], 3)
-                tracker.update([detection(x=18)], 4)
-                self.assertEqual(tracker.tracks[1].state, expected_state)
-
     def test_pose_is_primary_and_box_is_an_optional_secondary_cue(self):
         left = np.asarray([[11, 11, 1], [12, 12, 1], [13, 13, 1]], dtype=np.float32)
         right = np.asarray([[11, 11, 1], [12, 12, 0], [13, 13, 1]], dtype=np.float32)

@@ -1,5 +1,6 @@
-from typing import Optional
 """Ultralytics-compatible NMS for AnimalRTPose detections."""
+
+from typing import Optional
 
 import logging
 import time

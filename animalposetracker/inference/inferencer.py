@@ -7,6 +7,7 @@ from pathlib import Path
 import os
 
 from .constant import ENGINEtoBackend, OpenCV_TARGETS, EP_PARAMS
+from animalposetracker.postprocessing.nms_params import DEPLOY_NMS_CONF, DEPLOY_NMS_IOU
 
 
 def _static_shape(shape) -> Tuple[int, ...]:
@@ -61,8 +62,8 @@ class InferenceEngine:
                  engine: str = 'ONNX',
                  device: str = 'Intel CPU',
                  model_bits: str = 'FP32',
-                 conf: float = 0.25,
-                 iou: float = 0.45,
+                 conf: float = DEPLOY_NMS_CONF,
+                 iou: float = DEPLOY_NMS_IOU,
                  background: bool = 'Original',
                  show_classes: bool = False,
                  show_keypoints: bool = True,
@@ -694,8 +695,8 @@ class InferenceEngine:
     def inference_named_outputs(self, img, output_names=None):
         """Run the model and normalize its outputs to a name-to-array mapping.
 
-        The legacy ``inference`` method remains unchanged for the existing GUI
-        path. Stream pipelines use this method to consume multi-output models.
+        This is the single entry point; the legacy ``inference`` helper that used to
+        sit beside it has been removed. Stream pipelines use this method to consume multi-output models.
         """
         from animalposetracker.postprocessing.output_decoders import normalize_output_tensors
 
@@ -771,196 +772,6 @@ class InferenceEngine:
         except ImportError:
             raise ImportError("Please install tensorrt and pycuda to use TensorRT engine.")
 
-    def draw_detections(self, 
-                        img, 
-                        box, 
-                        score, 
-                        class_id, 
-                        line_width=2, 
-                        bbox=False, 
-                        classes=False):
-        """
-        Draws bounding boxes and labels on the input image based on the detected objects.
 
-        Args:
-            img: The input image to draw detections on.
-            box: Detected bounding box.
-            score: Corresponding detection score.
-            class_id: Class ID for the detected object.
 
-        Returns:
-            None
-        """
-        # Extract the coordinates of the bounding box
-        x1, y1, w, h = box
-
-        # Retrieve the color for the class ID
-        color = self.classes_color_palette[class_id]
-
-        if bbox:
-
-            # Draw the bounding box on the image
-            cv2.rectangle(
-                img=img,
-                pt1=(int(x1), int(y1)),
-                pt2=(int(x1 + w), int(y1 + h)),
-                color=color,
-                thickness=line_width,
-                lineType=cv2.LINE_AA
-            )
-
-        if classes:
-            # Create the label text with class name and score
-            label = f"{self.classes[class_id]}: {score:.2f}"
-
-            # Calculate the dimensions of the label text
-            (label_width, label_height), _ = cv2.getTextSize(label, cv2.FONT_HERSHEY_SIMPLEX, 0.5, 1)
-
-            # Calculate the position of the label text
-            label_x = int(x1)
-            label_y = int(y1 - 10) if y1 - 10 > label_height else int(y1 + 10)
-
-            # Draw a filled rectangle as the background for the label text
-            cv2.rectangle(
-                img,
-                (label_x, label_y - label_height),
-                (label_x + label_width, label_y + label_height), color, cv2.FILLED
-            )
-
-            # Draw the label text on the image
-            font_scale = self._input_height /  960.0 * self.visualize_config['font_scale']
-            thickness = max(1, int(font_scale))
-
-            cv2.putText(img, label,
-                        (label_x, label_y),
-                        cv2.FONT_HERSHEY_SIMPLEX,
-                        font_scale,
-                        (0, 0, 0),
-                        thickness, 
-                        cv2.LINE_AA)
-
-    def draw_keypoints(self, img, keypoints, radius=5):
-        for i, keypoint in enumerate(keypoints):
-            x, y = keypoint[0], keypoint[1]
-            color_k = [int(x) for x in self.keypoints_color_palette[i]]
-
-            if x != 0 and y != 0:
-                cv2.circle(img,
-                           (int(x), int(y)),
-                           radius=radius,
-                           color=color_k,
-                           thickness=-1,
-                           lineType=cv2.LINE_AA)
-
-    def draw_skeleton(self, img, keypoints, line_width=1):
-        for i, sk in enumerate(self.skeleton):
-            pos1 = (int(keypoints[(sk[0]), 0]), int(keypoints[(sk[0]), 1]))
-            pos2 = (int(keypoints[(sk[1]), 0]), int(keypoints[(sk[1]), 1]))
-
-            if pos1[0] == 0 or pos1[1] == 0 or pos2[0] == 0 or pos2[1] == 0:
-                continue
-
-            cv2.line(img,
-                     pos1, pos2,
-                     color=self.skeleton_color_palette[i],
-                     thickness=line_width,
-                     lineType=cv2.LINE_AA
-                     )
     
-    def visualize(self, frame, results):
-        """
-        Visualizes the output of the model on a single frame of video.
-
-        Args:
-            frame: The input frame to process.
-            results: The output of the model on the input frame.
-
-        Returns:
-            output_img: The output image with drawn detections.
-        """
-
-        boxes = results['boxes']
-        keypoints_list = results['keypoints_list']
-        scores = results['scores']
-        class_ids = results['class_ids']
-
-        if self.visualize_config['background'] == 'Black':
-            frame = np.zeros_like(frame)
-        elif self.visualize_config['background'] == 'White':
-            frame = np.ones_like(frame) * 255
-        elif self.visualize_config['background'] == 'Original':
-            pass
-
-        if len(boxes) > 0:
-            if boxes.ndim == 1:
-                self.draw_detections(frame, boxes, scores, class_ids, 
-                                     bbox=self.visualize_config['show_bbox'],
-                                     classes=self.visualize_config['show_classes'])
-                if self.visualize_config['show_keypoints']:
-                    self.draw_keypoints(frame, keypoints_list,
-                                        radius=self.visualize_config['radius'])
-                if self.visualize_config['show_skeletons']:
-                    self.draw_skeleton(frame, keypoints_list,
-                                       line_width=self.visualize_config['skeleton_line_width'])
-            else:
-                for i, box in enumerate(boxes):
-                    self.draw_detections(frame, box, scores[i], class_ids[i],
-                                        bbox=self.visualize_config['show_bbox'],
-                                        classes=self.visualize_config['show_classes'])
-                    if self.visualize_config['show_keypoints']:
-                        self.draw_keypoints(frame, keypoints_list[i],
-                                            radius=self.visualize_config['radius'])
-                    if self.visualize_config['show_skeletons']:
-                        self.draw_skeleton(frame, keypoints_list[i],
-                                           line_width=self.visualize_config['skeleton_line_width'])
-
-        times = {
-            'preprocess_time': 'preprocess: {:.3f} ms'.format(results['preprocess_time'] * 1000.0),
-            'inference_time': 'inference: {:.3f} ms'.format(results['inference_time'] * 1000.0),
-            'postprocess_time': 'postprocess: {:.3f} ms'.format(results['postprocess_time'] * 1000.0),
-            'fps': 'FPS: {:.1f} FPS'.format(results['fps'])
-        }
-
-        font_scale = self._input_height /  960.0 * self.visualize_config['font_scale']
-        thickness = max(1, int(font_scale))
-        
-        line_height = int(self._input_height * 0.04 * self.visualize_config['font_scale'])
-        x, y = int(self._input_width * 0.02), int(self._input_height * 0.05)
-
-        font_color=(0, 255, 0)
-
-        if self.visualize_config['show_fps']:
-            cv2.putText(frame, 
-                        f"FPS: {times['fps']}", 
-                        (x, y), 
-                        cv2.FONT_HERSHEY_SIMPLEX, 
-                        font_scale, 
-                        font_color, 
-                        thickness, 
-                        cv2.LINE_AA)
-            y += line_height
-
-        if self.visualize_config['show_preprocess_time']:
-            cv2.putText(frame, 
-                        f"Preprocess: {times['preprocess_time']}", 
-                        (x, y), 
-                        cv2.FONT_HERSHEY_SIMPLEX, 
-                        font_scale, font_color, thickness, cv2.LINE_AA)
-            y += line_height
-
-        if self.visualize_config['show_inference_time']:
-            cv2.putText(frame, 
-                        f"Inference: {times['inference_time']}", 
-                        (x, y), 
-                        cv2.FONT_HERSHEY_SIMPLEX, 
-                        font_scale, font_color, thickness, cv2.LINE_AA)
-            y += line_height
-        
-        if self.visualize_config['show_postprocess_time']:
-            cv2.putText(frame, 
-                        f"Postprocess: {times['postprocess_time']}", 
-                        (x, y), 
-                        cv2.FONT_HERSHEY_SIMPLEX, 
-                        font_scale, font_color, thickness, cv2.LINE_AA)
-        
-        return frame

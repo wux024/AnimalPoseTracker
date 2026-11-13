@@ -68,7 +68,6 @@ class TopDownPoseDataset(Dataset):
             image_size=max(self.input_size),
             cache=False,
             fraction=fraction if self.training else 1.0,
-            seed=seed,
             augmentation=None,
             single_cls=False,
         )

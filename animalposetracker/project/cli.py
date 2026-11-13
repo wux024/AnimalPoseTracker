@@ -192,6 +192,14 @@ def _load_dataset_config(path: Path, dataset_root: Path, annotation_format: str)
     if not isinstance(config, dict):
         raise ValueError(f"Dataset YAML must contain a mapping: {path}")
 
+    # Resolve split entries against the YAML they came from before overriding ``path``:
+    # a relative "prepared/train.json" is meaningless once the project copies the config
+    # into its own configs/ directory.
+    source_dir = path.parent
+    for split_key in ("train", "val", "test"):
+        split_value = config.get(split_key)
+        if isinstance(split_value, str) and split_value and not Path(split_value).is_absolute():
+            config[split_key] = str((source_dir / split_value).resolve())
     config["path"] = str(dataset_root)
     if annotation_format != "auto":
         config["annotation_format"] = annotation_format

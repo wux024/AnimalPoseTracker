@@ -18,6 +18,10 @@ from typing import Any, Dict, List, Sequence
 import cv2
 import numpy as np
 
+#: Shared by every OKS area denominator (evaluation, NMS, loss) so a tiny target
+#: scores the same everywhere instead of three slightly different amounts.
+OKS_AREA_EPSILON = 1e-7
+
 
 def order_desc(scores: np.ndarray) -> np.ndarray:
     """Indices of ``scores``, highest first.
@@ -161,7 +165,7 @@ def oks_similarity(keypoints_a, keypoints_b, area_a, area_b, variances) -> float
         np.asarray(keypoints_b, dtype=np.float32)[:, :2]
         - np.asarray(keypoints_a, dtype=np.float32)[:, :2]
     )
-    denominator = variances * ((float(area_a) + float(area_b)) * 0.5 + np.spacing(1)) * 2.0
+    denominator = variances * ((float(area_a) + float(area_b)) * 0.5 + OKS_AREA_EPSILON) * 2.0
     return float(np.exp(-np.sum(delta * delta, axis=1) / denominator).mean())
 
 

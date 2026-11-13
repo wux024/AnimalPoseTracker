@@ -3,10 +3,10 @@
 from importlib import import_module
 
 _METRIC_NAMES = {
-    "IOU_THRESHOLDS", "box_iou", "build_coco_ground_truth", "evaluate_coco_keypoints",
-    "keypoint_error_metrics", "keypoint_error_metrics_from_coco_matches", "keypoint_oks",
-    "match_predictions", "plot_confusion_matrix", "plot_precision_recall", "summarize_ap",
-    "update_confusion_matrix",
+    "IOU_THRESHOLDS", "build_coco_ground_truth", "evaluate_coco_keypoints",
+    "keypoint_error_metrics", "keypoint_error_metrics_from_coco_matches", 
+    
+    
 }
 _EXPORTS = {name: (".metrics", name) for name in _METRIC_NAMES}
 _EXPORTS.update({

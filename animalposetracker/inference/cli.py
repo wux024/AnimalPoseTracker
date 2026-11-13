@@ -192,7 +192,7 @@ def _make_argument_parser() -> argparse.ArgumentParser:
                         help="Rendered keypoint radius")
     parser.add_argument("--kpt-radius", dest="point_radius", type=int, default=4,
                         help="deprecated alias of --point-radius")
-    parser.set_defaults(show_boxes=True, show_labels=True, show_keypoints=True, show_skeletons=True)
+    parser.set_defaults(show_boxes=True, show_labels=True, show_keypoints=True, show_skeletons=False)
     parser.add_argument("--show", action="store_true",
                         help="Display the rendered stream in a window")
     parser.add_argument("--output", help="Write the rendered stream to this video file")

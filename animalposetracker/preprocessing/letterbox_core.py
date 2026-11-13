@@ -6,7 +6,9 @@ same grey, but they finish differently on purpose:
 - the offline path (``letterbox_image``) rounds the resized size and pastes it at an
   integer, centred offset;
 - the deployment path (``preprocess_live_frame``) keeps the scale fractional and builds
-  an affine matrix, whose offset places the image at the bottom-right of the canvas.
+  an affine matrix, centring the image the same way the offline path pads it. It used
+  to pin the image to the bottom-right corner, which put live inference on a different
+  input distribution than every frame the model trained on.
 
 This module shares the parts that must not drift -- the scale rule, the rounding rule,
 the centred-padding rule and the pad value. The finishing differences stay with their

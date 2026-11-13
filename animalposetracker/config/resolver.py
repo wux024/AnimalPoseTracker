@@ -12,7 +12,7 @@ Two deliberate choices, both from the refactor plan:
   translated. (Author's decision, 2026-10-14: test-stage projects, no
   migration.)
 - **Ownership discipline.** Keys in a project file that the registry does not
-  know are refused, with a hint when the spelling looks like a known legacy
+  know are refused outright, without guessing at older spellings
   name (``batch`` -> ``batch_size``). The train scope is exempt from the
   strict check for now: its section is a two-profile tree whose registered
   paths carry the active model's name, which the package-cleanup wave will
@@ -31,7 +31,7 @@ from typing import Any, Dict, Mapping, Optional, Sequence, Tuple
 import yaml
 
 from animalposetracker.config.defaults import default_subtree
-from animalposetracker.config.schema import SCOPES, field_for, find_by_legacy
+from animalposetracker.config.schema import SCOPES, field_for
 
 __all__ = [
     "ConfigFormatError",
@@ -212,22 +212,25 @@ def _flatten(tree: Mapping[str, Any], prefix: str = "") -> Dict[str, Any]:
 
 
 def _check_project_keys(scope: str, subtree: Mapping[str, Any], source_name: str) -> None:
-    """Refuse keys the registry does not own (strict scopes only)."""
+    """Refuse keys the registry does not own, and values that do not fit their type."""
     if scope not in _STRICT_SCOPES:
         return
-    for path in _flatten(subtree):
+    for path, value in _flatten(subtree).items():
         key = path.rsplit(".", 1)[-1]
         group = path.rsplit(".", 1)[0] if "." in path else ""
-        if field_for(key, scope, group) is not None:
-            continue
-        hint = ""
-        for candidate in find_by_legacy(key):
-            if candidate.scope == scope:
-                hint = f" (did you mean '{candidate.key}'? the old spelling '{key}' is not read)"
-                break
-        raise ConfigFormatError(
-            f"Unknown configuration key '{scope}.{path}' in {source_name}{hint}"
-        )
+        field = field_for(key, scope, group)
+        if field is None:
+            raise ConfigFormatError(
+                f"Unknown configuration key '{scope}.{path}' in {source_name}"
+            )
+        if not field.accepts(value):
+            expected = " / ".join(
+                getattr(item, "__name__", str(item)) for item in field.type
+            )
+            raise ConfigFormatError(
+                f"'{scope}.{path}' in {source_name} expects {expected}, "
+                f"got {type(value).__name__} ({value!r})"
+            )
 
 
 # ---------------------------------------------------------------------------

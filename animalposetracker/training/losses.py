@@ -14,14 +14,6 @@ def _xywh_to_xyxy(boxes: torch.Tensor) -> torch.Tensor:
     half = boxes[..., 2:4] * 0.5
     return torch.cat((boxes[..., :2] - half, boxes[..., :2] + half), dim=-1)
 
-def _boxes_to_distribution_targets(
-    anchor_points: torch.Tensor,
-    boxes: torch.Tensor,
-    reg_max: int,
-) -> torch.Tensor:
-    left_top = anchor_points - boxes[..., :2]
-    right_bottom = boxes[..., 2:] - anchor_points
-    return torch.cat((left_top, right_bottom), dim=-1).clamp_(0, reg_max - 1 - 0.01)
 
 class DistributionFocalLoss(nn.Module):
     """Interpolated cross-entropy for left/top/right/bottom distance bins."""
@@ -42,6 +34,9 @@ class DistributionFocalLoss(nn.Module):
         return -(
             lower_loss * lower_weight + upper_loss * upper_weight
         ).mean(-1, keepdim=True)
+
+OKS_AREA_EPSILON = 1e-7  # matches the evaluation and NMS denominators
+
 
 class KeypointOKSLoss(nn.Module):
     """OKS-shaped keypoint localization loss and per-instance visibility weighting."""
@@ -67,7 +62,7 @@ class KeypointOKSLoss(nn.Module):
         visible_count = visible_mask.sum(dim=1)
         keypoint_factor = visible_mask.shape[1] / (visible_count + 1e-9)
         sigma_term = (2.0 * self.kpt_oks_sigmas).square().view(1, -1)
-        error = squared_distance / (sigma_term * (instance_area + 1e-9) * 2.0)
+        error = squared_distance / (sigma_term * (instance_area + OKS_AREA_EPSILON) * 2.0)
         return (
             keypoint_factor.view(-1, 1)
             * ((1.0 - torch.exp(-error)) * visible_mask.to(error.dtype))

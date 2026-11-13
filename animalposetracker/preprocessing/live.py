@@ -11,8 +11,11 @@ def preprocess_live_frame(input_image, input_width: int, input_height: int, core
     img = input_image.copy()
     img_height, img_width = img.shape[:2]
     scale = letterbox_scale(img_width, img_height, input_width, input_height)
-    ox = input_width - scale * img_width
-    oy = input_height - scale * img_height
+    # Centre the image like the training pipeline does. The previous offsets pinned it
+    # to the bottom-right, so live inference saw a different input distribution from
+    # every frame the model was trained on.
+    ox = (input_width - scale * img_width) / 2.0
+    oy = (input_height - scale * img_height) / 2.0
     matrix = np.array([[scale, 0, ox], [0, scale, oy]], dtype="float32")
     img = cv2.warpAffine(
         img,

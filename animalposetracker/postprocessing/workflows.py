@@ -54,7 +54,7 @@ def filter_tracked_video_records(
     method: str = "median",
     window_length: int = 5,
     polyorder: int = 2,
-    confidence_threshold: Optional[float] = 0.25,
+    confidence_threshold: Optional[float] = None,
     max_gap: int = 0,
 ) -> list:
     """Smooth each track independently while preserving the input record structure.

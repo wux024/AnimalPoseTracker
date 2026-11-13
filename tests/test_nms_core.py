@@ -74,14 +74,14 @@ class NmsCoreEngineTests(unittest.TestCase):
         self.assertEqual(len(empty), 0)
 
     def test_oks_similarity_matches_the_inline_expression(self):
-        from animalposetracker.postprocessing.nms_core import oks_similarity
+        from animalposetracker.postprocessing.nms_core import OKS_AREA_EPSILON, oks_similarity
 
         kp_a = np.array([[10, 10, 1], [20, 20, 1], [30, 30, 1]], dtype=np.float32)
         kp_b = np.array([[10.5, 10.5, 1], [20.5, 20.5, 1], [30.5, 30.5, 1]], dtype=np.float32)
         variances = (np.ones(3, dtype=np.float32) * 2.0) ** 2
 
         delta = kp_b[:, :2] - kp_a[:, :2]
-        denominator = variances * ((900.0 + 900.0) * 0.5 + np.spacing(1)) * 2.0
+        denominator = variances * ((900.0 + 900.0) * 0.5 + OKS_AREA_EPSILON) * 2.0
         expected = float(np.exp(-np.sum(delta * delta, axis=1) / denominator).mean())
 
         self.assertEqual(oks_similarity(kp_a, kp_b, 900.0, 900.0, variances), expected)
