@@ -5,7 +5,6 @@ import os
 import random
 import threading
 import time
-import warnings
 from contextlib import nullcontext
 from typing import Any, Callable, Dict, Iterable, Mapping, Optional, Tuple
 
@@ -664,12 +663,6 @@ class Trainer:
                     stopped = True
                     break
                 epoch_number = epoch_index + 1
-                if self.scheduler is not None and not isinstance(
-                    self.scheduler, self.torch.optim.lr_scheduler.ReduceLROnPlateau
-                ):
-                    with warnings.catch_warnings():
-                        warnings.simplefilter("ignore")
-                        self.scheduler.step()
                 self._set_epoch(train_loader, epoch_index)
                 train_metrics, interrupted = self._train_epoch(train_loader, criterion, epoch_number)
                 final_metrics = {f"train_{key}": value for key, value in train_metrics.items()}
@@ -729,6 +722,15 @@ class Trainer:
                             metric = train_metrics.get("loss")
                         if metric is not None:
                             self.scheduler.step(metric)
+
+                if self.scheduler is not None and not isinstance(
+                    self.scheduler, self.torch.optim.lr_scheduler.ReduceLROnPlateau
+                ):
+                    # The reference schedule advances once the epoch has been trained and
+                    # validated, so epoch N runs at scale(N-1). Stepping before the last
+                    # checkpoint keeps its scheduler state one step behind; resuming replays
+                    # this epoch and advances exactly once instead of twice.
+                    self.scheduler.step()
 
                 self._save_checkpoint(
                     last_path, self.optimizer, self.scheduler, self.scaler,
