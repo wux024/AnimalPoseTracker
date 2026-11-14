@@ -282,10 +282,15 @@ def fit_intrinsics(
     entries: Mapping[int, Tuple[np.ndarray, np.ndarray]],
     size: Tuple[int, int],
     spec: BoardSpec,
-    model: str = "auto",
+    model: str = "brown",
     max_frames: int = 60,
 ) -> IntrinsicFit:
     """Fit one constrained lens model on at most ``max_frames`` evenly spaced frames.
+
+    ``model`` defaults to ``brown`` because an ordinary lens is the ordinary case; a
+    fisheye rig has to say so. ``auto`` still exists but only as an explicit request:
+    it picks by 2D reprojection RMS, which says nothing about how the three views
+    agree in 3D, so it is a fallback for an unknown lens rather than the default.
 
     OpenCV's ``calibrateCamera`` becomes disproportionately slower with many
     frames (about 3 s for 60 frames and 145 s for 200 on the reference data), so
@@ -679,7 +684,11 @@ def run(argv: Optional[Sequence[str]] = None) -> int:
                         help="sample every N frames of a video (0: 1 for folders, 30 for videos)")
     parser.add_argument("--max-frames", type=int, default=300, help="maximum sampled frames per view")
     parser.add_argument("--min-corners", type=int, default=12, help="minimum corners per usable frame")
-    parser.add_argument("--intrinsic-model", default="auto", choices=["auto", "none", "brown", "fisheye"])
+    parser.add_argument(
+        "--intrinsic-model", default="brown", choices=["auto", "none", "brown", "fisheye"],
+        help="lens model; brown for an ordinary lens (default), fisheye only for a fisheye rig. "
+             "auto guesses from the 2D reprojection RMS and is meant only for an unknown lens",
+    )
     parser.add_argument("--intrinsic-frames", type=int, default=60,
                         help="frames used to fit intrinsics (OpenCV gets very slow beyond ~60)")
     parser.add_argument("--intrinsics-from", help="reuse the intrinsics and lens model of an existing cameras.yaml")

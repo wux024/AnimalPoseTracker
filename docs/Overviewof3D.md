@@ -73,6 +73,7 @@ animalpose-cli calibrate \
 | `--dictionary` | ArUco dictionary, default `DICT_4X4_50` |
 | `--frame-step` / `--max-frames` | Video sampling |
 | `--intrinsic-frames` | Frames used for the lens fit, default 60 — OpenCV slows down sharply past this |
+| `--intrinsic-model` | Lens model: `brown` for an ordinary lens (default), `fisheye` for a fisheye rig, `none` for a distortion-free pinhole. `auto` guesses from the 2D reprojection RMS and is only for an unknown lens — that number says nothing about how the views agree in 3D |
 | `--intrinsics-from` | Reuse the lens model and distortion of an existing calibration |
 | `--sync hardware\|software\|unknown` | Recorded in the rig and reported by `pose3d --check-sync` |
 | `--force` | Required to overwrite an existing `cameras.yaml` |
