@@ -1135,19 +1135,17 @@ class Trainer:
         error = None
         if self.rank == 0:
             model = self.ema.model if self.config.ema else self.raw_model
-            use_half = self.amp_enabled
             try:
-                # Keep EMA weights in FP32. Casting them to half in place and
-                # back permanently rounds the stored weights at every validation.
+                # Keep EMA weights in FP32: casting them to half in place rounds the
+                # stored weights at every validation. Autocast stays off here as well —
+                # fp16 logits saturate near 65504, which surfaces as a class loss in the
+                # hundreds and all-zero metrics even though training is healthy
+                # (observed: train class 3.05, val class 198 on ChimpACT 2017_05_27).
                 model.float()
                 model.eval()
                 if hasattr(validator, "eval"):
                     validator.eval()
-                amp_context = (
-                    self.torch.autocast(device_type=self.device.type, enabled=True)
-                    if use_half else nullcontext()
-                )
-                with self.torch.inference_mode(), amp_context:
+                with self.torch.inference_mode():
                     result = validator(model, loader, self.device)
                 if not isinstance(result, Mapping):
                     raise TypeError("validator must return a mapping of metric names to scalar values")
