@@ -106,6 +106,16 @@ def _make_grad_scaler(torch, enabled: bool):
     return torch.cuda.amp.GradScaler(enabled=enabled)
 
 
+def _is_nan_failure(exc: BaseException) -> bool:
+    """True when an exception reports a non-finite loss or metric, not a real fault.
+
+    Training raises ``FloatingPointError`` directly; ``_validate`` wraps it in a
+    ``RuntimeError`` whose text keeps the original type, so both spellings match here.
+    """
+    text = f"{type(exc).__name__}: {exc}"
+    return "FloatingPointError" in text or "non-finite" in text.lower()
+
+
 def build_optimizer(model, config: TrainingConfig):
     """Build Ultralytics-compatible optimizer groups and automatic selection."""
     torch = _require_torch()
@@ -645,7 +655,9 @@ class Trainer:
         )
 
         try:
-            for epoch_index in range(self.start_epoch, self.config.epochs):
+            epoch_index = self.start_epoch
+            nan_retries = 0
+            while epoch_index < self.config.epochs:
                 reached_time_limit = (
                     self._time_deadline is not None
                     and time.monotonic() >= self._time_deadline
@@ -664,16 +676,30 @@ class Trainer:
                     break
                 epoch_number = epoch_index + 1
                 self._set_epoch(train_loader, epoch_index)
-                train_metrics, interrupted = self._train_epoch(train_loader, criterion, epoch_number)
+                should_validate = (
+                    validation_loader is not None
+                    and epoch_number % self.config.validation_interval == 0
+                )
+                try:
+                    train_metrics, interrupted = self._train_epoch(
+                        train_loader, criterion, epoch_number
+                    )
+                    if not interrupted and should_validate:
+                        validation_metrics = self._validate(
+                            validation_loader, validator, epoch_number
+                        )
+                except (FloatingPointError, RuntimeError) as exc:
+                    if not _is_nan_failure(exc):
+                        raise
+                    nan_retries += 1
+                    if nan_retries > 3 or not self._recover_from_nan(epoch_number, exc):
+                        raise
+                    continue
                 final_metrics = {f"train_{key}": value for key, value in train_metrics.items()}
                 if interrupted:
                     stopped = True
                     break
 
-                should_validate = (
-                    validation_loader is not None
-                    and epoch_number % self.config.validation_interval == 0
-                )
                 if should_validate:
                     validation_metrics = self._validate(
                         validation_loader, validator, epoch_number
@@ -773,6 +799,8 @@ class Trainer:
                         stopped = True
                         self._stop_reason = "patience"
                         break
+                nan_retries = 0
+                epoch_index += 1
 
             final_validation_metrics = None
             if validation_loader is not None and self.completed_epochs > 0:
@@ -1052,6 +1080,53 @@ class Trainer:
         if profiling:
             average_metrics["profile/epoch_ms"] = totals["profile/epoch_ms"] / max(self.world_size, 1)
         return average_metrics, self._stop_requested.is_set()
+
+    def _recover_from_nan(self, epoch_number: int, exc: BaseException) -> bool:
+        """Roll back to ``last.pt`` and retry the epoch, mirroring ultralytics' NaN recovery.
+
+        Returns ``False`` when there is nothing to roll back to — the first epoch, or a
+        checkpoint that is missing or holds non-finite weights — and the caller re-raises.
+        """
+        last_path = self.config.output_dir / "weights" / "last.pt"
+        if epoch_number <= self.start_epoch or not last_path.is_file():
+            self.events.emit(TrainingEvent(
+                event="warning",
+                epoch=epoch_number,
+                message=f"{exc} (no checkpoint to roll back to)",
+            ))
+            return False
+        try:
+            metadata = load_checkpoint(
+                last_path,
+                self.raw_model,
+                self.optimizer,
+                self.scheduler,
+                self.scaler,
+                prefer_ema_for_model=True,
+                ema_model=self.ema.model if self.config.ema else None,
+            )
+        except Exception as restore_error:  # corrupted or incompatible checkpoint
+            self.events.emit(TrainingEvent(
+                event="warning",
+                epoch=epoch_number,
+                message=f"NaN recovery failed: {restore_error}",
+            ))
+            return False
+        if self.config.ema:
+            updates = metadata.get("ema_updates")
+            if updates is not None:
+                self.ema.updates = int(updates)
+        if self.scheduler is not None and not isinstance(
+            self.scheduler, self.torch.optim.lr_scheduler.ReduceLROnPlateau
+        ):
+            # Retry the same epoch, so the schedule must sit where it was before it started.
+            self.scheduler.last_epoch = epoch_number - 1
+        self.events.emit(TrainingEvent(
+            event="warning",
+            epoch=epoch_number,
+            message=f"{exc}; rolled back to last.pt, retrying epoch {epoch_number}",
+        ))
+        return True
 
     def _validate(
         self, loader, validator: Callable, epoch_number: int, event_name: str = "validation"
