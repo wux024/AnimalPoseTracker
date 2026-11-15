@@ -425,20 +425,6 @@ def _split_batch(batch, device, torch) -> Tuple[Any, Any]:
     return images, _move_to_device(targets, device, torch)
 
 
-def _iter_output_tensors(result):
-    """Yield every tensor inside a model output (dict / list / tuple / tensor)."""
-    import torch
-
-    if torch.is_tensor(result):
-        yield result
-    elif isinstance(result, Mapping):
-        for value in result.values():
-            yield from _iter_output_tensors(value)
-    elif isinstance(result, (list, tuple)):
-        for value in result:
-            yield from _iter_output_tensors(value)
-
-
 def _loss_components(result, torch):
     if torch.is_tensor(result):
         if result.numel() != 1:
@@ -1102,46 +1088,33 @@ class Trainer:
             average_metrics["profile/epoch_ms"] = totals["profile/epoch_ms"] / max(self.world_size, 1)
         return average_metrics, self._stop_requested.is_set()
 
-    def _amp_is_healthy(self, loader, tolerance: float = 0.05) -> bool:
-        """Check that autocast reproduces the fp32 forward on real data.
+    def _amp_is_healthy(self, loader) -> bool:
+        """Mirror ultralytics' ``check_amp``: compare fp32 and autocast on the same input.
 
-        ultralytics gates AMP behind ``check_amp()`` for the same reason: on some
-        device/model combinations fp16 activations saturate, and the symptom is a
-        class loss in the hundreds or all-zero metrics rather than a clean error.
-        Returns True when autocast stays within ``tolerance`` (relative) of fp32.
+        The reference implementation runs a fixed model on a fixed image and requires the
+        decoded boxes of both passes to agree within 0.5 px. Deviating from that means
+        fp16 saturates on this device/model pair, which shows up later as a class loss in
+        the hundreds or all-zero metrics rather than a clean error.
         """
         if not self.amp_enabled:
             return False
         torch = self.torch
-        try:
-            batch = next(iter(loader))
-        except StopIteration:
+        batch = next(iter(loader), None)
+        if batch is None:
             return True
         images, _ = _split_batch(batch, self.device, torch)
         was_training = self.model.training
         self.model.eval()
         try:
             with torch.no_grad():
-                reference = self.model(images)
+                reference = self.model(images)[0][:, :4]  # decoded boxes, pixel coordinates
                 with torch.autocast(device_type="cuda", enabled=True):
-                    probe = self.model(images)
-        except Exception:
-            self.model.train(was_training)
-            return False
+                    probe = self.model(images)[0][:, :4]
         finally:
-            if self.model.training != was_training:
-                self.model.train(was_training)
-        reference_tensors = list(_iter_output_tensors(reference))
-        probe_tensors = list(_iter_output_tensors(probe))
-        if not reference_tensors or len(reference_tensors) != len(probe_tensors):
+            self.model.train(was_training)
+        if reference.shape != probe.shape:
             return False
-        for expected, actual in zip(reference_tensors, probe_tensors):
-            if not torch.isfinite(actual).all():
-                return False
-            scale = expected.detach().abs().max().clamp(min=1e-3)
-            if (actual - expected).abs().max() / scale > tolerance:
-                return False
-        return True
+        return bool(torch.allclose(reference.float(), probe.float(), atol=0.5))
 
     def _recover_from_nan(self, epoch_number: int, exc: BaseException) -> bool:
         """Roll back to ``last.pt`` and retry the epoch, mirroring ultralytics' NaN recovery.
