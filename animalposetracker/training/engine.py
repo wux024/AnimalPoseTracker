@@ -425,6 +425,20 @@ def _split_batch(batch, device, torch) -> Tuple[Any, Any]:
     return images, _move_to_device(targets, device, torch)
 
 
+def _iter_output_tensors(result):
+    """Yield every tensor inside a model output (dict / list / tuple / tensor)."""
+    import torch
+
+    if torch.is_tensor(result):
+        yield result
+    elif isinstance(result, Mapping):
+        for value in result.values():
+            yield from _iter_output_tensors(value)
+    elif isinstance(result, (list, tuple)):
+        for value in result:
+            yield from _iter_output_tensors(value)
+
+
 def _loss_components(result, torch):
     if torch.is_tensor(result):
         if result.numel() != 1:
@@ -627,6 +641,13 @@ class Trainer:
         succeeded = False
         best_path = self.config.output_dir / "weights" / "best.pt"
         last_path = self.config.output_dir / "weights" / "last.pt"
+        if self.amp_enabled and not self._amp_is_healthy(train_loader):
+            self.amp_enabled = False
+            self.scaler = _make_grad_scaler(self.torch, enabled=False)
+            self.events.emit(TrainingEvent(
+                event="warning",
+                message="AMP disabled: autocast diverged from the fp32 forward on real data",
+            ))
         try:
             total_batches = len(train_loader)
         except TypeError:
@@ -1081,6 +1102,47 @@ class Trainer:
             average_metrics["profile/epoch_ms"] = totals["profile/epoch_ms"] / max(self.world_size, 1)
         return average_metrics, self._stop_requested.is_set()
 
+    def _amp_is_healthy(self, loader, tolerance: float = 0.05) -> bool:
+        """Check that autocast reproduces the fp32 forward on real data.
+
+        ultralytics gates AMP behind ``check_amp()`` for the same reason: on some
+        device/model combinations fp16 activations saturate, and the symptom is a
+        class loss in the hundreds or all-zero metrics rather than a clean error.
+        Returns True when autocast stays within ``tolerance`` (relative) of fp32.
+        """
+        if not self.amp_enabled:
+            return False
+        torch = self.torch
+        try:
+            batch = next(iter(loader))
+        except StopIteration:
+            return True
+        images, _ = _split_batch(batch, self.device, torch)
+        was_training = self.model.training
+        self.model.eval()
+        try:
+            with torch.no_grad():
+                reference = self.model(images)
+                with torch.autocast(device_type="cuda", enabled=True):
+                    probe = self.model(images)
+        except Exception:
+            self.model.train(was_training)
+            return False
+        finally:
+            if self.model.training != was_training:
+                self.model.train(was_training)
+        reference_tensors = list(_iter_output_tensors(reference))
+        probe_tensors = list(_iter_output_tensors(probe))
+        if not reference_tensors or len(reference_tensors) != len(probe_tensors):
+            return False
+        for expected, actual in zip(reference_tensors, probe_tensors):
+            if not torch.isfinite(actual).all():
+                return False
+            scale = expected.detach().abs().max().clamp(min=1e-3)
+            if (actual - expected).abs().max() / scale > tolerance:
+                return False
+        return True
+
     def _recover_from_nan(self, epoch_number: int, exc: BaseException) -> bool:
         """Roll back to ``last.pt`` and retry the epoch, mirroring ultralytics' NaN recovery.
 
@@ -1136,16 +1198,19 @@ class Trainer:
         if self.rank == 0:
             model = self.ema.model if self.config.ema else self.raw_model
             try:
-                # Keep EMA weights in FP32: casting them to half in place rounds the
-                # stored weights at every validation. Autocast stays off here as well —
-                # fp16 logits saturate near 65504, which surfaces as a class loss in the
-                # hundreds and all-zero metrics even though training is healthy
-                # (observed: train class 3.05, val class 198 on ChimpACT 2017_05_27).
+                # Keep the stored weights in FP32: casting them to half in place rounds
+                # the EMA weights at every validation. Precision of the forward pass is
+                # governed by self.amp_enabled, which is itself gated by the AMP probe in
+                # fit() — the same contract ultralytics uses (model.float() plus autocast).
                 model.float()
                 model.eval()
                 if hasattr(validator, "eval"):
                     validator.eval()
-                with self.torch.inference_mode():
+                amp_context = (
+                    self.torch.autocast(device_type="cuda", enabled=True)
+                    if self.amp_enabled else nullcontext()
+                )
+                with self.torch.inference_mode(), amp_context:
                     result = validator(model, loader, self.device)
                 if not isinstance(result, Mapping):
                     raise TypeError("validator must return a mapping of metric names to scalar values")
