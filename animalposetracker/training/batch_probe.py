@@ -3,7 +3,9 @@
 Mirrors ultralytics' auto-batch trick: run real forward/backward steps at a
 modest batch size, measure the peak reserved memory, then walk a candidate
 list of larger sizes until the measured peak crosses the target (60% of VRAM
-by default). The winner is returned as-is; candidates are multiples of 8.
+by default). Every candidate is a power of two, and none may exceed the number
+of training images — a batch larger than the dataset spends a whole epoch on a
+single step.
 
 The synthetic loss used while probing does not skew the memory profile:
 activations, gradients and optimizer state dominate, and those are all real.
@@ -15,7 +17,43 @@ from pathlib import Path
 from typing import Any, Sequence, Union
 
 AUTO = "auto"
-DEFAULT_CANDIDATES: Sequence[int] = (128, 96, 64, 48, 32, 16)
+DEFAULT_CANDIDATES: Sequence[int] = (512, 256, 128, 64, 32, 16, 8)
+
+
+def _count_training_images(data_yaml: Union[str, Path]) -> int:
+    """Count the training images a dataset YAML points at, or 0 when unknown.
+
+    ``batch_size`` must not exceed this: a batch bigger than the dataset turns
+    one epoch into a single step, so 1000 epochs become 1000 updates.
+    """
+    import json
+
+    import yaml
+
+    yaml_path = Path(data_yaml)
+    try:
+        spec = yaml.safe_load(yaml_path.read_text(encoding="utf-8")) or {}
+    except OSError:
+        return 0
+    train = spec.get("train")
+    if not isinstance(train, (str, Path)):
+        return 0
+    target = Path(train)
+    if not target.is_absolute():
+        target = Path(spec.get("path", yaml_path.parent)) / target
+    try:
+        if target.suffix.lower() == ".json":
+            payload = json.loads(target.read_text(encoding="utf-8"))
+            return len(payload.get("images") or [])
+        if target.is_dir():
+            return sum(
+                1
+                for item in target.rglob("*")
+                if item.suffix.lower() in {".jpg", ".jpeg", ".png", ".bmp"}
+            )
+    except (OSError, ValueError):
+        return 0
+    return 0
 
 
 def parse_batch_size(value: Any) -> Union[int, str]:
@@ -72,12 +110,16 @@ def probe_batch_size(
     resolved = _resolve_probe_device(device)
     total_gb = torch.cuda.get_device_properties(resolved).total_memory / 2 ** 30
     target_gb = total_gb * fraction
+    dataset_size = _count_training_images(data_yaml)
 
     model = build_model(model_yaml, scale=model_scale).to(resolved).train()
     optimizer = torch.optim.AdamW(model.parameters(), lr=1e-4)
     scaler = torch.cuda.amp.GradScaler(enabled=True)
 
     for batch_size in candidates:
+        if dataset_size and batch_size > dataset_size:
+            # A batch larger than the dataset costs an epoch per step; keep walking down.
+            continue
         try:
             train_loader, _, _ = build_pose_dataloaders(
                 data_yaml,
@@ -116,4 +158,7 @@ def probe_batch_size(
         except torch.cuda.OutOfMemoryError:
             torch.cuda.empty_cache()
             continue
-    return candidates[-1]
+    fallback = candidates[-1]
+    if dataset_size:
+        fallback = min(fallback, dataset_size)
+    return fallback
