@@ -66,7 +66,8 @@ class TrainingConfig:
     lr_milestones: Optional[list] = None
     lr_gamma: float = 0.1
     ema: bool = True
-    amp: bool = True
+    amp: Any = True
+    precision: str = "fp16"
     seed: int = 0
     deterministic: bool = True
 

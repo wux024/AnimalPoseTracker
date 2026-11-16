@@ -42,6 +42,33 @@ def _read_mapping(path: Path) -> Dict[str, Any]:
     return value
 
 
+def _resolve_precision_for_run(model_spec, scale, config) -> str:
+    """Probe fp16 → bf16 → fp32 and shrink the batch when falling back to fp32.
+
+    fp32 needs roughly twice the activation memory of a 16-bit mode, so keeping the
+    original batch after the fallback walks straight into OOM. Halving the batch and
+    doubling the accumulation keeps the nominal batch — and therefore the optimiser
+    step — unchanged.
+    """
+    from animalposetracker.nn import build_model
+
+    from .precision import resolve_precision
+
+    try:
+        probe = build_model(model_spec, scale=scale)
+        precision = resolve_precision(probe, config.image_size, config.amp)
+        del probe
+    except Exception:
+        precision = "fp32" if config.amp is False else "fp16"
+    config.precision = precision
+    if precision == "fp32" and config.amp not in (False, "fp32"):
+        config.batch_size = max(1, config.batch_size // 2)
+        config.gradient_accumulation_steps = max(
+            int(round(config.nominal_batch_size / config.batch_size)), 1
+        )
+    return precision
+
+
 def _resolve_project_pretrained_path(source, project_dir: Path) -> Path:
     """Cache downloaded initialization weights inside their owning project."""
     from .checkpoint import resolve_checkpoint_path
@@ -849,6 +876,7 @@ def run(argv=None) -> int:
             from animalposetracker.evaluation.topdown import SimCCPoseValidator
             from animalposetracker.data.topdown import build_topdown_dataloaders
 
+            _resolve_precision_for_run(model_spec, scale, config)
             train_loader, validation_loader, metadata = build_topdown_dataloaders(
                 config.data,
                 input_size=simcc_input_size,
@@ -926,6 +954,7 @@ def run(argv=None) -> int:
                 if validation_loader is not None else None
             )
         else:
+            _resolve_precision_for_run(model_spec, scale, config)
             train_loader, validation_loader, metadata = build_pose_dataloaders(
                 config.data,
                 image_size=config.image_size,

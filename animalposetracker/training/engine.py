@@ -106,6 +106,15 @@ def _make_grad_scaler(torch, enabled: bool):
     return torch.cuda.amp.GradScaler(enabled=enabled)
 
 
+def _precision_dtype(torch, precision: str):
+    """Map a precision name to the autocast dtype; ``None`` means full fp32."""
+    if precision == "fp16":
+        return torch.float16
+    if precision == "bf16":
+        return torch.bfloat16
+    return None
+
+
 def _is_nan_failure(exc: BaseException) -> bool:
     """True when an exception reports a non-finite loss or metric, not a real fault.
 
@@ -627,13 +636,6 @@ class Trainer:
         succeeded = False
         best_path = self.config.output_dir / "weights" / "best.pt"
         last_path = self.config.output_dir / "weights" / "last.pt"
-        if self.amp_enabled and not self._amp_is_healthy(train_loader):
-            self.amp_enabled = False
-            self.scaler = _make_grad_scaler(self.torch, enabled=False)
-            self.events.emit(TrainingEvent(
-                event="warning",
-                message="AMP disabled: autocast diverged from the fp32 forward on real data",
-            ))
         try:
             total_batches = len(train_loader)
         except TypeError:
@@ -979,9 +981,10 @@ class Trainer:
                         )
             images, targets = _split_batch(batch, self.device, torch)
             images = self._multi_scale(images)
+            autocast_dtype = _precision_dtype(torch, self.config.precision)
             autocast = (
-                torch.autocast(device_type="cuda", enabled=True)
-                if self.amp_enabled else nullcontext()
+                torch.autocast(device_type="cuda", dtype=autocast_dtype)
+                if (self.amp_enabled and autocast_dtype is not None) else nullcontext()
             )
             with autocast:
                 predictions = self.model(images)
@@ -1088,34 +1091,6 @@ class Trainer:
             average_metrics["profile/epoch_ms"] = totals["profile/epoch_ms"] / max(self.world_size, 1)
         return average_metrics, self._stop_requested.is_set()
 
-    def _amp_is_healthy(self, loader) -> bool:
-        """Mirror ultralytics' ``check_amp``: compare fp32 and autocast on the same input.
-
-        The reference implementation runs a fixed model on a fixed image and requires the
-        decoded boxes of both passes to agree within 0.5 px. Deviating from that means
-        fp16 saturates on this device/model pair, which shows up later as a class loss in
-        the hundreds or all-zero metrics rather than a clean error.
-        """
-        if not self.amp_enabled:
-            return False
-        torch = self.torch
-        batch = next(iter(loader), None)
-        if batch is None:
-            return True
-        images, _ = _split_batch(batch, self.device, torch)
-        was_training = self.model.training
-        self.model.eval()
-        try:
-            with torch.no_grad():
-                reference = self.model(images)[0][:, :4]  # decoded boxes, pixel coordinates
-                with torch.autocast(device_type="cuda", enabled=True):
-                    probe = self.model(images)[0][:, :4]
-        finally:
-            self.model.train(was_training)
-        if reference.shape != probe.shape:
-            return False
-        return bool(torch.allclose(reference.float(), probe.float(), atol=0.5))
-
     def _recover_from_nan(self, epoch_number: int, exc: BaseException) -> bool:
         """Roll back to ``last.pt`` and retry the epoch, mirroring ultralytics' NaN recovery.
 
@@ -1179,9 +1154,10 @@ class Trainer:
                 model.eval()
                 if hasattr(validator, "eval"):
                     validator.eval()
+                amp_dtype = _precision_dtype(self.torch, self.config.precision)
                 amp_context = (
-                    self.torch.autocast(device_type="cuda", enabled=True)
-                    if self.amp_enabled else nullcontext()
+                    self.torch.autocast(device_type="cuda", dtype=amp_dtype)
+                    if (self.amp_enabled and amp_dtype is not None) else nullcontext()
                 )
                 with self.torch.inference_mode(), amp_context:
                     result = validator(model, loader, self.device)
