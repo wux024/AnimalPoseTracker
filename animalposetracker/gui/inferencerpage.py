@@ -1406,6 +1406,10 @@ class InferencerPage(QWidget, Ui_Inferencer):
             if key in engine_timings:
                 return f"{float(engine_timings[key]) * 1000.0:.3f} ms"
             # Falls back to the thread timings, which still feed the single-stage pathway.
+            # Those arrive as `<stage>_time`; the engine publishes the bare stage name.
+            legacy = f"{key}_time"
+            if legacy in results:
+                return f"{float(results[legacy]) * 1000.0:.3f} ms"
             return f"{float(results.get(key, 0.0)) * 1000.0:.3f} ms"
 
         lines = []
@@ -1881,6 +1885,12 @@ class InferencerPage(QWidget, Ui_Inferencer):
             self._frame_index = 0
             self.records = []
             self._build_tracker()
+            # Warm the backend before the reader starts pushing frames at it: otherwise the
+            # first seconds of the overlay are dominated by CUDA/kernel setup and the stage
+            # timings look far worse than the steady state.
+            from animalposetracker.inference.session import warmup_inference_session
+
+            warmup_inference_session(self.session, self._stream_pipeline)
             # init threads
             self._init_inference_threads()
             if self.videoreader_thread is None:

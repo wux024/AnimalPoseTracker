@@ -32,6 +32,7 @@ class CommandDispatcherTests(unittest.TestCase):
             self.assertEqual(main(["val", "--config", "project/configs/runtime.yaml", "--weights", "best.pt"]), 0)
         run.assert_called_once_with([
             "--validate-only", "--config", "project/configs/runtime.yaml", "--weights", "best.pt",
+            "--split", "val",
         ])
 
     def test_val_help_is_specific_to_validation(self):
@@ -723,6 +724,11 @@ class InferenceCliTopdownWiringTests(unittest.TestCase):
             def __init__(self, engine, output_config, *, input_mode, input_config,
                          detector, tracker, class_names):
                 calls["pipeline"] = {"input_mode": input_mode, "detector": detector}
+
+            def warmup(self):
+                # The real pipeline warms the backend before timing starts; the fake records
+                # that the CLI asked for it.
+                calls["warmup"] = True
 
         def _fake_session(**kwargs):
             calls["session"] = dict(kwargs)

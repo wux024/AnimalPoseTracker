@@ -235,5 +235,35 @@ class PerClassAndPerEdgeColourTests(unittest.TestCase):
         self.assertEqual(recorder.of("putText")[0][4], PREDICTION_STYLE.label_color)
 
 
+class TrackRenderingTests(unittest.TestCase):
+    def test_track_id_wins_over_the_class_colour(self):
+        first = _draw(style=INFERENCE_STYLE, track_id=3)
+        again = _draw(style=INFERENCE_STYLE, track_id=3)
+        other = _draw(style=INFERENCE_STYLE, track_id=4)
+
+        same_colour = first.of("rectangle")[0][3]
+        self.assertEqual(same_colour, again.of("rectangle")[0][3])
+        self.assertNotEqual(same_colour, other.of("rectangle")[0][3])
+
+    def test_trail_is_drawn_under_the_box(self):
+        recorder = _draw(style=INFERENCE_STYLE, track_id=1, trail=[(1, 1), (2, 2), (3, 3)])
+
+        ops = recorder.ops()
+        self.assertEqual(ops[0], "line")
+        self.assertEqual(ops[1], "line")
+        self.assertEqual(ops[2], "rectangle")
+        self.assertEqual(len(recorder.of("line")), 3)  # two trail segments plus one skeleton edge
+
+    def test_single_point_trail_draws_nothing_extra(self):
+        recorder = _draw(style=INFERENCE_STYLE, track_id=1, trail=[(1, 1)])
+
+        self.assertEqual(recorder.ops(), ["rectangle", "putText", "line", "circle", "circle"])
+
+    def test_without_track_or_trail_the_draw_order_is_unchanged(self):
+        recorder = _draw(style=INFERENCE_STYLE)
+
+        self.assertEqual(recorder.ops(), ["rectangle", "putText", "line", "circle", "circle"])
+
+
 if __name__ == "__main__":
     unittest.main()

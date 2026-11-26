@@ -10,6 +10,7 @@ import argparse
 import json
 import sys
 import time
+from collections import deque
 from pathlib import Path
 
 import yaml
@@ -199,6 +200,9 @@ def _make_argument_parser() -> argparse.ArgumentParser:
     parser.add_argument("--records", help="Write per-frame pose/tracking records to this JSON file")
     parser.add_argument("--max-frames", type=int,
                         help="Stop after this many frames (useful for smoke tests)")
+    parser.add_argument("--trail-length", dest="trail_length", type=int, default=0,
+                        help="Draw the last N box centres per tracked identity as a trail "
+                             "(0 turns trails off; needs --tracker)")
     return parser
 
 
@@ -214,6 +218,28 @@ def _detection_label(detection) -> str:
     return label
 
 
+def _update_trails(trails, detections, limit: int) -> None:
+    """Append one bbox-centre point per tracked detection, keeping the newest ``limit``.
+
+    Keyed by track id, so each identity keeps its own polyline. Detections without a
+    track id (tracking off) are ignored.
+    """
+    for detection in detections:
+        track_id = detection.get("track_id")
+        box = detection.get("bbox_xyxy")
+        if track_id is None or box is None:
+            continue
+        centre = (
+            int(round((float(box[0]) + float(box[2])) / 2.0)),
+            int(round((float(box[1]) + float(box[3])) / 2.0)),
+        )
+        history = trails.get(int(track_id))
+        if history is None:
+            history = deque(maxlen=max(int(limit), 2))
+            trails[int(track_id)] = history
+        history.append(centre)
+
+
 def _render(
     frame,
     detections,
@@ -225,6 +251,7 @@ def _render(
     show_skeletons=True,
     line_width=2,
     point_radius=4,
+    trails=None,
 ):
     # Imported here rather than at module scope: this package loads its drawing
     # dependency on demand, so plain `infer --help` stays cheap.
@@ -232,6 +259,10 @@ def _render(
 
     rendered = frame.copy()
     for detection in detections:
+        track_id = detection.get("track_id")
+        trail = None
+        if trails is not None and track_id is not None:
+            trail = trails.get(int(track_id))
         draw_instance(
             rendered,
             pixel_box(detection.get("bbox_xyxy")),
@@ -239,6 +270,8 @@ def _render(
             _pixel_points(detection.get("keypoints") or []),
             skeleton,
             style=INFERENCE_STYLE,
+            track_id=int(track_id) if track_id is not None else None,
+            trail=trail,
             show_box=show_bbox,
             show_label=show_labels,
             show_keypoints=show_keypoints,
@@ -378,7 +411,13 @@ def run(argv=None) -> int:
         ("Output", str(args.output) if args.output else "off"),
     ])
 
+    # Warm the backend once, before any timing starts: the first real frame would otherwise
+    # pay CUDA context creation, kernel compilation and NMS caching, and the stage averages
+    # would be reported from a sample that includes that setup.
+    pipeline.warmup()
+
     records = []
+    trails = {}
     frame_index = 0
     started_at = time.time()
     stage_keys = ("preprocess", "inference", "postprocess")
@@ -409,6 +448,9 @@ def run(argv=None) -> int:
                 stage_frames += 1
             records.append({"frame": frame_index, "predictions": detections})
             if writer is not None or args.show:
+                if args.trail_length > 0:
+                    # Updated before drawing so the current centre is the newest point.
+                    _update_trails(trails, detections, args.trail_length)
                 rendered = _render(
                     frame,
                     detections,
@@ -419,6 +461,7 @@ def run(argv=None) -> int:
                     show_skeletons=args.show_skeletons,
                     line_width=args.line_width,
                     point_radius=args.point_radius,
+                    trails=trails if args.trail_length > 0 else None,
                 )
                 if writer is not None:
                     writer.write(rendered)

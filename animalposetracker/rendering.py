@@ -103,6 +103,34 @@ class RenderStyle:
     skeleton_colors: Tuple[Color, ...] = ()
     label_fill: bool = False
     label_text_color: Color = (0, 0, 0)
+    track_colors: Tuple[Color, ...] = ()
+    trail_thickness: int = 2
+
+
+# One colour per tracked identity. High-contrast neighbours so two animals whose IDs sit
+# next to each other do not read as the same colour on a cluttered background.
+TRACK_PALETTE: Tuple[Color, ...] = (
+    (60, 180, 75),
+    (255, 130, 0),
+    (80, 80, 230),
+    (0, 220, 255),
+    (220, 80, 220),
+    (255, 220, 0),
+    (80, 200, 220),
+    (200, 120, 255),
+    (0, 140, 255),
+    (120, 255, 180),
+    (255, 140, 180),
+    (180, 220, 80),
+    (255, 60, 60),
+    (60, 220, 220),
+    (220, 160, 60),
+    (140, 60, 220),
+    (60, 120, 220),
+    (200, 200, 60),
+    (60, 200, 140),
+    (220, 100, 140),
+)
 
 
 # `predict`: green box and label, cyan skeleton, one colour per keypoint.
@@ -140,6 +168,8 @@ INFERENCE_STYLE = RenderStyle(
     label_offset_y=6,
     label_min_y=0,
     label_thickness_floor=0,
+    # Only used when the caller passes a track id; plain inference is unaffected.
+    track_colors=TRACK_PALETTE,
 )
 
 
@@ -152,6 +182,8 @@ def draw_instance(
     *,
     style: RenderStyle,
     class_id: Optional[int] = None,
+    track_id: Optional[int] = None,
+    trail: Optional[Sequence[Pixel]] = None,
     show_box: bool = True,
     show_label: bool = True,
     show_keypoints: bool = True,
@@ -173,6 +205,10 @@ def draw_instance(
         style: The palette and typography of the calling command.
         class_id: Index into ``style.class_colors``; ``None`` keeps
             ``style.box_color``.
+        track_id: Tracked identity.  When ``style.track_colors`` is set this wins over
+            ``class_id``, so each animal keeps one colour for the whole sequence.
+        trail: Recent box-centre positions, oldest first.  Drawn under the box as a
+            polyline in the instance colour; empty or ``None`` draws nothing.
         show_box: Draw the rectangle.
         show_label: Draw the label.  Independent of ``show_box``.
         show_keypoints: Draw the keypoint dots.
@@ -186,12 +222,28 @@ def draw_instance(
     import cv2
 
     box_color = style.box_color
-    if style.class_colors and class_id is not None:
+    if style.track_colors and track_id is not None:
+        # Identity wins over class: a tracked stream colours one animal consistently even
+        # when every detection shares the same class id.
+        box_color = style.track_colors[int(track_id) % len(style.track_colors)]
+    elif style.class_colors and class_id is not None:
         box_color = style.class_colors[int(class_id) % len(style.class_colors)]
     box_width = line_width if style.box_line_width is None else style.box_line_width
     edge_width = (
         line_width if style.skeleton_line_width is None else style.skeleton_line_width
     )
+
+    # The trail goes down first so the box and skeleton stay legible on top of it.
+    if trail is not None and len(trail) >= 2:
+        trail_width = max(int(style.trail_thickness), 1)
+        previous = None
+        for point in trail:
+            if point is None:
+                previous = None
+                continue
+            if previous is not None:
+                cv2.line(frame, previous, point, box_color, trail_width, cv2.LINE_AA)
+            previous = point
 
     if box is not None:
         if show_box:

@@ -556,6 +556,29 @@ def instance_to_record(instance, class_names) -> Dict[str, Any]:
     }
 
 
+def warmup_inference_session(session, pipeline=None) -> None:
+    """Warm the engine once so the first real frame does not pay setup costs.
+
+    Pass the running pipeline when one exists (it knows the detector and the input mode);
+    otherwise a temporary full-frame pipeline is built over the same engine. Failures are
+    swallowed on purpose: a CPU-only or partially configured backend must still be able to
+    run, just without the warmup benefit.
+    """
+    try:
+        if pipeline is None:
+            from animalposetracker.inference.stream_inference import StreamInferencePipeline
+
+            pipeline = StreamInferencePipeline(
+                session.engine,
+                session.output_config,
+                input_config=session.input_config,
+                class_names=list(session.class_names),
+            )
+        pipeline.warmup()
+    except Exception:
+        pass
+
+
 __all__ = [
     "ENGINE_NAMES",
     "FORMAT_TO_ENGINE",
@@ -569,4 +592,5 @@ __all__ = [
     "read_inference_config",
     "resolve_num_classes",
     "validate_inference_selection",
+    "warmup_inference_session",
 ]

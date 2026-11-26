@@ -508,6 +508,45 @@ class StreamPipelineTests(unittest.TestCase):
         self.assertEqual(len(result), 1)
         np.testing.assert_allclose(result[0].keypoints_xy, [[4, 2]], atol=1e-5)
 
+    def test_warmup_runs_the_engine_and_discards_its_timings(self):
+        config = PoseOutputConfig(
+            schema=RTMO_MMDEPLOY,
+            num_keypoints=1,
+            keypoint_dims=3,
+        )
+        engine = self.FakePoseEngine({
+            "dets": np.asarray([[[0, 0, 8, 8, 0.9]]], dtype=np.float32),
+            "pred_kpts": np.asarray([[[[4, 4, 0.8]]]], dtype=np.float32),
+        })
+        pipeline = StreamInferencePipeline(
+            engine,
+            config,
+            input_mode="full_frame",
+            input_config=StreamInputConfig(
+                input_size=(8, 8),
+                preprocess_mode="mmpose_bottomup",
+                color_order="BGR",
+                input_scale=1.0,
+                pixel_mean=(0, 0, 0),
+                pixel_std=(1, 1, 1),
+            ),
+        )
+
+        pipeline.warmup(repeats=3)
+
+        # Warmup must actually hit the backend, and must not leak into the reported timings.
+        self.assertEqual(len(engine.calls), 3)
+        self.assertEqual(pipeline.last_timings, {})
+        self.assertTrue(pipeline._warmed_up)
+
+        pipeline.warmup(repeats=3)
+        self.assertEqual(len(engine.calls), 3, "warmup must be idempotent")
+
+        pipeline.process_frame(np.zeros((4, 8, 3), dtype=np.uint8))
+        self.assertIn("preprocess", pipeline.last_timings)
+        self.assertIn("inference", pipeline.last_timings)
+        self.assertIn("postprocess", pipeline.last_timings)
+
 
 if __name__ == "__main__":
     unittest.main()

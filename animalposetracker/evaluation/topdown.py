@@ -1,6 +1,7 @@
 """AnimalViTPose SimCC validation adapter."""
 
 import warnings
+from time import perf_counter
 from typing import Optional, Sequence, Tuple
 
 import numpy as np
@@ -20,6 +21,12 @@ from animalposetracker.postprocessing.nms_core import (
     group_by_key,
     oks_similarity,
 )
+
+def _synchronize_timing(device) -> None:
+    """Let queued CUDA work finish so a stage timer measures compute, not just submission."""
+    if getattr(device, "type", None) == "cuda":
+        torch.cuda.synchronize(device)
+
 
 class SimCCPoseValidator:
     """Compute MMPose-compatible SimCC decoding and keypoint metrics."""
@@ -76,6 +83,13 @@ class SimCCPoseValidator:
         errors = []
         visibility_parts = []
         bbox_sizes = []
+        # Stage timings, accumulated in seconds and divided by the crop count at the end.
+        # Per crop rather than per image: one image yields one crop per annotated box, and
+        # the inference cost is paid per crop. The bottom-up evaluator reports per image, so
+        # the two speed columns are not interchangeable; reports say which is which.
+        speed_seconds = {"preprocess": 0.0, "inference": 0.0, "postprocess": 0.0}
+        sample_count = 0
+        image_ids_seen = set()
         if self.validation_dataset is None:
             raise ValueError("AnimalViTPose validation requires the validation dataset")
         coco_gt, _image_ids_by_path, _category_ids_by_class = build_coco_ground_truth(
@@ -85,12 +99,18 @@ class SimCCPoseValidator:
 
         with torch.inference_mode():
             for batch in tqdm(loader, desc="val", unit="batch", dynamic_ncols=True, leave=False):
+                _synchronize_timing(device)
+                stage_start = perf_counter()
                 raw_images = batch["images"]
                 images = raw_images.to(device, non_blocking=device.type == "cuda")
                 # Match the trainer's uint8 -> [0, 1] scaling (engine._prepare_batch).
                 if raw_images.dtype == torch.uint8:
                     images = images.float().div_(255)
                 targets = batch["targets"]
+                _synchronize_timing(device)
+                speed_seconds["preprocess"] += perf_counter() - stage_start
+
+                stage_start = perf_counter()
                 pred_x, pred_y = model(images)
                 if self.flip_tta and self.flip_indices is not None:
                     flipped_x, flipped_y = model(torch.flip(images, dims=(-1,)))
@@ -99,7 +119,10 @@ class SimCCPoseValidator:
                     flipped_y = flipped_y.index_select(1, permutation)
                     pred_x = (pred_x + flipped_x) * 0.5
                     pred_y = (pred_y + flipped_y) * 0.5
+                _synchronize_timing(device)
+                speed_seconds["inference"] += perf_counter() - stage_start
 
+                stage_start = perf_counter()
                 crop_coords, keypoint_scores = simcc_argmax(pred_x, pred_y, self.split_ratio)
                 inverse = targets["warp_inverse"].numpy()
                 homogeneous = np.concatenate(
@@ -159,6 +182,9 @@ class SimCCPoseValidator:
                             "score": confidence,
                             "area": detection_area,
                         })
+                speed_seconds["postprocess"] += perf_counter() - stage_start
+                sample_count += len(source_coords)
+                image_ids_seen.update(int(value) for value in ids)
 
         if not errors:
             raise ValueError("Validation data loader produced no top-down samples")
@@ -174,6 +200,10 @@ class SimCCPoseValidator:
             auc_thresholds=self.auc_thresholds,
         )
         metrics.update(self._coco_metrics(coco_gt, predictions_for_coco))
+        metrics["images"] = len(image_ids_seen)
+        metrics["instances"] = sample_count
+        for stage, seconds in speed_seconds.items():
+            metrics[f"speed/{stage}_ms"] = seconds * 1000.0 / max(sample_count, 1)
         return metrics
 
     def _coco_metrics(self, coco_gt, detections):
