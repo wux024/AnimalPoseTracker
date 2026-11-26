@@ -381,6 +381,9 @@ def run(argv=None) -> int:
     records = []
     frame_index = 0
     started_at = time.time()
+    stage_keys = ("preprocess", "inference", "postprocess")
+    stage_totals = {key: 0.0 for key in stage_keys}
+    stage_frames = 0
     frame_progress = tqdm(
         total=frame_total or None,
         desc="infer",
@@ -397,6 +400,13 @@ def run(argv=None) -> int:
             else:
                 instances = pipeline.process_frame(frame)
                 detections = [_instance_to_record(instance, class_names) for instance in instances]
+            # Stage timings are measured inside the pipeline, so tracking and plain inference
+            # contribute the same way.
+            frame_timings = getattr(pipeline, "last_timings", None) or {}
+            if frame_timings:
+                for key in stage_keys:
+                    stage_totals[key] += float(frame_timings.get(key, 0.0))
+                stage_frames += 1
             records.append({"frame": frame_index, "predictions": detections})
             if writer is not None or args.show:
                 rendered = _render(
@@ -461,6 +471,17 @@ def run(argv=None) -> int:
         f"Inference complete: {frame_index} frames in {elapsed:.1f}s "
         f"({frame_index / elapsed:.1f} fps)"
     )
+    if stage_frames:
+        averaged = {key: stage_totals[key] / stage_frames for key in stage_keys}
+        total_seconds = sum(averaged.values())
+        print(
+            "Stage averages: "
+            f"preprocess {averaged['preprocess'] * 1000:.3f} ms | "
+            f"inference {averaged['inference'] * 1000:.3f} ms | "
+            f"postprocess {averaged['postprocess'] * 1000:.3f} ms | "
+            f"total {total_seconds * 1000:.3f} ms "
+            f"({1.0 / total_seconds:.1f} fps)" if total_seconds > 0 else "Stage averages: n/a"
+        )
     return 0
 
 

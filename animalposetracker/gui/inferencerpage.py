@@ -90,6 +90,9 @@ class InferencerPage(QWidget, Ui_Inferencer):
         # The shared two-stage stream (detector -> crops -> SimCC), built at Start and dropped
         # when the run ends.
         self._stream_pipeline = None
+        # Stage timings reported by the engine for the most recent frame; empty until the
+        # first frame of a run decodes.
+        self._last_engine_timings = {}
         # Whether each half of the inference setup has passed its checks; Start needs both.
         self._config_ready = False
         self._weights_ready = False
@@ -1375,7 +1378,11 @@ class InferencerPage(QWidget, Ui_Inferencer):
             confidence_threshold=self._live_poser_conf,
             iou_threshold=self._live_nms_iou,
         )
-        return self._stream_pipeline.process_frame(frame)
+        instances = self._stream_pipeline.process_frame(frame)
+        # Stage timings come from the engine now, not from the thread wrappers: the pipeline
+        # measured its own preprocess/inference/postprocess inside this call.
+        self._last_engine_timings = dict(self._stream_pipeline.last_timings)
+        return instances
 
     def _wrap_instances(self, instances, _inverse_affine):
         """Two-stage decodes inside the pipeline; just carry the instances onward."""
@@ -1393,22 +1400,31 @@ class InferencerPage(QWidget, Ui_Inferencer):
     def _draw_timings(self, frame, results):
         """FPS and the three stage timings, top-left, in the order the old renderer used."""
         config = self.visualization_config
+        engine_timings = getattr(self, "_last_engine_timings", None) or {}
 
         def milliseconds(key):
+            if key in engine_timings:
+                return f"{float(engine_timings[key]) * 1000.0:.3f} ms"
+            # Falls back to the thread timings, which still feed the single-stage pathway.
             return f"{float(results.get(key, 0.0)) * 1000.0:.3f} ms"
 
         lines = []
         if config['show_fps']:
             # Clamped: the value is derived from a measured stage time, and an outlier used to
             # print as a seven-digit frame rate.
-            fps_value = min(max(float(results.get('fps', 0.0)), 0.0), 999.9)
+            if engine_timings:
+                stage_total = sum(float(value) for value in engine_timings.values())
+                fps_value = (1.0 / stage_total) if stage_total > 0 else 0.0
+            else:
+                fps_value = float(results.get('fps', 0.0))
+            fps_value = min(max(fps_value, 0.0), 999.9)
             lines.append(f"FPS: {fps_value:.1f}")
         if config['show_preprocess_time']:
-            lines.append(f"Preprocess: {milliseconds('preprocess_time')}")
+            lines.append(f"Preprocess: {milliseconds('preprocess')}")
         if config['show_inference_time']:
-            lines.append(f"Inference: {milliseconds('inference_time')}")
+            lines.append(f"Inference: {milliseconds('inference')}")
         if config['show_postprocess_time']:
-            lines.append(f"Postprocess: {milliseconds('postprocess_time')}")
+            lines.append(f"Postprocess: {milliseconds('postprocess')}")
         if not lines:
             return frame
 

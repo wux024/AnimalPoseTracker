@@ -5,7 +5,8 @@ This API consumes in-memory frames only. File and dataset prediction remain in
 """
 
 from dataclasses import dataclass
-from typing import Any, List, Mapping, Optional, Protocol, Sequence, Tuple, Union
+from time import perf_counter
+from typing import Any, Dict, List, Mapping, Optional, Protocol, Sequence, Tuple, Union
 
 import cv2
 import numpy as np
@@ -279,6 +280,46 @@ class StreamInferencePipeline:
         self.detector = detector
         self.class_names = list(class_names) if class_names is not None else []
         self.tracker = self._build_tracker(tracker)
+        # Stage timings of the most recent process_frame call, in seconds. Callers read
+        # this instead of timing the whole call, so the engine owns the measurement and
+        # the GUI/CLI cannot drift apart.
+        self.last_timings: Dict[str, float] = {}
+        self._warmed_up = False
+
+    def warmup(self, repeats: int = 3) -> None:
+        """Run a few dummy frames so the first real frame does not pay CUDA/kernel setup.
+
+        Random tensors are enough: the goal is to trigger allocations, kernel compilation
+        and NMS caching, not to produce a meaningful prediction. Results are discarded and
+        never enter ``last_timings``.
+        """
+        if self._warmed_up:
+            return
+        height, width = self._pose_input_size()
+        dummy = np.zeros((1, 3, int(height), int(width)), dtype=np.float32)
+        try:
+            for _ in range(max(int(repeats), 1)):
+                if self.input_mode == "topdown":
+                    self._warmup_topdown(dummy)
+                else:
+                    self._inference_outputs(dummy)
+        except Exception:
+            # Warmup is best-effort: a CPU-only or partially configured backend should not
+            # block the pipeline from running.
+            pass
+        finally:
+            self._warmed_up = True
+            self.last_timings = {}
+
+    def _warmup_topdown(self, dummy: np.ndarray) -> None:
+        """Warm the pose engine with a synthetic crop, and the detector with a blank frame."""
+        dummy_frame = np.zeros((480, 640, 3), dtype=np.uint8)
+        if self.detector is not None:
+            try:
+                self.detector.predict_boxes(dummy_frame)
+            except Exception:
+                pass
+        self._inference_outputs(dummy)
 
     @staticmethod
     def _build_tracker(tracker):
@@ -335,6 +376,7 @@ class StreamInferencePipeline:
 
     def _predict_full_frame(self, frame: np.ndarray) -> List[PoseInstance]:
         mode = self.input_config.preprocess_mode or "engine"
+        start = perf_counter()
         if mode == "engine":
             model_input, inverse = self.pose_engine.preprocess(frame)
         elif mode == "mmpose_bottomup":
@@ -343,23 +385,40 @@ class StreamInferencePipeline:
             )
         else:
             raise ValueError(f"Unsupported full-frame preprocess mode {mode!r}")
+        after_preprocess = perf_counter()
         outputs = self._inference_outputs(model_input)
-        return decode_pose_outputs(outputs, self.output_config, inverse_affine=inverse)
+        after_inference = perf_counter()
+        instances = decode_pose_outputs(outputs, self.output_config, inverse_affine=inverse)
+        after_postprocess = perf_counter()
+        self.last_timings = {
+            "preprocess": after_preprocess - start,
+            "inference": after_inference - after_preprocess,
+            "postprocess": after_postprocess - after_inference,
+        }
+        return instances
 
     def _predict_topdown(self, frame: np.ndarray) -> List[PoseInstance]:
+        start = perf_counter()
         boxes = [
             _coerce_detector_box(box)
             for box in self.detector.predict_boxes(frame)
         ]
+        after_detector = perf_counter()
         instances = []
+        preprocess_seconds = 0.0
+        inference_seconds = 0.0
+        postprocess_seconds = 0.0
         for detection in boxes:
+            crop_start = perf_counter()
             model_input, inverse = _preprocess_topdown_crop(
                 frame,
                 detection,
                 self.input_config,
                 self._pose_input_size(),
             )
+            crop_preprocessed = perf_counter()
             outputs = self._inference_outputs(model_input)
+            crop_inferred = perf_counter()
             pose = decode_simcc(
                 outputs,
                 self.output_config,
@@ -368,7 +427,16 @@ class StreamInferencePipeline:
                 bbox_score=detection.score,
                 class_id=detection.class_id,
             )
+            crop_done = perf_counter()
+            preprocess_seconds += crop_preprocessed - crop_start
+            inference_seconds += crop_inferred - crop_preprocessed
+            postprocess_seconds += crop_done - crop_inferred
             instances.append(pose)
+        self.last_timings = {
+            "preprocess": (after_detector - start) + preprocess_seconds,
+            "inference": inference_seconds,
+            "postprocess": postprocess_seconds,
+        }
         return instances
 
     def process_frame(self, frame: np.ndarray) -> List[PoseInstance]:
