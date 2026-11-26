@@ -62,8 +62,6 @@ def _coco_keypoint_shape(categories, annotations, requested_shape):
 def load_coco_pose_index(
     annotation_path: Path,
     root: Path,
-    image_roots: Sequence[Path],
-    available_images: Sequence[Path],
     class_names: Optional[Sequence[str]],
     requested_shape,
 ):
@@ -82,10 +80,7 @@ def load_coco_pose_index(
     )
     names, category_to_class = _category_map(categories, class_names)
 
-    images_by_name: Dict[str, List[Path]] = {}
-    for image_path in available_images:
-        images_by_name.setdefault(image_path.name.casefold(), []).append(image_path.resolve())
-    resolved_roots = [root.resolve(), *(path.resolve() for path in image_roots)]
+    resolved_root = root.resolve()
     image_paths: List[Path] = []
     annotations_by_path: Dict[str, List[dict]] = {}
     image_metadata_by_path: Dict[str, dict] = {}
@@ -94,16 +89,20 @@ def load_coco_pose_index(
         file_name = image_record.get("file_name")
         if not file_name:
             raise ValueError(f"COCO image record is missing file_name: {annotation_path}")
-        file_path = Path(str(file_name)).expanduser()
-        candidates = [file_path] if file_path.is_absolute() else [base / file_path for base in resolved_roots]
-        resolved = next((candidate.resolve() for candidate in candidates if candidate.is_file()), None)
-        if resolved is None:
-            matches = images_by_name.get(file_path.name.casefold(), [])
-            if len(matches) == 1:
-                resolved = matches[0]
-        if resolved is None:
+        # The layout is fixed: every file_name is relative to the dataset root, for example
+        # "images/test/000001.jpg". An absolute path, or a name that does not resolve there,
+        # is a broken dataset -- report it instead of searching other roots or guessing by
+        # filename, which used to hide layout mistakes until the metrics looked wrong.
+        file_path = Path(str(file_name))
+        if file_path.is_absolute():
+            raise ValueError(
+                f"COCO image file_name must be relative to the dataset root {root}; "
+                f"got an absolute path: {file_name!r}"
+            )
+        resolved = (resolved_root / file_path).resolve()
+        if not resolved.is_file():
             raise FileNotFoundError(
-                f"COCO image {file_name!r} was not found under dataset root or configured image folders"
+                f"COCO image {file_name!r} does not exist under the dataset root {root}"
             )
         image_paths.append(resolved)
         image_id_to_path[image_record["id"]] = resolved

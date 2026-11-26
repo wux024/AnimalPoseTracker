@@ -236,11 +236,6 @@ class PoseTextDataset(Dataset):
             if not self.annotation_path.is_file():
                 raise FileNotFoundError(f"COCO annotation JSON does not exist: {self.annotation_path}")
 
-            image_source = sources
-            available_images = (
-                _expand_sources(image_source, self.root, split) if image_source is not None else []
-            )
-            image_roots = sorted({path.parent for path in available_images})
             (
                 self.image_paths,
                 self._coco_annotations_by_path,
@@ -251,8 +246,6 @@ class PoseTextDataset(Dataset):
             ) = load_coco_pose_index(
                 self.annotation_path,
                 self.root,
-                image_roots,
-                available_images,
                 class_names or None,
                 self.data_config.get("kpt_shape"),
             )
