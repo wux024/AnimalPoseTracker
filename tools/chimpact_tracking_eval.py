@@ -34,6 +34,7 @@ from pathlib import Path
 from typing import Dict, List, Optional, Sequence, Tuple
 
 import numpy as np
+from tqdm import tqdm
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 if str(REPO_ROOT) not in sys.path:
@@ -410,7 +411,8 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
 
     clip_results: Dict[str, dict] = {}
     skipped = []
-    for label_path in label_paths:
+    progress = tqdm(label_paths, desc=args.tracker, unit="clip", dynamic_ncols=True)
+    for label_path in progress:
         clip = label_path.stem
         video_path = videos_dir / f"{clip}.mp4"
         if not video_path.is_file():
@@ -425,10 +427,12 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
             args.iou,
             args.max_frames,
         )
-        print(
-            f"{clip[:44]:<44} MOTA={clip_results[clip]['mota']:.4f} "
-            f"IDF1={clip_results[clip]['idf1']:.4f}"
+        progress.set_postfix(
+            mota=f"{clip_results[clip]['mota']:.3f}",
+            idf1=f"{clip_results[clip]['idf1']:.3f}",
+            refresh=False,
         )
+    progress.close()
 
     summary = summarize(clip_results)
     output_dir = Path(args.output).expanduser().resolve()
