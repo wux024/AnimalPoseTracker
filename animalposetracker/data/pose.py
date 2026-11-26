@@ -19,7 +19,7 @@ from torch.utils.data import DataLoader, Dataset
 from torch.utils.data.distributed import DistributedSampler
 
 from .augment import PoseAugment
-from .coco import annotation_source_for_split, load_coco_pose_index
+from .coco import load_coco_pose_index
 from animalposetracker.preprocessing.letterbox import letterbox_image
 from animalposetracker.preprocessing.letterbox_core import (
     PAD_VALUE,
@@ -208,27 +208,19 @@ class PoseTextDataset(Dataset):
             raise ValueError("fraction must be in the range (0, 1]")
 
         sources = self.data_config.get(split)
-        annotation_source = annotation_source_for_split(self.data_config, split)
-        source_is_json = (
-            isinstance(sources, (str, Path)) and Path(str(sources)).suffix.lower() == ".json"
-        )
-        if annotation_source is None and source_is_json:
-            annotation_source = sources
         annotation_format = str(
-            self.data_config.get("annotation_format", self.data_config.get("format", "auto"))
+            self.data_config.get("annotation_format", self.data_config.get("format", "coco"))
         ).strip().lower()
         if annotation_format not in {"auto", "yolo", "coco"}:
             raise ValueError("annotation_format must be 'auto', 'yolo' or 'coco'")
-        if annotation_format == "coco" and annotation_source is None:
-            candidates = (
-                self.root / "annotations" / f"person_keypoints_{split}2017.json",
-                self.root / "annotations" / f"{split}.json",
-                self.root / f"{split}.json",
-            )
-            annotation_source = next((candidate for candidate in candidates if candidate.is_file()), None)
-            if annotation_source is None:
+        annotation_source = None
+        if annotation_format in {"auto", "coco"}:
+            # One fixed location: <path>/annotations/<split>.json. Nothing else to configure.
+            candidate = self.root / "annotations" / f"{split}.json"
+            annotation_source = candidate if candidate.is_file() else None
+            if annotation_source is None and annotation_format == "coco":
                 raise FileNotFoundError(
-                    f"COCO format was selected but no {split} annotation JSON was configured or found"
+                    f"COCO annotation JSON does not exist: {candidate}"
                 )
 
         names = self.data_config.get("names") or {}
@@ -244,24 +236,11 @@ class PoseTextDataset(Dataset):
             if not self.annotation_path.is_file():
                 raise FileNotFoundError(f"COCO annotation JSON does not exist: {self.annotation_path}")
 
-            image_source = self.data_config.get(f"{split}_images")
-            if image_source is None and isinstance(self.data_config.get("images"), dict):
-                image_source = self.data_config["images"].get(split)
-            if image_source is None and not source_is_json:
-                image_source = sources
+            image_source = sources
             available_images = (
                 _expand_sources(image_source, self.root, split) if image_source is not None else []
             )
             image_roots = sorted({path.parent for path in available_images})
-            if image_source is None and source_is_json:
-                inferred_roots = (
-                    self.root / "images",
-                    self.root / "images" / f"{split}2017",
-                    self.root / f"{split}2017",
-                    self.root / "images" / split,
-                    self.root / split,
-                )
-                image_roots.extend(path.resolve() for path in inferred_roots if path.is_dir())
             (
                 self.image_paths,
                 self._coco_annotations_by_path,

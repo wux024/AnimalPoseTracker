@@ -17,7 +17,12 @@ from scipy.stats import truncnorm
 from torch.utils.data import DataLoader, Dataset, SequentialSampler
 from torch.utils.data.distributed import DistributedSampler
 
-from animalposetracker.data.pose import PoseTextDataset, _read_yaml, _seed_pose_worker
+from animalposetracker.data.pose import (
+    PoseTextDataset,
+    _read_yaml,
+    _resolve_root,
+    _seed_pose_worker,
+)
 from animalposetracker.preprocessing.topdown import (
     _fix_aspect_ratio, _topdown_warp_matrix,
 )
@@ -477,11 +482,9 @@ def build_topdown_dataloaders(
         preprocessing_config=preprocessing_config,
     )
     values = _read_yaml(config_path)
-    validation_value = values.get(validation_split)
-    if validation_value is None:
-        validation_value = values.get(f"{validation_split}_annotations")
-    if validation_value is None and isinstance(values.get("annotations"), dict):
-        validation_value = values["annotations"].get(validation_split)
+    root = _resolve_root(values, config_path)
+    annotation_candidate = root / "annotations" / f"{validation_split}.json"
+    validation_value = annotation_candidate if annotation_candidate.is_file() else None
     validation_dataset = None
     if include_validation and validation_value is not None:
         validation_dataset = TopDownPoseDataset(
