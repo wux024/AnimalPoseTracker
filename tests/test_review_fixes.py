@@ -141,7 +141,7 @@ class ReviewFixTests(unittest.TestCase):
         }
         trainer = Trainer.__new__(Trainer)
         trainer.rank = 0
-        trainer.config = SimpleNamespace(ema=True, epochs=1)
+        trainer.config = SimpleNamespace(ema=True, epochs=1, precision="fp16")
         trainer.ema = SimpleNamespace(model=model)
         trainer.raw_model = model
         trainer.amp_enabled = True
@@ -165,7 +165,7 @@ class ReviewFixTests(unittest.TestCase):
         with patch("torch.autocast", return_value=nullcontext()) as autocast:
             result = trainer._validate([], Validator(), epoch_number=1)
 
-        autocast.assert_called_once_with(device_type="cuda", enabled=True)
+        autocast.assert_called_once_with(device_type="cuda", dtype=torch.float16)
         self.assertEqual(result["loss"], 1.0)
         self.assertEqual(observed_dtypes, [torch.float32])
         for name, value in model.state_dict().items():
@@ -198,6 +198,7 @@ class ReviewFixTests(unittest.TestCase):
             data_path = root / "dataset.yaml"
             data_path.write_text(yaml.safe_dump({
                 "path": str(root),
+                "annotation_format": "yolo",
                 "train": "images/train",
                 "kpt_shape": [1, 2],
                 "names": {0: "mouse"},

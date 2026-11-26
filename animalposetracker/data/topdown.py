@@ -481,12 +481,12 @@ def build_topdown_dataloaders(
         augmentation_config=augmentation_config,
         preprocessing_config=preprocessing_config,
     )
-    values = _read_yaml(config_path)
-    root = _resolve_root(values, config_path)
-    annotation_candidate = root / "annotations" / f"{validation_split}.json"
-    validation_value = annotation_candidate if annotation_candidate.is_file() else None
+    # Whether the split has annotatable instances is the dataset's own business: it
+    # reads COCO json when present and falls back to YOLO labels otherwise. Gating on
+    # the json file here silently produced ``validation_loader = None`` for YOLO
+    # datasets, which looked like "no validation set" rather than "unsupported layout".
     validation_dataset = None
-    if include_validation and validation_value is not None:
+    if include_validation:
         validation_dataset = TopDownPoseDataset(
             config_path,
             validation_split,

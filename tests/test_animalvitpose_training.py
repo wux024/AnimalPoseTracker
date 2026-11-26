@@ -611,6 +611,7 @@ class SimCCTrainingTests(unittest.TestCase):
             config_path = root / "dataset.yaml"
             config_path.write_text(
                 "path: .\n"
+                "annotation_format: yolo\n"
                 "train: images/val\n"
                 "val: images/val\n"
                 "kpt_shape: [2, 3]\n"
@@ -743,6 +744,7 @@ class SimCCTrainingTests(unittest.TestCase):
             for field in ("oks_sigmas", "sigmas"):
                 config_path.write_text(
                     "path: .\n"
+                    "annotation_format: yolo\n"
                     "val: images/val\n"
                     "kpt_shape: [1, 3]\n"
                     f"{field}: [0.1]\n"
