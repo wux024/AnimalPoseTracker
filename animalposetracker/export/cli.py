@@ -117,6 +117,57 @@ def _export_onnx(adapter, dummy, path, context, values):
         onnx.save(simplified, str(path))
 
 
+def _quantize_onnx(source: Path, calibration_images, image_size: int) -> Path:
+    """Static INT8 quantization (QDQ): weights and activations both become int8.
+
+    Calibration tensors come from ``preprocess_live_frame``, the same function the
+    inference path uses. Re-implementing the resize here would shift the measured
+    activation ranges and the quantized accuracy would drop for a reason that is very
+    hard to spot later.
+    """
+    try:
+        from onnxruntime.quantization import (
+            CalibrationDataReader,
+            QuantFormat,
+            QuantType,
+            quantize_static,
+        )
+    except ImportError as exc:
+        raise ImportError(
+            "ONNX INT8 calibration requires onnxruntime; install the `export` extra"
+        ) from exc
+
+    from .calibration import calibrated_tensor
+
+    class _FrameReader(CalibrationDataReader):
+        def __init__(self, paths, width, height):
+            self._paths = list(paths)
+            self._index = 0
+            self._width = width
+            self._height = height
+
+        def get_next(self):
+            if self._index >= len(self._paths):
+                return None
+            path = self._paths[self._index]
+            self._index += 1
+            return {"images": calibrated_tensor(path, self._width, self._height)}
+
+    target = source.with_name(f"{source.stem}_int8{source.suffix}")
+    quantize_static(
+        str(source),
+        str(target),
+        _FrameReader(calibration_images, image_size, image_size),
+        quant_format=QuantFormat.QDQ,
+        per_channel=True,
+        weight_type=QuantType.QInt8,
+        activation_type=QuantType.QUInt8,
+    )
+    if not target.is_file():
+        raise RuntimeError(f"quantize_static produced no file at {target}")
+    return target
+
+
 def _resolve_export_format(requested, configured):
     """Resolve an explicitly selected export format without an implicit default."""
     value = requested if requested is not None else configured
@@ -141,11 +192,14 @@ def run(argv=None) -> int:
         overrides["common.device"] = args.device
     for name in (
         "opset", "workspace", "rknn_target", "half", "dynamic", "simplify",
-        "optimize", "int8", "nms", "keras", "exist_ok",
+        "optimize", "int8", "nms", "keras",
     ):
         value = getattr(args, name)
         if value is not None:
             overrides[f"export.{name}"] = value
+    # ``exist_ok`` only decides whether an existing output directory may be reused.
+    # It is not part of the resolved configuration, so it must not go through the
+    # override table -- doing that raised "export.exist_ok is not a registered key".
     resolved = resolve_scopes(project_dir, ("common", "train", "export"), overrides=overrides)
     model, config, context = load_project_runtime_model(project_dir, args.weights, resolved)
     context["dataset_config_path"] = config.data
@@ -173,9 +227,9 @@ def run(argv=None) -> int:
         raise NotImplementedError("Embedding NMS in the exported graph is not implemented")
     format_options = {
         "torchscript": {"half", "optimize"},
-        "onnx": {"dynamic", "half", "opset", "simplify"},
-        "openvino": {"dynamic", "half", "opset", "simplify"},
-        "engine": {"dynamic", "half", "opset", "simplify", "workspace"},
+        "onnx": {"dynamic", "half", "opset", "simplify", "int8"},
+        "openvino": {"dynamic", "half", "opset", "simplify", "int8"},
+        "engine": {"dynamic", "half", "opset", "simplify", "workspace", "int8"},
         "coreml": {"half"},
         "saved_model": {"opset", "simplify"},
         "pb": {"opset", "simplify"},
@@ -212,8 +266,6 @@ def run(argv=None) -> int:
         and "workspace" not in format_options[export_format]
     ):
         raise ValueError("workspace is only meaningful for TensorRT export")
-    if export_format == "engine" and bool(values.get("int8", False)):
-        raise NotImplementedError("TensorRT INT8 requires a representative calibration loader")
     if export_format in {"torchscript", "coreml", "paddle", "ncnn"} and bool(values.get("simplify", False)):
         print(f"Note: simplify applies to ONNX graph conversion; {export_format} exports directly from PyTorch/TorchScript.")
 
@@ -234,7 +286,7 @@ def run(argv=None) -> int:
         config.output_dir = context["project_dir"] / "results" / "export"
     config.output_dir = unique_output_directory(
         config.output_dir,
-        exist_ok=bool(values.get("exist_ok", False)),
+        exist_ok=bool(args.exist_ok),
     )
     output_dir = config.output_dir
     output_dir.mkdir(parents=True, exist_ok=True)
@@ -287,6 +339,8 @@ def run(argv=None) -> int:
         print()
 
     half = bool(values.get("half", False))
+    if half and bool(values.get("int8", False)):
+        raise ValueError("half and int8 are mutually exclusive: pick one precision")
     if export_format == "imx" and half:
         raise ValueError("Sony IMX500 export uses an INT8 quantized graph; half=true does not apply")
     if half and context["device"].type != "cuda" and export_format in {"torchscript", "onnx"}:
@@ -352,9 +406,17 @@ def run(argv=None) -> int:
             json.dumps(metadata, ensure_ascii=False, indent=2) + "\n", encoding="utf-8"
         )
     elif export_format == "onnx":
-        if bool(values.get("int8", False)):
-            raise NotImplementedError("ONNX INT8 quantization is not part of native graph export")
         _export_onnx(adapter, dummy, output_path, context, values)
+        if bool(values.get("int8", False)):
+            from .calibration import calibration_images
+
+            calibration = calibration_images(config.data, limit=200)
+            quantized = _quantize_onnx(output_path, calibration, size)
+            # The FP32 graph is an intermediate, not a deliverable.
+            output_path.unlink()
+            output_path = quantized
+            metadata["quantization"] = "int8_static_qdq"
+            metadata["calibration_images"] = len(calibration)
         output_path.with_suffix(output_path.suffix + ".json").write_text(
             json.dumps(metadata, ensure_ascii=False, indent=2) + "\n", encoding="utf-8"
         )

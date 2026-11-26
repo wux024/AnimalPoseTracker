@@ -29,17 +29,66 @@ def _save_metadata(path: Path, metadata: Dict[str, Any]):
     sidecar.write_text(json.dumps(metadata, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
 
 
-def _export_openvino(onnx_path: Path, output_path: Path, metadata, half=False):
+def _export_openvino(onnx_path: Path, output_path: Path, metadata, half=False, int8=False,
+                     calibration=None, image_size=None):
     ov = _require("openvino")
     output_path.mkdir(parents=True, exist_ok=True)
     xml_path = output_path / f"{onnx_path.stem}.xml"
     ov_model = ov.convert_model(str(onnx_path))
+    if int8:
+        nncf = _require("nncf")
+        from .calibration import iter_tensors
+
+        if not calibration or not image_size:
+            raise ValueError("openvino int8 export needs calibration images and an input size")
+        # NNCF measures activation ranges from these tensors, so they must be built with
+        # the inference preprocessing rather than a fresh resize.
+        dataset = nncf.Dataset(iter_tensors(calibration, image_size, image_size))
+        ov_model = nncf.quantize(ov_model, dataset)
+        metadata["quantization"] = "int8_nncf"
+        metadata["calibration_images"] = len(calibration)
     ov.save_model(ov_model, str(xml_path), compress_to_fp16=bool(half))
     _save_metadata(output_path, metadata)
     return output_path
 
 
-def _export_tensorrt(onnx_path: Path, output_path: Path, metadata, values, dummy_shape):
+def _make_tensorrt_calibrator(trt, images, input_shape, image_size: int, output_path: Path):
+    """Entropy calibrator over preprocessed batches, with the cache kept next to the engine."""
+    import torch
+
+    from .calibration import calibrated_tensor
+
+    shape = tuple(int(value) for value in input_shape)
+    cache_path = output_path.with_suffix(output_path.suffix + ".calibration.cache")
+
+    class _Int8Calibrator(trt.IInt8EntropyCalibrator2):
+        def __init__(self):
+            trt.IInt8EntropyCalibrator2.__init__(self)
+            self._index = 0
+            self._buffer = torch.zeros(shape, dtype=torch.float32, device="cuda")
+
+        def get_batch_size(self):
+            return 1
+
+        def get_batch(self, names):
+            if self._index >= len(images):
+                return None
+            tensor = calibrated_tensor(images[self._index], image_size, image_size)
+            self._index += 1
+            self._buffer.copy_(torch.from_numpy(tensor).to(self._buffer.device))
+            return [int(self._buffer.data_ptr())]
+
+        def read_calibration_cache(self):
+            return cache_path.read_bytes() if cache_path.is_file() else None
+
+        def write_calibration_cache(self, cache):
+            cache_path.write_bytes(bytes(cache))
+
+    return _Int8Calibrator()
+
+
+def _export_tensorrt(onnx_path: Path, output_path: Path, metadata, values, dummy_shape,
+                     int8=False, calibration=None, image_size=None):
     trt = _require("tensorrt")
     logger = trt.Logger(trt.Logger.WARNING)
     builder = trt.Builder(logger)
@@ -59,6 +108,17 @@ def _export_tensorrt(onnx_path: Path, output_path: Path, metadata, values, dummy
         config.max_workspace_size = workspace_bytes
     if bool(values.get("half", False)) and builder.platform_has_fast_fp16:
         config.set_flag(trt.BuilderFlag.FP16)
+    if int8:
+        if not builder.platform_has_fast_int8:
+            raise RuntimeError("this GPU reports no fast INT8 support")
+        if not calibration or not image_size:
+            raise ValueError("TensorRT int8 export needs calibration images and an input size")
+        config.set_flag(trt.BuilderFlag.INT8)
+        config.int8_calibrator = _make_tensorrt_calibrator(
+            trt, calibration, dummy_shape, image_size, output_path
+        )
+        metadata["quantization"] = "int8_tensorrt"
+        metadata["calibration_images"] = len(calibration)
 
     if bool(values.get("dynamic", False)):
         profile = builder.create_optimization_profile()
@@ -408,10 +468,26 @@ def export_with_backend(
     context: Dict[str, Any],
 ):
     """Export a portable native graph through an optional platform-specific converter."""
+    int8_format = export_format in {"openvino", "engine"} and bool(values.get("int8", False))
+    calibration = None
+    image_size = None
+    if int8_format:
+        from .calibration import calibration_images
+
+        input_size = metadata.get("input_size") or []
+        image_size = int(input_size[0]) if input_size else None
+        calibration = calibration_images(context["dataset_config_path"])
+
     if export_format == "openvino":
-        return _export_openvino(onnx_path, output_path, metadata, values.get("half", False))
+        return _export_openvino(
+            onnx_path, output_path, metadata, values.get("half", False),
+            int8=int8_format, calibration=calibration, image_size=image_size,
+        )
     if export_format == "engine":
-        return _export_tensorrt(onnx_path, output_path, metadata, values, dummy.shape)
+        return _export_tensorrt(
+            onnx_path, output_path, metadata, values, dummy.shape,
+            int8=int8_format, calibration=calibration, image_size=image_size,
+        )
     if export_format == "coreml":
         return _export_coreml(adapter, dummy, output_path, metadata, values.get("half", False))
     if export_format in {"saved_model", "pb", "tflite", "edgetpu", "tfjs"}:
