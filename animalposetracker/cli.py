@@ -50,12 +50,19 @@ def _run_validation(argv: Sequence[str]) -> int:
     parser.add_argument("--config", default="configs/runtime.yaml")
     parser.add_argument("--weights", required=True)
     parser.add_argument("--output-dir")
+    parser.add_argument(
+        "--split",
+        default="val",
+        choices=("train", "val", "test"),
+        help="Dataset split to evaluate (default: val).",
+    )
     values, overrides = parser.parse_known_args(list(argv))
 
     from animalposetracker.training.cli import run
 
     forwarded = [
         "--validate-only", "--config", values.config, "--weights", values.weights,
+        "--split", values.split,
     ]
     if values.output_dir:
         forwarded.extend(("--output-dir", values.output_dir))

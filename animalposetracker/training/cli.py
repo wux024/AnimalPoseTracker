@@ -494,6 +494,12 @@ def _make_argument_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="Run the configured validation split without training.",
     )
+    parser.add_argument(
+        "--split",
+        default="val",
+        choices=("train", "val", "test"),
+        help="Dataset split evaluated by --validate-only (default: val).",
+    )
     parser.add_argument("--weights", help="Checkpoint or weights-only file used by --validate-only.")
     parser.add_argument("--output-dir", "--save-dir", dest="output_dir")
     parser.add_argument("--json", action="store_true", help="Emit JSON-lines events on stdout.")
@@ -894,6 +900,7 @@ def run(argv=None) -> int:
                 split_ratio=simcc_split_ratio,
                 augmentation_config=augmentation_config,
                 preprocessing_config=preprocessing_config,
+                validation_split=getattr(args, "split", "val"),
             )
             config.train_dataset_size = metadata["train_instances"]
             set_simcc_keypoint_count(
@@ -987,6 +994,7 @@ def run(argv=None) -> int:
                 close_mosaic=config.close_mosaic,
                 single_cls=config.single_cls,
                 device=config.device,
+                validation_split=getattr(args, "split", "val"),
             )
             model = build_model(model_spec, scale=scale)
             head = model.model[-1]
@@ -1087,6 +1095,7 @@ def run(argv=None) -> int:
                 json.dumps(
                     {
                         "weights": str(weights_path),
+                        "split": getattr(args, "split", "val"),
                         "metrics": metrics,
                     },
                     ensure_ascii=False,

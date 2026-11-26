@@ -455,9 +455,15 @@ def build_topdown_dataloaders(
     split_ratio: float = 2.0,
     augmentation_config: Optional[Dict[str, Any]] = None,
     preprocessing_config: Optional[Dict[str, Any]] = None,
+    validation_split: str = "val",
 ) -> Tuple[DataLoader, Optional[DataLoader], Dict[str, Any]]:
     """Build MMPose-style instance-crop loaders for the shared training engine."""
     config_path = Path(data_yaml).expanduser().resolve()
+    validation_split = str(validation_split or "val").strip().lower()
+    if validation_split not in {"train", "val", "test"}:
+        raise ValueError(
+            f"validation_split must be one of train/val/test, got {validation_split!r}"
+        )
     train_dataset = TopDownPoseDataset(
         config_path,
         "train",
@@ -471,14 +477,16 @@ def build_topdown_dataloaders(
         preprocessing_config=preprocessing_config,
     )
     values = _read_yaml(config_path)
-    validation_value = values.get("val") or values.get("val_annotations")
+    validation_value = values.get(validation_split)
+    if validation_value is None:
+        validation_value = values.get(f"{validation_split}_annotations")
     if validation_value is None and isinstance(values.get("annotations"), dict):
-        validation_value = values["annotations"].get("val")
+        validation_value = values["annotations"].get(validation_split)
     validation_dataset = None
     if include_validation and validation_value is not None:
         validation_dataset = TopDownPoseDataset(
             config_path,
-            "val",
+            validation_split,
             input_size=input_size,
             sigma=sigma,
             split_ratio=split_ratio,

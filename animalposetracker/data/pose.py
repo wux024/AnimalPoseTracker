@@ -863,9 +863,15 @@ def build_pose_dataloaders(
     single_cls: bool = False,
     device: str = "auto",
     rect: bool = False,
+    validation_split: str = "val",
 ) -> Tuple[DataLoader, Optional[DataLoader], Dict[str, Any]]:
     """Construct project-owned training and validation loaders from dataset YAML."""
     config_path = Path(data_yaml).expanduser().resolve()
+    validation_split = str(validation_split or "val").strip().lower()
+    if validation_split not in {"train", "val", "test"}:
+        raise ValueError(
+            f"validation_split must be one of train/val/test, got {validation_split!r}"
+        )
     train_dataset = PoseTextDataset(
         config_path,
         "train",
@@ -879,13 +885,15 @@ def build_pose_dataloaders(
         batch_size=batch_size,
     )
     data_config = _read_yaml(config_path)
-    validation_value = data_config.get("val") or data_config.get("val_annotations")
+    validation_value = data_config.get(validation_split)
+    if validation_value is None:
+        validation_value = data_config.get(f"{validation_split}_annotations")
     if validation_value is None and isinstance(data_config.get("annotations"), dict):
-        validation_value = data_config["annotations"].get("val")
+        validation_value = data_config["annotations"].get(validation_split)
     validation_dataset = (
         PoseTextDataset(
             config_path,
-            "val",
+            validation_split,
             image_size,
             cache=cache,
             single_cls=single_cls,
