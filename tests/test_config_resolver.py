@@ -13,6 +13,7 @@ import yaml
 
 from animalposetracker.config import (
     ConfigFormatError,
+    persist_overrides,
     project_dir_from,
     resolve_scopes,
     write_scope,
@@ -292,3 +293,35 @@ class RuntimeContextTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class PersistOverridesTests(unittest.TestCase):
+    """Command-line values must survive the process that introduced them."""
+
+    def test_records_dotted_path_and_keeps_siblings(self):
+        with TemporaryDirectory() as temporary:
+            root = _make_project(temporary, runtime={"train": {"epochs": 10}})
+            persist_overrides(root, {"train.models.AnimalRTPose.training.image_size": 192})
+            tree = yaml.safe_load((root / "configs" / "runtime.yaml").read_text(encoding="utf-8"))
+
+        self.assertEqual(tree["train"]["models"]["AnimalRTPose"]["training"]["image_size"], 192)
+        self.assertEqual(tree["train"]["epochs"], 10)
+
+    def test_skips_run_scoped_keys(self):
+        with TemporaryDirectory() as temporary:
+            root = _make_project(temporary)
+            result = persist_overrides(
+                root, {"common.project": "results/x"}, skip=("common.project",)
+            )
+            tree = yaml.safe_load((root / "configs" / "runtime.yaml").read_text(encoding="utf-8")) or {}
+
+        self.assertIsNone(result)
+        self.assertNotIn("project", tree.get("common", {}))
+
+    def test_second_write_of_the_same_value_is_a_no_op(self):
+        with TemporaryDirectory() as temporary:
+            root = _make_project(temporary)
+            persist_overrides(root, {"export.opset": 17})
+            again = persist_overrides(root, {"export.opset": 17})
+
+        self.assertIsNone(again)

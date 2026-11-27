@@ -28,7 +28,7 @@ from .profiles import (
     flatten_train_values,
     train_key_targets,
 )
-from animalposetracker.config import project_dir_from, resolve_scopes
+from animalposetracker.config import persist_overrides, project_dir_from, resolve_scopes
 from animalposetracker.nn.model_config import head_config, set_simcc_keypoint_count
 
 
@@ -565,11 +565,20 @@ def run(argv=None) -> int:
         project_values = _read_mapping(project_config_path) if project_config_path.is_file() else {}
         model_type = str(project_values.get("model_type") or "AnimalRTPose")
 
+        explicit_overrides = _build_train_overrides(cli_override_values, model_type)
         overrides = {
             **_inherited_override_paths(),
-            **_build_train_overrides(cli_override_values, model_type),
+            **explicit_overrides,
         }
         resolved = resolve_scopes(project_dir, ("common", "train"), overrides=overrides)
+        # Command-line values used to last one process: a run started with --imgsz 192
+        # finished, then validation read the file's stale 640 and predicted at the wrong
+        # scale. Recording what this run actually used keeps runtime.yaml truthful.
+        persist_overrides(
+            project_dir,
+            explicit_overrides,
+            skip=("common.project", "common.name", "common.exist_ok", "common.device"),
+        )
         values, _origins = flatten_train_values(resolved, model_type)
         if values.get("model") is None:
             values["model"] = str(project_dir / "configs" / "model.yaml")

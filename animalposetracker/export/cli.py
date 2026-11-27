@@ -10,7 +10,7 @@ import torch
 
 from animalposetracker.nn.head import SimCCHead, YOLOPoseHead
 from animalposetracker.artifacts import EXPORT_FORMATS
-from animalposetracker.config import default_subtree, resolve_scopes
+from animalposetracker.config import default_subtree, persist_overrides, resolve_scopes
 from animalposetracker.config.resolver import project_dir_from
 from .backends import export_with_backend
 from animalposetracker.project.model_context import (
@@ -201,6 +201,10 @@ def run(argv=None) -> int:
     # It is not part of the resolved configuration, so it must not go through the
     # override table -- doing that raised "export.exist_ok is not a registered key".
     resolved = resolve_scopes(project_dir, ("common", "train", "export"), overrides=overrides)
+    # This project treats runtime.yaml as its argument record: what the command line
+    # spelled out last time is what the next run starts from. Device stays out of it --
+    # it describes the machine, not the project.
+    persist_overrides(project_dir, overrides, skip=("common.device",))
     model, config, context = load_project_runtime_model(project_dir, args.weights, resolved)
     context["dataset_config_path"] = config.data
     values = dict(context["runtime"])

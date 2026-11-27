@@ -141,6 +141,10 @@ class ProjectJobsMixin:
         """Predict a dataset/video and optionally track and filter its video poses."""
         from animalposetracker.project.model_context import unique_output_directory
 
+        # The subprocess reads configs/runtime.yaml, not this process's memory, so flush the
+        # prediction page's edits first -- otherwise the run uses the file's earlier values
+        # while the form shows the new ones.
+        self.save_configs("runtime")
         model_path = self._resolve_project_prediction_model()
         if inference_source is None:
             inference_source = self.get_runtime_value("predict.source")
@@ -224,6 +228,9 @@ class ProjectJobsMixin:
 
     def export(self, format: Optional[str] = None) -> None:
         """Export a project checkpoint to an explicitly selected deployment format."""
+        # Same reason as predict: the export CLI reads the file, so persist the form's
+        # format/opset/int8 edits before it starts.
+        self.save_configs("runtime")
         weights_path = self._resolve_project_weights()
         cmd = [
             sys.executable,

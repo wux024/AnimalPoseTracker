@@ -1242,8 +1242,16 @@ class SimCCTrainingTests(unittest.TestCase):
             self.assertEqual(exported_metadata["model_format"], "torchscript")
             self.assertEqual(len(exported_results[0]["predictions"]), 1)
 
-            # The format comes from configs/runtime.yaml (export section); no
-            # --format flag here, so a successful export proves it was read.
+            # runtime.yaml records the last export format, so the torchscript run above
+            # left "torchscript" behind. Restore the onnx intent before checking that a
+            # flag-less export reads the export section.
+            runtime_path = root / "configs" / "runtime.yaml"
+            runtime_payload = yaml.safe_load(runtime_path.read_text(encoding="utf-8")) or {}
+            runtime_payload.setdefault("export", {})["format"] = "onnx"
+            runtime_path.write_text(
+                yaml.safe_dump(runtime_payload, sort_keys=False), encoding="utf-8"
+            )
+
             onnx_dir = root / "results" / "test-onnx-export"
             run_export([
                 "--config", str(root / "configs" / "runtime.yaml"),

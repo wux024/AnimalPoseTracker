@@ -41,7 +41,7 @@ from animalposetracker.config.schema import (
     fields,
     to_cli_name,
 )
-from animalposetracker.config.writer import write_scope
+from animalposetracker.config.writer import persist_overrides, write_scope
 
 __all__ = [
     # schema
@@ -72,5 +72,6 @@ __all__ = [
     "read_runtime_tree",
     "resolve_scopes",
     # writer
+    "persist_overrides",
     "write_scope",
 ]

@@ -14,7 +14,7 @@ import cv2
 import numpy as np
 from tqdm import tqdm
 
-from animalposetracker.config import resolve_scopes
+from animalposetracker.config import persist_overrides, resolve_scopes
 from animalposetracker.config.resolver import project_dir_from
 from animalposetracker.project.model_context import (
     configure_project_model_spec,
@@ -742,6 +742,22 @@ def _print_predict_banner(
     print()
 
 
+_PREDICT_CLI_TO_KEY = {
+    "conf": "confidence",
+    "iou": "iou",
+    "max_det": "max_det",
+    "keypoint_score_threshold": "keypoint_confidence",
+    "agnostic_nms": "agnostic_nms",
+    "show_boxes": "show_boxes",
+    "show_labels": "show_labels",
+    "show_confidence": "show_conf",
+    "show_keypoints": "show_keypoints",
+    "show_skeletons": "show_skeletons",
+    "point_radius": "point_radius",
+    "line_width": "line_width",
+}
+
+
 def run(argv=None, box_provider: InstanceBoxProvider = None) -> int:
     import torch
 
@@ -751,9 +767,16 @@ def run(argv=None, box_provider: InstanceBoxProvider = None) -> int:
     overrides = {}
     if args.device is not None:
         overrides["common.device"] = args.device
+    for field, key in _PREDICT_CLI_TO_KEY.items():
+        value = getattr(args, field, None)
+        if value is not None:
+            overrides[f"predict.{key}"] = value
     resolved = resolve_scopes(
         project_dir, ("common", "train", "predict"), overrides=overrides
     )
+    # runtime.yaml doubles as this project's argument record: a threshold passed once
+    # stays for the next run. Device is excluded because it is a property of the machine.
+    persist_overrides(project_dir, overrides, skip=("common.device",))
     remote_model = str(args.weights).startswith(("http://", "grpc://"))
     weights_path = (
         str(args.weights) if remote_model else Path(args.weights).expanduser().resolve()
