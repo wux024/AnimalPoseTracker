@@ -5,7 +5,7 @@ minute of footage is enough to see whether the labels are right — the one-stag
 less data than most people expect.
 
 This page assumes the project exists already; [Create the project
-first](../your_data.md#create-the-project-first) is the one command that makes it, and the
+first](#create-the-project-first) is the one command that makes it, and the
 place to record the keypoint count the annotator will show you.
 
 ## Picking the frames worth labelling
@@ -40,7 +40,7 @@ them on the same frames:
 | Format | Layout |
 |---|---|
 | YOLO-Pose | one `.txt` per image beside it, under `datasets/labels/<split>/` |
-| COCO | one `annotations/<split>.json` per split |
+| COCO | one `annotations/<split>.json` per split; a bare `file_name` joins the split's image folder, a name with folder parts is relative to the dataset root |
 
 `create` detects the format from the dataset root (an `annotations/*.json` means COCO),
 or you fix it with `--annotation-format`. Both describe the same thing; COCO is easier to

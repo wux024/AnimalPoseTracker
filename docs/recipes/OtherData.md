@@ -32,7 +32,7 @@ kpt_oks_sigmas: [0.026, 0.025, 0.025, 0.035]
 | `skeleton` | recommended | keypoint pairs to draw and evaluate |
 | `flip_idx` | recommended | left/right pairs, for flip augmentation |
 | `kpt_oks_sigmas` | recommended | per-keypoint tolerance for AP |
-| `annotation_format` | optional | `auto` (default), `coco`, `yolo` |
+| `annotation_format` | optional | `auto` (default), `coco`, `yolo`. `create` resolves `auto` from the root (an `annotations/*.json` means `coco`) and writes the answer in; the loader accepts all three and falls back to `coco` when the key is missing |
 
 ## YOLO layout
 
@@ -48,6 +48,10 @@ datasets/
 
 Each `.txt` line: `class cx cy w h kx1 ky1 v1 kx2 ky2 v2 ...`, all normalized to the image.
 
+YOLO labels feed validation exactly like COCO JSON does — no `annotations/` folder is
+needed. A split with nothing to train or validate on (no images, or no annotated
+instances) raises instead of silently training without validation.
+
 ## COCO layout
 
 ```text
@@ -61,10 +65,15 @@ datasets/
     └── test.json
 ```
 
-`person_keypoints_{split}2017.json` names are detected too. `train_annotations` and
-`val_annotations` override the discovery when the files are named differently.
+One fixed location: the loader reads `<path>/annotations/<split>.json` and nothing else —
+no name patterns to match, no override keys. With `annotation_format: coco` a missing JSON
+is an error; with `auto` a missing JSON falls through to the YOLO layout.
 
-Images, boxes and keypoints are read straight from JSON; nothing converts the dataset.
+Images, boxes and keypoints are read straight from JSON; nothing converts the dataset. Each
+`images[].file_name` is resolved in one of two ways: a bare name (what the annotator writes)
+joins the split's image folder from the `train:`/`val:`/`test:` key, and a name with folder
+parts (what external COCO files carry) is relative to the dataset root. Absolute paths are
+refused.
 
 ## OKS sigmas and the flip table
 

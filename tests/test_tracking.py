@@ -254,7 +254,11 @@ class IndependentTrackingTests(unittest.TestCase):
         )
 
     def test_reid_and_gmc_configuration_errors_are_explicit(self):
-        reid = create_tracker(tracker_config("botsort", with_reid=True))
+        # A model is part of the ReID contract now: without it the tracker refuses to
+        # build at all, rather than waiting for a detection that has no embedding.
+        with self.assertRaisesRegex(ValueError, "requires a ReID model"):
+            create_tracker(tracker_config("botsort", with_reid=True))
+        reid = create_tracker(tracker_config("botsort", with_reid=True, model="fake.onnx"))
         with self.assertRaisesRegex(ValueError, "requires an embedding"):
             reid.update([detection()], 0)
 
@@ -291,7 +295,7 @@ class IndependentTrackingTests(unittest.TestCase):
         self.assertIsNone(result[0].bbox_xyxy)
 
     def test_reid_features_change_association_and_dimension_mismatch_fails(self):
-        tracker = create_tracker(tracker_config("botsort", with_reid=True, appearance_thresh=0.7))
+        tracker = create_tracker(tracker_config("botsort", with_reid=True, model="fake.onnx", appearance_thresh=0.7))
         first = [
             detection(embedding=[1, 0]),
             detection(embedding=[0, 1]),
@@ -304,7 +308,7 @@ class IndependentTrackingTests(unittest.TestCase):
         result = tracker.update(swapped, 1)
         self.assertEqual([item.track_id for item in result], [2, 1])
 
-        mismatch = create_tracker(tracker_config("botsort", with_reid=True, appearance_thresh=0.0))
+        mismatch = create_tracker(tracker_config("botsort", with_reid=True, model="fake.onnx", appearance_thresh=0.0))
         mismatch.update([detection(embedding=[1, 0])], 0)
         with self.assertRaisesRegex(ValueError, "same dimension"):
             mismatch.update([detection(embedding=[1, 0, 0])], 1)
@@ -331,3 +335,55 @@ class IndependentTrackingTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class BoTSORTReIDTests(unittest.TestCase):
+    """Appearance gating only participates when with_reid is on."""
+
+    @staticmethod
+    def _detection(box, embedding=None, score=0.9):
+        keypoints = np.array([[box[0], box[1], 1.0]], dtype=np.float32)
+        return PoseDetection(
+            bbox_xyxy=box,
+            score=score,
+            keypoints=keypoints,
+            embedding=None if embedding is None else np.asarray(embedding, dtype=np.float32),
+        )
+
+    def _tracker(self):
+        return BoTSORT(TrackerConfig(algorithm="botsort", with_reid=True, model="fake.onnx", track_buffer=5))
+
+    def _lose(self, tracker):
+        for index in range(1, 6):
+            tracker.update([], frame_index=index)
+
+    def test_matching_appearance_reconnects_a_lost_track(self):
+        tracker = self._tracker()
+        tracker.update([self._detection((10, 10, 30, 30), embedding=[1.0, 0.0, 0.0])], frame_index=0)
+        track_id = next(iter(tracker.tracks))
+        self._lose(tracker)
+        self.assertEqual(tracker.tracks[track_id].state, "lost")
+
+        tracker.update(
+            [self._detection((12, 12, 32, 32), embedding=[1.0, 0.0, 0.0])],
+            frame_index=6,
+        )
+
+        self.assertIn(track_id, tracker.tracks)
+        self.assertEqual(tracker.tracks[track_id].state, "tracked")
+        self.assertNotIn(track_id, [t for t in tracker.tracks if t != track_id])
+
+    def test_different_appearance_starts_a_new_track(self):
+        tracker = self._tracker()
+        tracker.update([self._detection((10, 10, 30, 30), embedding=[1.0, 0.0, 0.0])], frame_index=0)
+        original = next(iter(tracker.tracks))
+        self._lose(tracker)
+
+        tracker.update(
+            [self._detection((12, 12, 32, 32), embedding=[0.0, 1.0, 0.0])],
+            frame_index=6,
+        )
+
+        self.assertNotEqual(tracker.tracks[original].state, "tracked")
+        self.assertGreater(len(tracker.tracks), 1)
+

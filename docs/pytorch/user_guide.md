@@ -23,8 +23,8 @@ project.train()          # reads configs/runtime.yaml; no per-call arguments
 ```
 
 Both paths build the same `TrainingConfig`, call the same engine, and write the same files.
-The Python call takes no overrides — edit `configs/runtime.yaml` (or use the CLI) for a
-one-off value. A run started one way can be resumed the other.
+The Python call takes no overrides — edit `configs/runtime.yaml` or use the CLI, which records
+each flag it was given. A run started one way can be resumed the other.
 
 ## Major concepts
 
@@ -44,8 +44,15 @@ derived from `--learning-rate` unless a key in `runtime.yaml` says otherwise.
 ### EMA and AMP
 
 An exponential moving average of the weights is kept alongside the raw model and evaluated at
-each validation; `best.pt` is whichever of the two scored better. Mixed precision is a training
-setting — on a device without tensor cores it degrades to full precision rather than failing.
+each validation; `best.pt` is whichever of the two scored better.
+
+`amp` takes `false`, `true` or a precision name (`fp16`, `bf16`, `fp32`). With `true`, startup
+runs one forward on synthetic input at fp16 → bf16 → fp32 and keeps the first precision whose
+output stays finite: fp16 saturates at 65504, bf16 needs Ampere or newer. When the probe falls
+back to fp32, the batch is halved and the gradient accumulation doubled, so the nominal batch
+and the optimizer step stay unchanged. Validation forward runs under autocast at the resolved
+precision while the weights themselves stay fp32 — casting EMA weights to half in place would
+round them at every validation.
 
 ### Freezing and resuming
 
@@ -67,6 +74,18 @@ means the same thing at any `validation_interval`. `0` disables it.
 
 An exhausted patience is a normal completion: exit code 0, `best.pt` final. That is what makes
 `train && val && export` safe in a script.
+
+### Non-finite recovery
+
+A loss or metric that turns non-finite rolls the run back to `last.pt` — weights, optimizer
+and schedule — and replays the epoch, up to three retries. A first epoch that has no
+checkpoint yet still raises: there is nothing to roll back to.
+
+### Batch size auto
+
+`--batch-size auto` probes real forward/backward steps at powers of two (512 down to 8) and
+keeps the largest whose measured peak memory stays under 60% of the GPU; the candidate is
+never larger than the number of training images.
 
 ### Distributed runs
 
@@ -101,8 +120,11 @@ finished; `--resume` appends to the same file.
 
 Three levels, in increasing order of commitment:
 
-1. **A flag** — `--epochs`, `--batch-size`, `--learning-rate`: one run, nothing written.
-2. **`configs/runtime.yaml`** — durable for the project, visible in the file.
+1. **A flag** — `--epochs`, `--batch-size`, `--learning-rate`: wins the run, then is recorded
+   into `configs/runtime.yaml` so the next run starts from it. Run-level keys (`--project`,
+   `--name`, `--exist-ok`, `--device`) describe the run and are never written back.
+2. **`configs/runtime.yaml`** — durable for the project: the profile snapshot plus every
+   override a run has recorded.
 3. **`cfg/training.yaml`** — changes the default for every new project; a package edit, and it
    needs the tests to stay green.
 

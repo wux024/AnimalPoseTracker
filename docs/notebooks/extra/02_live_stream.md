@@ -40,7 +40,10 @@ animalpose-cli infer --poser-weights results/export/best.onnx --source 0 \
     --tracker bytetrack --records live.json
 ```
 
-Tracking attaches a `track_id` per detection while the stream runs. Filtering is different:
+Tracking attaches a `track_id` per detection while the stream runs. Boxes and trails are
+coloured by identity, so one animal keeps one colour. `--trail-length N` draws the last N
+box centres of each tracked identity as a trail under the box (`0`, the default, draws
+nothing; the flag needs `--tracker`). Filtering is different:
 it runs **after the stream ends**, smoothing each track over the recorded sequence:
 
 ```bash
@@ -50,6 +53,19 @@ animalpose-cli infer --poser-weights results/export/best.onnx --source 0 \
 
 `--pose-filter` without `--tracker` is refused — the smoother needs track IDs to know which
 detections belong together.
+
+## Stage timings
+
+The pipeline times preprocess, inference and postprocess itself for every frame, and `infer`
+prints the per-stage averages plus total and FPS at the end of a run:
+
+```text
+Stage averages: preprocess 1.234 ms | inference 5.678 ms | postprocess 0.901 ms | total 7.813 ms (128.0 fps)
+```
+
+Before timing starts the pipeline warms up — a few dummy forwards plus detector and NMS
+passes — so the first real frame does not pay CUDA context and kernel-compile costs. Warmup
+runs never enter the averages. The GUI's overlay shows the same engine timings.
 
 ## The records file
 

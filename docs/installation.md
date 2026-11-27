@@ -169,8 +169,8 @@ their own hardware, and only the engine you deploy with has to be installed.
 
 - A CPU-only install trains and predicts correctly, just slower; nothing in the data path
   requires a GPU.
-- Mixed precision (`--amp`) is a training flag, not an install step; it falls back cleanly on
-  devices without tensor cores.
+- Mixed precision (`--amp`) is a training flag, not an install step; it probes fp16 → bf16 →
+  fp32 at startup and falls back cleanly when a precision does not hold.
 - Multi-GPU training uses `--device 0,1` and needs no extra package beyond PyTorch.
 
 ## Troubleshooting

@@ -11,7 +11,10 @@ Two things, separately:
 - **Latency** — how long one forward pass takes on a given device.
 
 They are measured by different tools and are not interchangeable: a fast model that is
-inaccurate is not better than a slow one that works, and `val` says nothing about speed.
+inaccurate is not better than a slow one that works. `val` reports per-stage forward timing
+(`speed/preprocess_ms`, `speed/inference_ms`, `speed/postprocess_ms`, CUDA-synchronized, per
+crop for AnimalViTPose and per image for AnimalRTPose), but that is a forward micro-benchmark,
+not end-to-end latency — decoding, letterboxing, tracking and writing frames live outside it.
 
 ## Metrics
 
@@ -22,6 +25,7 @@ inaccurate is not better than a slow one that works, and `val` says nothing abou
 | `PCK` | fraction of keypoints within a distance threshold, normalized by instance scale | coarse localization |
 | `AUC` | area under the PCK curve across thresholds | the shape of the error distribution |
 | `EPE` | end-point error in pixels | absolute localization, per keypoint |
+| `speed/preprocess_ms`, `speed/inference_ms`, `speed/postprocess_ms` | per-stage forward timing (per crop top-down, per image one-stage); plus `images` and `instances` counts | hardware and batch; not end-to-end latency |
 
 AP is the one to compare across models; EPE is the one to look at when a single landmark is
 off.
@@ -46,7 +50,8 @@ animalpose-cli val --config configs/runtime.yaml \
 The run writes `metrics.json` with the aggregate numbers and the per-keypoint breakdown. What
 determines whether the number is comparable:
 
-1. **the same split** — `val` always uses the configured validation split;
+1. **the same split** — `val` scores the configured validation split; `--split train`/`val`/`test`
+   scores another one, and `metrics.json` records which ran. Keep it identical across runs;
 2. **the same sigmas** — from the dataset descriptor;
 3. **the same decoder** — the shipped decoder, not a separate evaluation harness.
 
@@ -93,4 +98,6 @@ move the last decimal. A number within a point of the table means you reproduced
 several points off usually means a different split or a missing `kpt_oks_sigmas`.
 
 To reproduce a latency row, export the artifact for that device and time a forward pass with
-the same input size and precision. `val` does not measure latency.
+the same input size and precision. The `speed/*` keys in `metrics.json` cover only the forward
+stages — end-to-end latency needs the deployment path (`infer` prints stage averages plus total
+FPS at the end of a run).

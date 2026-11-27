@@ -236,6 +236,18 @@ class PoseTextDataset(Dataset):
             if not self.annotation_path.is_file():
                 raise FileNotFoundError(f"COCO annotation JSON does not exist: {self.annotation_path}")
 
+            # The split's image folder: a bare COCO file_name joins it (see coco.py).
+            split_image_dir = None
+            source_entries = sources if isinstance(sources, (list, tuple)) else [sources]
+            for entry in source_entries:
+                if entry is None:
+                    continue
+                candidate = Path(str(entry)).expanduser()
+                if not candidate.is_absolute():
+                    candidate = self.root / candidate
+                if candidate.is_dir():
+                    split_image_dir = candidate
+                    break
             (
                 self.image_paths,
                 self._coco_annotations_by_path,
@@ -248,6 +260,7 @@ class PoseTextDataset(Dataset):
                 self.root,
                 class_names or None,
                 self.data_config.get("kpt_shape"),
+                image_dir=split_image_dir,
             )
             shape = self.data_config.get("kpt_shape") or inferred_shape
         else:

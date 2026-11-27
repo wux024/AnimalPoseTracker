@@ -12,10 +12,14 @@ home, and the layers only decide "default vs project vs this command":
      skeleton, flip table, OKS sigmas). The shape's single home.
    - `configs/model.yaml` -- the model's architecture graph.
    - `configs/runtime.yaml` -- the project's runtime parameters, sectioned by
-     flow: `common` / `train` / `predict` / `export`. A snapshot: it carries
-     every registered key with the value the project uses.
+     flow: `common` / `train` / `predict` / `export`. A snapshot of the
+     selected profile plus every explicit override a run has recorded, so
+     the file always carries what the project actually used.
 3. **This run** -- command-line flags (or the GUI's own controls) beat
-   everything; the same key name is used at every layer.
+   everything and are recorded back into `configs/runtime.yaml`; the same key
+   name is used at every layer. Run-level keys (`--project`, `--name`,
+   `--exist-ok`, `--device`) describe the run, not the project, and are never
+   written back.
 
 The `infer` pipeline is deliberately independent: it reads no project files,
 only command-line arguments and the artifact's sidecar metadata, so an
@@ -81,7 +85,7 @@ This reference is generated from the key registry (`animalposetracker/config/sch
 | `validation_interval` | int | 1 / 10 (RTPose / ViTPose) | build | advanced | Run validation every N epochs |
 | `log_interval` | int | 1 / 50 (RTPose / ViTPose) | build | advanced | Log every N batches |
 | `epochs` | int | 1000 / 500 (RTPose / ViTPose) | build | form | Training epochs |
-| `batch_size` | int | 16 / 64 (RTPose / ViTPose) | build | form | Training batch size ('auto' on the training CLI probes the largest batch that fits 60% of the GPU memory) |
+| `batch_size` | int | 16 / 64 (RTPose / ViTPose) | build | form | Training batch size ('auto' on the training CLI probes powers of two from 512 down to 8, keeps the largest that fits 60% of the GPU memory, and never exceeds the training image count) |
 | `validation_batch_size` | int | `null` / 32 (RTPose / ViTPose) | build | advanced | Validation batch size |
 | `image_size` | int | 640 / 256 (RTPose / ViTPose) | build | form | Model input size (a model property; follows the model recipe) |
 | `optimizer` | str | `auto` / `AdamW` (RTPose / ViTPose) | build | form | Optimizer (auto, or a concrete name) |
@@ -96,7 +100,7 @@ This reference is generated from the key registry (`animalposetracker/config/sch
 | `warmup_bias_lr` | float | 0.1 / — (RTPose / ViTPose) | build | advanced | Warmup learning rate for the bias group |
 | `nominal_batch_size` | int | 64 / — (RTPose / ViTPose) | build | advanced | Nominal batch size (used to scale the learning rate) |
 | `cosine_schedule` | bool | False / — (RTPose / ViTPose) | build | form | Cosine learning-rate schedule |
-| `amp` | bool | True / False (RTPose / ViTPose) | build | form | Mixed-precision training |
+| `amp` | bool / str | True / False (RTPose / ViTPose) | build | form | Mixed-precision training: false, true, or a precision name (fp16/bf16/fp32). 'true' probes fp16 -> bf16 -> fp32 with a synthetic forward at startup and takes the first that stays finite; falling back to fp32 halves the batch and doubles the gradient accumulation |
 | `ema` | bool | True / False (RTPose / ViTPose) | build | form | Exponential moving average |
 | `close_mosaic` | int | 10 / — (RTPose / ViTPose) | build | form | Disable mosaic for the last N epochs |
 | `layer_decay_rate` | float | `null` / — (RTPose / ViTPose) | build | advanced | ViT layer decay rate |
@@ -110,7 +114,7 @@ This reference is generated from the key registry (`animalposetracker/config/sch
 | `best_metric_mode` | str | `max` | build | advanced | Selection direction: max / min |
 | `early_stopping_patience` | int | 300 | build | form | Early-stopping patience in epochs |
 | `single_cls` | bool | False | build | advanced | Train multi-class data as a single class |
-| `multi_scale` | float | False | build | advanced | Multi-scale jitter half-width (0 disables; 0.2 means image_size * (1 +/- 0.2)) |
+| `multi_scale` | float | 0.0 | build | advanced | Multi-scale jitter half-width (0 disables; 0.2 means image_size * (1 +/- 0.2)) |
 | `freeze` | int / list | `null` | build | advanced | Freeze the first n layers, or explicit layer indices |
 
 **`train.models.loss`**
@@ -239,7 +243,7 @@ This reference is generated from the key registry (`animalposetracker/config/sch
 | `workspace` | float | 4.0 | build | advanced | TensorRT workspace (GiB) |
 | `rknn_target` | str | `rk3588` | build | advanced | Rockchip NPU target (e.g. rk3588) |
 | `optimize` | bool | False | build | advanced | TorchScript mobile optimization |
-| `int8` | bool | False | build | advanced | INT8 quantization |
+| `int8` | bool | False | build | advanced | INT8 quantization (onnx/openvino/engine/tflite/edgetpu/mnn/imx; mutually exclusive with half; calibrates on the first 200 training images) |
 | `keras` | bool | False | build | hidden | Keras export (errors when unsupported) |
 | `nms` | bool | False | build | hidden | Embed NMS into the graph (errors when unsupported) |
 

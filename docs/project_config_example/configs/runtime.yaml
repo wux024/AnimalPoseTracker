@@ -1,6 +1,6 @@
 common:
   device: auto
-  project: runs
+  project: results
   name: train
   exist_ok: false
   selected_weights: null
@@ -9,7 +9,7 @@ train:
     runtime:
       num_workers: 8
       time_hours: null
-      cache: false
+      cache: true
       fraction: 1.0
       profile: false
       plots: true
@@ -28,12 +28,12 @@ train:
       early_stopping_patience: 300
       lr_gamma: 0.1
       single_cls: false
-      multi_scale: false
+      multi_scale: 0.0
       freeze: null
-      best_metric: COCO/AP
+      best_metric: YOLO/AP
       best_metric_mode: max
   metrics:
-    oks_area_mode: annotation
+    oks_area_mode: bbox
     pck_threshold: 0.05
     auc_norm_factor: 30.0
     auc_thresholds: 20
@@ -150,6 +150,10 @@ predict:
   tracking:
     enabled: false
     algorithm: bytetrack
+    with_reid: false
+    model: ""
+    proximity_thresh: 0.5
+    appearance_thresh: 0.8
   pose_filter:
     method: none
     window_length: 5

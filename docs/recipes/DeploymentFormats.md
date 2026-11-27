@@ -45,6 +45,6 @@ pip install -e ".[export-ncnn]"
 pip install -e ".[predict-triton]"
 ```
 
-TensorRT, Edge TPU, IMX500, and RKNN require vendor/platform components beyond a portable Python extra. They are not installed automatically by AnimalPoseTracker. INT8 calibration is wired for TFLite/Edge TPU and IMX500; unsupported precision requests are rejected rather than silently ignored.
+TensorRT, Edge TPU, IMX500, and RKNN require vendor/platform components beyond a portable Python extra. They are not installed automatically by AnimalPoseTracker. INT8 quantization is wired for onnx (static QDQ), openvino (nncf), TensorRT (entropy calibrator, cache kept beside the engine), TFLite, Edge TPU, MNN and IMX500; unsupported precision requests are rejected rather than silently ignored. `--half` and `--int8` are mutually exclusive. Calibration reads the first 200 training images and preprocesses them exactly as inference does.
 
 The worker preserves the existing `results/predict/predictions.json` list schema. `prediction_metadata.json` records the checkpoint/artifact, format, model type, and selected dataset split.

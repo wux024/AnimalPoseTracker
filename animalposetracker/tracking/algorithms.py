@@ -12,7 +12,7 @@ import numpy as np
 
 from .base import BaseTracker, Track
 from .config import TrackerConfig
-from .geometry import bbox_iou, pose_similarity
+from .geometry import bbox_iou, keypoints_to_bbox, pose_similarity
 from .types import PoseDetection
 
 
@@ -78,6 +78,66 @@ class BoTSORT(ByteTrack):
     participate only when ``with_reid`` is explicitly enabled.
     """
 
+    def _associate(self, detections: Sequence[PoseDetection]):
+        matches, unmatched_track_ids, unmatched_detection_indices = super()._associate(detections)
+        if not self.config.with_reid:
+            return matches, unmatched_track_ids, unmatched_detection_indices
+
+        extra = self._match_appearance(detections, unmatched_track_ids, unmatched_detection_indices)
+        if not extra:
+            return matches, unmatched_track_ids, unmatched_detection_indices
+
+        matched_tracks = {track_id for track_id, _index in extra}
+        matched_detections = {index for _track_id, index in extra}
+        return (
+            list(matches) + extra,
+            [track_id for track_id in unmatched_track_ids if track_id not in matched_tracks],
+            [index for index in unmatched_detection_indices if index not in matched_detections],
+        )
+
+    def _match_appearance(self, detections, track_ids, detection_indices):
+        """Second pass over the leftovers, gated on position *and* appearance.
+
+        ByteTrack has already given up on these pairs because their motion cost was too
+        high; appearance is the only cue left when a track was lost for a while. Both
+        gates must pass: proximity stops a look-alike on the far side of the frame from
+        stealing the identity, appearance stops two animals standing together from being
+        merged.
+        """
+        cfg = self.config
+        pairs = []
+        for track_id in track_ids:
+            track = self.tracks[track_id]
+            track_embedding = track.embedding
+            if track_embedding is None:
+                continue
+            track_box = track.bbox
+            for detection_index in detection_indices:
+                detection = detections[detection_index]
+                if detection.embedding is None:
+                    continue
+                detection_box = detection.bbox_xyxy
+                if detection_box is None:
+                    detection_box = keypoints_to_bbox(detection.keypoints)
+                if detection_box is None:
+                    continue
+                similarity = float(np.dot(track_embedding, detection.embedding))
+                if similarity < cfg.appearance_thresh:
+                    continue
+                if bbox_iou(track_box, detection_box) < cfg.proximity_thresh:
+                    continue
+                pairs.append((similarity, track_id, detection_index))
+
+        pairs.sort(reverse=True)
+        used_tracks, used_detections, matched = set(), set(), []
+        for _similarity, track_id, detection_index in pairs:
+            if track_id in used_tracks or detection_index in used_detections:
+                continue
+            used_tracks.add(track_id)
+            used_detections.add(detection_index)
+            matched.append((track_id, detection_index))
+        return matched
+
 
 class OCSORT(BaseTracker):
     """Observation-centric keypoint motion matching and recovery."""
@@ -129,6 +189,23 @@ class OCSORT(BaseTracker):
 
 class DeepOCSORT(OCSORT):
     """Pose-centric OC-SORT with optional external appearance embeddings."""
+
+    def _associate(self, detections: Sequence[PoseDetection]):
+        matches, unmatched_track_ids, unmatched_detection_indices = super()._associate(detections)
+        if not self.config.with_reid:
+            return matches, unmatched_track_ids, unmatched_detection_indices
+
+        extra = BoTSORT._match_appearance(self, detections, unmatched_track_ids, unmatched_detection_indices)
+        if not extra:
+            return matches, unmatched_track_ids, unmatched_detection_indices
+
+        matched_tracks = {track_id for track_id, _index in extra}
+        matched_detections = {index for _track_id, index in extra}
+        return (
+            list(matches) + extra,
+            [track_id for track_id in unmatched_track_ids if track_id not in matched_tracks],
+            [index for index in unmatched_detection_indices if index not in matched_detections],
+        )
 
 
 class FastTracker(ByteTrack):

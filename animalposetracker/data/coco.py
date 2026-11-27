@@ -64,8 +64,15 @@ def load_coco_pose_index(
     root: Path,
     class_names: Optional[Sequence[str]],
     requested_shape,
+    image_dir: Optional[Path] = None,
 ):
-    """Return image paths, annotation records, names, category mapping and keypoint shape."""
+    """Return image paths, annotation records, names, category mapping and keypoint shape.
+
+    ``image_dir`` is the split's image folder from the dataset descriptor (the
+    ``train:`` / ``val:`` / ``test:`` entry). A bare ``file_name`` is joined onto it,
+    which is what the annotator writes; a name with folder parts is relative to the
+    dataset root, which is what external COCO files carry.
+    """
     with annotation_path.open("r", encoding="utf-8-sig") as stream:
         payload = json.load(stream)
     if not isinstance(payload, dict) or not all(
@@ -81,6 +88,7 @@ def load_coco_pose_index(
     names, category_to_class = _category_map(categories, class_names)
 
     resolved_root = root.resolve()
+    resolved_image_dir = image_dir.resolve() if image_dir is not None else None
     image_paths: List[Path] = []
     annotations_by_path: Dict[str, List[dict]] = {}
     image_metadata_by_path: Dict[str, dict] = {}
@@ -89,9 +97,10 @@ def load_coco_pose_index(
         file_name = image_record.get("file_name")
         if not file_name:
             raise ValueError(f"COCO image record is missing file_name: {annotation_path}")
-        # The layout is fixed: every file_name is relative to the dataset root, for example
-        # "images/test/000001.jpg". An absolute path, or a name that does not resolve there,
-        # is a broken dataset -- report it instead of searching other roots or guessing by
+        # Two accepted forms, both deterministic: a bare name joins the split's image
+        # folder (what the annotator writes), a name with folder parts is relative to
+        # the dataset root (what external COCO files carry). An absolute path is a
+        # broken dataset -- report it instead of searching other roots or guessing by
         # filename, which used to hide layout mistakes until the metrics looked wrong.
         file_path = Path(str(file_name))
         if file_path.is_absolute():
@@ -99,7 +108,10 @@ def load_coco_pose_index(
                 f"COCO image file_name must be relative to the dataset root {root}; "
                 f"got an absolute path: {file_name!r}"
             )
-        resolved = (resolved_root / file_path).resolve()
+        if len(file_path.parts) == 1 and resolved_image_dir is not None:
+            resolved = (resolved_image_dir / file_path).resolve()
+        else:
+            resolved = (resolved_root / file_path).resolve()
         if not resolved.is_file():
             raise FileNotFoundError(
                 f"COCO image {file_name!r} does not exist under the dataset root {root}"

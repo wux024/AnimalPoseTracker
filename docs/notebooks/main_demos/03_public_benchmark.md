@@ -8,7 +8,8 @@ loop — it is knowing exactly which choices decide whether your number is compa
 
 A validation number is only comparable when three things match the published row:
 
-1. **the split** — `val` always scores the configured validation split;
+1. **the split** — `val` scores the configured validation split; `--split` names another one,
+   so keep it identical across runs and the published row;
 2. **the OKS sigmas** — one tolerance per keypoint, from the dataset descriptor;
 3. **the decoder** — the shipped decoder, not a separate evaluation harness.
 

@@ -121,6 +121,7 @@ class TrackerConfig:
     min_track_len: int = 1
 
     with_reid: bool = False
+    model: Optional[str] = None
     proximity_thresh: float = 0.50
     appearance_thresh: float = 0.80
     alpha_fixed_emb: float = 0.95
@@ -237,6 +238,14 @@ class TrackerConfig:
             raise ValueError("enlarge_bbox_occ must be finite and at least 1")
         if self.with_reid and self.algorithm not in _REID_ALGORITHMS:
             raise ValueError(f"{self.algorithm} does not define a ReID association branch")
+        # Once the algorithm can do ReID, the model becomes mandatory. Caught here rather
+        # than at the first frame: without it the appearance stage would only complain when
+        # a detection arrives without embeddings, blaming the detections instead.
+        if self.with_reid and not str(self.model or "").strip():
+            raise ValueError(
+                "with_reid=True requires a ReID model: set tracker.model to an ONNX path "
+                "(for example yolo26s-reid.onnx), or turn with_reid off"
+            )
         if self.gmc_method not in _GMC_METHODS:
             raise ValueError(f"gmc_method must be one of {sorted(_GMC_METHODS)}")
         if self.gmc_method != "none" and self.algorithm not in _GMC_ALGORITHMS:

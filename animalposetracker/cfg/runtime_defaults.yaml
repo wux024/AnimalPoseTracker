@@ -31,6 +31,10 @@ predict:
   tracking:
     enabled: false
     algorithm: bytetrack
+    with_reid: false
+    model: ""
+    proximity_thresh: 0.5
+    appearance_thresh: 0.8
   pose_filter:
     method: none
     window_length: 5

@@ -162,7 +162,7 @@ FIELDS: Tuple[Field, ...] = (
 
     # train -- models.training (the per-model recipe)
     _f("epochs", "train", "models.training", int, "Training epochs", visibility="form", views=("train",)),
-    _f("batch_size", "train", "models.training", int, "Training batch size ('auto' on the training CLI probes the largest batch that fits 60% of the GPU memory)", visibility="form", views=("train", "evaluate", "infer", "export")),
+    _f("batch_size", "train", "models.training", int, "Training batch size ('auto' on the training CLI probes powers of two from 512 down to 8, keeps the largest that fits 60% of the GPU memory, and never exceeds the training image count)", visibility="form", views=("train", "evaluate", "infer", "export")),
     _f("validation_batch_size", "train", "models.training", int, "Validation batch size", visibility="advanced"),
     _f("image_size", "train", "models.training", int, "Model input size (a model property; follows the model recipe)", visibility="form", views=("train", "evaluate", "infer", "export")),
     _f("optimizer", "train", "models.training", str, "Optimizer (auto, or a concrete name)", visibility="form", views=("train",)),
@@ -177,7 +177,7 @@ FIELDS: Tuple[Field, ...] = (
     _f("warmup_bias_lr", "train", "models.training", float, "Warmup learning rate for the bias group", visibility="advanced", views=("train",)),
     _f("nominal_batch_size", "train", "models.training", int, "Nominal batch size (used to scale the learning rate)", visibility="advanced", views=("train",)),
     _f("cosine_schedule", "train", "models.training", bool, "Cosine learning-rate schedule", visibility="form", views=("train",)),
-    _f("amp", "train", "models.training", bool, "Mixed-precision training", visibility="form", views=("train",)),
+    _f("amp", "train", "models.training", (bool, str), "Mixed-precision training: false, true, or a precision name (fp16/bf16/fp32). 'true' probes fp16 -> bf16 -> fp32 with a synthetic forward at startup and takes the first that stays finite; falling back to fp32 halves the batch and doubles the gradient accumulation", visibility="form", views=("train",)),
     _f("ema", "train", "models.training", bool, "Exponential moving average", visibility="form"),
     _f("close_mosaic", "train", "models.training", int, "Disable mosaic for the last N epochs", visibility="form", views=("train",)),
     _f("layer_decay_rate", "train", "models.training", float, "ViT layer decay rate", visibility="advanced"),
@@ -261,6 +261,10 @@ FIELDS: Tuple[Field, ...] = (
     _f("point_radius", "predict", "", int, "Keypoint radius", apply="live", visibility="form", views=("infer",)),
     _f("enabled", "predict", "tracking", bool, "Cross-frame tracking switch", visibility="form", views=("infer",)),
     _f("algorithm", "predict", "tracking", str, "Tracking algorithm (six options, e.g. bytetrack)", visibility="form", views=("infer",)),
+    _f("with_reid", "predict", "tracking", bool, "Appearance ReID in the tracker; needs a model", visibility="form", views=("infer",)),
+    _f("model", "predict", "tracking", str, "ReID model path (ONNX)", visibility="form", views=("infer",)),
+    _f("proximity_thresh", "predict", "tracking", float, "Spatial gate: box IoU required before appearance matching", visibility="advanced", views=("infer",)),
+    _f("appearance_thresh", "predict", "tracking", float, "Appearance gate: cosine similarity required to reconnect a track", visibility="advanced", views=("infer",)),
     _f("method", "predict", "pose_filter", str, "Temporal smoothing method: none / median / savgol", apply="run_end", visibility="form", views=("infer",)),
     _f("window_length", "predict", "pose_filter", int, "Smoothing window length in frames", apply="run_end", visibility="form", views=("infer",)),
     _f("polyorder", "predict", "pose_filter", int, "Savitzky-Golay polynomial order", apply="run_end", visibility="form", views=("infer",)),
@@ -278,7 +282,7 @@ FIELDS: Tuple[Field, ...] = (
     _f("workspace", "export", "", float, "TensorRT workspace (GiB)", visibility="advanced", views=("export",)),
     _f("rknn_target", "export", "", str, "Rockchip NPU target (e.g. rk3588)", visibility="advanced"),
     _f("optimize", "export", "", bool, "TorchScript mobile optimization", visibility="advanced", views=("export",)),
-    _f("int8", "export", "", bool, "INT8 quantization", visibility="advanced", views=("export",)),
+    _f("int8", "export", "", bool, "INT8 quantization (onnx/openvino/engine/tflite/edgetpu/mnn/imx; mutually exclusive with half; calibrates on the first 200 training images)", visibility="advanced", views=("export",)),
     _f("keras", "export", "", bool, "Keras export (errors when unsupported)", visibility="hidden", views=("export",)),
     _f("nms", "export", "", bool, "Embed NMS into the graph (errors when unsupported)", visibility="hidden", views=("export",)),
 )

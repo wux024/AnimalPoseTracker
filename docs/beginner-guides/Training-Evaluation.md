@@ -17,7 +17,9 @@ The **Train** and **Evaluate** tabs are the desktop equivalents of `animalpose-c
 
 Everything else — optimizer, learning rate, augmentation, early stopping patience — comes from
 `configs/runtime.yaml`. The form shows the values it will use, so a hand-edited key is visible
-before the run starts.
+before the run starts. Every form writes what it shows into `configs/runtime.yaml` before its
+run starts — the training and evaluate pages always did, and the predict and export pages now
+do the same — so the window and the run can never disagree.
 
 ![Training configuration](../assets/screenshots/training.png)
 

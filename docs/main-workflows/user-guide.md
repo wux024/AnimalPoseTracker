@@ -137,19 +137,22 @@ The nesting is the file's own shape: values shared by both families sit under `t
 and per-family values under `train.models.<Family>`. A flat `train: epochs: 200` is not a key the
 resolver accepts — [the configuration reference](../pytorch/pytorch_config.md) lists every path.
 
-Override it for one run on the command line:
+Override it on the command line:
 
 ```bash
 animalpose-cli train --config configs/runtime.yaml --epochs 50 --batch-size 4
 ```
 
-The flag wins for that run and is never written back, so a one-off experiment leaves the
-project untouched.
+The flag wins, and `train` records it back into `configs/runtime.yaml`, so the next run
+starts from the values this one actually used — no re-typing after a one-off experiment.
+Run-level keys (`--project`, `--name`, `--exist-ok`, `--device`) describe the run rather
+than the recipe and are never written back.
 
 ##### Precedence
 
 1. a command-line flag,
-2. the project's `configs/runtime.yaml`,
+2. the project's `configs/runtime.yaml` — the profile snapshot plus every override a run
+   has recorded,
 3. the model profile's defaults in `animalposetracker/cfg/training.yaml`.
 
 `training.shared` holds the values both model families share; each profile under
@@ -208,7 +211,8 @@ If the frames live outside the project, keep `path` absolute; nothing is copied.
 skeleton. It writes either format:
 
 - **YOLO-Pose TXT** — one `.txt` per image, beside the image in `labels/<split>/`;
-- **COCO Keypoints JSON** — one JSON per split, under `annotations/`.
+- **COCO Keypoints JSON** — one JSON per split, under `annotations/`. A bare `file_name`
+  joins the split's image folder; a path is relative to the dataset root.
 
 Both are read directly at training time; nothing converts between them.
 
@@ -297,7 +301,7 @@ The knobs that matter first:
 | Flag | Meaning |
 |---|---|
 | `--epochs` | upper bound; early stopping can end the run sooner |
-| `--batch-size` | per-device batch |
+| `--batch-size` | per-device batch; `auto` probes powers of two (512 down to 8) and keeps the largest that fits 60% of GPU memory, never larger than the training set |
 | `--image-size` | square input; both families are trained at one size |
 | `--device` | `0`, `0,1` for multi-GPU, or `cpu` |
 | `--num-workers` | dataloader processes |
@@ -309,6 +313,9 @@ The knobs that matter first:
 
 Early stopping counts **epochs since the best validation** (`epoch - best_epoch`), so it
 means the same thing at any validation interval. `early_stopping_patience: 0` disables it.
+
+A non-finite loss or metric rolls the run back to `last.pt` and replays the epoch, up to
+three retries; a first epoch with no checkpoint yet still raises.
 
 ##### Code example
 
@@ -353,7 +360,9 @@ an error exits `1`. That makes `val` and `export` safe to chain in a `set -e` sc
 
 ##### Overview
 
-`val` runs the native validator on the configured validation split. It reports:
+`val` runs the native validator on the configured validation split. `--split train`, `val`
+or `test` scores another split without editing `dataset.yaml`; `metrics.json` records which
+split ran. It reports:
 
 | Metric | What it measures |
 |---|---|
@@ -362,6 +371,8 @@ an error exits `1`. That makes `val` and `export` safe to chain in a `set -e` sc
 | `PCK` | percentage of correct keypoints within a fraction of the instance scale |
 | `AUC` | area under the PCK curve |
 | `EPE` | end-point error, in pixels |
+| `speed/preprocess_ms`, `speed/inference_ms`, `speed/postprocess_ms` | per-stage forward timing, CUDA-synchronized; per crop for AnimalViTPose, per image for AnimalRTPose — not end-to-end latency |
+| `images`, `instances` | what the timing and metrics were computed over |
 
 AnimalViTPose validation does **not** use flip test-time augmentation by default, so the
 numbers match what the shipped decoder produces. Set `validation.flip_tta: true` to re-enable
@@ -371,13 +382,14 @@ it — expect higher numbers than the deployment path.
 
 ```bash
 animalpose-cli val --config configs/runtime.yaml \
-    --weights results/train/weights/best.pt
+    --weights results/train/weights/best.pt --split test
 ```
 
 ##### What it writes
 
-`results/val/metrics.json` — the aggregate metrics plus the per-keypoint breakdown where it
-applies, and the same decoder settings the prediction path uses.
+`results/val/metrics.json` — the aggregate metrics, the split they were computed on, the
+per-keypoint breakdown where it applies, and the same decoder settings the prediction path
+uses.
 
 ##### API Docs
 
@@ -610,6 +622,10 @@ animalpose-cli infer --poser-weights results/export/best.onnx --source 0 --recor
 ```
 
 A SimCC artifact also needs `--detector-weights`; without it the inferencer refuses the model.
+
+With `--tracker`, `--trail-length N` draws the last N box centres per tracked identity as a
+trail, colouring boxes and trails by identity. The run ends with per-stage timing averages —
+see [live stream](../notebooks/extra/02_live_stream.md).
 
 ##### API Docs
 

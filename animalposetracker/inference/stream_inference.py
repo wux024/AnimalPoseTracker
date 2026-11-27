@@ -23,7 +23,7 @@ from animalposetracker.postprocessing.output_decoders import (
 )
 
 
-def _pose_instance_to_detection(instance: PoseInstance) -> dict:
+def _pose_instance_to_detection(instance: PoseInstance, embedding=None) -> dict:
     """Adapt one decoded PoseInstance to the tracker input mapping."""
     keypoints = np.asarray(instance.keypoints_xy, dtype=np.float32)
     scores = instance.keypoint_scores
@@ -41,6 +41,7 @@ def _pose_instance_to_detection(instance: PoseInstance) -> dict:
         "score": float(instance.score) if instance.score is not None else 1.0,
         "class_id": int(instance.class_id) if instance.class_id is not None else 0,
         "keypoints": keypoints,
+        "embedding": embedding,
     }
 
 
@@ -220,6 +221,7 @@ class StreamInferencePipeline:
         detector: Optional[DetectorProvider] = None,
         tracker=None,
         class_names: Optional[Sequence[str]] = None,
+        reid_encoder=None,
     ):
         if pose_engine is None:
             raise ValueError("pose_engine is required")
@@ -280,6 +282,9 @@ class StreamInferencePipeline:
         self.detector = detector
         self.class_names = list(class_names) if class_names is not None else []
         self.tracker = self._build_tracker(tracker)
+        # Resolved once at construction: the tracker only reads PoseDetection.embedding,
+        # so whoever produces the detections owns the encoder. ``None`` when ReID is off.
+        self.reid_encoder = self._resolve_reid_encoder(reid_encoder)
         # Stage timings of the most recent process_frame call, in seconds. Callers read
         # this instead of timing the whole call, so the engine owns the measurement and
         # the GUI/CLI cannot drift apart.
@@ -338,6 +343,23 @@ class StreamInferencePipeline:
         if self.tracker is not None:
             self.tracker.reset()
 
+    def _resolve_reid_encoder(self, encoder):
+        """Pick up the tracker's ReID settings unless the caller supplied an encoder.
+
+        Device comes from the pose engine so appearance features run on the same
+        hardware as the detector that produced the crops -- a GPU detector paired with a
+        CPU encoder would silently halve the throughput of every tracked frame.
+        """
+        if encoder is not None:
+            return encoder
+        config = getattr(self.tracker, "config", None)
+        if config is None or not getattr(config, "with_reid", False):
+            return None
+        from animalposetracker.inference.reid import build_reid_encoder
+
+        device = getattr(self.pose_engine, "_device", None) or "CPU"
+        return build_reid_encoder(getattr(config, "model", None), device=device)
+
     def track_frame(self, frame: np.ndarray, frame_index: int) -> list:
         """Decode poses for one stream frame and attach sequence-local track IDs.
 
@@ -352,7 +374,10 @@ class StreamInferencePipeline:
         from animalposetracker.postprocessing.workflows import track_frame_predictions
 
         instances = self.process_frame(frame)
-        detections = [_pose_instance_to_detection(instance) for instance in instances]
+        if self.reid_encoder is None:
+            detections = [_pose_instance_to_detection(instance) for instance in instances]
+        else:
+            detections = self._detections_with_embeddings(frame, instances)
         return track_frame_predictions(
             detections,
             self.tracker,
@@ -360,6 +385,35 @@ class StreamInferencePipeline:
             frame=frame,
             class_names=self.class_names,
         )
+
+    def _detections_with_embeddings(self, frame, instances):
+        """Crop each detection once and attach its appearance vector.
+
+        Boxes are resolved from the instance's own box first and from its visible
+        keypoints second -- the same fallback the tracker uses, so a detection that the
+        tracker can follow is never one the encoder refuses to describe.
+        """
+        from animalposetracker.tracking.geometry import keypoints_to_bbox
+
+        boxes = []
+        for instance in instances:
+            box = instance.bbox_xyxy
+            if box is None:
+                box = keypoints_to_bbox(instance.keypoints_xy)
+            boxes.append(None if box is None else np.asarray(box, dtype=np.float32))
+
+        valid = [index for index, box in enumerate(boxes) if box is not None]
+        embeddings = {}
+        if valid:
+            vectors = self.reid_encoder.encode(
+                frame, np.asarray([boxes[index] for index in valid], dtype=np.float32)
+            )
+            embeddings = dict(zip(valid, vectors))
+
+        return [
+            _pose_instance_to_detection(instance, embeddings.get(index))
+            for index, instance in enumerate(instances)
+        ]
 
     def _pose_input_size(self) -> Tuple[int, int]:
         if self.input_config.input_size is not None:

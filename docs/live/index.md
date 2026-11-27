@@ -77,11 +77,17 @@ The detector is any artifact that emits boxes; `DetectorBoxProvider` adapts it t
 Every run writes `results/inference/records.json`, in the `[{frame, predictions}, ...]` shape,
 with a `track_id` on every detection when tracking was on.
 
-- **tracking** — `--tracker` with the same six algorithms `predict` accepts;
+- **tracking** — `--tracker` with the same six algorithms `predict` accepts; boxes and trails
+  are coloured by identity, and `--trail-length N` draws the last N box centres per track;
 - **filtering** — `--pose-filter median|savgol` with window, order and gap settings.
 
 Filtering needs track ids, so it is rejected without a tracker — the same rule the GUI enforces
 by disabling the controls.
+
+Every run ends with per-stage timing averages (preprocess / inference / postprocess) plus total
+and FPS; a warmup pass before timing keeps one-time setup out of the numbers. The GUI overlay
+shows the same engine timings. Details in
+[live stream](../notebooks/extra/02_live_stream.md).
 
 ## Engine matrix
 

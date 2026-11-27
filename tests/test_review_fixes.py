@@ -541,6 +541,57 @@ class ReviewFixTests(unittest.TestCase):
             with self.assertWarns(UserWarning):
                 dataset[0]
 
+    def test_coco_file_name_accepts_bare_name_and_root_relative_path(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            image_dir = root / "images" / "train"
+            annotation_dir = root / "annotations"
+            image_dir.mkdir(parents=True)
+            annotation_dir.mkdir()
+            Image.new("RGB", (32, 32), color="white").save(image_dir / "sample.png")
+
+            def write_payload(file_name):
+                payload = {
+                    "images": [{"id": 1, "file_name": file_name, "width": 32, "height": 32}],
+                    "categories": [{"id": 1, "name": "mouse", "keypoints": ["nose"]}],
+                    "annotations": [{
+                        "id": 1,
+                        "image_id": 1,
+                        "category_id": 1,
+                        "bbox": [4, 4, 10, 10],
+                        "area": 100,
+                        "keypoints": [8, 8, 2],
+                        "num_keypoints": 1,
+                    }],
+                }
+                (annotation_dir / "train.json").write_text(
+                    json.dumps(payload), encoding="utf-8"
+                )
+
+            data_path = root / "dataset.yaml"
+            data_path.write_text(yaml.safe_dump({
+                "annotation_format": "coco",
+                "path": str(root),
+                "train": "images/train",
+                "kpt_shape": [1, 2],
+                "names": {0: "mouse"},
+            }), encoding="utf-8")
+
+            # A bare file_name (what the annotator writes) joins the split's image
+            # folder; a root-relative path (what external COCO files carry) resolves
+            # against the dataset root. Both land on the same image.
+            for file_name in ("sample.png", "images/train/sample.png"):
+                write_payload(file_name)
+                dataset = PoseTextDataset(data_path, split="train", image_size=32)
+                self.assertEqual(
+                    dataset.image_paths[0], (image_dir / "sample.png").resolve()
+                )
+
+            write_payload("sample.png")
+            (image_dir / "sample.png").unlink()
+            with self.assertRaises(FileNotFoundError):
+                PoseTextDataset(data_path, split="train", image_size=32)
+
     def test_project_source_copy_preserves_subfolders_and_deduplicates(self):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)

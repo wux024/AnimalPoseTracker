@@ -31,6 +31,8 @@ what the graph cannot say about itself:
 | `outputs` | output tensor names (`predictions`, or `simcc_x` / `simcc_y`) |
 | `pixel_mean` / `pixel_std` / `bbox_padding` | top-down preprocessing (SimCC heads only) |
 | `simcc_split_ratio` | SimCC binning granularity (SimCC heads only) |
+| `quantization` | how the artifact was quantized (`int8_static_qdq` / `int8_nncf` / `int8_tensorrt`; INT8 exports only) |
+| `calibration_images` | how many images the calibration saw (INT8 exports only) |
 
 Never edit or delete the sidecar for a SimCC artifact: mmpose-style graphs do not bake
 normalization into the graph, so a missing sidecar means the inferencer feeds raw 0–255
@@ -70,10 +72,14 @@ exporter's exit code.
 ### 5. Precision and graph options
 
 `--half` (FP16) and `--int8` shrink and speed up the artifact where the format supports it;
-unsupported precision requests are rejected rather than silently ignored. `--dynamic`
-requests dynamic input axes for families whose export graph allows it; `--simplify` runs the
-ONNX graph optimizer. The defaults are the safe path — change one flag at a time and re-run
-step 4.
+unsupported precision requests are rejected rather than silently ignored. `--int8` covers
+onnx (static QDQ), openvino (nncf), TensorRT (entropy calibrator, cache kept beside the
+engine), TFLite, Edge TPU, MNN and IMX500. The two never combine — `--half` with `--int8`
+is rejected. Calibration reads the first 200 training images and preprocesses them exactly
+as inference does; for onnx the FP32 graph is an intermediate and only the `_int8` artifact
+is kept. `--dynamic` requests dynamic input axes for families whose export graph allows it;
+`--simplify` runs the ONNX graph optimizer. The defaults are the safe path — change one flag
+at a time and re-run step 4.
 
 ## Where to go next
 

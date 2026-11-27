@@ -32,7 +32,9 @@ normalized box and the keypoint coordinates. No export command is needed — the
 ## COCO export
 
 COCO is written per split, under `annotations/`. The same instances are written with absolute
-pixel coordinates and a category id from the class list.
+pixel coordinates and a category id from the class list. Each image's `file_name` is the bare
+name, which the trainer joins onto the split's image folder; a name with folder parts would be
+read relative to the dataset root instead, and an absolute path is refused.
 
 Both formats are read by the trainer; the choice is a convenience, not a conversion step.
 

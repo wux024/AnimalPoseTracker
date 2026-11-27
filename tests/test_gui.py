@@ -557,7 +557,8 @@ class ConfigureTreeTests(unittest.TestCase):
             "show_boxes", "show_skeletons", "line_width", "point_radius",
             # Grouped rows keep their group-qualified names (the tracking / temporal-filter
             # blocks in runtime.yaml).
-            "tracking.enabled", "tracking.algorithm",
+            "tracking.enabled", "tracking.algorithm", "tracking.with_reid", "tracking.model",
+            "tracking.proximity_thresh", "tracking.appearance_thresh",
             "pose_filter.method", "pose_filter.window_length", "pose_filter.polyorder",
             "pose_filter.max_gap",
         },
@@ -1212,11 +1213,18 @@ class InferencerDecodeTests(unittest.TestCase):
             [left.itemAt(2).layout().itemAt(index).widget() for index in range(4)],
             [page.EnableTracking, page.TrackerAlgorithm, page.EnableFilter, page.FilterMethod],
         )
+        # ReID gets its own row right under the tracker pair: it is a second matching pass
+        # that only exists once tracking does.
+        self.assertIs(left.itemAt(4).layout(), page.ReIDLayout)
+        self.assertEqual(
+            [left.itemAt(4).layout().itemAt(index).widget() for index in range(4)],
+            [page.EnableReID, page.ReIDModel, page.ReIDProximity, page.ReIDAppearance],
+        )
         # Below them the group keeps its own order: source, camera parameters, engine and device.
-        self.assertIs(left.itemAt(4).layout(), page.CameraVideosLayout)
-        self.assertIs(left.itemAt(5).layout(), page.CameraParametersLayout)
-        self.assertIs(left.itemAt(6).layout(), page.EngineDeviceLayout)
-        self.assertIs(left.itemAt(7).layout(), page.StartEndLayout)
+        self.assertIs(left.itemAt(5).layout(), page.CameraVideosLayout)
+        self.assertIs(left.itemAt(6).layout(), page.CameraParametersLayout)
+        self.assertIs(left.itemAt(7).layout(), page.EngineDeviceLayout)
+        self.assertIs(left.itemAt(8).layout(), page.StartEndLayout)
         # Tracking moved out of that row, leaving the three pairs the ui module drew.
         self.assertEqual(
             [page.EngineDeviceLayout.itemAt(index).layout() for index in range(3)],

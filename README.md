@@ -71,7 +71,9 @@ animalpose-cli export --config <project>/configs/runtime.yaml \
 `create` writes the project and its four configs, filled from the model profile's defaults;
 `train` takes the values you want to change for this run.
 `load` validates a project and prints a summary without opening the GUI or writing files.
-Command-line values override `configs/runtime.yaml` for that run and are never written back.
+Command-line values override `configs/runtime.yaml` and are recorded there, so the next run
+starts from what this one used. Run-level keys (`--project`, `--name`, `--exist-ok`,
+`--device`) describe the run, not the project, and are never written back.
 
 # Documentation: The AnimalPoseTracker Process
 

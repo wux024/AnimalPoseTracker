@@ -108,6 +108,7 @@ class InferencerPage(QWidget, Ui_Inferencer):
         self._frame_index = 0
         self.records = []
         self.tracker = None
+        self.reid_encoder = None
         # Frozen by `_build_palettes` when a run starts; these defaults keep the render path
         # usable before then.
         self._run_style = None
@@ -428,6 +429,43 @@ class InferencerPage(QWidget, Ui_Inferencer):
         self.BaseToolsLayout.insertLayout(2, self.TrackerLayout)
         self.BaseToolsLayout.insertLayout(3, self.FilterValuesLayout)
 
+        # ReID sits on its own row: it is a second matching pass, only meaningful once a
+        # tracker exists, so it reads as a sub-option rather than a sibling of Track.
+        self.EnableReID = QCheckBox("ReID", self.BaseToolsGroup)
+        self.EnableReID.setObjectName("EnableReID")
+        self.EnableReID.setToolTip(
+            "Appearance re-identification: reconnect a track after it was lost, using a "
+            "ReID model instead of motion alone"
+        )
+        self.ReIDModel = QComboBox(self.BaseToolsGroup)
+        self.ReIDModel.setObjectName("ReIDModel")
+        self.ReIDModel.setEditable(True)
+        self.ReIDModel.setMinimumSize(QSize(0, 25))
+        self.ReIDModel.setToolTip(
+            "ReID model in ONNX: yolo26*-reid.onnx, or one trained on your species"
+        )
+        self.ReIDProximity = QDoubleSpinBox(self.BaseToolsGroup)
+        self.ReIDProximity.setObjectName("ReIDProximity")
+        self.ReIDProximity.setRange(0.0, 1.0)
+        self.ReIDProximity.setSingleStep(0.05)
+        self.ReIDProximity.setValue(0.50)
+        self.ReIDProximity.setToolTip("Box IoU a pair must reach before appearance is even considered")
+        self.ReIDAppearance = QDoubleSpinBox(self.BaseToolsGroup)
+        self.ReIDAppearance.setObjectName("ReIDAppearance")
+        self.ReIDAppearance.setRange(0.0, 1.0)
+        self.ReIDAppearance.setSingleStep(0.05)
+        self.ReIDAppearance.setValue(0.80)
+        self.ReIDAppearance.setToolTip("Cosine similarity required to reconnect a lost track")
+        self.ReIDLayout = QHBoxLayout()
+        for widget in (
+            self.EnableReID,
+            self.ReIDModel,
+            self.ReIDProximity,
+            self.ReIDAppearance,
+        ):
+            self.ReIDLayout.addWidget(widget)
+        self.BaseToolsLayout.insertLayout(4, self.ReIDLayout)
+
     def _filter_controls(self):
         return (
             self.EnableFilter,
@@ -479,13 +517,35 @@ class InferencerPage(QWidget, Ui_Inferencer):
         Built through the same entry point the CLI uses, and reset per run so a new session
         starts its track IDs from scratch instead of continuing the previous one's.
         """
-        from animalposetracker.tracking import create_tracker
+        from animalposetracker.tracking import TrackerConfig, create_tracker
 
         if not self.EnableTracking.isChecked():
             self.tracker = None
+            self.reid_encoder = None
             return
-        self.tracker = create_tracker(self.TrackerAlgorithm.currentText())
+        config = TrackerConfig(
+            algorithm=self.TrackerAlgorithm.currentText(),
+            with_reid=self.EnableReID.isChecked(),
+            model=self.ReIDModel.currentText().strip() or None,
+            proximity_thresh=float(self.ReIDProximity.value()),
+            appearance_thresh=float(self.ReIDAppearance.value()),
+        )
+        self.tracker = create_tracker(config)
         self.tracker.reset()
+        self.reid_encoder = self._build_reid_encoder(config)
+
+    def _build_reid_encoder(self, config):
+        """One encoder per run, on the same device the pose engine picked.
+
+        The page draws straight from the pipeline but tracks its own records, so it owns
+        this encoder rather than borrowing the pipeline's.
+        """
+        if not config.with_reid or not config.model:
+            return None
+        from animalposetracker.inference.reid import build_reid_encoder
+
+        device = getattr(self.session.engine, "_device", None) or "CPU"
+        return build_reid_encoder(config.model, device=device)
 
     def _add_status_line(self):
         """One visible line for worker messages.
@@ -1453,6 +1513,34 @@ class InferencerPage(QWidget, Ui_Inferencer):
             y += step
         return frame
 
+    def _attach_embeddings(self, frame, instances, records):
+        """Give each record its appearance vector when ReID is on.
+
+        The pipeline owns its own encoder for the two-stage path; the page tracks the
+        records it renders, so it crops and encodes them here. Boxes fall back to the
+        visible keypoints exactly like the tracker's own extent does, keeping the two
+        views of one detection consistent.
+        """
+        if self.reid_encoder is None or not records:
+            return records
+        from animalposetracker.tracking.geometry import keypoints_to_bbox
+
+        boxes, indices = [], []
+        for index, instance in enumerate(instances):
+            box = instance.bbox_xyxy
+            if box is None:
+                box = keypoints_to_bbox(instance.keypoints_xy)
+            if box is None:
+                continue
+            boxes.append(np.asarray(box, dtype=np.float32))
+            indices.append(index)
+        if not boxes:
+            return records
+        vectors = self.reid_encoder.encode(frame, np.asarray(boxes, dtype=np.float32))
+        for index, vector in zip(indices, vectors):
+            records[index] = {**records[index], "embedding": vector}
+        return records
+
     def _present(self, frame, results):
         """Render one decoded frame, and keep the frame's records for the caller."""
         frame = self._draw_background(frame)
@@ -1468,6 +1556,7 @@ class InferencerPage(QWidget, Ui_Inferencer):
             # the same records later with another tracker.
             from animalposetracker.postprocessing.workflows import track_frame_predictions
 
+            records = self._attach_embeddings(frame, instances, records)
             records = track_frame_predictions(
                 records,
                 self.tracker,

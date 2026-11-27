@@ -190,8 +190,9 @@ animalpose-cli create --dataset trimouse --workspace projects --name demo --work
 animalpose-cli train --config projects/demo-me-AnimalRTPose-N-demo/configs/runtime.yaml
 ```
 
-Every command takes `--help`, and command-line values override `configs/runtime.yaml` for
-that run only — nothing is written back.
+Every command takes `--help`. Command-line values override `configs/runtime.yaml` and are
+recorded there, so the next run starts from what this one used; run-level keys (`--project`,
+`--name`, `--exist-ok`, `--device`) are never written back.
 
 ## Useful links
 
