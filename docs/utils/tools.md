@@ -57,6 +57,28 @@ Image names default to `<folder>_<file>`, matching the benchmark's flat
 Keypoint names come from `keypoint_names` in the dataset YAML and fall back to `kpt_<i>`;
 `--min-score` drops low-confidence instances.
 
+## reid_export.py
+
+Wraps a standard backbone into the one contract the ReID encoder understands: input
+`(N, 3, H, W)` in 0..1, output a single `(N, D)` vector. torchvision and torch.hub
+backbones do not honour that shape on their own — they want ImageNet normalisation, some
+return a 4-D map, some return a dict — so this tool bakes the difference into the graph
+once, offline.
+
+```bash
+python tools/reid_export.py --backbone dinov2_vits14 --output dinov2.onnx
+```
+
+`--backbone` picks from the table in the script: `dinov2_vits14`, `dinov2_vitb14`,
+`resnet50`, `convnext_tiny`. Adding another is one entry (how to load it, how it
+normalises, how its output becomes a vector) rather than new logic; there is no
+architecture guessing. The batch axis stays dynamic so one call can encode every box of a
+frame, while the spatial axes stay fixed so the encoder can read its crop size off the
+graph.
+
+The result plugs straight into `--track-model`, and a purpose-trained ReID model exports
+the same way — the wrapper only has to produce the same `(N, D)` shape.
+
 ## Adding a tool
 
 A script belongs in `tools/` when it is for maintainers: it is not part of the installed

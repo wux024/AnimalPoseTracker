@@ -84,6 +84,26 @@ with a `track_id` on every detection when tracking was on.
 Filtering needs track ids, so it is rejected without a tracker — the same rule the GUI enforces
 by disabling the controls.
 
+### Appearance re-identification
+
+BoT-SORT and Deep OC-SORT can take a second pass over the pairs motion alone could not
+match, comparing appearance instead of position:
+
+```bash
+animalpose-cli infer ... --tracker botsort --track-with-reid --track-model yolo26s-reid.onnx
+```
+
+`--track-model` is a path to an ONNX model that maps one crop to one vector; the two
+backbones in `tools/reid_export.py` (`dinov2_*`, `resnet50`, `convnext_tiny`) can be
+wrapped into that shape, and a purpose-trained ReID model exports the same way.
+`--track-proximity-thresh` (default 0.5) gates a pair on box IoU before appearance is
+consulted, and `--track-appearance-thresh` (default 0.8) gates it on cosine similarity.
+A tracker with `with_reid` but no model is rejected at construction.
+
+Widening NMS (`--iou 0.9`) is not a substitute: two peaks on one animal both survive, and
+the appearance pass then adopts the spurious one, so the box count grows. Keep `--iou` at
+its default and let `--track-proximity-thresh` decide which detections are eligible.
+
 Every run ends with per-stage timing averages (preprocess / inference / postprocess) plus total
 and FPS; a warmup pass before timing keeps one-time setup out of the numbers. The GUI overlay
 shows the same engine timings. Details in
