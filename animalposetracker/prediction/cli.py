@@ -693,6 +693,20 @@ def _make_argument_parser():
     return parser
 
 
+def _json_default(value):
+    """Make numpy scalars and arrays storable in ``predictions.json``.
+
+    ``PoseDetection.to_mapping`` hands back numpy on purpose -- the tracker wants arrays,
+    not lists. Only the serialisation boundary needs plain Python, so the conversion
+    lives here instead of costing every consumer a round trip.
+    """
+    if isinstance(value, np.ndarray):
+        return value.tolist()
+    if isinstance(value, np.generic):
+        return value.item()
+    raise TypeError(f"Object of type {type(value).__name__} is not JSON serializable")
+
+
 def _parse_float_list(value: str) -> Tuple[float, ...]:
     try:
         return tuple(float(item.strip()) for item in str(value).split(",") if item.strip())
@@ -1213,7 +1227,16 @@ def run(argv=None, box_provider: InstanceBoxProvider = None) -> int:
 
     results_path = output_dir / "predictions.json"
     results_path.write_text(
-        json.dumps(results, ensure_ascii=False, indent=2, allow_nan=False) + "\n",
+        json.dumps(
+            results,
+            ensure_ascii=False,
+            indent=2,
+            allow_nan=False,
+            # Records built straight from a PoseDetection carry numpy arrays (keypoints,
+            # embeddings); the tracked path converts them, the image path does not. One
+            # converter here beats sprinkling .tolist() through every record builder.
+            default=_json_default,
+        ) + "\n",
         encoding="utf-8",
     )
     if tracked_results:
