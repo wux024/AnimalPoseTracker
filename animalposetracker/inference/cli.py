@@ -7,6 +7,7 @@ building blocks as ``predict --tracker --pose-filter``.
 """
 
 import argparse
+import dataclasses
 import json
 import sys
 import time
@@ -167,8 +168,6 @@ def _make_argument_parser() -> argparse.ArgumentParser:
                         help="Track detections with this AnimalPoseTracker algorithm")
     # The tracker's own knobs, generated from the dataclass: a new field appears here
     # without a second list to keep in sync. --tracker alone keeps every default.
-    import dataclasses
-
     from animalposetracker.tracking.config import TrackerConfig as _TrackerConfig
 
     for _item in dataclasses.fields(_TrackerConfig):
