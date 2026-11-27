@@ -1167,7 +1167,6 @@ def run(argv=None, box_provider: InstanceBoxProvider = None) -> int:
 
             reid_encoder = build_reid_encoder(
                 tracker.config.model,
-                model=model,
                 device=str(getattr(args, "device", None) or "CPU"),
             )
 

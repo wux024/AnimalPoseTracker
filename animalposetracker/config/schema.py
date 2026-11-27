@@ -262,7 +262,7 @@ FIELDS: Tuple[Field, ...] = (
     _f("enabled", "predict", "tracking", bool, "Cross-frame tracking switch", visibility="form", views=("infer",)),
     _f("algorithm", "predict", "tracking", str, "Tracking algorithm (six options, e.g. bytetrack)", visibility="form", views=("infer",)),
     _f("with_reid", "predict", "tracking", bool, "Appearance ReID in the tracker; needs a model", visibility="form", views=("infer",)),
-    _f("model", "predict", "tracking", str, "ReID model path (ONNX)", visibility="form", views=("infer",)),
+    _f("model", "predict", "tracking", str, "ReID model path (ONNX); \"auto\" is not supported", visibility="form", views=("infer",)),
     _f("proximity_thresh", "predict", "tracking", float, "Spatial gate: box IoU required before appearance matching", visibility="advanced", views=("infer",)),
     _f("appearance_thresh", "predict", "tracking", float, "Appearance gate: cosine similarity required to reconnect a track", visibility="advanced", views=("infer",)),
     _f("method", "predict", "pose_filter", str, "Temporal smoothing method: none / median / savgol", apply="run_end", visibility="form", views=("infer",)),

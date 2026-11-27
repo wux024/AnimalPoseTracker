@@ -3,15 +3,14 @@
 Lives in the inference layer because it owns a runtime: ``tracking/`` stays pure
 algorithm and only ever reads ``PoseDetection.embedding``.
 
-Two sources, mirroring what ultralytics exposes for BoT-SORT:
+One source: ``OnnxReIDEncoder``, an exported model (``yolo26*-reid.onnx`` or one trained
+on the target species), one crop-sized forward per box. Reusing the detector's own
+features used to be an option; it required guessing where the backbone ends, and a wrong
+guess produced plausible-looking but useless embeddings, so it was dropped rather than
+guarded.
 
-* ``OnnxReIDEncoder`` -- an exported ReID model (``yolo26*-reid.onnx`` or one trained
-  on the target species). One crop-sized forward per box.
-* ``BackboneReIDEncoder`` -- reuse the detector's own features (their ``model="auto"``).
-  Not wired yet: it needs a pooled feature hook on the detector.
-
-Both return one L2-normalised vector per detection, so the association code only needs
-cosine similarity and never learns which source produced the numbers.
+The encoder returns one L2-normalised vector per detection, so the association code only
+needs cosine similarity and never learns which model produced the numbers.
 """
 
 from __future__ import annotations
@@ -22,7 +21,6 @@ from typing import Protocol, Sequence
 import numpy as np
 
 __all__ = [
-    "BackboneReIDEncoder",
     "NullReIDEncoder",
     "OnnxReIDEncoder",
     "ReIDEncoder",
@@ -144,77 +142,11 @@ class OnnxReIDEncoder:
         return embeddings / norms
 
 
-class BackboneReIDEncoder:
-    """Extracts features from the detector's own backbone.
-
-    The detector's stages run backbone -> neck -> head; the pooled backbone output is the
-    most generic of the three, so that is what gets used. No extra model and no extra
-    weights, at the cost of features that were learned to *find* animals rather than to
-    tell individuals apart -- ultralytics makes the same trade for ``model="auto"``.
-    """
-
-    def __init__(self, model=None, device: str = "CPU", imgsz: int = 224) -> None:
-        if model is None:
-            raise ValueError("BackboneReIDEncoder needs the pose detector instance")
-        import torch
-
-        self.imgsz = int(imgsz)
-        stages = getattr(model, "model", None)
-        if stages is None:
-            raise ValueError("The detector does not expose a stage list to slice a backbone from")
-        # The backbone ends where the neck begins: upsampling and concatenation are the
-        # first neck-only operations, so the slice stops right before the first of them.
-        neck_start = len(stages)
-        for index, layer in enumerate(stages):
-            if type(layer).__name__ in {"Upsample", "Concat"}:
-                neck_start = index
-                break
-        self.backbone = torch.nn.Sequential(*list(stages)[:neck_start])
-        self.backbone.eval()
-        self.device = torch.device("cuda" if str(device).lower().startswith("cuda") else "cpu")
-        self.backbone.to(self.device)
-        self.embedding_dim = None
-
-    def _crop_batch(self, frame: np.ndarray, boxes) -> "torch.Tensor":
-        import cv2
-        import torch
-
-        height, width = frame.shape[:2]
-        crops = []
-        for box in boxes:
-            x1, y1, x2, y2 = (int(round(float(value))) for value in box)
-            x1, x2 = max(0, min(x1, width - 1)), max(0, min(x2, width))
-            y1, y2 = max(0, min(y1, height - 1)), max(0, min(y2, height))
-            if x2 <= x1 or y2 <= y1:
-                crops.append(np.zeros((self.imgsz, self.imgsz, 3), dtype=np.float32))
-                continue
-            crop = cv2.resize(frame[y1:y2, x1:x2], (self.imgsz, self.imgsz))
-            crops.append(crop[:, :, ::-1].astype(np.float32) / 255.0)
-        return torch.from_numpy(np.stack(crops)).permute(0, 3, 1, 2).to(self.device)
-
-    def encode(self, frame: np.ndarray, boxes: np.ndarray) -> np.ndarray:
-        if boxes is None or len(boxes) == 0:
-            return np.zeros((0, 0), dtype=np.float32)
-        import torch
-
-        batch = self._crop_batch(frame, boxes)
-        with torch.inference_mode():
-            features = self.backbone(batch)
-        if isinstance(features, (list, tuple)):
-            features = features[-1]
-        pooled = features.mean(dim=(2, 3))
-        pooled = pooled / (pooled.norm(dim=1, keepdim=True) + 1e-12)
-        self.embedding_dim = int(pooled.shape[1])
-        return pooled.detach().cpu().numpy()
-
-
-def build_reid_encoder(kind=None, model=None, providers=None, backend: str = "ort", device: str = "CPU") -> ReIDEncoder | None:
+def build_reid_encoder(kind=None, providers=None, backend: str = "ort", device: str = "CPU") -> ReIDEncoder | None:
     """Resolve ``with_reid`` / ``model`` settings into an encoder.
 
     Args:
-        kind: ``None`` or ``"none"`` disables ReID; ``"auto"`` selects the detector's own
-            features; any other value is treated as a model path.
-        model: The detector, for the ``"auto"`` path.
+        kind: ``None`` or ``"none"`` disables ReID; anything else is a model path.
         providers: onnxruntime providers; ``None`` picks the best this build offers.
         backend: ``"ort"`` or ``"cv2"``, matching whatever the pose estimator uses.
         device: Device label shared with the pose estimator's OpenCV backend table.
@@ -224,8 +156,6 @@ def build_reid_encoder(kind=None, model=None, providers=None, backend: str = "or
     """
     if kind is None or str(kind).lower() in {"", "none", "off", "false", "0"}:
         return None
-    if str(kind).lower() == "auto":
-        return BackboneReIDEncoder(model=model)
     return OnnxReIDEncoder(kind, providers=providers, backend=backend, device=device)
 
 
