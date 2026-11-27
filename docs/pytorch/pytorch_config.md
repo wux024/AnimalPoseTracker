@@ -218,6 +218,10 @@ This reference is generated from the key registry (`animalposetracker/config/sch
 |---|---|---|---|---|---|
 | `enabled` | bool | False | build | form | Cross-frame tracking switch |
 | `algorithm` | str | `bytetrack` | build | form | Tracking algorithm (six options, e.g. bytetrack) |
+| `with_reid` | bool | False | build | form | Appearance ReID in the tracker; needs a model |
+| `model` | str | `` | build | form | ReID model path (ONNX) |
+| `proximity_thresh` | float | 0.5 | build | advanced | Spatial gate: box IoU required before appearance matching |
+| `appearance_thresh` | float | 0.8 | build | advanced | Appearance gate: cosine similarity required to reconnect a track |
 
 **`predict.pose_filter`**
 

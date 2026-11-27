@@ -508,6 +508,7 @@ def _write_video(
     tracker=None,
     class_names=None,
     progress_callback=None,
+    reid_encoder=None,
 ):
     from animalposetracker.postprocessing.workflows import track_frame_predictions
 
@@ -539,8 +540,10 @@ def _write_video(
                 break
             rendered, records = frame_predictor(frame)
             if tracker is not None:
+                from animalposetracker.inference.reid import attach_embeddings
+
                 tracked_records = track_frame_predictions(
-                    records,
+                    attach_embeddings(records, frame, reid_encoder),
                     tracker,
                     frame_index,
                     frame=frame,
@@ -1142,6 +1145,18 @@ def run(argv=None, box_provider: InstanceBoxProvider = None) -> int:
 
             tracker = create_tracker({**tracking_settings, "algorithm": tracker_name})
 
+        # One encoder per run, built from the tracker's own settings. ``auto`` reuses this
+        # detector's backbone, so the features cost one pooled forward per frame's crops.
+        reid_encoder = None
+        if tracker is not None and tracker.config.with_reid:
+            from animalposetracker.inference.reid import build_reid_encoder
+
+            reid_encoder = build_reid_encoder(
+                tracker.config.model,
+                model=model,
+                device=str(getattr(args, "device", None) or "CPU"),
+            )
+
         video_progress = {"bar": None}
 
         def update_video_progress(current, total, name=video_path.name):
@@ -1169,6 +1184,7 @@ def run(argv=None, box_provider: InstanceBoxProvider = None) -> int:
             tracker=tracker,
             class_names=context["class_names"],
             progress_callback=update_video_progress,
+            reid_encoder=reid_encoder,
         )
         if video_progress["bar"] is not None:
             video_progress["bar"].close()

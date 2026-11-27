@@ -121,7 +121,10 @@ class TrackerConfig:
     min_track_len: int = 1
 
     with_reid: bool = False
-    model: Optional[str] = None
+    # Empty, not None: the CLI derives each --track-* flag's argparse type from
+    # type(default), and type(None) is not callable. An empty string also reads as
+    # "no model configured", which is what validate() checks.
+    model: str = ""
     proximity_thresh: float = 0.50
     appearance_thresh: float = 0.80
     alpha_fixed_emb: float = 0.95

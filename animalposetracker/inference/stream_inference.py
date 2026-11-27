@@ -358,7 +358,11 @@ class StreamInferencePipeline:
         from animalposetracker.inference.reid import build_reid_encoder
 
         device = getattr(self.pose_engine, "_device", None) or "CPU"
-        return build_reid_encoder(getattr(config, "model", None), device=device)
+        return build_reid_encoder(
+            getattr(config, "model", None),
+            model=getattr(self.pose_engine, "model", None),
+            device=device,
+        )
 
     def track_frame(self, frame: np.ndarray, frame_index: int) -> list:
         """Decode poses for one stream frame and attach sequence-local track IDs.

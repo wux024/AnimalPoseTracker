@@ -26,6 +26,7 @@ __all__ = [
     "NullReIDEncoder",
     "OnnxReIDEncoder",
     "ReIDEncoder",
+    "attach_embeddings",
     "build_reid_encoder",
 ]
 
@@ -144,22 +145,67 @@ class OnnxReIDEncoder:
 
 
 class BackboneReIDEncoder:
-    """Extracts features from the detector's own network.
+    """Extracts features from the detector's own backbone.
 
-    Not implemented: ``AnimalRTPose`` has to expose a pooled feature map for a given
-    frame first. Kept as a named class so ``build_reid_encoder("auto")`` has a stable
-    target once that hook exists.
+    The detector's stages run backbone -> neck -> head; the pooled backbone output is the
+    most generic of the three, so that is what gets used. No extra model and no extra
+    weights, at the cost of features that were learned to *find* animals rather than to
+    tell individuals apart -- ultralytics makes the same trade for ``model="auto"``.
     """
 
-    def __init__(self, model=None, device: str = "cpu") -> None:
-        self.model = model
-        self.device = device
+    def __init__(self, model=None, device: str = "CPU", imgsz: int = 224) -> None:
+        if model is None:
+            raise ValueError("BackboneReIDEncoder needs the pose detector instance")
+        import torch
+
+        self.imgsz = int(imgsz)
+        stages = getattr(model, "model", None)
+        if stages is None:
+            raise ValueError("The detector does not expose a stage list to slice a backbone from")
+        # The backbone ends where the neck begins: upsampling and concatenation are the
+        # first neck-only operations, so the slice stops right before the first of them.
+        neck_start = len(stages)
+        for index, layer in enumerate(stages):
+            if type(layer).__name__ in {"Upsample", "Concat"}:
+                neck_start = index
+                break
+        self.backbone = torch.nn.Sequential(*list(stages)[:neck_start])
+        self.backbone.eval()
+        self.device = torch.device("cuda" if str(device).lower().startswith("cuda") else "cpu")
+        self.backbone.to(self.device)
+        self.embedding_dim = None
+
+    def _crop_batch(self, frame: np.ndarray, boxes) -> "torch.Tensor":
+        import cv2
+        import torch
+
+        height, width = frame.shape[:2]
+        crops = []
+        for box in boxes:
+            x1, y1, x2, y2 = (int(round(float(value))) for value in box)
+            x1, x2 = max(0, min(x1, width - 1)), max(0, min(x2, width))
+            y1, y2 = max(0, min(y1, height - 1)), max(0, min(y2, height))
+            if x2 <= x1 or y2 <= y1:
+                crops.append(np.zeros((self.imgsz, self.imgsz, 3), dtype=np.float32))
+                continue
+            crop = cv2.resize(frame[y1:y2, x1:x2], (self.imgsz, self.imgsz))
+            crops.append(crop[:, :, ::-1].astype(np.float32) / 255.0)
+        return torch.from_numpy(np.stack(crops)).permute(0, 3, 1, 2).to(self.device)
 
     def encode(self, frame: np.ndarray, boxes: np.ndarray) -> np.ndarray:
-        raise NotImplementedError(
-            "BackboneReIDEncoder needs a pooled feature hook on the detector; "
-            "use an exported ONNX ReID model for now"
-        )
+        if boxes is None or len(boxes) == 0:
+            return np.zeros((0, 0), dtype=np.float32)
+        import torch
+
+        batch = self._crop_batch(frame, boxes)
+        with torch.inference_mode():
+            features = self.backbone(batch)
+        if isinstance(features, (list, tuple)):
+            features = features[-1]
+        pooled = features.mean(dim=(2, 3))
+        pooled = pooled / (pooled.norm(dim=1, keepdim=True) + 1e-12)
+        self.embedding_dim = int(pooled.shape[1])
+        return pooled.detach().cpu().numpy()
 
 
 def build_reid_encoder(kind=None, model=None, providers=None, backend: str = "ort", device: str = "CPU") -> ReIDEncoder | None:
@@ -181,3 +227,34 @@ def build_reid_encoder(kind=None, model=None, providers=None, backend: str = "or
     if str(kind).lower() == "auto":
         return BackboneReIDEncoder(model=model)
     return OnnxReIDEncoder(kind, providers=providers, backend=backend, device=device)
+
+
+def attach_embeddings(records, frame, encoder):
+    """Return ``records`` with one appearance vector attached per detection.
+
+    Shared by the stream pipeline and the offline video writer: both hold records as
+    plain mappings at this point, and both must hand the tracker vectors that were cut
+    from the same frame the boxes were detected in. A record with neither a box nor
+    usable keypoints is left without an embedding, which the tracker refuses rather than
+    silently scoring.
+    """
+    if encoder is None or not records:
+        return records
+    from animalposetracker.tracking.geometry import keypoints_to_bbox
+
+    boxes, indices = [], []
+    for index, record in enumerate(records):
+        box = record.get("bbox_xyxy")
+        if box is None:
+            points = record.get("keypoints")
+            box = keypoints_to_bbox(points) if points is not None else None
+        if box is None:
+            continue
+        boxes.append(np.asarray(box, dtype=np.float32))
+        indices.append(index)
+    if not boxes:
+        return records
+    vectors = encoder.encode(frame, np.asarray(boxes, dtype=np.float32))
+    for index, vector in zip(indices, vectors):
+        records[index] = {**records[index], "embedding": vector}
+    return records

@@ -165,6 +165,24 @@ def _make_argument_parser() -> argparse.ArgumentParser:
                         help="Fallback square input size when no sidecar metadata exists")
     parser.add_argument("--tracker",
                         help="Track detections with this AnimalPoseTracker algorithm")
+    # The tracker's own knobs, generated from the dataclass: a new field appears here
+    # without a second list to keep in sync. --tracker alone keeps every default.
+    import dataclasses
+
+    from animalposetracker.tracking.config import TrackerConfig as _TrackerConfig
+
+    for _item in dataclasses.fields(_TrackerConfig):
+        _name = _item.name
+        if _name == "algorithm":
+            continue
+        _flag = f"--track-{_name.replace('_', '-')}"
+        _value_type = type(_item.default)
+        if _value_type is bool:
+            parser.add_argument(_flag, dest=f"track_{_name}", action="store_true", default=None)
+            parser.add_argument(f"--no-{_flag[2:]}", dest=f"track_{_name}", action="store_false",
+                                default=None)
+        elif _value_type in (int, float, str):
+            parser.add_argument(_flag, dest=f"track_{_name}", type=_value_type, default=None)
     parser.add_argument("--pose-filter", dest="pose_filter",
                         choices=("none", "median", "savgol"), default="none",
                         help="Smooth tracked records after the stream ends")
@@ -362,13 +380,28 @@ def run(argv=None) -> int:
             preprocess_mode=args.detector_preprocess_mode,
         )
         input_mode = "topdown"
+    tracker_config = None
+    if args.tracker:
+        from animalposetracker.tracking.config import TrackerConfig
+
+        overrides = {}
+        for item in dataclasses.fields(TrackerConfig):
+            if item.name == "algorithm":
+                continue
+            value = getattr(args, f"track_{item.name}", None)
+            if value is not None:
+                overrides[item.name] = value
+        # validate() runs here so a bad combination (with_reid without a model, ReID on
+        # bytetrack) fails before the first frame instead of inside the stream loop.
+        tracker_config = TrackerConfig(algorithm=args.tracker, **overrides).validate()
+
     pipeline = StreamInferencePipeline(
         engine,
         output_config,
         input_mode=input_mode,
         input_config=input_config,
         detector=detector,
-        tracker=args.tracker,
+        tracker=tracker_config,
         class_names=class_names,
     )
 
