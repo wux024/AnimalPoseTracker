@@ -231,7 +231,7 @@ def _detection_label(detection) -> str:
         label = f"{label} {float(score):.2f}"
     track_id = detection.get("track_id")
     if track_id is not None:
-        label = f"#{track_id} {label}"
+        label = f"ID: {track_id} {label}"
     return label
 
 

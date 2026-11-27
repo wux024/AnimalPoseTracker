@@ -1106,9 +1106,9 @@ class InferencerDecodeTests(unittest.TestCase):
                 page._present(np.zeros((480, 640, 3), np.uint8), page._decode(self._tensor(), None))
 
         self.assertEqual(len(labels), 2)
-        self.assertTrue(labels[0].startswith("#"))
+        self.assertTrue(labels[0].startswith("ID:"))
         self.assertIn("mouse: 0.90", labels[0])
-        self.assertEqual(labels[0].split()[0], labels[1].split()[0])
+        self.assertEqual(" ".join(labels[0].split()[:2]), " ".join(labels[1].split()[:2]))
 
     def _tracked_page(self, **config):
         page = self._page(**config)

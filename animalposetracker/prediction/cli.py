@@ -555,7 +555,7 @@ def _write_video(
                         x1, y1 = int(round(box[0])), int(round(box[1]))
                         cv2.putText(
                             rendered,
-                            f"ID {detection['track_id']}",
+                            f"ID: {detection['track_id']}",
                             (x1, max(18, y1 - 20)),
                             cv2.FONT_HERSHEY_SIMPLEX,
                             0.6,

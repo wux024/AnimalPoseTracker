@@ -1578,7 +1578,7 @@ class InferencerPage(QWidget, Ui_Inferencer):
                 label = f"{record['class_name']}: {float(record.get('score', 0.0)):.2f}"
                 track_id = record.get("track_id")
                 if track_id is not None:
-                    label = f"#{track_id} {label}"
+                    label = f"ID: {track_id} {label}"
             draw_instance(
                 frame,
                 pixel_box(record['bbox_xyxy']),
